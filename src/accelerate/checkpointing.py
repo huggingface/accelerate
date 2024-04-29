@@ -120,8 +120,7 @@ def save_accelerator_state(
         from .data_loader import IterableDatasetShard, SeedableRandomSampler
 
         if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = getattr(dataloader.sampler, "sampler", None)
-
+            sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
         logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
@@ -227,10 +226,9 @@ def load_accelerator_state(
         from .data_loader import IterableDatasetShard, SeedableRandomSampler
 
         if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = getattr(dataloader.sampler, "sampler", None)
-
+            sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
-                dataloader.sampler.sampler = torch.load(input_sampler_file)
+                sampler = dataloader.set_sampler(torch.load(input_sampler_file))
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state

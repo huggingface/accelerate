@@ -502,6 +502,23 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         else:
             return len(self.dataset)
 
+    def get_sampler(self):
+        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
+        if sampler_is_batch_sampler:
+            sampler = getattr(self.sampler, "sampler", None)
+        else:
+            sampler = getattr(self.batch_sampler, "sampler", None)
+        return sampler
+
+    def set_sampler(self, sampler):
+        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
+        if sampler_is_batch_sampler:
+            self.sampler.sampler = sampler
+        else:
+            self.batch_sampler.sampler = sampler
+            if hasattr(self.batch_sampler, "batch_sampler"):
+                self.batch_sampler.batch_sampler.sampler = sampler
+
 
 if is_torch_xla_available():
     import torch_xla.distributed.parallel_loader as xpl
@@ -751,6 +768,23 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     def total_dataset_length(self):
         return len(self.dataset)
 
+    def get_sampler(self):
+        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
+        if sampler_is_batch_sampler:
+            sampler = getattr(self.sampler, "sampler", None)
+        else:
+            sampler = getattr(self.batch_sampler, "sampler", None)
+        return sampler
+
+    def set_sampler(self, sampler):
+        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
+        if sampler_is_batch_sampler:
+            self.sampler.sampler = sampler
+        else:
+            self.batch_sampler.sampler = sampler
+            if hasattr(self.batch_sampler, "batch_sampler"):
+                self.batch_sampler.batch_sampler.sampler = sampler
+
 
 def prepare_data_loader(
     dataloader: DataLoader,
@@ -989,12 +1023,7 @@ def prepare_data_loader(
         )
 
     if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
-        if sampler_is_batch_sampler:
-            dataloader.sampler.sampler = sampler
-        else:
-            dataloader.batch_sampler.sampler = sampler
-            if hasattr(dataloader.batch_sampler, "batch_sampler"):
-                dataloader.batch_sampler.batch_sampler.sampler = sampler
+        dataloader.set_sampler(sampler)
     if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
