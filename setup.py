@@ -35,7 +35,7 @@ extras["test_dev"] = [
     "timm",
 ]
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
-extras["deepspeed"] = ["deepspeed"]
+extras["deepspeed"] = ["deepspeed<=0.14.0"]
 extras["rich"] = ["rich"]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive"]
