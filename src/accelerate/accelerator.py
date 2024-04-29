@@ -1511,7 +1511,7 @@ class Accelerator:
 
                         if len(upcasted_log) > 0:
                             warnings.warn(
-                                "FSDP upcast of low precision paramters may affect precision of model checkpoints."
+                                "FSDP upcast of low precision parameters may affect the precision of model checkpoints."
                             )
 
                 # if the previous and current models are same, delete the previous one
