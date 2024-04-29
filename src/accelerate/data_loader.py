@@ -503,12 +503,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             return len(self.dataset)
 
     def get_sampler(self):
-        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
-        if sampler_is_batch_sampler:
-            sampler = getattr(self.sampler, "sampler", None)
-        else:
-            sampler = getattr(self.batch_sampler, "sampler", None)
-        return sampler
+        return get_sampler(self)
 
     def set_sampler(self, sampler):
         sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
@@ -769,12 +764,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         return len(self.dataset)
 
     def get_sampler(self):
-        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
-        if sampler_is_batch_sampler:
-            sampler = getattr(self.sampler, "sampler", None)
-        else:
-            sampler = getattr(self.batch_sampler, "sampler", None)
-        return sampler
+        return get_sampler(self)
 
     def set_sampler(self, sampler):
         sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
@@ -784,6 +774,24 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             self.batch_sampler.sampler = sampler
             if hasattr(self.batch_sampler, "batch_sampler"):
                 self.batch_sampler.batch_sampler.sampler = sampler
+
+
+def get_sampler(dataloader):
+    """
+    Get the sampler associated to the dataloader
+
+    Args:
+        dataloader (`torch.utils.data.dataloader.DataLoader`):
+            The data loader to split across several devices.
+    Returns:
+        `torch.utils.data.Sampler`: The sampler associated to the dataloader
+    """
+    sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+    if sampler_is_batch_sampler:
+        sampler = getattr(dataloader.sampler, "sampler", None)
+    else:
+        sampler = getattr(dataloader.batch_sampler, "sampler", None)
+    return sampler
 
 
 def prepare_data_loader(
@@ -914,11 +922,7 @@ def prepare_data_loader(
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
     sampler_is_batch_sampler = False
     synchronized_generator = None
-    sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
-    if sampler_is_batch_sampler:
-        sampler = getattr(dataloader.sampler, "sampler", None)
-    else:
-        sampler = getattr(dataloader.batch_sampler, "sampler", None)
+    sampler = get_sampler(dataloader)
     if isinstance(sampler, RandomSampler) and use_seedable_sampler:
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
