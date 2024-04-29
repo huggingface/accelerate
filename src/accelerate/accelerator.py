@@ -2246,7 +2246,7 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, input_data):
+    def gather_for_metrics(self, input_data, use_gather_object=False):
         """
         Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system. Should be
         used for gathering the inputs and targets for metric calculation.
@@ -2254,6 +2254,11 @@ class Accelerator:
         Args:
             input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
                 The tensors or objects for calculating metrics across all processes
+            use_gather_object(`bool`):
+                Whether to forcibly use gather_object instead of gather (which is already done if all objects passed do
+                not contain tensors). This flag can be useful for gathering tensors with different sizes that we don't
+                want to pad and concatenate along the first dimension. Using it with GPU tensors is not well supported
+                and inefficient as it incurs GPU -> CPU transfer since tensors would be pickled.
 
         Example:
 
@@ -2278,7 +2283,9 @@ class Accelerator:
         except TypeError:
             all_tensors = False
 
-        if not all_tensors:
+        use_gather_object = use_gather_object or not all_tensors
+
+        if use_gather_object:
             data = gather_object(input_data)
         else:
             data = self.gather(input_data)
@@ -2297,7 +2304,11 @@ class Accelerator:
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
 
-                    return recursively_apply(_adjust_samples, data)
+                    if use_gather_object:
+                        # gather_object put the objects in a list
+                        return _adjust_samples(data)
+                    else:
+                        return recursively_apply(_adjust_samples, data)
                 else:  # remainder is 0
                     # no remainder even though at end of dataloader, so nothing to do.
                     return data
