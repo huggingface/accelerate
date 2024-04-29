@@ -29,9 +29,10 @@ huggingface/accelerate:{accelerator}-{nightly,release}
 ```
 
 `accelerator` in this instance is one of many applical pre-configured backend supports:
-* `gpu`: Comes compiled off of the `nvidia/cuda` image and includes everything such as `deepspeed`, `bitsandbytes`, etc. 
-* `cpu`: Comes compiled off of `python:3.8-slim` and is designed for non-CUDA based workloads.
+* `gpu`: Comes compiled off of the `nvidia/cuda` image and includes core parts like `bitsandbytes`. Runs off python 3.9.
+* `cpu`: Comes compiled off of `python:3.9-slim` and is designed for non-CUDA based workloads.
 * More to come soon
+* `gpu-deepspeed`: Comes compiled off of the `nvidia/cuda` image and includes core parts like `bitsandbytes` as well as the latest `deepspeed` version. Runs off python 3.10.
 
 ## Nightlies vs Releases
 

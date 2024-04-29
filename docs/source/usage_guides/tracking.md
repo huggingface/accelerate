@@ -198,7 +198,7 @@ achieve the same outcome with:
 
 ```python
 wandb_tracker = accelerator.get_tracker("wandb", unwrap=True)
-with accelerator.on_main_process:
+if accelerator.is_main_process:
     wandb_tracker.log_artifact(some_artifact_to_log)
 ```
 

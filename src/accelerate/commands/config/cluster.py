@@ -298,6 +298,18 @@ def get_cluster_input():
                         "When `zero3_init_flag` is set, it requires Transformers to be installed. "
                         "Please run `pip3 install transformers`."
                     )
+            use_moe = _ask_field(
+                "Do you want to enable Mixture-of-Experts training (MoE)? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            if use_moe:
+                deepspeed_config["deepspeed_moe_layer_cls_names"] = _ask_field(
+                    "Specify the comma-separated list of transformers MoE layer class names (case-sensitive), e.g : "
+                    " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ... : ",
+                    str,
+                )
 
             if num_machines > 1:
                 launcher_query = "Which Type of launcher do you want to use?"

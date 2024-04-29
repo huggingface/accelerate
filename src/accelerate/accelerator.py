@@ -383,8 +383,15 @@ class Accelerator:
             **kwargs,
         )
 
-        if self.fp8_recipe_handler is None and self.state.mixed_precision == "fp8":
-            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
+        self.delayed_fp8_autocast = False
+        if self.fp8_recipe_handler is not None:
+            # We already check if FP8 is available during `self.state`
+            if self.state.mixed_precision != "fp8":
+                raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
+            self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
+                DistributedType.MULTI_GPU,
+                DistributedType.FSDP,
+            )
 
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
@@ -450,7 +457,7 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "mps", "npu", "xla", "mlu") or is_torch_xla_available(
+            if self.device.type not in ("xpu", "cuda", "npu", "xla", "mlu") or is_torch_xla_available(
                 check_is_tpu=True
             ):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
@@ -478,6 +485,10 @@ class Accelerator:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available():
                 raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
+
+        elif self.state.mixed_precision == "fp8":
+            # We always enable `native_amp` for FP8
+            self.native_amp = True
 
         # Start of internal step tracking
         self.step = 0
@@ -549,6 +560,10 @@ class Accelerator:
     @property
     def use_seedable_sampler(self):
         return self.dataloader_config.use_seedable_sampler
+
+    @property
+    def non_blocking(self):
+        return self.dataloader_config.non_blocking
 
     @property
     def project_dir(self):
@@ -1345,18 +1360,22 @@ class Accelerator:
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
             else:
                 model.forward = convert_outputs_to_fp32(new_forward)
-        elif self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
+
+        # We prepare fp8 after, allowing for bf16 autocast to happen first
+        if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
                     convert_model(model)
                 model._converted_to_transformer_engine = True
-            model._original_forward = model.forward
 
             kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
             if "fp8_format" in kwargs:
                 kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
             fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-            model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
+            # If we are in DDP or FSDP, we delay `autocast` until after FSDP/DDP has been initialized
+            # to make use of the process group
+            if not self.delayed_fp8_autocast:
+                model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
@@ -1368,16 +1387,19 @@ class Accelerator:
                     " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
                     " Therefore you should not specify that you are under any distributed regime in your accelerate config."
                 )
-            current_device = list(model_devices)[0]
-            current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
+            elif len(model_devices) == 1:
+                current_device = list(model_devices)[0]
+                current_device_index = (
+                    current_device.index if isinstance(current_device, torch.device) else current_device
+                )
 
-            if torch.device(current_device_index) != self.device:
-                # if on the first device (GPU 0) we don't care
-                if (self.device.index is not None) or (current_device_index != 0):
-                    raise ValueError(
-                        "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
-                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
-                    )
+                if torch.device(current_device_index) != self.device:
+                    # if on the first device (GPU 0) we don't care
+                    if (self.device.index is not None) or (current_device_index != 0):
+                        raise ValueError(
+                            "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
+                            "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
+                        )
 
             if "cpu" in model_devices or "disk" in model_devices:
                 raise ValueError(
@@ -1447,6 +1469,73 @@ class Accelerator:
                             ),
                             auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
                         )
+
+                # In the event the model had been loaded in low precision, but
+                # mixed precision had also been activated, then we follow DeepSpeed's
+                # strategy to hold the parameters in full precision.
+                # - assume that trainer.args.bf16 and trainer.args.fp16 are already checked against
+                #   fsdp_plugin.mixed_precision_policy.
+                # - NOTE: we do not check the mixed_precision attribute on the FSDP root wrapper.
+                #   * this attribute will always set by init_utils.init_core_state so its always not None.
+                #   * mixed_precision.param_dtype only regards _fwd_bwd_param_dtype
+                #   * if model is loaded in 16bit, and even if mixed_precision.param_dtype is None,
+                #     we sill want to upcast the flat_param.
+                if self.mixed_precision != "no":  # if mixed precision is set
+                    upcasted_log = []
+                    for module in FSDP.fsdp_modules(model):
+                        # Referencing DeepSpeed Zero3
+                        # - in Init, params are converted to 16bit while partitioning.
+                        # - in accelerator.prepare, deepspeed.initalize is called to:
+                        #   * creates the DeepSpeeedEngine.
+                        #   * since zero_optimization() is True , calls engine._configure_zero_optimizer.
+                        #
+                        # Inside the DeepSpeed Zero3 optimizer configuration, which initalizes
+                        # DeepSpeedZeroOptimizer_Stage3, during which:
+                        #   * trainable_param_groups are obtained from the attached optimizer
+                        #     (already partitioned in 16bit).
+                        #   * then _setup_for_real_optimizer -> _create_fp32_partitions
+                        #     which performs the fp32 upcasting.
+
+                        # To mimick DeepSeepds's casting in FSDP, we look at the (single) FlatParameter held
+                        # within an FSDP wrapper. This FlatParameter will be seen by the optimizer.
+                        #  - even though there is a torch.device('meta') guard below, we
+                        #    expect _init_utils._init_param_handle_from_module to already
+                        #    sync the parameter.
+
+                        if not module._has_params:
+                            continue  # skip if FSDP module not managing parameters
+                        param = module._flat_param
+                        if (
+                            param.dtype != torch.float32
+                            and param.device != torch.device("meta")
+                            and param.requires_grad
+                        ):
+                            # keep log of names_params that was upcasted
+                            # NOTE: resorted to this because warnings.simplefilter("once") is somehow not working
+                            name_param_log = (module.module.__class__.__name__, ", ".join(module._flat_param._fqns))
+                            if name_param_log not in upcasted_log:
+                                upcasted_log.append(name_param_log)
+
+                            # this works because of FSDP's _runtime_utils.lazy_init.
+                            # Have to be careful not to call anything before this that
+                            # triggers lazy_init (e.g., _is_fsdp_root).
+                            param.data = param.data.to(torch.float32)  # upcasting
+                            module._handle._orig_param_dtype = torch.float32  # update
+
+                    # report the warnings
+                    # some messages can be quite repetitive, especially when reporting about layers that have identical architecture.
+                    if self.is_main_process:
+                        for name_log, param_log in upcasted_log:
+                            warnings.warn(
+                                f"Upcasted low precision parameters in {name_log} because mixed precision turned on in FSDP. "
+                                f"Affects: {param_log}."
+                            )
+
+                        if len(upcasted_log) > 0:
+                            warnings.warn(
+                                "FSDP upcast of low precision parameters may affect the precision of model checkpoints."
+                            )
+
                 # if the previous and current models are same, delete the previous one
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
@@ -1456,6 +1545,11 @@ class Accelerator:
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
+        # Now we can apply the FP8 autocast
+        if self.delayed_fp8_autocast:
+            model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe, fp8_group=model.process_group)(
+                model.forward
+            )
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if not is_torch_version(">=", "2.0"):
@@ -1571,6 +1665,8 @@ class Accelerator:
                 )
 
         if model is not None:
+            # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
+            deepspeed_plugin.set_moe_leaf_modules(model)
             # deal with config keys that use `auto` value and rely on model's hidden_size
             hidden_size_based_keys = [
                 "zero_optimization.reduce_bucket_size",
@@ -1904,6 +2000,7 @@ class Accelerator:
             even_batches=self.even_batches,
             slice_fn_for_dispatch=slice_fn_for_dispatch,
             use_seedable_sampler=self.use_seedable_sampler,
+            non_blocking=self.non_blocking,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
@@ -2216,7 +2313,7 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, input_data):
+    def gather_for_metrics(self, input_data, use_gather_object=False):
         """
         Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system. Should be
         used for gathering the inputs and targets for metric calculation.
@@ -2224,6 +2321,11 @@ class Accelerator:
         Args:
             input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
                 The tensors or objects for calculating metrics across all processes
+            use_gather_object(`bool`):
+                Whether to forcibly use gather_object instead of gather (which is already done if all objects passed do
+                not contain tensors). This flag can be useful for gathering tensors with different sizes that we don't
+                want to pad and concatenate along the first dimension. Using it with GPU tensors is not well supported
+                and inefficient as it incurs GPU -> CPU transfer since tensors would be pickled.
 
         Example:
 
@@ -2248,7 +2350,9 @@ class Accelerator:
         except TypeError:
             all_tensors = False
 
-        if not all_tensors:
+        use_gather_object = use_gather_object or not all_tensors
+
+        if use_gather_object:
             data = gather_object(input_data)
         else:
             data = self.gather(input_data)
@@ -2267,7 +2371,11 @@ class Accelerator:
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
 
-                    return recursively_apply(_adjust_samples, data)
+                    if use_gather_object:
+                        # gather_object put the objects in a list
+                        return _adjust_samples(data)
+                    else:
+                        return recursively_apply(_adjust_samples, data)
                 else:  # remainder is 0
                     # no remainder even though at end of dataloader, so nothing to do.
                     return data

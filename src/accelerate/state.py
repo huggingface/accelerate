@@ -179,7 +179,10 @@ class PartialState:
                 )
 
             # Sets up self.backend + imports
-            backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, kwargs.pop("backend", None))
+            original_backend = kwargs.pop("backend", None)
+            backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, original_backend)
+            if original_backend is not None and backend != original_backend:
+                raise ValueError("Your assigned backend {original_backend} is not avaliable, please use {backend}")
             self.backend = backend
             self.distributed_type = distributed_type
             use_deepspeed = False
@@ -718,19 +721,19 @@ class PartialState:
         elif is_torch_xla_available():
             backend = "xla"
             distributed_type = DistributedType.XLA
-        elif int(os.environ.get("LOCAL_RANK", -1)) != -1:
-            if not cpu:
-                if is_mlu_available():
-                    backend = "cncl"
-                    distributed_type = DistributedType.MULTI_MLU
-                elif torch.cuda.is_available():
-                    if backend is None:
-                        backend = "nccl"
-                    distributed_type = DistributedType.MULTI_GPU
-                elif is_npu_available():
-                    backend = "hccl"
-                    distributed_type = DistributedType.MULTI_NPU
-        if backend is None and (
+        elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
+            if is_mlu_available():
+                backend = "cncl"
+                distributed_type = DistributedType.MULTI_MLU
+            elif torch.cuda.is_available():
+                if backend is None:
+                    backend = "nccl"
+                distributed_type = DistributedType.MULTI_GPU
+            elif is_npu_available():
+                backend = "hccl"
+                distributed_type = DistributedType.MULTI_NPU
+
+        if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
             or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
         ):
@@ -738,8 +741,11 @@ class PartialState:
                 distributed_type = DistributedType.MULTI_XPU
             else:
                 distributed_type = DistributedType.MULTI_CPU
-            if is_ccl_available() and (
-                get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU
+
+            if (
+                backend in (None, "ccl")
+                and is_ccl_available()
+                and (get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU)
             ):
                 if get_ccl_version() >= "1.12":
                     import oneccl_bindings_for_pytorch  # noqa: F401
@@ -747,12 +753,13 @@ class PartialState:
                     import torch_ccl  # noqa: F401
 
                 backend = "ccl"
-            elif torch.distributed.is_mpi_available():
+            elif backend in (None, "mpi") and torch.distributed.is_mpi_available():
                 backend = "mpi"
             else:
                 backend = "gloo"
         if distributed_type is None:
             distributed_type = DistributedType.NO
+
         return backend, distributed_type
 
     def set_device(self):
@@ -899,7 +906,6 @@ class AcceleratorState:
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
                 if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" and self.distributed_type not in [
-                    DistributedType.MULTI_NPU,
                     DistributedType.MULTI_XPU,
                 ]:
                     self.distributed_type = DistributedType.MEGATRON_LM
