@@ -18,6 +18,8 @@ env:
 jobs:
   run-tests:
     runs-on: ubuntu-latest
+    container:
+      image: huggingface/accelerate:cpu-nightly
     strategy:
       fail-fast: false
       matrix:
@@ -38,11 +40,6 @@ jobs:
           test_rest
         ]
     steps:
-    - uses: actions/checkout@v3.1.0
-    - name: Set up python 3.8
-      uses: actions/setup-python@v3
-      with:
-        python-version: 3.8
     
     - name: Install the library
       run: |
