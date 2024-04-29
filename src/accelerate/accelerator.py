@@ -3054,9 +3054,10 @@ class Accelerator:
         self._models = []
         self._dataloaders = []
         # Deepspeed needs a bit more prep
-        if self.deepspeed_engine_wrapped is not None:
-            self.deepspeed_engine_wrapped.destroy()
-        self.deepspeed_engine_wrapped = None
+        if hasattr(self, "deepspeed_engine_wrapped"):
+            if self.deepspeed_engine_wrapped is not None:
+                self.deepspeed_engine_wrapped.destroy()
+            self.deepspeed_engine_wrapped = None
         self.step = 0
         return objects
 
