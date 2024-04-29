@@ -3126,16 +3126,16 @@ class Accelerator:
         >>> model, optimizer, scheduler = accelerator.free_memory(model, optimizer, scheduler)
         ```
         """
+        # Deepspeed needs a bit more prep that should be done first
+        if hasattr(self, "deepspeed_engine_wrapped"):
+            if self.deepspeed_engine_wrapped is not None:
+                self.deepspeed_engine_wrapped.engine.destroy()
+            self.deepspeed_engine_wrapped = None
         objects = release_memory(*objects)
         self._schedulers = []
         self._optimizers = []
         self._models = []
         self._dataloaders = []
-        # Deepspeed needs a bit more prep
-        if hasattr(self, "deepspeed_engine_wrapped"):
-            if self.deepspeed_engine_wrapped is not None:
-                self.deepspeed_engine_wrapped.destroy()
-            self.deepspeed_engine_wrapped = None
         self.step = 0
         return objects
 
