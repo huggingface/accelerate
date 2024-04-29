@@ -120,7 +120,7 @@ def save_accelerator_state(
         from .data_loader import IterableDatasetShard, SeedableRandomSampler
 
         if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = dataloader.sampler.sampler
+            sampler = getattr(dataloader.sampler, "sampler", None)
 
             if isinstance(sampler, SeedableRandomSampler):
                 save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
@@ -227,7 +227,7 @@ def load_accelerator_state(
         from .data_loader import IterableDatasetShard, SeedableRandomSampler
 
         if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = dataloader.sampler.sampler
+            sampler = getattr(dataloader.sampler, "sampler", None)
 
             if isinstance(sampler, SeedableRandomSampler):
                 dataloader.sampler.sampler = torch.load(input_sampler_file)
