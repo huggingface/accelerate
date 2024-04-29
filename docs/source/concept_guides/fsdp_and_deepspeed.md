@@ -175,4 +175,4 @@ Framework | Model Loading (`torch_dtype`) | Mixed Precision | Preparation (Local
 --|--|--|--|--|--
 FSDP | bf16 | default (none) | bf16 | bf16 | bf16
 FSDP | bf16 | bf16 | fp32 | bf16 | fp32
-DeepSpeed   | fp32 | bf16 | fp32 | bf16 | fp32
+DeepSpeed   | bf16 | bf16 | fp32 | bf16 | fp32
