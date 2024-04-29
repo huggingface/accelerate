@@ -17,9 +17,11 @@ RUN python3 -m venv ${VIRTUAL_ENV}
 # Make sure we use the virtualenv
 ENV PATH="${VIRTUAL_ENV}/bin:$PATH"
 WORKDIR /workspace
+# Setup UV
+RUN pip install uv --no-cache-dir
 # Install specific CPU torch wheel to save on space
-RUN python3 -m pip install --upgrade --no-cache-dir pip
-RUN python3 -m pip install --no-cache-dir \
+RUN uv pip install --upgrade --no-cache-dir pip
+RUN uv pip install --no-cache-dir \
     jupyter \
     git+https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers] \
     --extra-index-url https://download.pytorch.org/whl/cpu
