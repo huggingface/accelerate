@@ -41,7 +41,7 @@ sharding / partitioning | FSDP<br>DeepSpeed | `--fsdp_sharding_strategy`<br>`--z
 offload | FSDP<br>DeepSpeed | `--fsdp_offload_params`<br>`--offload_param_device`<br>`--offload_optimizer_device` | `true`<br>`cpu`<br>`cpu` | all or nothing <br><br> 
 model loading | FSDP<br>DeepSpeed | <span style="white-space:nowrap;">`--fsdp_cpu_ram_efficient_loading`</span><br>`--zero3_init_flag` | `true`<br>`true` | <br>only ZeRO 3
 efficient checkpointing | FSDP<br>DeepSpeed | `--fsdp_state_dict_type`<br>`--zero3_save_16bit_model` |  `SHARDED_STATE_DICT`<br>`true` |  <br>only ZeRO 3
-pipeline | FSDP<br><br>DeepSpeed | `--fsdp_forward_prefetch`<br>`--fsdp_backward_prefetch`<br>None | `true`<br>`BACKWARD_PRE` | <br><br>
+weights prefetching | FSDP<br><br>DeepSpeed | `--fsdp_forward_prefetch`<br>`--fsdp_backward_prefetch`<br>None | `true`<br>`BACKWARD_PRE` | <br><br>
 model | FSDP<br><br>DeepSpeed |  `--fsdp_auto_wrap_policy`<br><span style="white-space:nowrap;">`--fsdp_transformer_layer_cls_to_wrap`</span><br>None | `TRANSFORMER_BASED_WRAP`<br><Layer Class> |<br>Usually not needed <br>Transparent to user.
 parameters summoning | FSDP<br>DeepSpeed | `--fsdp_use_orig_params`<br>None | `true` | required for `torch.compile`<br>Transparent to user
 parameters syncing | FSDP<br>DeepSpeed | `--fsdp_sync_module_states`<br>None | `true` | 
@@ -70,7 +70,20 @@ Do note that while FSDP can be configured via `--fsdp_state_dict_type` to save e
 
 <Tip>
 
-    For DeepSpeed Zero3, it is recommended to also pass a `--zero3_save_16bit_model true`, which conveniently consolidates the model to a single rank and saves; this is the FSDP equivalent of `fsdp_state_dict_type: FULL_STATE_DICT`.
+    For DeepSpeed Zero3, one could pass a `--zero3_save_16bit_model true`, which conveniently consolidates the model to a single rank and saves; this is the FSDP equivalent of `fsdp_state_dict_type: FULL_STATE_DICT`. 
+
+</Tip>
+
+<Tip warning={true}>
+
+    For large models, consolidating the model to a single rank can be very slow.
+
+</Tip>
+
+<Tip>
+
+    For quicker checkpointing, for FSDP use `fsdp_state_dict_type: SHARDED_STATE_DICT`, and for DeepSpeed Zero3 [use the `zero_to_fp32.py` script to post-convert sharded checkpoints](https://www.deepspeed.ai/tutorials/zero/#extracting-weights).
+
 
 </Tip>
 
@@ -81,7 +94,7 @@ FSDP only allows *all-or-nothing* offload (i.e., either offload parameters, grad
 ### Prefetching
 
 FSDP allows two prefetching configurations `--fsdp_forward_prefetch` and `--fsdp_backward_prefetch` to improve overlap of comms / computation at a cost of extra memory, see [FSDP documentation](https://pytorch.org/docs/stable/fsdp.html). 
-For DeepSpeed, the prefetching is always on, and only certain hyperparams like `stage3_prefetch_bucket_size` [can be configured for Zero3](https://www.deepspeed.ai/docs/config-json/#parameter-offloading); 🤗 `accelerate` will set these hyperparams automatically.
+For DeepSpeed, the prefetching will be turned on when needed, and it turns on depending on certain hyperparams like `stage3_param_persistence_threshold, stage3_max_reuse_distance`, etc, [that can be configured for Zero3](https://www.deepspeed.ai/docs/config-json/#parameter-offloading); 🤗 `accelerate` will set these hyperparams automatically.
 
 <Tip>
 
@@ -133,7 +146,7 @@ Deepspeed requires explicit `--gradient_accumulation_steps` and `--gradient_clip
 
 ## On Differences in Data Precision Handling
 
-To discuss the how data precision is handled in both FSDP and Deepspeed, it is instructive to first give a flow of how model parameters are handled in these frameworks. Before the model / optimizer parameters are distributed across GPUs, parameter preparation is involved to first "flatten" them to  one-dimensional [`torch.Tensor`](https://pytorch.org/docs/stable/tensors.html#torch-tensor)'s. The implementation of FSDP / DeepSpeed varies in the respect of the `dtype` in which these "flattened" parameters are stored, and there are ramifications with regards to how [`torch.Optimizer`](https://pytorch.org/docs/stable/optim.html#module-torch.optim)'s allocate their `dtypes`'s. The table below outlines the processes for both frameworks; the "Local" column indicates the process occurring at a per-gpu level, therefore any memory overheads by upcasting should be understood to be amortized by the number of gpus used.
+To discuss the how data precision is handled in both FSDP and Deepspeed, it is instructive to first give an overview of how model parameters are handled in these frameworks. Before the model / optimizer parameters are distributed across GPUs, parameter preparation is involved to first "flatten" them to  one-dimensional [`torch.Tensor`](https://pytorch.org/docs/stable/tensors.html#torch-tensor). The implementation of FSDP / DeepSpeed varies in the respect of the `dtype` in which these "flattened" parameters are stored, and there are ramifications with regards to how [`torch.Optimizer`](https://pytorch.org/docs/stable/optim.html#module-torch.optim) allocate their `dtypes`. The table below outlines the processes for both frameworks; the "Local" column indicates the process occurring at a per-gpu level, therefore any memory overheads by upcasting should be understood to be amortized by the number of gpus used.
 
 <Tip>
 
@@ -143,7 +156,7 @@ To discuss the how data precision is handled in both FSDP and Deepspeed, it is i
 
 Process | Local | Framework | Details
 --|--|--|--
-Loading, i.e., [`AutoModel.from_pretrained(..., torch_dtype)`] |  
+Loading, i.e., [`AutoModel.from_pretrained(..., torch_dtype=torch_dtype)`] |  
 Preparation, i.e., creation of "flat params" | ✅ | FSDP<br>DeepSpeed | created in `torch_dtype`.<br> disregards `torch_dtype`, created in `float32`.
 Optimizer initialization | ✅ | FSDP<br>DeepSpeed  | creates parameters in `torch_dtype`<br> creates parameters in `float32`
 Training Step, i.e, forward, backward, reduction | | FSDP<br>DeepSpeed  | follows [`MixedPrecision`](https://pytorch.org/docs/stable/fsdp.html#torch.distributed.fsdp.MixedPrecision)<br> follows `deepspeed_config_file` mixed precision settings.
