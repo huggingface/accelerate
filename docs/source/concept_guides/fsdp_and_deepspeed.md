@@ -108,7 +108,8 @@ While FSDP require an explicit `--fsdp_cpu_ram_efficient_loading true` to activa
 
 <Tip>
 
-    For FSDP, whenever setting `--fsdp_cpu_ram_efficient_loading true`, please also set `--fsdp_sync_module_states true`, otherwise the model will not load properly. 
+    For FSDP, whenever setting `--fsdp_cpu_ram_efficient_loading true`, 🤗 `accelerate` will automatically set `sync_module_states` to true. 
+    For RAM efficient loading the weights will be loaded only in a singe rank, and thus requires `sync_module_states` to broadcast weights to other ranks.
 
 </Tip>
 
