@@ -3110,7 +3110,7 @@ class Accelerator:
             for index, obj in enumerate(self._custom_objects):
                 load_custom_state(obj, input_dir, index)
 
-    def free_memory(self):
+    def free_memory(self, *objects):
         """
         Will release all references to the internal objects stored and call the garbage collector. You should call this
         method between two trainings with different models/optimizers. Also will reset `Accelerator.step` to 0.
@@ -3123,19 +3123,23 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> model, optimizer, scheduler = ...
         >>> model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
-        >>> accelerator.free_memory()
-        >>> del model, optimizer, scheduler
+        >>> model, optimizer, scheduler = accelerator.free_memory(model, optimizer, scheduler)
         ```
         """
+        # Deepspeed needs a bit more prep that should be done first
+        if hasattr(self, "deepspeed_engine_wrapped"):
+            if self.deepspeed_engine_wrapped is not None:
+                self.deepspeed_engine_wrapped.engine.destroy()
+            self.deepspeed_engine_wrapped = None
+        objects = release_memory(*objects)
         self._schedulers = []
         self._optimizers = []
         self._models = []
         self._dataloaders = []
-        self.deepspeed_engine_wrapped = None
         self.step = 0
-        release_memory()
+        return objects
 
-    def clear(self):
+    def clear(self, *objects):
         """
         Alias for [`Accelerate.free_memory`], releases all references to the internal objects stored and call the
         garbage collector. You should call this method between two trainings with different models/optimizers.
@@ -3148,11 +3152,10 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> model, optimizer, scheduler = ...
         >>> model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
-        >>> accelerator.free_memory()
-        >>> del model, optimizer, scheduler
+        >>> model, optimizer, scheduler = accelerator.clear(model, optimizer, scheduler)
         ```
         """
-        self.free_memory()
+        return self.free_memory(*objects)
 
     def _get_named_parameters(self, *args):
         named_parameters = {}
