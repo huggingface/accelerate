@@ -40,10 +40,12 @@ from ..utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_dvclive_available,
+    is_mlu_available,
     is_mps_available,
     is_npu_available,
     is_pandas_available,
     is_pippy_available,
+    is_schedulefree_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
@@ -62,6 +64,8 @@ def get_backend():
         return "cuda", torch.cuda.device_count(), torch.cuda.memory_allocated
     elif is_mps_available():
         return "mps", 1, torch.mps.current_allocated_memory()
+    elif is_mlu_available():
+        return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
     elif is_npu_available():
         return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
@@ -164,6 +168,13 @@ def require_non_xpu(test_case):
     return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
 
 
+def require_mlu(test_case):
+    """
+    Decorator marking a test that requires MLU. These tests are skipped when there are no MLU available.
+    """
+    return unittest.skipUnless(is_mlu_available(), "test require a MLU")(test_case)
+
+
 def require_npu(test_case):
     """
     Decorator marking a test that requires NPU. These tests are skipped when there are no NPU available.
@@ -201,6 +212,13 @@ def require_timm(test_case):
     Decorator marking a test that requires transformers. These tests are skipped when they are not.
     """
     return unittest.skipUnless(is_timm_available(), "test requires the timm library")(test_case)
+
+
+def require_schedulefree(test_case):
+    """
+    Decorator marking a test that requires schedulefree. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_schedulefree_available(), "test requires the schedulefree library")(test_case)
 
 
 def require_bnb(test_case):

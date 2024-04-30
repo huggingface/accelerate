@@ -248,7 +248,7 @@ def training_function(config, args):
         # Use accelerator.print to print only on the main process.
         test_predictions.append(torch.cat(fold_predictions, dim=0))
         # We now need to release all our memory and get rid of the current model, optimizer, etc
-        accelerator.free_memory()
+        model, optimizer = accelerator.free_memory(model, optimizer)
     # New Code #
     # Finally we check the accuracy of our folded results:
     test_references = torch.cat(test_references, dim=0)

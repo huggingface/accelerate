@@ -25,17 +25,18 @@ extras["docs"] = []
 extras["test_prod"] = ["pytest>=7.2.0,<=8.0.0", "pytest-xdist", "pytest-subtests", "parameterized"]
 extras["test_dev"] = [
     "datasets",
+    "diffusers",
     "evaluate",
     "torchpippy>=0.2.0",
     "transformers",
     "scipy",
     "scikit-learn",
-    "deepspeed",
     "tqdm",
     "bitsandbytes",
     "timm",
 ]
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
+extras["deepspeed"] = ["deepspeed<=0.14.0"]
 extras["rich"] = ["rich"]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive"]
@@ -47,7 +48,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.29.0.dev",
+    version="0.30.0.dev",
     description="Accelerate",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

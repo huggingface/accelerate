@@ -23,7 +23,7 @@ defaults:
 jobs:
   run-trainer-tests:
     container:
-      image: huggingface/accelerate-gpu:latest
+      image: huggingface/accelerate:gpu-deepspeed-nightly
       options: --gpus all --shm-size "16gb"
     runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
     strategy:
@@ -88,7 +88,7 @@ jobs:
 
   run-skorch-tests:
     container:
-      image: huggingface/accelerate-gpu:latest
+      image: huggingface/accelerate:gpu-nightly
       options: --gpus all --shm-size "16gb"
     runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
     strategy:

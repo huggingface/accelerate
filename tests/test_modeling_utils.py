@@ -18,9 +18,11 @@ import tempfile
 import unittest
 import warnings
 from collections import OrderedDict
+from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
+from parameterized import parameterized
 from safetensors.torch import save_file
 
 from accelerate import init_empty_weights
@@ -466,6 +468,25 @@ class ModelingUtilsTester(unittest.TestCase):
 
             assert new_model.int_param.dtype == torch.int64
             assert new_model.float_param.dtype == torch.float16
+
+    @parameterized.expand([(None,), ({"": "cpu"},)])
+    def test_load_checkpoint_in_model_unexpected_keys(self, device_map: Optional[Dict]):
+        model = ModelForTest()
+
+        state_dict = model.state_dict()
+        state_dict["foo"] = torch.rand(4, 5)
+        with tempfile.NamedTemporaryFile(suffix=".pt") as tmpfile:
+            torch.save(state_dict, tmpfile)
+
+            model = ModelForTest()
+
+            with self.assertLogs() as cm:
+                load_checkpoint_in_model(model, tmpfile.name, device_map=device_map)
+
+                self.assertTrue(any("were not used when" in out for out in cm.output))
+
+            with self.assertRaises((ValueError, RuntimeError)):
+                load_checkpoint_in_model(model, tmpfile.name, device_map=device_map, strict=True)
 
     def test_clean_device_map(self):
         # Regroup everything if all is on the same device

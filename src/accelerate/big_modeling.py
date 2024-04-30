@@ -31,11 +31,13 @@ from .hooks import (
 )
 from .utils import (
     OffloadedWeightsLoader,
+    check_cuda_p2p_ib_support,
     check_device_map,
     extract_submodules_state_dict,
     find_tied_parameters,
     get_balanced_memory,
     infer_auto_device_map,
+    is_mlu_available,
     is_npu_available,
     is_torch_version,
     is_xpu_available,
@@ -458,16 +460,28 @@ def dispatch_model(
         model.to = add_warning(model.to, model)
         if is_npu_available():
             model.npu = add_warning(model.npu, model)
+        elif is_mlu_available():
+            model.mlu = add_warning(model.mlu, model)
         elif is_xpu_available():
             model.xpu = add_warning(model.xpu, model)
         else:
             model.cuda = add_warning(model.cuda, model)
 
+        # Check if we are using multi-gpus with RTX 4000 series
+        use_multi_gpu = len([device for device in set(device_map.values()) if device not in ("cpu", "disk")]) > 1
+        if use_multi_gpu and not check_cuda_p2p_ib_support():
+            logger.warning(
+                "We've detected an older driver with an RTX 4000 series GPU. These drivers have issues with P2P. "
+                "This can affect the multi-gpu inference when using accelerate device_map."
+                "Please make sure to update your driver to the latest version which resolves this."
+            )
     else:
         device = list(device_map.values())[0]
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
         if is_npu_available() and isinstance(device, int):
             device = f"npu:{device}"
+        elif is_mlu_available() and isinstance(device, int):
+            device = f"mlu:{device}"
         elif is_xpu_available() and isinstance(device, int):
             device = f"xpu:{device}"
         if device != "disk":
@@ -494,6 +508,7 @@ def load_checkpoint_and_dispatch(
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
     force_hooks: bool = False,
+    strict: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -540,6 +555,9 @@ def load_checkpoint_and_dispatch(
         force_hooks (`bool`, *optional*, defaults to `False`):
             Whether or not to force device hooks to be attached to the model even if all layers are dispatched to a
             single device.
+        strict (`bool`, *optional*, defaults to `False`):
+            Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
+            state_dict.
 
     Example:
 
@@ -594,6 +612,7 @@ def load_checkpoint_and_dispatch(
         dtype=dtype,
         offload_state_dict=offload_state_dict,
         offload_buffers=offload_buffers,
+        strict=strict,
     )
     if device_map is None:
         return model

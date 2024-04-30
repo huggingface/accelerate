@@ -30,6 +30,7 @@ from accelerate.test_utils.testing import (
     require_huggingface_suite,
     require_multi_gpu,
     require_pippy,
+    require_schedulefree,
     require_trackers,
     run_command,
     slow,
@@ -47,6 +48,7 @@ EXCLUDE_EXAMPLES = [
     "local_sgd.py",
     "multi_process_metrics.py",
     "memory.py",
+    "schedule_free.py",
     "automatic_gradient_accumulation.py",
     "fsdp_with_peak_mem_tracking.py",
     "deepspeed_with_config_support.py",
@@ -216,6 +218,11 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/multi_process_metrics.py"]
         run_command(self.launch_args + testargs)
 
+    @require_schedulefree
+    def test_schedulefree(self):
+        testargs = ["examples/by_feature/schedule_free.py"]
+        run_command(self.launch_args + testargs)
+
     @require_trackers
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
     def test_tracking(self):
@@ -240,27 +247,30 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/early_stopping.py"]
         run_command(self.launch_args + testargs)
 
+    @require_multi_gpu
+    def test_distributed_inference_examples_stable_diffusion(self):
+        testargs = ["examples/inference/distributed/stable_diffusion.py"]
+        run_command(self.launch_args + testargs)
+
+    @require_multi_gpu
+    def test_distributed_inference_examples_phi2(self):
+        testargs = ["examples/inference/distributed/phi2.py"]
+        run_command(self.launch_args + testargs)
+
     @require_pippy
     @require_multi_gpu
     def test_pippy_examples_bert(self):
-        testargs = ["examples/inference/bert.py"]
+        testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
     @require_pippy
     @require_multi_gpu
     def test_pippy_examples_gpt2(self):
-        testargs = ["examples/inference/gpt2.py"]
+        testargs = ["examples/inference/pippy/gpt2.py"]
         run_command(self.launch_args + testargs)
 
     @require_pippy
     @require_multi_gpu
     def test_pippy_examples_t5(self):
-        testargs = ["examples/inference/t5.py"]
-        run_command(self.launch_args + testargs)
-
-    @slow
-    @require_pippy
-    @require_multi_gpu
-    def test_pippy_examples_llama(self):
-        testargs = ["examples/inference/llama.py"]
+        testargs = ["examples/inference/pippy/t5.py"]
         run_command(self.launch_args + testargs)

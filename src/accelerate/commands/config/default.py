@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 
-from ...utils import is_npu_available, is_xpu_available
+from ...utils import is_mlu_available, is_npu_available, is_xpu_available
 from .config_args import ClusterConfig, default_json_config_file
 from .config_utils import SubcommandHelpFormatter
 
@@ -57,7 +57,15 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         "compute_environment": "LOCAL_MACHINE",
         "mixed_precision": mixed_precision,
     }
-    if torch.cuda.is_available():
+    if is_mlu_available():
+        num_mlus = torch.mlu.device_count()
+        config["num_processes"] = num_mlus
+        config["use_cpu"] = False
+        if num_mlus > 1:
+            config["distributed_type"] = "MULTI_MLU"
+        else:
+            config["distributed_type"] = "NO"
+    elif torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
         config["num_processes"] = num_gpus
         config["use_cpu"] = False

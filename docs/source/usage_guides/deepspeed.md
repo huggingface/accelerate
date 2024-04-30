@@ -157,10 +157,18 @@ Currently, `Accelerate` supports following config through the CLI:
 `gradient_accumulation_steps`: Number of training steps to accumulate gradients before averaging and applying them.
 `gradient_clipping`: Enable gradient clipping with value.
 `offload_optimizer_device`: [none] Disable optimizer offloading, [cpu] offload optimizer to CPU, [nvme] offload optimizer to NVMe SSD. Only applicable with ZeRO >= Stage-2.
+`offload_optimizer_nvme_path`: Decides Nvme Path to offload optimizer states. If unspecified, will default to 'none'.
 `offload_param_device`: [none] Disable parameter offloading, [cpu] offload parameters to CPU, [nvme] offload parameters to NVMe SSD. Only applicable with ZeRO Stage-3.
+`offload_param_nvme_path`: Decides Nvme Path to offload parameters. If unspecified, will default to 'none'.
 `zero3_init_flag`: Decides whether to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with ZeRO Stage-3.
 `zero3_save_16bit_model`: Decides whether to save 16-bit model weights when using ZeRO Stage-3.
 `mixed_precision`: `no` for FP32 training, `fp16` for FP16 mixed-precision training and `bf16` for BF16 mixed-precision training.
+`deepspeed_moe_layer_cls_names`: Comma-separated list of transformer Mixture-of-Experts (MoE) layer class names (case-sensitive) to wrap ,e.g, `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ...
+`deepspeed_hostfile`: DeepSpeed hostfile for configuring multi-node compute resources.
+`deepspeed_exclusion_filter`: DeepSpeed exclusion filter string when using mutli-node setup.
+`deepspeed_inclusion_filter`: DeepSpeed inclusion filter string when using mutli-node setup.
+`deepspeed_multinode_launcher`: DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.
+`deepspeed_config_file`: path to the DeepSpeed config file in `json` format. See the next section for more details on this.
 ```
 To be able to tweak more options, you will need to use a DeepSpeed config file.
 

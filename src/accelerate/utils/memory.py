@@ -23,7 +23,7 @@ import inspect
 
 import torch
 
-from .imports import is_mps_available, is_npu_available, is_xpu_available
+from .imports import is_mlu_available, is_mps_available, is_npu_available, is_xpu_available
 
 
 def release_memory(*objects):
@@ -55,6 +55,8 @@ def release_memory(*objects):
     gc.collect()
     if is_xpu_available():
         torch.xpu.empty_cache()
+    elif is_mlu_available():
+        torch.mlu.empty_cache()
     elif is_npu_available():
         torch.npu.empty_cache()
     elif is_mps_available():
@@ -119,6 +121,8 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
         gc.collect()
         if is_xpu_available():
             torch.xpu.empty_cache()
+        elif is_mlu_available():
+            torch.mlu.empty_cache()
         elif is_npu_available():
             torch.npu.empty_cache()
         else:
@@ -141,6 +145,8 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
                     gc.collect()
                     if is_xpu_available():
                         torch.xpu.empty_cache()
+                    elif is_mlu_available():
+                        torch.mlu.empty_cache()
                     elif is_npu_available():
                         torch.npu.empty_cache()
                     else:

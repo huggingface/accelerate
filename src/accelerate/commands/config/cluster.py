@@ -20,6 +20,7 @@ from ...utils import (
     ComputeEnvironment,
     DistributedType,
     is_deepspeed_available,
+    is_mlu_available,
     is_mps_available,
     is_npu_available,
     is_transformers_available,
@@ -48,7 +49,7 @@ from .config_utils import (
 def get_cluster_input():
     distributed_type = _ask_options(
         "Which type of machine are you using?",
-        ["No distributed training", "multi-CPU", "multi-XPU", "multi-GPU", "multi-NPU", "TPU"],
+        ["No distributed training", "multi-CPU", "multi-XPU", "multi-GPU", "multi-NPU", "multi-MLU", "TPU"],
         _convert_distributed_mode,
     )
 
@@ -64,6 +65,7 @@ def get_cluster_input():
 
     if distributed_type in [
         DistributedType.MULTI_GPU,
+        DistributedType.MULTI_MLU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_CPU,
@@ -142,7 +144,8 @@ def get_cluster_input():
     if (
         not use_cpu
         and is_xpu_available()
-        and distributed_type not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.XLA]
+        and distributed_type
+        not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_MLU, DistributedType.XLA]
     ):
         ipex_config["use_xpu"] = _ask_field(
             "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
@@ -197,7 +200,13 @@ def get_cluster_input():
     deepspeed_config = {}
     if (
         distributed_type
-        in [DistributedType.MULTI_GPU, DistributedType.MULTI_XPU, DistributedType.MULTI_NPU, DistributedType.NO]
+        in [
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_XPU,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_MLU,
+            DistributedType.NO,
+        ]
         and not use_mps
     ):
         use_deepspeed = _ask_field(
@@ -289,6 +298,18 @@ def get_cluster_input():
                         "When `zero3_init_flag` is set, it requires Transformers to be installed. "
                         "Please run `pip3 install transformers`."
                     )
+            use_moe = _ask_field(
+                "Do you want to enable Mixture-of-Experts training (MoE)? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            if use_moe:
+                deepspeed_config["deepspeed_moe_layer_cls_names"] = _ask_field(
+                    "Specify the comma-separated list of transformers MoE layer class names (case-sensitive), e.g : "
+                    " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ... : ",
+                    str,
+                )
 
             if num_machines > 1:
                 launcher_query = "Which Type of launcher do you want to use?"
@@ -333,7 +354,12 @@ def get_cluster_input():
                         )
 
     fsdp_config = {}
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_XPU]:
+    if distributed_type in [
+        DistributedType.MULTI_GPU,
+        DistributedType.MULTI_NPU,
+        DistributedType.MULTI_MLU,
+        DistributedType.MULTI_XPU,
+    ]:
         use_fsdp = _ask_field(
             "Do you want to use FullyShardedDataParallel? [yes/NO]: ",
             _convert_yes_no_to_bool,
@@ -496,6 +522,7 @@ def get_cluster_input():
         DistributedType.MULTI_CPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_GPU,
+        DistributedType.MULTI_MLU,
         DistributedType.MULTI_NPU,
         DistributedType.XLA,
     ]:
@@ -531,6 +558,7 @@ def get_cluster_input():
         distributed_type
         in [
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_MLU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.NO,
@@ -540,11 +568,23 @@ def get_cluster_input():
     ):
         if is_npu_available():
             machine_type = "NPU(s)"
+        elif is_mlu_available():
+            machine_type = "MLU(s)"
         else:
             machine_type = "GPU(s)"
         gpu_ids = _ask_field(
             f"What {machine_type} (by id) should be used for training on this machine as a comma-seperated list? [all]:",
             default="all",
+        )
+
+    # CPU affinity is only supported on NVIDIA hardware for now
+    enable_cpu_affinity = False
+    if distributed_type == (DistributedType.NO, DistributedType.MULTI_GPU) and not use_cpu and not use_mps:
+        enable_cpu_affinity = _ask_field(
+            "Would you like to enable numa efficiency? (Currently only supported on NVIDIA hardware). [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
         )
 
     if distributed_type == DistributedType.XLA:
@@ -673,4 +713,5 @@ def get_cluster_input():
         tpu_use_cluster=tpu_use_cluster,
         dynamo_config=dynamo_config,
         debug=debug,
+        enable_cpu_affinity=enable_cpu_affinity,
     )
