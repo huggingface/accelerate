@@ -920,8 +920,9 @@ def prepare_data_loader(
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
-    sampler_is_batch_sampler = False
+    sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
     synchronized_generator = None
+
     sampler = get_sampler(dataloader)
     if isinstance(sampler, RandomSampler) and use_seedable_sampler:
         # When iterating through the dataloader during distributed processes
