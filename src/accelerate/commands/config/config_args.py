@@ -25,6 +25,7 @@ import yaml
 from ...utils import ComputeEnvironment, DistributedType, SageMakerDistributedType
 from ...utils.constants import SAGEMAKER_PYTHON_VERSION, SAGEMAKER_PYTORCH_VERSION, SAGEMAKER_TRANSFORMERS_VERSION
 
+is_local_machine = yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE) == ComputeEnvironment.LOCAL_MACHINE
 
 hf_cache_home = os.path.expanduser(
     os.environ.get("HF_HOME", os.path.join(os.environ.get("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
@@ -62,10 +63,7 @@ def load_config_from_file(config_file):
                 config_class = SageMakerConfig
             return config_class.from_json_file(json_file=config_file)
         else:
-            if (
-                yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
-                == ComputeEnvironment.LOCAL_MACHINE
-            ):
+            if (is_local_machine):
                 config_class = ClusterConfig
             else:
                 config_class = SageMakerConfig
@@ -109,7 +107,7 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
-        if "enable_cpu_affinity" not in config_dict:
+        if "enable_cpu_affinity" not in config_dict :
             config_dict["enable_cpu_affinity"] = False
         extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
@@ -145,7 +143,7 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
-        if "enable_cpu_affinity" not in config_dict:
+        if "enable_cpu_affinity" not in config_dict and !is_local_machine:
             config_dict["enable_cpu_affinity"] = False
         extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
