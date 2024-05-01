@@ -225,6 +225,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
 
     if args.use_fsdp:
         current_env["ACCELERATE_USE_FSDP"] = "true"
+        if args.fsdp_cpu_ram_efficient_loading and not args.fsdp_sync_module_states:
+            raise ValueError("When using `--fsdp_cpu_ram_efficient_loading` set `--fsdp_sync_module_states` to `True`")
 
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
