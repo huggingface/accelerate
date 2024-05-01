@@ -143,7 +143,7 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
-        if "enable_cpu_affinity" not in config_dict and !is_local_machine:
+        if "enable_cpu_affinity" not in config_dict and is_local_machine:
             config_dict["enable_cpu_affinity"] = False
         extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
