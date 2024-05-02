@@ -694,11 +694,11 @@ class DeepSpeedPlugin:
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
-    offload_optimizer_device: bool = field(
+    offload_optimizer_device: str = field(
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3."},
     )
-    offload_param_device: bool = field(
+    offload_param_device: str = field(
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."},
     )
