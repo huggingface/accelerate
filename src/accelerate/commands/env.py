@@ -79,6 +79,8 @@ def env_command(args):
     }
     if pt_cuda_available:
         info["GPU type"] = torch.cuda.get_device_name()
+    if pt_npu_available:
+        info["CANN version"] = torch.version.cann
 
     print("\nCopy-and-paste the text below in your GitHub issue\n")
     print("\n".join([f"- {prop}: {val}" for prop, val in info.items()]))

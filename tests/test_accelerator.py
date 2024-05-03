@@ -17,6 +17,7 @@ import pickle
 import tempfile
 from unittest.mock import patch
 
+import psutil
 import pytest
 import torch
 from parameterized import parameterized
@@ -197,13 +198,22 @@ class AcceleratorTester(AccelerateTestCase):
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
-        accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
-        accelerator.free_memory()
+        free_cpu_ram_before = psutil.virtual_memory().available // 1024 // 1024
+        model, optimizer, scheduler, train_dl, valid_dl = accelerator.prepare(
+            model, optimizer, scheduler, train_dl, valid_dl
+        )
+        model, optimizer, scheduler, train_dl, valid_dl = accelerator.free_memory(
+            model, optimizer, scheduler, train_dl, valid_dl
+        )
+
+        free_cpu_ram_after = psutil.virtual_memory().available // 1024 // 1024
 
         assert len(accelerator._models) == 0
         assert len(accelerator._optimizers) == 0
         assert len(accelerator._schedulers) == 0
         assert len(accelerator._dataloaders) == 0
+        # The less-than comes *specifically* from CUDA CPU things/won't be present on CPU builds
+        assert free_cpu_ram_after <= free_cpu_ram_before
 
     @require_non_torch_xla
     def test_env_var_device(self):
