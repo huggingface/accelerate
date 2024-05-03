@@ -25,8 +25,6 @@ import yaml
 from ...utils import ComputeEnvironment, DistributedType, SageMakerDistributedType
 from ...utils.constants import SAGEMAKER_PYTHON_VERSION, SAGEMAKER_PYTORCH_VERSION, SAGEMAKER_TRANSFORMERS_VERSION
 
-is_local_machine = yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE) == ComputeEnvironment.LOCAL_MACHINE
-
 hf_cache_home = os.path.expanduser(
     os.environ.get("HF_HOME", os.path.join(os.environ.get("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
@@ -53,6 +51,7 @@ def load_config_from_file(config_file):
     else:
         config_file = default_config_file
     with open(config_file, encoding="utf-8") as f:
+        is_local_machine = yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE) == ComputeEnvironment.LOCAL_MACHINE
         if config_file.endswith(".json"):
             if (
                 json.load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
