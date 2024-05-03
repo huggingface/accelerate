@@ -341,7 +341,7 @@ class Accelerator:
         self.init_handler = None
         self.fp8_recipe_handler = None
         self.autocast_handler = None
-        self._has_lomo_optimizer = False 
+        self.has_lomo_optimizer = False 
 
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
