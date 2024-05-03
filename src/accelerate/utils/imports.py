@@ -85,6 +85,10 @@ def is_pynvml_available():
     return _is_package_available("pynvml")
 
 
+def is_pytest_available():
+    return _is_package_available("pytest")
+
+
 def is_msamp_available():
     return _is_package_available("msamp", "ms-amp")
 

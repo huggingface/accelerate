@@ -38,6 +38,7 @@ from accelerate.utils import (
     is_ipex_available,
     is_mlu_available,
     is_npu_available,
+    is_pytest_available,
     is_xpu_available,
     set_seed,
     synchronize_rng_states,
@@ -793,9 +794,10 @@ def main():
         print("\n**Breakpoint trigger test**")
     test_trigger()
 
-    if state.local_process_index == 0:
-        print("\n**Test reinstantiated state**")
-    test_reinstantiated_state()
+    if is_pytest_available():
+        if state.local_process_index == 0:
+            print("\n**Test reinstantiated state**")
+        test_reinstantiated_state()
 
 
 if __name__ == "__main__":

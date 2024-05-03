@@ -92,6 +92,7 @@ from .imports import (
     is_peft_available,
     is_pippy_available,
     is_pynvml_available,
+    is_pytest_available,
     is_rich_available,
     is_sagemaker_available,
     is_schedulefree_available,
