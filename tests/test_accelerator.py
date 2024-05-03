@@ -197,6 +197,8 @@ class AcceleratorTester(AccelerateTestCase):
 
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
+        # Free up refs with empty_cache() and gc.collect()
+        accelerator.free_memory()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
         free_cpu_ram_before = psutil.virtual_memory().available // 1024 // 1024
         model, optimizer, scheduler, train_dl, valid_dl = accelerator.prepare(
