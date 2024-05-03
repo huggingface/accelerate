@@ -81,6 +81,7 @@ from .imports import (
     is_dvclive_available,
     is_fp8_available,
     is_ipex_available,
+    is_lomo_available,
     is_megatron_lm_available,
     is_mlflow_available,
     is_mlu_available,
