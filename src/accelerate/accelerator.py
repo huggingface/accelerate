@@ -2031,9 +2031,11 @@ class Accelerator:
         ```
         """
         if is_lomo_available():
+            # We need to import locally to avoid circular imports since lomo imports stuff from 
+            # transformers & accelerate
             from lomo_optim import AdaLomo, Lomo
 
-            self._has_lomo_optimizer = isinstance(optimizer, (Lomo, AdaLomo))
+            self.has_lomo_optimizer = isinstance(optimizer, (Lomo, AdaLomo))
 
         # Ensure we can't double wrap an optimizer due to `find_batch_size`
         if getattr(optimizer, "_is_accelerate_prepared", False):
@@ -2116,7 +2118,7 @@ class Accelerator:
             return
         elif self.scaler is not None:
             self.scaler.scale(loss).backward(**kwargs)
-        elif learning_rate is not None and self._has_lomo_optimizer:
+        elif learning_rate is not None and self.has_lomo_optimizer:
             self._lomo_backward(loss, learning_rate)
         else:
             loss.backward(**kwargs)
@@ -3386,6 +3388,8 @@ class Accelerator:
         Runs backward pass on LOMO optimizers.
         """
         if is_lomo_available():
+            # We need to import locally to avoid circular imports since lomo imports stuff from 
+            # transformers & accelerate
             from lomo_optim import AdaLomo, Lomo
         else:
             raise ValueError("`lomo_optim` package is needed to call backward on LOMO optimizers")
