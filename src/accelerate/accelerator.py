@@ -341,7 +341,7 @@ class Accelerator:
         self.init_handler = None
         self.fp8_recipe_handler = None
         self.autocast_handler = None
-        self.has_lomo_optimizer = False 
+        self.has_lomo_optimizer = False
 
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
@@ -2031,7 +2031,7 @@ class Accelerator:
         ```
         """
         if is_lomo_available():
-            # We need to import locally to avoid circular imports since lomo imports stuff from 
+            # We need to import locally to avoid circular imports since lomo imports stuff from
             # transformers & accelerate
             from lomo_optim import AdaLomo, Lomo
 
@@ -2119,7 +2119,7 @@ class Accelerator:
         elif self.scaler is not None:
             self.scaler.scale(loss).backward(**kwargs)
         elif learning_rate is not None and self.has_lomo_optimizer:
-            self._lomo_backward(loss, learning_rate)
+            self.lomo_backward(loss, learning_rate)
         else:
             loss.backward(**kwargs)
 
@@ -3383,17 +3383,28 @@ class Accelerator:
 
         return False
 
-    def _lomo_backward(self, loss: torch.Tensor, learning_rate: float) -> None:
+    def lomo_backward(self, loss: torch.Tensor, learning_rate: float) -> None:
         """
         Runs backward pass on LOMO optimizers.
         """
         if is_lomo_available():
-            # We need to import locally to avoid circular imports since lomo imports stuff from 
+            # We need to import locally to avoid circular imports since lomo imports stuff from
             # transformers & accelerate
             from lomo_optim import AdaLomo, Lomo
         else:
             raise ValueError("`lomo_optim` package is needed to call backward on LOMO optimizers")
 
+        if learning_rate is None:
+            raise ValueError("A learning rate must be passed in order to call backward pass with LOMO optimizers.")
+
+        _backward_called = False
+
         for optimizer in self._optimizers:
             if isinstance(optimizer.optimizer, (Lomo, AdaLomo)):
                 optimizer.optimizer.fused_backward(loss, learning_rate)
+                _backward_called = True
+
+        if not _backward_called:
+            raise ValueError(
+                "Backward pass not properly called on LOMO optimizers. Are you sure you passed a LOMO optimizer in accelerator.prepare()?"
+            )
