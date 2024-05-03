@@ -3391,8 +3391,6 @@ class Accelerator:
             # We need to import locally to avoid circular imports since lomo imports stuff from
             # transformers & accelerate
             from lomo_optim import AdaLomo, Lomo
-        else:
-            raise ValueError("`lomo_optim` package is needed to call backward on LOMO optimizers")
 
         if learning_rate is None:
             raise ValueError("A learning rate must be passed in order to call backward pass with LOMO optimizers.")
