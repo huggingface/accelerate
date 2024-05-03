@@ -50,6 +50,7 @@ from ..utils import (
     is_timm_available,
     is_torch_version,
     is_torch_xla_available,
+    is_torchvision_available,
     is_transformers_available,
     is_wandb_available,
     is_xpu_available,
@@ -212,6 +213,13 @@ def require_timm(test_case):
     Decorator marking a test that requires transformers. These tests are skipped when they are not.
     """
     return unittest.skipUnless(is_timm_available(), "test requires the timm library")(test_case)
+
+
+def require_torchvision(test_case):
+    """
+    Decorator marking a test that requires torchvision. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_torchvision_available(), "test requires the torchvision library")(test_case)
 
 
 def require_schedulefree(test_case):

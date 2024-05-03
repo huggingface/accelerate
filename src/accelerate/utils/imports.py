@@ -208,6 +208,10 @@ def is_bnb_available():
     return _is_package_available("bitsandbytes")
 
 
+def is_torchvision_available():
+    return _is_package_available("torchvision")
+
+
 def is_megatron_lm_available():
     if str_to_bool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
         package_exists = importlib.util.find_spec("megatron") is not None
