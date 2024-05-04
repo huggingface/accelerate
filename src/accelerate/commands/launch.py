@@ -304,6 +304,15 @@ def launch_command_parser(subparsers=None):
         help="Tee std streams into a log file and also to console.",
     )
     distributed_args.add_argument(
+        "--log_dir",
+        type=str,
+        default=None,
+        help=(
+            "Base directory to use for log files when using torchrun/torch.distributed.run as launcher. "
+            "Use with --tee to redirect std streams info log files."
+        ),
+    )
+    distributed_args.add_argument(
         "--role",
         type=str,
         default="default",
