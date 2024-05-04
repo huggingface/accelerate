@@ -304,7 +304,6 @@ def launch_command_parser(subparsers=None):
         help="Tee std streams into a log file and also to console.",
     )
     distributed_args.add_argument(
-        "--log-dir",
         "--log_dir",
         type=str,
         default=None,
