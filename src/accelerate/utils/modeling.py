@@ -445,7 +445,11 @@ def set_module_tensor_to_device(
             elif module.__class__.__name__ == "Linear4bit" and getattr(module.weight, "quant_state", None) is None:
                 # quantize only if necessary
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
-                if not getattr(module.weight, "quant_state", None) and device_index is not None:
+                if (
+                    not getattr(module.weight, "quant_state", None) 
+                    and device_index is not None
+                    and str(module.weight.device) != "meta"
+                ):
                     module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
     if device != "cpu":
