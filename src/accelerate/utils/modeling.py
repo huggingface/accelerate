@@ -811,7 +811,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                     _ = torch.tensor(0, device=torch.device("npu", i))
                     max_memory.append({i: torch.npu.mem_get_info(i)[0]})
                 except Exception:
-                    logger.warning(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
         elif is_mlu_available():
             for i in range(torch.mlu.device_count()):
@@ -819,7 +819,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                     _ = torch.tensor(0, device=torch.device("mlu", i))
                     max_memory.append({i: torch.mlu.mem_get_info(i)[0]})
                 except Exception:
-                    logger.warning(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
         elif is_xpu_available():
             for i in range(torch.xpu.device_count()):
@@ -827,7 +827,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                     _ = torch.tensor(0, device=torch.device("xpu", i))
                     max_memory.append({i: torch.xpu.max_memory_allocated(i)})
                 except Exception:
-                    logger.warning(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
         else:
             for i in range(torch.cuda.device_count()):
@@ -835,7 +835,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                     _ = torch.tensor([0], device=i)
                     max_memory.append({i: torch.cuda.mem_get_info(i)[0]})
                 except Exception:
-                    logger.warning(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
         # allocate everything in the mps device as the RAM is shared
         if is_mps_available():
