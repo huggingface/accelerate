@@ -2035,7 +2035,8 @@ class Accelerator:
             # transformers & accelerate
             from lomo_optim import AdaLomo, Lomo
 
-            self.has_lomo_optimizer = isinstance(optimizer, (Lomo, AdaLomo))
+            # Support multiple optimizers: https://github.com/huggingface/accelerate/pull/2695#discussion_r1589164607
+            self.has_lomo_optimizer |= isinstance(optimizer, (Lomo, AdaLomo))
 
         # Ensure we can't double wrap an optimizer due to `find_batch_size`
         if getattr(optimizer, "_is_accelerate_prepared", False):
