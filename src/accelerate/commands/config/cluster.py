@@ -579,7 +579,7 @@ def get_cluster_input():
 
     # CPU affinity is only supported on NVIDIA hardware for now
     enable_cpu_affinity = False
-    if distributed_type == (DistributedType.NO, DistributedType.MULTI_GPU) and not use_cpu and not use_mps:
+    if distributed_type in (DistributedType.NO, DistributedType.MULTI_GPU) and not use_cpu and not use_mps:
         enable_cpu_affinity = _ask_field(
             "Would you like to enable numa efficiency? (Currently only supported on NVIDIA hardware). [yes/NO]: ",
             _convert_yes_no_to_bool,
