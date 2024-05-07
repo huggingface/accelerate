@@ -809,7 +809,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
             for i in range(torch.npu.device_count()):
                 try:
                     _ = torch.tensor(0, device=torch.device("npu", i))
-                    max_memory.append({i: torch.npu.mem_get_info(i)[0]})
+                    max_memory[i] = torch.npu.mem_get_info(i)[0]
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -817,7 +817,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
             for i in range(torch.mlu.device_count()):
                 try:
                     _ = torch.tensor(0, device=torch.device("mlu", i))
-                    max_memory.append({i: torch.mlu.mem_get_info(i)[0]})
+                    max_memory[i] = torch.mlu.mem_get_info(i)[0]
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -825,7 +825,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
             for i in range(torch.xpu.device_count()):
                 try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
-                    max_memory.append({i: torch.xpu.max_memory_allocated(i)})
+                    max_memory[i] = torch.xpu.max_memory_allocated(i)
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -833,7 +833,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
             for i in range(torch.cuda.device_count()):
                 try:
                     _ = torch.tensor([0], device=i)
-                    max_memory.append({i: torch.cuda.mem_get_info(i)[0]})
+                    max_memory[i] = torch.cuda.mem_get_info(i)[0]
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
