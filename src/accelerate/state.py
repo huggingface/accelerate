@@ -238,7 +238,7 @@ class PartialState:
 
                 if (
                     self.distributed_type == DistributedType.MULTI_CPU
-                    and get_int_from_env(["OMP_NUM_THREADS", "OMP_NUM_THREADS"], 0) > 0
+                    and get_int_from_env(["OMP_NUM_THREADS"], 0) > 0
                 ):
                     import psutil
 
