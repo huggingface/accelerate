@@ -20,7 +20,7 @@ from unittest.mock import patch
 import torch
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
-from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig
+from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command_parser
 from accelerate.test_utils import execute_subprocess_async
@@ -196,6 +196,8 @@ class ClusterConfigTester(unittest.TestCase):
     Test case for verifying the config dataclasses work
     """
 
+    test_config_path = Path("tests/test_configs")
+
     def test_base_config(self):
         # Tests that all the dataclasses can be initialized
         config = BaseConfig(
@@ -256,6 +258,8 @@ class ClusterConfigTester(unittest.TestCase):
         assert config.compute_environment == "AMAZON_SAGEMAKER"
         assert config.ec2_instance_type == "MY_TYPE"
         assert config.iam_role_name == "MY_ROLE"
+
+        config = load_config_from_file(str(self.test_config_path / "0_30_0_sagemaker.yaml"))
 
 
 class TpuConfigTester(unittest.TestCase):
