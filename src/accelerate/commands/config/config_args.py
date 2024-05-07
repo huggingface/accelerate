@@ -182,8 +182,8 @@ class ClusterConfig(BaseConfig):
     rdzv_backend: Optional[str] = "static"
     same_network: Optional[bool] = False
     main_training_function: str = "main"
-
     enable_cpu_affinity: bool = False
+
     # args for deepspeed_plugin
     deepspeed_config: dict = None
     # args for fsdp
