@@ -508,6 +508,7 @@ def load_checkpoint_and_dispatch(
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
     force_hooks: bool = False,
+    strict: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -554,6 +555,9 @@ def load_checkpoint_and_dispatch(
         force_hooks (`bool`, *optional*, defaults to `False`):
             Whether or not to force device hooks to be attached to the model even if all layers are dispatched to a
             single device.
+        strict (`bool`, *optional*, defaults to `False`):
+            Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
+            state_dict.
 
     Example:
 
@@ -608,6 +612,7 @@ def load_checkpoint_and_dispatch(
         dtype=dtype,
         offload_state_dict=offload_state_dict,
         offload_buffers=offload_buffers,
+        strict=strict,
     )
     if device_map is None:
         return model

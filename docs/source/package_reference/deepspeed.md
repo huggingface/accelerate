@@ -17,12 +17,12 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] utils.DeepSpeedPlugin
 
-[[autodoc]] utils.DummyOptim
+[[autodoc]] utils.deepspeed.DummyOptim
 
-[[autodoc]] utils.DummyScheduler
+[[autodoc]] utils.deepspeed.DummyScheduler
 
-[[autodoc]] utils.DeepSpeedEngineWrapper
+[[autodoc]] utils.deepspeed.DeepSpeedEngineWrapper
 
-[[autodoc]] utils.DeepSpeedOptimizerWrapper
+[[autodoc]] utils.deepspeed.DeepSpeedOptimizerWrapper
 
-[[autodoc]] utils.DeepSpeedSchedulerWrapper
+[[autodoc]] utils.deepspeed.DeepSpeedSchedulerWrapper

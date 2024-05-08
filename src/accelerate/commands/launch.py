@@ -304,6 +304,15 @@ def launch_command_parser(subparsers=None):
         help="Tee std streams into a log file and also to console.",
     )
     distributed_args.add_argument(
+        "--log_dir",
+        type=str,
+        default=None,
+        help=(
+            "Base directory to use for log files when using torchrun/torch.distributed.run as launcher. "
+            "Use with --tee to redirect std streams info log files."
+        ),
+    )
+    distributed_args.add_argument(
         "--role",
         type=str,
         default="default",
@@ -486,6 +495,13 @@ def launch_command_parser(subparsers=None):
         default=None,
         type=str,
         help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
+    )
+    deepspeed_args.add_argument(
+        "--deepspeed_moe_layer_cls_names",
+        default=None,
+        type=str,
+        help="comma-separated list of transformer MoE layer class names (case-sensitive) to wrap ,e.g, `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
+        " (useful only when `use_deepspeed` flag is passed).",
     )
 
     # fsdp arguments

@@ -140,6 +140,8 @@ with distributed_state.split_between_processes(["a dog", "a cat", "a chicken"], 
 On the first GPU, the prompts will be `["a dog", "a cat"]`, and on the second GPU it will be `["a chicken", "a chicken"]`.
 Make sure to drop the final sample, as it will be a duplicate of the previous one.
 
+You can find more complex examples [here](https://github.com/huggingface/accelerate/tree/main/examples/inference/distributed) such as how to use it with LLMs.
+
 ## Memory-efficient pipeline parallelism (experimental)
 
 This next part will discuss using *pipeline parallelism*. This is an **experimental** API utilizing the [PiPPy library by PyTorch](https://github.com/pytorch/PiPPy/) as a native solution. 
@@ -232,4 +234,4 @@ if PartialState().is_last_process:
     
 </Tip>
 
-And that's it! To explore more, please check out the inference examples in the [Accelerate repo](https://github.com/huggingface/accelerate/tree/main/examples/inference) and our [documentation](../package_reference/inference) as we work to improving this integration. 
+And that's it! To explore more, please check out the inference examples in the [Accelerate repo](https://github.com/huggingface/accelerate/tree/main/examples/inference/pippy) and our [documentation](../package_reference/inference) as we work to improving this integration. 

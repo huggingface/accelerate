@@ -31,6 +31,7 @@ from accelerate.test_utils import (
     require_multi_gpu,
     require_non_torch_xla,
     require_pippy,
+    require_torchvision,
 )
 from accelerate.utils import patch_environment
 
@@ -76,6 +77,7 @@ class MultiDeviceTester(unittest.TestCase):
 
     @require_multi_gpu
     @require_pippy
+    @require_torchvision
     @require_huggingface_suite
     def test_pippy(self):
         """

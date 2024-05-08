@@ -234,7 +234,7 @@ class DummyOptim:
             parameter groups
         weight_decay (float):
             Weight decay.
-        **kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Other arguments.
     """
 
@@ -259,7 +259,7 @@ class DummyScheduler:
             Number of steps for warmup.
         lr_scheduler_callable (callable, *optional*):
             A callable function that creates an LR Scheduler. It accepts only one argument `optimizer`.
-        **kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Other arguments.
     """
 

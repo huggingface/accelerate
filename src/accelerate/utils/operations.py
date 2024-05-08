@@ -97,7 +97,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
         error_on_other_type (`bool`, *optional*, defaults to `False`):
             Whether to return an error or not if after unpacking `data`, we get on an object that is not of type
             `main_type`. If `False`, the function will leave objects of types different than `main_type` unchanged.
-        **kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Keyword arguments that will be passed to `func` when applied on the unpacked data.
 
     Returns:
@@ -164,10 +164,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             if is_npu_available():
                 if isinstance(device, int):
                     device = f"npu:{device}"
-            else:
-                raise error
-        except Exception as error:
-            if is_xpu_available():
+            elif is_xpu_available():
                 if isinstance(device, int):
                     device = f"xpu:{device}"
             else:

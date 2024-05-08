@@ -422,7 +422,7 @@ class MegatronLMDummyScheduler:
             Total number of steps.
         warmup_num_steps (int):
             Number of steps for warmup.
-        **kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Other arguments.
     """
 

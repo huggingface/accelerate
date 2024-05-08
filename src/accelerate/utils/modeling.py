@@ -381,12 +381,13 @@ def set_module_tensor_to_device(
             device_quantization = device
             device = "cpu"
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if is_npu_available() and isinstance(device, int):
-            device = f"npu:{device}"
-        elif is_mlu_available() and isinstance(device, int):
-            device = f"mlu:{device}"
-        if is_xpu_available() and isinstance(device, int):
-            device = f"xpu:{device}"
+        if isinstance(device, int):
+            if is_npu_available():
+                device = f"npu:{device}"
+            elif is_mlu_available():
+                device = f"mlu:{device}"
+            elif is_xpu_available():
+                device = f"xpu:{device}"
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
@@ -447,14 +448,15 @@ def set_module_tensor_to_device(
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
                     module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
-    if is_npu_available():
-        torch.npu.empty_cache()
-    elif is_mlu_available():
-        torch.mlu.empty_cache()
-    elif is_xpu_available():
-        torch.xpu.empty_cache()
-    else:
-        torch.cuda.empty_cache()
+    if device != "cpu":
+        if is_npu_available():
+            torch.npu.empty_cache()
+        elif is_mlu_available():
+            torch.mlu.empty_cache()
+        elif is_xpu_available():
+            torch.xpu.empty_cache()
+        else:
+            torch.cuda.empty_cache()
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
     # order to avoid duplicating memory, see above.
@@ -801,27 +803,40 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not (torch.cuda.is_available() or is_npu_available() or is_mlu_available() or is_xpu_available()):
-            max_memory = {}
-
-        else:
-            # Make sure CUDA is initialized on each GPU to have the right memory info.
-            if is_npu_available():
-                for i in range(torch.npu.device_count()):
+        max_memory = {}
+        # Make sure CUDA is initialized on each GPU to have the right memory info.
+        if is_npu_available():
+            for i in range(torch.npu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("npu", i))
-                max_memory = {i: torch.npu.mem_get_info(i)[0] for i in range(torch.npu.device_count())}
-            elif is_mlu_available():
-                for i in range(torch.mlu.device_count()):
+                    max_memory[i] = torch.npu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_mlu_available():
+            for i in range(torch.mlu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("mlu", i))
-                max_memory = {i: torch.mlu.mem_get_info(i)[0] for i in range(torch.mlu.device_count())}
-            elif is_xpu_available():
-                for i in range(torch.xpu.device_count()):
+                    max_memory[i] = torch.mlu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_xpu_available():
+            for i in range(torch.xpu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
-                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
-            else:
-                for i in range(torch.cuda.device_count()):
+                    max_memory[i] = torch.xpu.max_memory_allocated(i)
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        else:
+            for i in range(torch.cuda.device_count()):
+                try:
                     _ = torch.tensor([0], device=i)
-                max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+                    max_memory[i] = torch.cuda.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         # allocate everything in the mps device as the RAM is shared
         if is_mps_available():
             max_memory["mps"] = psutil.virtual_memory().available
@@ -1546,6 +1561,7 @@ def load_checkpoint_in_model(
     offload_buffers: bool = False,
     keep_in_fp32_modules: List[str] = None,
     offload_8bit_bnb: bool = False,
+    strict: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -1583,6 +1599,9 @@ def load_checkpoint_in_model(
             A list of the modules that we keep in `torch.float32` dtype.
         offload_8bit_bnb (`bool`, *optional*):
             Whether or not to enable offload of 8-bit modules on cpu/disk.
+        strict (`bool`, *optional*, defaults to `False`):
+            Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
+            state_dict.
 
     """
     if offload_8bit_bnb:
@@ -1660,16 +1679,24 @@ def load_checkpoint_in_model(
         state_dict_folder = tempfile.mkdtemp()
         state_dict_index = {}
 
+    unexpected_keys = set()
+    model_keys = set(model.state_dict().keys())
     buffer_names = [name for name, _ in model.named_buffers()]
     for checkpoint_file in checkpoint_files:
-        checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+        loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
         if device_map is None:
-            model.load_state_dict(checkpoint, strict=False)
+            model.load_state_dict(loaded_checkpoint, strict=strict)
+            unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
         else:
-            for param_name, param in checkpoint.items():
+            for param_name, param in loaded_checkpoint.items():
                 # skip SCB parameter (for 8-bit serialization)
                 if "SCB" in param_name:
                     continue
+
+                if param_name not in model_keys:
+                    unexpected_keys.add(param_name)
+                    if not strict:
+                        continue  # Skip loading this parameter.
 
                 module_name = param_name
 
@@ -1690,9 +1717,9 @@ def load_checkpoint_in_model(
                         if proceed:
                             new_dtype = torch.float32
 
-                if "weight" in param_name and param_name.replace("weight", "SCB") in checkpoint.keys():
+                if "weight" in param_name and param_name.replace("weight", "SCB") in loaded_checkpoint.keys():
                     if param.dtype == torch.int8:
-                        fp16_statistics = checkpoint[param_name.replace("weight", "SCB")]
+                        fp16_statistics = loaded_checkpoint[param_name.replace("weight", "SCB")]
                 else:
                     fp16_statistics = None
 
@@ -1729,8 +1756,14 @@ def load_checkpoint_in_model(
                     )
 
         # Force Python to clean up.
-        del checkpoint
+        del loaded_checkpoint
         gc.collect()
+
+    if not strict and len(unexpected_keys) > 0:
+        logger.warning(
+            f"Some weights of the model checkpoint at {checkpoint} were not used when"
+            f" initializing {model.__class__.__name__}: {unexpected_keys}. This may or may not be an issue - make sure that the checkpoint does not have unnecessary parameters, or that the model definition correctly corresponds to the checkpoint."
+        )
 
     save_offload_index(offload_index, offload_folder)
 
@@ -1765,7 +1798,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
         )
         if state.mixed_precision == "fp16":
             return torch.autocast(device_type=device_type, dtype=torch.float16, **autocast_kwargs)
-        elif state.mixed_precision == "bf16" and state.distributed_type in [
+        elif state.mixed_precision in ["bf16", "fp8"] and state.distributed_type in [
             DistributedType.NO,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,

@@ -524,6 +524,14 @@ class DataLoaderConfiguration:
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
+    non_blocking: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator will utilize non-blocking host-to-device"
+            " transfers, allowing for better overlap between dataloader communication and computation.  Recommended that the"
+            " prepared dataloader has `pin_memory` set to `True` to work properly."
+        },
+    )
 
 
 @dataclass
@@ -682,15 +690,15 @@ class DeepSpeedPlugin:
         default=None,
         metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
     )
-    is_train_batch_min: str = field(
+    is_train_batch_min: bool = field(
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
-    offload_optimizer_device: bool = field(
+    offload_optimizer_device: str = field(
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3."},
     )
-    offload_param_device: bool = field(
+    offload_param_device: str = field(
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."},
     )
@@ -713,6 +721,13 @@ class DeepSpeedPlugin:
         default=None,
         metadata={"help": "Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3."},
     )
+    transformer_moe_cls_names: str = field(
+        default=None,
+        metadata={
+            "help": "comma-separated list of transformers MoE layer class names (case-sensitive), e.g : "
+            " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
+        },
+    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -722,9 +737,8 @@ class DeepSpeedPlugin:
             self.gradient_accumulation_steps = int(gas) if gas.isdigit() else gas
 
         if self.gradient_clipping is None:
-            gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "none")
-            if gradient_clipping != "none":
-                self.gradient_clipping = float(gradient_clipping)
+            gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "auto")
+            self.gradient_clipping = gradient_clipping if gradient_clipping == "auto" else float(gradient_clipping)
 
         if self.zero_stage is None:
             self.zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", 2))
@@ -968,6 +982,26 @@ class DeepSpeedPlugin:
                 "It will only ask for the necessary config variables when using `deepspeed_config_file`."
             )
 
+    def set_moe_leaf_modules(self, model):
+        if self.transformer_moe_cls_names is None:
+            self.transformer_moe_cls_names = os.environ.get("ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES", None)
+        if self.transformer_moe_cls_names is not None:
+            if compare_versions("deepspeed", "<", "0.14.0"):
+                raise ImportError("DeepSpeed version must be >= 0.14.0 to use MOE support. Please update DeepSpeed.")
+            from deepspeed.utils import set_z3_leaf_modules
+
+            class_names = self.transformer_moe_cls_names.split(",")
+            transformer_moe_cls = []
+            for layer_class in class_names:
+                transformer_cls = get_module_class_from_name(model, layer_class)
+                if transformer_cls is None:
+                    raise Exception(
+                        f"Could not find a transformer layer class called '{layer_class}' to wrap in the model."
+                    )
+                else:
+                    transformer_moe_cls.append(transformer_cls)
+            set_z3_leaf_modules(model, transformer_moe_cls)  # z3_leaf
+
 
 @dataclass
 class FullyShardedDataParallelPlugin:
@@ -1109,6 +1143,13 @@ class FullyShardedDataParallelPlugin:
         self.forward_prefetch = str_to_bool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
         self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
+        if str_to_bool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1 and not self.sync_module_states:
+            warnings.warn(
+                "sync_module_states cannot be False since efficient cpu ram loading enabled. "
+                "Setting sync_module_states to True."
+            )
+            self.sync_module_states = True
+
         if self.sync_module_states:
             if is_npu_available():
                 device = torch.npu.current_device()
@@ -1121,26 +1162,6 @@ class FullyShardedDataParallelPlugin:
                     "There are currently no available devices found, must be one of 'XPU', 'CUDA', or 'NPU'."
                 )
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
-
-    @staticmethod
-    def get_module_class_from_name(module, name):
-        """
-        Gets a class from a module by its name.
-
-        Args:
-            module (`torch.nn.Module`): The module to get the class from.
-            name (`str`): The name of the class.
-        """
-        modules_children = list(module.children())
-        if module.__class__.__name__ == name:
-            return module.__class__
-        elif len(modules_children) == 0:
-            return
-        else:
-            for child_module in modules_children:
-                module_class = FullyShardedDataParallelPlugin.get_module_class_from_name(child_module, name)
-                if module_class is not None:
-                    return module_class
 
     def set_auto_wrap_policy(self, model):
         from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
@@ -1156,7 +1177,7 @@ class FullyShardedDataParallelPlugin:
                 ).split(",")
                 transformer_cls_to_wrap = set()
                 for layer_class in transformer_cls_names_to_wrap:
-                    transformer_cls = FullyShardedDataParallelPlugin.get_module_class_from_name(model, layer_class)
+                    transformer_cls = get_module_class_from_name(model, layer_class)
                     if transformer_cls is None:
                         raise Exception("Could not find the transformer layer class to wrap in the model.")
                     else:
@@ -1715,3 +1736,23 @@ class BnbQuantizationConfig:
 
         if not isinstance(self.torch_dtype, torch.dtype):
             raise ValueError("torch_dtype must be a torch.dtype")
+
+
+def get_module_class_from_name(module, name):
+    """
+    Gets a class from a module by its name.
+
+    Args:
+        module (`torch.nn.Module`): The module to get the class from.
+        name (`str`): The name of the class.
+    """
+    modules_children = list(module.children())
+    if module.__class__.__name__ == name:
+        return module.__class__
+    elif len(modules_children) == 0:
+        return
+    else:
+        for child_module in modules_children:
+            module_class = get_module_class_from_name(child_module, name)
+            if module_class is not None:
+                return module_class
