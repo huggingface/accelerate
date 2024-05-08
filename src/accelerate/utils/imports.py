@@ -85,12 +85,24 @@ def is_pynvml_available():
     return _is_package_available("pynvml")
 
 
+def is_pytest_available():
+    return _is_package_available("pytest")
+
+
 def is_msamp_available():
     return _is_package_available("msamp", "ms-amp")
 
 
+def is_schedulefree_available():
+    return _is_package_available("schedulefree")
+
+
 def is_transformer_engine_available():
     return _is_package_available("transformer_engine")
+
+
+def is_lomo_available():
+    return _is_package_available("lomo_optim")
 
 
 def is_fp8_available():
@@ -175,6 +187,8 @@ def is_bf16_available(ignore_tpu=False):
         return not ignore_tpu
     if is_cuda_available():
         return torch.cuda.is_bf16_supported()
+    if is_mps_available():
+        return False
     return True
 
 
@@ -196,6 +210,10 @@ def is_8bit_bnb_available():
 
 def is_bnb_available():
     return _is_package_available("bitsandbytes")
+
+
+def is_torchvision_available():
+    return _is_package_available("torchvision")
 
 
 def is_megatron_lm_available():

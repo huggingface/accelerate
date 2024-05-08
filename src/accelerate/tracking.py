@@ -171,7 +171,7 @@ class TensorBoardTracker(GeneralTracker):
             The name of the experiment run
         logging_dir (`str`, `os.PathLike`):
             Location for TensorBoard logs to be stored.
-        kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Additional key word arguments passed along to the `tensorboard.SummaryWriter.__init__` method.
     """
 
@@ -280,7 +280,7 @@ class WandBTracker(GeneralTracker):
     Args:
         run_name (`str`):
             The name of the experiment run.
-        kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Additional key word arguments passed along to the `wandb.init` method.
     """
 
@@ -405,7 +405,7 @@ class CometMLTracker(GeneralTracker):
     Args:
         run_name (`str`):
             The name of the experiment run.
-        kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Additional key word arguments passed along to the `Experiment.__init__` method.
     """
 
@@ -484,7 +484,7 @@ class AimTracker(GeneralTracker):
     Args:
         run_name (`str`):
             The name of the experiment run.
-        kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Additional key word arguments passed along to the `Run.__init__` method.
     """
 
@@ -729,7 +729,7 @@ class ClearMLTracker(GeneralTracker):
         run_name (`str`, *optional*):
             Name of the experiment. Environment variables `CLEARML_PROJECT` and `CLEARML_TASK` have priority over this
             argument.
-        kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Kwargs passed along to the `Task.__init__` method.
     """
 

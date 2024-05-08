@@ -9,7 +9,7 @@ env:
   IS_GITHUB_CI: "1"
 
 jobs:
-  run_all_tests_single_gpu:
+  run_core_tests_single_gpu:
     runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
     env:
       CUDA_VISIBLE_DEVICES: "0"
@@ -28,6 +28,11 @@ jobs:
           git checkout ${{ github.sha }};
           pip install -e .[testing,test_trackers] -U;
           pip install pytest-reportlog tabulate  ;
+
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
 
       - name: Run CLI tests (use make cli)
         working-directory: accelerate
@@ -56,7 +61,46 @@ jobs:
           pip install tabulate;
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
-  run_all_tests_multi_gpu:
+  run_deepspeed_tests_single_gpu:
+    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+    container:
+      image: huggingface/accelerate:gpu-deepspeed-nightly
+      options: --gpus all --shm-size "16gb"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install accelerate
+        run: |
+          source activate accelerate;
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
+          git checkout ${{ github.sha }};
+          pip install -e .[testing,test_trackers] -U;
+          pip install pytest-reportlog tabulate  ;
+
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
+          
+      - name: Run test on GPUs
+        working-directory: accelerate
+        if: always()
+        run: |
+          source activate accelerate;
+          make test_deepspeed
+
+      - name: Generate Report
+        working-directory: accelerate
+        if: always()
+        run: |
+          pip install tabulate;
+          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
+
+  run_core_tests_multi_gpu:
     runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
     env:
       CUDA_VISIBLE_DEVICES: 0,1
@@ -75,6 +119,11 @@ jobs:
           git checkout ${{ github.sha }};
           pip install -e .[testing,test_trackers] -U;
           pip install pytest-reportlog tabulate
+
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
 
       - name: Run test on GPUs
         working-directory: accelerate
@@ -95,4 +144,41 @@ jobs:
         if: always()
         run: |
           source activate accelerate;
+          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
+
+  run_deepspeed_tests_multi_gpu:
+    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
+    container:
+      image: huggingface/accelerate:gpu-deepspeed-nightly
+      options: --gpus all --shm-size "16gb"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install accelerate
+        run: |
+          source activate accelerate;
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
+          git checkout ${{ github.sha }};
+          pip install -e .[testing,test_trackers] -U;
+          pip install pytest-reportlog tabulate  ;
+
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
+
+      - name: Run test on GPUs
+        working-directory: accelerate
+        if: always()
+        run: |
+          source activate accelerate;
+          make test_deepspeed
+
+      - name: Generate Report
+        working-directory: accelerate
+        if: always()
+        run: |
+          pip install tabulate;
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

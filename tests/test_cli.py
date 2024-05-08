@@ -470,8 +470,8 @@ class ModelEstimatorTester(unittest.TestCase):
             assert (
                 total_size_estimate == output[i][2]
             ), f"Calculation for total size in `{precision_str}` is incorrect."
-            assert (
-                total_training_size_estimate == output[i][3]
+            assert total_training_size_estimate == max(
+                output[i][3].values()
             ), f"Calculation for total training size in `{precision_str}` is incorrect."
 
     @require_transformers
