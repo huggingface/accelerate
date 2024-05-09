@@ -1,0 +1,6 @@
+compute_environment: LOCAL_MACHINE
+distributed_type: MEGATRON_LM
+num_processes: 1
+fsdp_config:
+  x: 1
+  fsdp_sync_module_states: true
