@@ -1,0 +1,4 @@
+compute_environment: LOCAL_MACHINE
+debug: true
+num_processes: 1
+distributed_type: 'NO'
