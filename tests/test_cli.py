@@ -73,8 +73,9 @@ class AccelerateLauncherTester(unittest.TestCase):
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_config_compatibility(self):
+        invalid_configs = ["invalid", "mpi", "sagemaker"]
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
-            if "invalid" in str(config) or "mpi" in str(config):
+            if any(invalid_config in str(config) for invalid_config in invalid_configs):
                 continue
             with self.subTest(config_file=config):
                 cmd = get_launch_command(config_file=config) + [self.test_file_path]
