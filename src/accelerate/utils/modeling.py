@@ -928,6 +928,16 @@ def load_offloaded_weights(model, index, offload_folder):
         weight = load_offloaded_weight(tensor_file, metadata)
         set_module_tensor_to_device(model, param_name, "cpu", value=weight, fp16_statistics=fp16_statistics)
 
+def get_module_leaves(module_sizes):
+    module_children = {}
+    for module in module_sizes:
+        if module == "":
+            continue
+        parent = module.rsplit(".", 1)[0]
+        module_children[parent] = module_children.get(parent, 0) + 1
+    
+    leaves = [module for module in module_sizes if module_children.get(module, 0) == 0]
+    return leaves
 
 def get_balanced_memory(
     model: nn.Module,
@@ -1038,10 +1048,10 @@ def get_balanced_memory(
         buffer = 0
 
     # Compute mean of final modules. In the first dict of module sizes, leaves are the parameters
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
+    leaves = get_module_leaves(module_sizes)
     module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
     # Once removed, leaves are the final modules.
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
+    leaves = get_module_leaves(module_sizes)
     mean_leaves = int(sum([module_sizes[n] for n in leaves]) / max(len(leaves), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
