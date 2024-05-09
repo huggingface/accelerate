@@ -968,8 +968,6 @@ def _validate_launch_command(args):
                     and getattr(args, name, None) is None
                 ):
                     setattr(args, name, attr)
-        if not args.debug:
-            args.debug = defaults.debug
 
         if not args.mixed_precision:
             if defaults.mixed_precision is None:
