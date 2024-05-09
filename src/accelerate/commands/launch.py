@@ -901,7 +901,7 @@ def _validate_launch_command(args):
     warned = []
     mp_from_config_flag = False
     # Get the default from the config file.
-    if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
+    if args.config_file is not None or (os.path.isfile(default_config_file) and not args.cpu):
         defaults = load_config_from_file(args.config_file)
         if (
             not args.multi_gpu
