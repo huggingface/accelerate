@@ -164,6 +164,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         _validate_launch_command(args)
         self.assertEqual(2, args.num_processes)
 
+        # Make sure fsdp sub-section entries are correctly parsed.
         args = parser.parse_args(
             [
                 "--config-file",
@@ -175,10 +176,6 @@ class AccelerateLauncherTester(unittest.TestCase):
         self.assertTrue(args.fsdp_sync_module_states)
         self.assertEqual(1, args.fsdp_x)
 
-    @unittest.expectedFailure
-    def test_validate_launch_command_megatron(self):
-        """An expected failure: config sub-elements override the CLI."""
-        parser = launch_command_parser()
         args = parser.parse_args(
             [
                 "--config-file",
