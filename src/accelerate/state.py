@@ -236,7 +236,10 @@ class PartialState:
                 kwargs["rank"] = dist_information.rank
                 kwargs["world_size"] = dist_information.world_size
 
-                if self.distributed_type == DistributedType.MULTI_CPU and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0:
+                if (
+                    self.distributed_type == DistributedType.MULTI_CPU
+                    and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0
+                ):
                     import psutil
 
                     num_cpu_threads_per_process = int(
