@@ -1220,6 +1220,8 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             FullOptimStateDictConfig,
             FullStateDictConfig,
+            ShardedOptimStateDictConfig,
+            ShardedStateDictConfig,
             StateDictType,
         )
 
@@ -1230,6 +1232,11 @@ class FullyShardedDataParallelPlugin:
                 self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        elif self.state_dict_type == StateDictType.SHARDED_STATE_DICT:
+            if self.state_dict_config is None:
+                self.state_dict_config = ShardedStateDictConfig(offload_to_cpu=True)
+            if self.optim_state_dict_config is None:
+                self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
 
 
 @dataclass
