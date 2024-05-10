@@ -1,5 +1,0 @@
-compute_environment: LOCAL_MACHINE
-distributed_type: MEGATRON_LM
-num_processes: 1
-megatron_lm_config:
-  megatron_lm_recompute_activations: false
