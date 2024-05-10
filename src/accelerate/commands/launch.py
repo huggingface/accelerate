@@ -1031,8 +1031,8 @@ def _validate_launch_command(args):
         defaults is not None and defaults.compute_environment != ComputeEnvironment.AMAZON_SAGEMAKER
     )
     if is_aws_env_disabled and args.num_cpu_threads_per_process is None:
-        args.num_cpu_threads_per_process = 1
-        if args.use_cpu and args.num_processes >= 1:
+        args.num_cpu_threads_per_process = get_int_from_env(["OMP_NUM_THREADS"], 1)
+        if args.use_cpu and args.num_processes >= 1 and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0:
             local_size = get_int_from_env(
                 ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
             )
