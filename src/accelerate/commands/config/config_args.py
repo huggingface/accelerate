@@ -241,3 +241,4 @@ class SageMakerConfig(BaseConfig):
     sagemaker_metrics_file: str = None
     additional_args: dict = None
     dynamo_config: dict = None
+    enable_cpu_affinity: bool = False
