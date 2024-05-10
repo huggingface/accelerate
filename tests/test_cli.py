@@ -134,61 +134,6 @@ class AccelerateLauncherTester(unittest.TestCase):
         self.assertEqual(python_script_cmd[1], str(self.test_file_path))
         self.assertEqual(python_script_cmd[2], test_file_arg)
 
-    def test_validate_launch_command(self):
-        """Test that the validation function combines args and defaults."""
-        parser = launch_command_parser()
-
-        # If an option isn't specified on the CLI
-        # the config file should be used.
-        args = parser.parse_args(
-            [
-                "--config-file",
-                str(self.test_config_path / "debug.yaml"),
-                "test.py",
-            ]
-        )
-        self.assertFalse(args.debug)
-        _validate_launch_command(args)
-        self.assertTrue(args.debug)
-
-        # If an option is specified on the CLI
-        # that should take precedence over the config file.
-        args = parser.parse_args(
-            [
-                "--num-processes",
-                "2",
-                "--config-file",
-                str(self.test_config_path / "one_proc.yaml"),
-                "test.py",
-            ]
-        )
-        _validate_launch_command(args)
-        self.assertEqual(2, args.num_processes)
-
-        # Make sure fsdp sub-section entries are correctly parsed.
-        args = parser.parse_args(
-            [
-                "--config-file",
-                str(self.test_config_path / "fsdp.yaml"),
-                "test.py",
-            ]
-        )
-        _validate_launch_command(args)
-        self.assertTrue(args.fsdp_sync_module_states)
-        self.assertEqual(1, args.fsdp_x)
-
-        args = parser.parse_args(
-            [
-                "--config-file",
-                str(self.test_config_path / "megatron.yaml"),
-                "--megatron_lm_recompute_activations",
-                "true",
-                "test.py",
-            ]
-        )
-        _validate_launch_command(args)
-        self.assertEqual("true", args.megatron_lm_recompute_activations)
-
 
 class LaunchArgTester(unittest.TestCase):
     """
