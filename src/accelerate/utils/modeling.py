@@ -928,6 +928,7 @@ def load_offloaded_weights(model, index, offload_folder):
         weight = load_offloaded_weight(tensor_file, metadata)
         set_module_tensor_to_device(model, param_name, "cpu", value=weight, fp16_statistics=fp16_statistics)
 
+
 def get_module_leaves(module_sizes):
     module_children = {}
     for module in module_sizes:
@@ -935,9 +936,9 @@ def get_module_leaves(module_sizes):
             continue
         parent = module.rsplit(".", 1)[0]
         module_children[parent] = module_children.get(parent, 0) + 1
-    
     leaves = [module for module in module_sizes if module_children.get(module, 0) == 0]
     return leaves
+
 
 def get_balanced_memory(
     model: nn.Module,
