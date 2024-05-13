@@ -29,7 +29,8 @@ from .utils import (
 
 
 if is_pippy_available():
-    from pippy import Pipe, SplitPoint, annotate_split_points, PipelineStage
+    from pippy import Pipe, PipelineStage, SplitPoint, annotate_split_points
+
 
 def generate_device_map(model, num_processes: int = 1, no_split_module_classes=None, max_memory: dict = None):
     """
