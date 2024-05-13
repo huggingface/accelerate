@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import shutil
+from pathlib import Path
 
 import torch
 
@@ -19,11 +21,13 @@ from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME
 from .imports import is_torch_distributed_available
 from .modeling import is_peft_model
+from .other import save
 from .versions import is_torch_version
 
 
 if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
     import torch.distributed.checkpoint as dist_cp
+    import torch.distributed.checkpoint.format_utils as dist_cp_format_utils
     from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner, DefaultSavePlanner
     from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -207,3 +211,57 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
             logger.info(f"Optimizer loaded from {ckpt_dir}")
         flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
         optimizer.load_state_dict(flattened_osd)
+
+
+def _distributed_checkpoint_to_merged_weights(
+    checkpoint_dir: str,
+    save_path: str,
+    use_safetensors: bool = True
+):
+    """
+    Passthrough to `torch.distributed.checkpoint.format_utils.dcp_to_torch_save`,
+    except will save with safetensors if `use_safetensors`.
+
+    Will save to `{save_path}/merged.{safetensors,pth}`.
+    """
+    state_dict = {}
+    save_path = Path(save_path)
+    dist_cp_format_utils._load_state_dict(
+        state_dict,
+        storage_reader=dist_cp.FileSystemReader(checkpoint_dir),
+        planner=dist_cp_format_utils._EmptyStateDictLoadPlanner(),
+        no_dist=True
+    )
+    # if we just have a folder, use merged
+    if save_path.suffix == "":
+        save_path = save_path / "merged"
+        save_path += ".safetensors" if use_safetensors else ".pth"
+
+    save(state_dict, save_path, safe_serialization=use_safetensors)
+    return save_path
+
+
+def merge_fsdp_weights(checkpoint_dir: str, output_path: str, use_safetensors: bool = True, remove_checkpoint_dir: bool = False):
+    """
+    Merge the weights from multiple FSDP checkpoints into a single combined checkpoint.
+    Should be used if `SHARDED_STATE_DICT` was used for the model. Weights will be saved 
+    to `{output_path}/merged.pth`.
+
+    Note: this is a CPU-bound process.
+
+    Args:
+        checkpoint_dir (`str`): 
+            The directory containing the FSDP checkpoints (can be either the model or optimizer).
+        output_path (str): 
+            The path to save the merged checkpoint.
+        use_safetensors (`bool`, *optional*, defaults to `True`):
+            Whether to save the merged weights with safetensors (recommended).
+        remove_checkpoint_dir (`bool`, *optional*, defaults to `False`):
+            Whether to remove the checkpoint directory after merging.
+    """
+    logger.info(f"Merging FSDP weights from {checkpoint_dir}")
+    save_path = _distributed_checkpoint_to_merged_weights(checkpoint_dir, output_path, use_safetensors)
+    logger.info(f"Successfully merged FSDP weights and saved to {save_path}")
+    if remove_checkpoint_dir:
+        logger.info(f"Removing old checkpoint directory {checkpoint_dir}")
+        shutil.rmtree(checkpoint_dir)
