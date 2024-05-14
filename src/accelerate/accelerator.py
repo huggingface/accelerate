@@ -2903,7 +2903,7 @@ class Accelerator:
         for i, model in enumerate(self._models):
             if self.distributed_type == DistributedType.FSDP:
                 logger.info("Saving FSDP model")
-                save_fsdp_model(self.state.fsdp_plugin, self, model, output_dir, i)
+                save_fsdp_model(self.state.fsdp_plugin, model, output_dir, i)
                 logger.info(f"FSDP Model saved to output dir {output_dir}")
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Saving DeepSpeed Model and Optimizer")
@@ -2922,7 +2922,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.FSDP:
             for i, opt in enumerate(self._optimizers):
                 logger.info("Saving FSDP Optimizer")
-                save_fsdp_optimizer(self.state.fsdp_plugin, self, opt, self._models[i], output_dir, i)
+                save_fsdp_optimizer(self.state.fsdp_plugin, opt, self._models[i], output_dir, i)
                 logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
         elif self.distributed_type not in [DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
             optimizers = self._optimizers
@@ -3047,7 +3047,7 @@ class Accelerator:
         for i, model in enumerate(self._models):
             if self.distributed_type == DistributedType.FSDP:
                 logger.info("Loading FSDP model")
-                load_fsdp_model(self.state.fsdp_plugin, self, model, input_dir, i)
+                load_fsdp_model(self.state.fsdp_plugin, model, input_dir, i)
                 logger.info(f"FSDP Model loaded from input dir {input_dir}")
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Loading DeepSpeed Model and Optimizer")
@@ -3066,7 +3066,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.FSDP:
             for i, opt in enumerate(self._optimizers):
                 logger.info("Loading FSDP Optimizer")
-                load_fsdp_optimizer(self.state.fsdp_plugin, self, opt, self._models[i], input_dir, i)
+                load_fsdp_optimizer(self.state.fsdp_plugin, opt, self._models[i], input_dir, i)
                 logger.info(f"FSDP Optimizer loaded from input dir {input_dir}")
         elif self.distributed_type not in [DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
             optimizers = self._optimizers
