@@ -41,7 +41,7 @@ def merge_command_parser(subparsers=None):
     )
     parser.add_argument(
         "--use_safetensors",
-        action="store_true",
+        action="store_false",
         help="Whether to save the merged weights with safetensors (recommended).",
         default=True,
     )
