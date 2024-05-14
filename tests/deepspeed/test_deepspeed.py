@@ -992,6 +992,11 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage)
 
     def test_peak_memory_usage(self):
+        if compare_versions("deepspeed", ">", "0.12.6"):
+            self.skipTest(
+                "The test fails when deepspeed>0.12.6. This is something that needs to be fixed on deepspeed library"
+            )
+
         self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
         cmd = [
             "accelerate",
