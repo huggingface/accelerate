@@ -447,7 +447,7 @@ def get_cluster_input():
                     error_message="Please enter yes or no.",
                 )
             fsdp_config["fsdp_activation_checkpointing"] = _ask_field(
-                    "Do you want to enable FSDP activation checkpointing? [yes/NO]: ",
+                "Do you want to enable FSDP activation checkpointing? [yes/NO]: ",
                 _convert_yes_no_to_bool,
                 default=False,
                 error_message="Please enter yes or no.",
