@@ -18,7 +18,7 @@ from pathlib import Path
 import torch
 
 from ..logging import get_logger
-from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME
+from .constants import FSDP_MERGED_MODEL_NAME, FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME
 from .imports import is_torch_distributed_available
 from .modeling import is_peft_model
 from .other import save
@@ -230,7 +230,7 @@ def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: st
     )
     # if we just have a folder, use merged
     if save_path.suffix == "":
-        fname = "merged"
+        fname = FSDP_MERGED_MODEL_NAME
         fname += ".safetensors" if use_safetensors else ".pth"
         save_path = save_path / fname
 

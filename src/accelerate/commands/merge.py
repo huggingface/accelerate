@@ -40,15 +40,15 @@ def merge_command_parser(subparsers=None):
         help="The path to save the merged weights. Defaults to the current directory. ",
     )
     parser.add_argument(
-        "--use_safetensors",
-        action="store_false",
-        help="Whether to save the merged weights with safetensors (recommended).",
-        default=True,
+        "--use_pytorch",
+        action="store_true",
+        help="Whether to save the merged weights as `.pth` rather than `.safetensors` (not recommended).",
+        default=False,
     )
     parser.add_argument(
         "--remove_checkpoint_dir",
         action="store_true",
-        help="""Whether to remove the checkpoint directory after merging.""",
+        help="Whether to remove the checkpoint directory after merging.",
         default=False,
     )
 
