@@ -32,7 +32,7 @@ jobs:
           cd accelerate;
           git checkout ${{ github.sha }};
           pip install -e . --no-deps
-          pip install "deepspeed<0.14.0"
+          pip install "deepspeed<0.13.0"
           pip install pytest-reportlog tabulate
 
       - name: Show installed libraries
