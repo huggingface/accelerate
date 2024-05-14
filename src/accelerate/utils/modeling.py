@@ -934,8 +934,9 @@ def get_module_leaves(module_sizes):
     for module in module_sizes:
         if module == "":
             continue
-        parent = module.rsplit(".", 1)[0]
-        module_children[parent] = module_children.get(parent, 0) + 1
+        if "." in module:
+            parent = module.rsplit(".", 1)[0]
+            module_children[parent] = module_children.get(parent, 0) + 1
     leaves = [module for module in module_sizes if module_children.get(module, 0) == 0 and module != ""]
     return leaves
 
