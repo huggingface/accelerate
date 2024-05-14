@@ -932,7 +932,7 @@ def load_offloaded_weights(model, index, offload_folder):
 def get_module_leaves(module_sizes):
     module_children = {}
     for module in module_sizes:
-        if module == "":
+        if module == "" or "." not in module:
             continue
         parent = module.rsplit(".", 1)[0]
         module_children[parent] = module_children.get(parent, 0) + 1
