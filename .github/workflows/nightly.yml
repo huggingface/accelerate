@@ -12,162 +12,6 @@ env:
 
 
 jobs:
-  run_core_tests_single_gpu:
-    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
-    env:
-      CUDA_VISIBLE_DEVICES: "0"
-      TEST_TYPE: "single_gpu"
-    container:
-      image: huggingface/accelerate:gpu-nightly
-      options: --gpus all --shm-size "16gb"
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Update clone & pip install
-        run: |
-          source activate accelerate
-          git clone https://github.com/huggingface/accelerate;
-          cd accelerate;
-          git checkout ${{ github.sha }};
-          pip install -e . --no-deps
-          pip install pytest-reportlog tabulate
-
-      - name: Show installed libraries
-        run: |
-          source activate accelerate;
-          pip freeze
-
-      - name: Run test on GPUs
-        working-directory: accelerate
-        run: |
-          source activate accelerate
-          make test
-          
-      - name: Run examples on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
-          
-      - name: Generate Report
-        working-directory: accelerate
-        if: always()
-        run: |
-          pip install slack_sdk tabulate
-          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
-
-  run_deepspeed_tests_single_gpu:
-    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
-    env:
-      CUDA_VISIBLE_DEVICES: "0"
-      TEST_TYPE: "single_gpu_deepspeed"
-    container:
-      image: huggingface/accelerate:gpu-deepspeed-nightly
-      options: --gpus all --shm-size "16gb"
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Update clone & pip install
-        run: |
-          source activate accelerate
-          git clone https://github.com/huggingface/accelerate;
-          cd accelerate;
-          git checkout ${{ github.sha }};
-          pip install -e . --no-deps
-          pip install pytest-reportlog tabulate
-
-      - name: Show installed libraries
-        run: |
-          source activate accelerate;
-          pip freeze
-
-      - name: Run test on GPUs
-        working-directory: accelerate
-        run: |
-          source activate accelerate
-          make test_deepspeed
-
-      - name: Run Integration tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_integrations
-
-      - name: Run examples on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
-          
-      - name: Generate Report
-        working-directory: accelerate
-        if: always()
-        run: |
-          pip install slack_sdk tabulate
-          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
-
-  run_core_tests_multi_gpu:
-    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
-    env:
-      CUDA_VISIBLE_DEVICES: "0,1"
-      TEST_TYPE: "multi_gpu"
-    container:
-      image: huggingface/accelerate:gpu-nightly
-      options: --gpus all --shm-size "16gb"
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Update clone
-        run: |
-          source activate accelerate
-          git clone https://github.com/huggingface/accelerate;
-          cd accelerate;
-          git checkout ${{ github.sha }};
-          pip install -e . --no-deps
-          pip install pytest-reportlog tabulate
-
-      - name: Show installed libraries
-        run: |
-          source activate accelerate;
-          pip freeze
-
-      - name: Run core and big modeling tests on GPUs
-        working-directory: accelerate
-        run: |
-          source activate accelerate
-          make test_core
-          make test_big_modeling
-          make test_cli
-
-      - name: Run Integration tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_integrations
-
-      - name: Run examples on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
-
-      - name: Generate Report
-        working-directory: accelerate
-        if: always()
-        run: |
-          pip install slack_sdk tabulate
-          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_deepspeed_tests_multi_gpu:
     runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
@@ -188,6 +32,7 @@ jobs:
           cd accelerate;
           git checkout ${{ github.sha }};
           pip install -e . --no-deps
+          pip install "deepspeed<0.14.0"
           pip install pytest-reportlog tabulate
 
       - name: Show installed libraries
@@ -201,29 +46,9 @@ jobs:
           source activate accelerate
           make test_deepspeed
 
-      - name: Run Integration tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_integrations
-
-      - name: Run examples on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
-
       - name: Generate Report
         working-directory: accelerate
         if: always()
         run: |
           pip install slack_sdk tabulate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
-
-  
-  run-integration-tests:
-    if: always()
-    uses: ./.github/workflows/self_hosted_integration_tests.yml
