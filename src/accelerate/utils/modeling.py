@@ -355,7 +355,7 @@ def set_module_tensor_to_device(
         print("using value from tied_params_map old_value")
         print(tensor_name)
         print(value)
-        print(value.data_ptr())
+        print(old_value.data_ptr())
         print(tied_params_map[old_value.data_ptr()][device])
         module._parameters[tensor_name] = tied_params_map[old_value.data_ptr()][device]
         return
