@@ -340,6 +340,11 @@ def set_module_tensor_to_device(
         and value.data_ptr() in tied_params_map
         and device in tied_params_map[value.data_ptr()]
     ):
+        print("using value from tied_params_map value")
+        print(tensor_name)
+        print(value)
+        print(value.data_ptr())
+        print(tied_params_map[value.data_ptr()][device])
         module._parameters[tensor_name] = tied_params_map[value.data_ptr()][device]
         return
     elif (
@@ -347,6 +352,11 @@ def set_module_tensor_to_device(
         and old_value.data_ptr() in tied_params_map
         and device in tied_params_map[old_value.data_ptr()]
     ):
+        print("using value from tied_params_map old_value")
+        print(tensor_name)
+        print(value)
+        print(value.data_ptr())
+        print(tied_params_map[old_value.data_ptr()][device])
         module._parameters[tensor_name] = tied_params_map[old_value.data_ptr()][device]
         return
 
@@ -466,6 +476,8 @@ def set_module_tensor_to_device(
         and device not in tied_params_map[old_value.data_ptr()]
     ):
         tied_params_map[old_value.data_ptr()][device] = new_value
+        print("tied_map updated 1 ")
+        print(tied_params_map)
     elif (
         value is not None
         and tied_params_map is not None
@@ -473,6 +485,8 @@ def set_module_tensor_to_device(
         and device not in tied_params_map[value.data_ptr()]
     ):
         tied_params_map[value.data_ptr()][device] = new_value
+        print("tied_map updated 2")
+        print(tied_params_map)
 
 
 def named_module_tensors(

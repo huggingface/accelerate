@@ -416,8 +416,6 @@ def dispatch_model(
 
                 # Note: To handle the disk offloading case, we can not simply use weights_map[param_name].data_ptr() as the reference pointer,
                 # as we have no guarantee that safetensors' `file.get_tensor()` will always give the same pointer.
-        print("tied_params_map from dispatch")
-        print(tied_params_map)
         attach_align_device_hook_on_blocks(
             model,
             execution_device=execution_device,

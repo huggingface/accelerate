@@ -174,7 +174,6 @@ class LinearModuleAndSubModule(torch.nn.Linear):
         b = torch.nn.functional.linear(self.weight_submodule2(x), self.weight)
         c = torch.nn.functional.linear(self.weight_submodule3(x), self.weight)
         d = torch.nn.functional.linear(self.weight_submodule4(x), self.weight)
-        print([a, b, c, d])
         return a + b + c + d
 
 
@@ -186,11 +185,7 @@ class ModelWithSubmodules(torch.nn.Module):
 
     def forward(self, x):
         a = self.module1(x)
-        print("a")
-        print(a)
         b = self.module2(x)
-        print("b")
-        print(b)
         return a + b
 
 
@@ -560,7 +555,13 @@ class BigModelingTester(unittest.TestCase):
 
         free_memory_bytes_before_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
         with TemporaryDirectory() as tmp_dir:
+            print("before dispatch")
+            print(model.module1.weight)
+            print(model.module2.weight)
             dispatch_model(model, device_map, offload_dir=tmp_dir)
+            print("after dispatch")
+            print(model.module1.weight)
+            print(model.module2.weight)
             free_memory_bytes_after_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
 
             assert (free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130
@@ -574,8 +575,6 @@ class BigModelingTester(unittest.TestCase):
                     )
                 except Exception as e:
                     raise e
-            print(expected)
-            print(output)
             assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
             torch.cuda.empty_cache()
