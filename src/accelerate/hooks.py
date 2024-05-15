@@ -326,8 +326,6 @@ class AlignDevicesHook(ModelHook):
             ):
                 fp16_statistics = None
                 value = self.weights_map[name]
-                print("value from pre_forward")
-                print(value)
                 if "weight" in name and name.replace("weight", "SCB") in self.weights_map.keys():
                     if value.dtype == torch.int8:
                         fp16_statistics = self.weights_map[name.replace("weight", "SCB")]
@@ -345,7 +343,8 @@ class AlignDevicesHook(ModelHook):
                     and self.execution_device not in self.tied_params_map[value.data_ptr()]
                 ):
                     self.tied_pointers_to_remove.add((value.data_ptr(), self.execution_device))
-
+                print("tied_params_map")
+                print(self.tied_params_map)
                 set_module_tensor_to_device(
                     module,
                     name,
@@ -354,11 +353,6 @@ class AlignDevicesHook(ModelHook):
                     fp16_statistics=fp16_statistics,
                     tied_params_map=self.tied_params_map,
                 )
-                print("set")
-                print(name)
-                print(module)
-                print(value)
-                print("____")
 
         return send_to_device(args, self.execution_device), send_to_device(
             kwargs, self.execution_device, skip_keys=self.skip_keys
