@@ -499,10 +499,10 @@ class BigModelingTester(unittest.TestCase):
                 return x + torch.max(self.parameter)
 
         class LinearModuleAndSubModule(torch.nn.Linear):
-            def __init__(self, in_features, out_features):
+            def __init__(self, in_features, out_features, name):
                 super().__init__(in_features, out_features, bias=False)
                 print("init weights")
-                print(self.weight)
+                self.name = name
                 self.weight_submodule = SubModule(self.weight)
                 self.weight_submodule2 = SubModule(self.weight)
                 self.weight_submodule3 = SubModule(self.weight)
@@ -511,6 +511,8 @@ class BigModelingTester(unittest.TestCase):
             def forward(self, x):
                 print("weight")
                 print(self.weight)
+                print("name")
+                print(self.name)
                 a = torch.nn.functional.linear(self.weight_submodule(x), self.weight)
                 b = torch.nn.functional.linear(self.weight_submodule2(x), self.weight)
                 c = torch.nn.functional.linear(self.weight_submodule3(x), self.weight)
@@ -521,8 +523,8 @@ class BigModelingTester(unittest.TestCase):
         class ModelWithSubmodules(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.module1 = LinearModuleAndSubModule(5000, 5000)
-                self.module2 = LinearModuleAndSubModule(5000, 5000)
+                self.module1 = LinearModuleAndSubModule(5000, 5000, "1")
+                self.module2 = LinearModuleAndSubModule(5000, 5000, "2")
 
             def forward(self, x):
                 a = self.module1(x)

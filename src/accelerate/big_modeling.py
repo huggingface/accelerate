@@ -383,6 +383,8 @@ def dispatch_model(
             and (not os.path.isdir(offload_dir) or not os.path.isfile(os.path.join(offload_dir, "index.json")))
         ):
             disk_state_dict = extract_submodules_state_dict(model.state_dict(), disk_modules)
+            print("disk state_dict offloaded")
+            print(disk_state_dict)
             offload_state_dict(offload_dir, disk_state_dict)
 
         execution_device = {
@@ -397,6 +399,7 @@ def dispatch_model(
             weights_map = OffloadedWeightsLoader(
                 state_dict=state_dict, save_folder=save_folder, index=offload_index, device=device
             )
+            print(weights_map)
         else:
             weights_map = None
 
