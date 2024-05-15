@@ -521,20 +521,20 @@ class BigModelingTester(unittest.TestCase):
         class ModelWithSubmodules(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.compute = LinearModuleAndSubModule(5000, 5000)
-                self.compute1 = LinearModuleAndSubModule(5000, 5000)
+                self.module1 = LinearModuleAndSubModule(5000, 5000)
+                self.module2 = LinearModuleAndSubModule(5000, 5000)
 
             def forward(self, x):
-                a = self.compute(x)
+                a = self.module1(x)
                 print("a")
                 print(a)
-                b = self.compute1(x)
+                b = self.module2(x)
                 print("b")
                 print(b)
                 return a + b
 
         # We should need only 2 * 5000 * 5000 * 32 // 8 * 1e-6 = 200 MB on the device 0 for the whole model forward, and not 600 MB.
-        device_map = {"compute": 0, "compute1": "disk"}
+        device_map = {"module1": 0, "module2": "disk"}
 
         model = ModelWithSubmodules()
 
@@ -555,7 +555,7 @@ class BigModelingTester(unittest.TestCase):
         free_memory_bytes_before_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir)
-            print(model.compute1.weight_submodule.parameter)
+            print(model.module1.weight_submodule.parameter)
             free_memory_bytes_after_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
 
             assert (free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130
@@ -579,16 +579,16 @@ class BigModelingTester(unittest.TestCase):
 
             # Check that we have no more references on GPU for the offloaded tied weight.
             n_non_empty = 0
-            for pointer, pointer_dict in model.compute1.weight_submodule._hf_hook.tied_params_map.items():
+            for pointer, pointer_dict in model.module1.weight_submodule._hf_hook.tied_params_map.items():
                 if len(pointer_dict) > 0:
                     n_non_empty += 1
-            assert n_non_empty == 1  # `compute` layer one.
+            assert n_non_empty == 1  # `module1` layer one.
 
             n_non_empty = 0
-            for pointer, pointer_dict in model.compute1._hf_hook.tied_params_map.items():
+            for pointer, pointer_dict in model.module1._hf_hook.tied_params_map.items():
                 if len(pointer_dict) > 0:
                     n_non_empty += 1
-            assert n_non_empty == 1  # `compute` layer one.
+            assert n_non_empty == 1  # `module1` layer one.
 
             assert (free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130
 
