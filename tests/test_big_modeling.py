@@ -501,6 +501,8 @@ class BigModelingTester(unittest.TestCase):
         class LinearModuleAndSubModule(torch.nn.Linear):
             def __init__(self, in_features, out_features):
                 super().__init__(in_features, out_features, bias=False)
+                print("init weights")
+                print(self.weight)
                 self.weight_submodule = SubModule(self.weight)
                 self.weight_submodule2 = SubModule(self.weight)
                 self.weight_submodule3 = SubModule(self.weight)
