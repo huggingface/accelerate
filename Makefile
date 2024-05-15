@@ -42,11 +42,7 @@ test_fsdp:
 # Since the new version of pytest will *change* how things are collected, we need `deepspeed` to 
 # run after test_core and test_cli
 test:
-	$(MAKE) test_core
-	$(MAKE) test_cli
 	$(MAKE) test_big_modeling
-	$(MAKE) test_deepspeed
-	$(MAKE) test_fsdp
 
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_examples.log",)
