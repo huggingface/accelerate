@@ -521,7 +521,11 @@ class BigModelingTester(unittest.TestCase):
 
             def forward(self, x):
                 a = self.compute(x)
+                print("a")
+                print(a)
                 b = self.compute1(x)
+                print("b")
+                print(b)
                 return a + b
 
         # We should need only 2 * 5000 * 5000 * 32 // 8 * 1e-6 = 200 MB on the device 0 for the whole model forward, and not 600 MB.
