@@ -484,7 +484,7 @@ class BigModelingTester(unittest.TestCase):
         del model
         gc.collect()
 
-    # This test fails because the data_ptr() of compute2.weight is sometime the same of compute1.weight.
+    # This test fails because sometimes data_ptr() of compute2.weight is  the same of compute1.weight.
     # I check that the values are not the same but it gives the same address. This does not happen on my local machine.
     @require_cuda
     @unittest.skip("Flaky test, we should have enough coverage with test_dispatch_model_tied_weights_memory_with_nested_offload_cpu test")
