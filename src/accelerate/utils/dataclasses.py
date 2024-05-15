@@ -1196,7 +1196,7 @@ class FullyShardedDataParallelPlugin:
                     transformer_layer_cls=transformer_cls_to_wrap,
                 )
             elif auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[1]:
-                min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))
+                min_num_params = int(float(os.environ.get("FSDP_MIN_NUM_PARAMS", 0)))
                 if min_num_params > 0:
                     self.auto_wrap_policy = functools.partial(
                         size_based_auto_wrap_policy, min_num_params=min_num_params

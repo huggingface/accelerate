@@ -18,7 +18,7 @@ from pathlib import Path
 import torch
 
 from ..logging import get_logger
-from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_NAME
+from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME
 from .imports import is_torch_distributed_available
 from .modeling import is_peft_model
 from .other import save
@@ -215,10 +215,9 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
 
 def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: str, use_safetensors: bool = True):
     """
-    Passthrough to `torch.distributed.checkpoint.format_utils.dcp_to_torch_save`, except will save with safetensors if
-    `use_safetensors`.
+    Passthrough to `torch.distributed.checkpoint.format_utils.dcp_to_torch_save`
 
-    Will save to `{save_path}/{model,pytorch_model}.{safetensors,bin}`.
+    Will save to `{save_path}/merged.bin`.
     """
     state_dict = {}
     save_path = Path(save_path)
@@ -230,7 +229,11 @@ def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: st
     )
     # if we just have a folder, use merged
     if save_path.suffix == "":
-        fname = WEIGHTS_NAME if not use_safetensors else SAFE_WEIGHTS_NAME
+        fname = "merged"
+        if use_safetensors:
+            fname += ".safetensors"
+        else:
+            fname += ".bin"
         save_path = save_path / fname
 
     # To handle if state is a dict like {model: {...}}
@@ -262,10 +265,12 @@ def merge_fsdp_weights(
     from accelerate.state import PartialState
 
     # To setup `save` to work
-    _ = PartialState()
-    logger.info(f"Merging FSDP weights from {checkpoint_dir}")
-    save_path = _distributed_checkpoint_to_merged_weights(checkpoint_dir, output_path, use_safetensors)
-    logger.info(f"Successfully merged FSDP weights and saved to {save_path}")
-    if remove_checkpoint_dir:
-        logger.info(f"Removing old checkpoint directory {checkpoint_dir}")
-        shutil.rmtree(checkpoint_dir)
+    state = PartialState()
+    if state.is_main_process:
+        logger.info(f"Merging FSDP weights from {checkpoint_dir}")
+        save_path = _distributed_checkpoint_to_merged_weights(checkpoint_dir, output_path, use_safetensors)
+        logger.info(f"Successfully merged FSDP weights and saved to {save_path}")
+        if remove_checkpoint_dir:
+            logger.info(f"Removing old checkpoint directory {checkpoint_dir}")
+            shutil.rmtree(checkpoint_dir)
+    state.wait_for_everyone()
