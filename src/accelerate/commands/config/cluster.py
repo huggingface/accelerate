@@ -446,6 +446,12 @@ def get_cluster_input():
                     default=True,
                     error_message="Please enter yes or no.",
                 )
+            fsdp_config["fsdp_activation_checkpointing"] = _ask_field(
+                "Do you want to enable FSDP activation checkpointing? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
 
     megatron_lm_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:
