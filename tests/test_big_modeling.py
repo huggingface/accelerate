@@ -559,7 +559,8 @@ class BigModelingTester(unittest.TestCase):
                     )
                 except Exception as e:
                     raise e
-
+            print(expected)
+            print(output)
             assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
             torch.cuda.empty_cache()
