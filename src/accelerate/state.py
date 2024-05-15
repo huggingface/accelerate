@@ -437,8 +437,8 @@ class PartialState:
             length = len(inputs[list(inputs.keys())[0]])
             if not all(len(v) == length for v in inputs.values()):
                 raise ValueError("All values in the dictionary must have the same length")
-        num_samples_per_process = length // self.num_processes
-        num_extras = length % self.num_processes
+        
+        num_samples_per_process, num_extras = divmod(length, self.num_processes)
         start_index = self.process_index * num_samples_per_process + min(self.process_index, num_extras)
         end_index = start_index + num_samples_per_process + (1 if self.process_index < num_extras else 0)
 
