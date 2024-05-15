@@ -343,8 +343,7 @@ class AlignDevicesHook(ModelHook):
                     and self.execution_device not in self.tied_params_map[value.data_ptr()]
                 ):
                     self.tied_pointers_to_remove.add((value.data_ptr(), self.execution_device))
-                print("tied_params_map")
-                print(self.tied_params_map)
+
                 set_module_tensor_to_device(
                     module,
                     name,

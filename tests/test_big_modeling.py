@@ -145,6 +145,55 @@ class ModelWithUnusedSubModulesForTest(nn.Module):
         return self.linear4(self.linear3(self.batchnorm(self.linear2(self.linear1(x)))))
 
 
+# To test dispatch with tied weights
+class SubModule(torch.nn.Module):
+    def __init__(self, ref_to_parameter):
+        super().__init__()
+        self.parameter = ref_to_parameter
+
+    def forward(self, x):
+        return x + torch.max(self.parameter)
+
+
+class LinearModuleAndSubModule(torch.nn.Linear):
+    def __init__(self, in_features, out_features, name):
+        super().__init__(in_features, out_features, bias=False)
+        print("init weights")
+        self.name = name
+        self.weight_submodule = SubModule(self.weight)
+        self.weight_submodule2 = SubModule(self.weight)
+        self.weight_submodule3 = SubModule(self.weight)
+        self.weight_submodule4 = SubModule(self.weight)
+
+    def forward(self, x):
+        print("weight")
+        print(self.weight)
+        print("name")
+        print(self.name)
+        a = torch.nn.functional.linear(self.weight_submodule(x), self.weight)
+        b = torch.nn.functional.linear(self.weight_submodule2(x), self.weight)
+        c = torch.nn.functional.linear(self.weight_submodule3(x), self.weight)
+        d = torch.nn.functional.linear(self.weight_submodule4(x), self.weight)
+        print([a, b, c, d])
+        return a + b + c + d
+
+
+class ModelWithSubmodules(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.module1 = LinearModuleAndSubModule(5000, 5000, "1")
+        self.module2 = LinearModuleAndSubModule(5000, 5000, "2")
+
+    def forward(self, x):
+        a = self.module1(x)
+        print("a")
+        print(a)
+        b = self.module2(x)
+        print("b")
+        print(b)
+        return a + b
+
+
 class BigModelingTester(unittest.TestCase):
     def test_init_empty_weights(self):
         # base use
@@ -490,51 +539,6 @@ class BigModelingTester(unittest.TestCase):
 
         torch.cuda.empty_cache()  # Needed in case we run several tests in a row.
 
-        class SubModule(torch.nn.Module):
-            def __init__(self, ref_to_parameter):
-                super().__init__()
-                self.parameter = ref_to_parameter
-
-            def forward(self, x):
-                return x + torch.max(self.parameter)
-
-        class LinearModuleAndSubModule(torch.nn.Linear):
-            def __init__(self, in_features, out_features, name):
-                super().__init__(in_features, out_features, bias=False)
-                print("init weights")
-                self.name = name
-                self.weight_submodule = SubModule(self.weight)
-                self.weight_submodule2 = SubModule(self.weight)
-                self.weight_submodule3 = SubModule(self.weight)
-                self.weight_submodule4 = SubModule(self.weight)
-
-            def forward(self, x):
-                print("weight")
-                print(self.weight)
-                print("name")
-                print(self.name)
-                a = torch.nn.functional.linear(self.weight_submodule(x), self.weight)
-                b = torch.nn.functional.linear(self.weight_submodule2(x), self.weight)
-                c = torch.nn.functional.linear(self.weight_submodule3(x), self.weight)
-                d = torch.nn.functional.linear(self.weight_submodule4(x), self.weight)
-                print([a, b, c, d])
-                return a + b + c + d
-
-        class ModelWithSubmodules(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.module1 = LinearModuleAndSubModule(5000, 5000, "1")
-                self.module2 = LinearModuleAndSubModule(5000, 5000, "2")
-
-            def forward(self, x):
-                a = self.module1(x)
-                print("a")
-                print(a)
-                b = self.module2(x)
-                print("b")
-                print(b)
-                return a + b
-
         # We should need only 2 * 5000 * 5000 * 32 // 8 * 1e-6 = 200 MB on the device 0 for the whole model forward, and not 600 MB.
         device_map = {"module1": 0, "module2": "disk"}
 
@@ -557,7 +561,6 @@ class BigModelingTester(unittest.TestCase):
         free_memory_bytes_before_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir)
-            print(model.module1.weight_submodule.parameter)
             free_memory_bytes_after_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
 
             assert (free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130
