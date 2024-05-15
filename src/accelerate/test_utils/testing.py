@@ -372,7 +372,7 @@ def require_pippy(test_case):
     """
     Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed
     """
-    return unittest.skipUnless(is_pippy_available(), "test requires pippy")(test_case)
+    return unittest.skipUnless(bool(is_pippy_available()), "test requires pippy")(test_case)
 
 
 _atleast_one_tracker_available = (

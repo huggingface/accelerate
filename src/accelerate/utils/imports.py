@@ -177,7 +177,10 @@ def is_pippy_available():
     package_exists = _is_package_available("pippy", "torchpippy")
     if package_exists:
         pippy_version = version.parse(importlib.metadata.version("torchpippy"))
-        return compare_versions(pippy_version, ">", "0.1.1")
+        if compare_versions(pippy_version, ">", "0.1.1") and compare_versions(pippy_version, "<=", "0.2.0"):
+            return "0.1.1-0.2.0"
+        elif compare_versions(pippy_version, ">", "0.2.0"):
+            return ">0.2.0"
     return False
 
 

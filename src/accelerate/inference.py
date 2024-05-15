@@ -28,8 +28,15 @@ from .utils import (
 )
 
 
-if is_pippy_available():
+pippy_version = is_pippy_available()
+
+if pippy_version == "0.1.1-0.2.0":
+    from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
+    from pippy.PipelineStage import PipelineStage
+    split_point_class = PipeSplitWrapper.SplitPoint
+elif pippy_version == ">0.2.0":
     from pippy import Pipe, PipelineStage, SplitPoint, annotate_split_points
+    split_point_class = SplitPoint
 
 
 def generate_device_map(model, num_processes: int = 1, no_split_module_classes=None, max_memory: dict = None):
@@ -84,7 +91,7 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     """
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
-    annotate_split_points(model, {split_point: SplitPoint.BEGINNING for split_point in split_points})
+    annotate_split_points(model, {split_point: split_point_class.BEGINNING for split_point in split_points})
     found_batch_size = find_pippy_batch_size(args, kwargs)
     if found_batch_size != num_chunks:
         if args is not None:
