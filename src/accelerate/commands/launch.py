@@ -584,6 +584,12 @@ def launch_command_parser(subparsers=None):
         help="If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0."
         " (useful only when `use_fsdp` flag is passed).",
     )
+    fsdp_args.add_argument(
+        "--fsdp_activation_checkpointing",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
+    )
 
     # megatron_lm args
     megatron_lm_args = parser.add_argument_group("Megatron-LM Arguments", "Arguments related to Megatron-LM.")
