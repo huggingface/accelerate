@@ -227,7 +227,7 @@ def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: st
         planner=dist_cp_format_utils._EmptyStateDictLoadPlanner(),
         no_dist=True,
     )
-    save_path = save_path / SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+    save_path = save_path / SAFE_WEIGHTS_NAME if safe_serialization else save_path / WEIGHTS_NAME
 
     # To handle if state is a dict like {model: {...}}
     if len(state_dict.keys()) == 1:

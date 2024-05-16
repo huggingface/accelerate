@@ -106,7 +106,7 @@ def check_pytorch_weights(path, model):
 
 def test_merge_weights_safetensors(model, path):
     # Should now be saved at `path/merged.safetensors`
-    merge_fsdp_weights(path / "pytorch_model_fsdp_0", path, use_safetensors=True)
+    merge_fsdp_weights(path / "pytorch_model_fsdp_0", path, safe_serialization=True)
     check_safetensors_weights(path, model)
 
 
@@ -118,14 +118,14 @@ def test_merge_weights_command_safetensors(model, path):
 
 def test_merge_weights_pytorch(model, path):
     # Should now be saved at `path/merged.bin`
-    merge_fsdp_weights(path / "pytorch_model_fsdp_0", path, use_safetensors=False)
+    merge_fsdp_weights(path / "pytorch_model_fsdp_0", path, safe_serialization=False)
     check_pytorch_weights(path, model)
 
 
 def test_merge_weights_command_pytorch(model, path):
-    args = parser.parse_args([str(path / "pytorch_model_fsdp_0"), str(path), "--use-safetensors", "False"])
+    args = parser.parse_args([str(path / "pytorch_model_fsdp_0"), str(path), "--unsafe_serialization"])
     merge_command(args)
-    check_safetensors_weights(path, model)
+    check_pytorch_weights(path, model)
 
 
 if __name__ == "__main__":

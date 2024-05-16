@@ -25,7 +25,7 @@ This is a CPU-bound process and requires enough RAM to load the entire model sta
 
 def merge_command(args):
     merge_fsdp_weights(
-        args.checkpoint_directory, args.output_path, args.safe_serialization, args.remove_checkpoint_dir
+        args.checkpoint_directory, args.output_path, not args.unsafe_serialization, args.remove_checkpoint_dir
     )
 
 
