@@ -437,7 +437,6 @@ class PartialState:
             length = len(inputs[list(inputs.keys())[0]])
             if not all(len(v) == length for v in inputs.values()):
                 raise ValueError("All values in the dictionary must have the same length")
-        
         num_samples_per_process, num_extras = divmod(length, self.num_processes)
         start_index = self.process_index * num_samples_per_process + min(self.process_index, num_extras)
         end_index = start_index + num_samples_per_process + (1 if self.process_index < num_extras else 0)
@@ -456,7 +455,7 @@ class PartialState:
                         tensorized_result = send_to_device(result, self.device)
                         result = pad_across_processes(tensorized_result, pad_index=inputs[-1])
                     else:
-                        result += [result[-1]] * (num_samples_per_process - len(result))
+                        result += [result[-1]] * (num_samples_per_process + 1 - len(result))
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
@@ -473,7 +472,7 @@ class PartialState:
                             end_index = len(inputs)
                         result_idcs = list(range(start_index, end_index))
                         if apply_padding:
-                            result_idcs += [end_index - 1] * (num_samples_per_process - len(result_idcs))
+                            result_idcs += [end_index - 1] * (num_samples_per_process + 1 - len(result_idcs))
                         return inputs.select(result_idcs)
                 return inputs
 
