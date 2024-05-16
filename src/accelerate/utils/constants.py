@@ -36,7 +36,6 @@ FSDP_BACKWARD_PREFETCH = ["BACKWARD_PRE", "BACKWARD_POST", "NO_PREFETCH"]
 FSDP_STATE_DICT_TYPE = ["FULL_STATE_DICT", "LOCAL_STATE_DICT", "SHARDED_STATE_DICT"]
 FSDP_PYTORCH_VERSION = "2.1.0"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
-FSDP_MERGED_MODEL_NAME = f"{FSDP_MODEL_NAME}_merged"
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich", "mpich"]
 TORCH_DYNAMO_MODES = ["default", "reduce-overhead", "max-autotune"]
 
