@@ -179,7 +179,7 @@ if is_deepspeed_available():
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model
-from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, save_fsdp_model, save_fsdp_optimizer
+from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, merge_fsdp_weights, save_fsdp_model, save_fsdp_optimizer
 from .launch import (
     PrepareForLaunch,
     _filter_args,
