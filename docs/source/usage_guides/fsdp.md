@@ -161,7 +161,7 @@ When using transformers `save_pretrained`, pass `state_dict=accelerator.get_stat
 
 You can then pass `state` into the `save_pretrained` method.  There are several modes for `StateDictType` and `FullStateDictConfig` that you can use to control the behavior of `state_dict`.  For more information, see the [PyTorch documentation](https://pytorch.org/docs/stable/fsdp.html).
 
-If you choose to use `StateDictType.SHARDED_STATE_DICT`, the weights and optimizer states of the model during `Accelerator.save_state` will be split into `n` files for each sub-split on the model. To merge them back into
+If you choose to use `StateDictType.SHARDED_STATE_DICT`, the weights of the model during `Accelerator.save_state` will be split into `n` files for each sub-split on the model. To merge them back into
 a single dictionary to load back into the model later after training you can use the `merge_weights` utility:
 
 ```py
