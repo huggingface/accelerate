@@ -99,6 +99,22 @@ class CustomArgumentGroup(argparse._ArgumentGroup):
         return action
 
 
+class _CustomMutuallyExclusiveGroup(CustomArgumentGroup):
+    def __init__(self, container, required=False):
+        super().__init__(container)
+        self.required = required
+        self._container = container
+
+    def _add_action(self, action):
+        action = self._container._add_action(action)
+        self._group_actions.append(action)
+        return action
+
+    def _remove_action(self, action):
+        self._container._remove_action(action)
+        self._group_actions.remove(action)
+
+
 class CustomArgumentParser(argparse.ArgumentParser):
     """
     Custom argument parser that allows for the use of `-` or `_` in arguments passed and overrides the help for each

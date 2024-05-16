@@ -23,12 +23,15 @@ from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy,
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator, FullyShardedDataParallelPlugin
+from accelerate.commands.merge import merge_command, merge_command_parser
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.training import RegressionDataset
 from accelerate.utils import merge_fsdp_weights, patch_environment, save_fsdp_model
 
 
 logging.basicConfig(level=logging.INFO)
+
+parser = merge_command_parser()
 
 
 class TinyModel(torch.nn.Module):
@@ -85,26 +88,44 @@ def check_weights(operation, state_1, state_2):
             assert not torch.allclose(weight_1, weight_2)
 
 
-def test_merge_weights_safetensors(model, path):
-    # Should now be saved at `path/merged.safetensors`
-    merge_fsdp_weights(path / "pytorch_model_fsdp_0", path, use_safetensors=True)
-
-    safe_state_dict = load_file(path / "merged.safetensors")
+def check_safetensors_weights(path, model):
+    safe_state_dict = load_file(path / "model.safetensors")
     safe_loaded_model = TinyModel()
     check_weights("diff", model.state_dict(), safe_loaded_model.state_dict())
     safe_loaded_model.load_state_dict(safe_state_dict)
     check_weights("same", model.state_dict(), safe_loaded_model.state_dict())
 
 
-def test_merge_weights_pytorch(model, path):
-    # Should now be saved at `path/merged.bin`
-    merge_fsdp_weights(path / "pytorch_model_fsdp_0", path, use_safetensors=False)
-
-    nonsafe_state_dict = torch.load(path / "merged.bin")
+def check_pytorch_weights(path, model):
+    nonsafe_state_dict = torch.load(path / "pytorch_model.bin")
     nonsafe_loaded_model = TinyModel()
     check_weights("diff", model.state_dict(), nonsafe_loaded_model.state_dict())
     nonsafe_loaded_model.load_state_dict(nonsafe_state_dict)
     check_weights("same", model.state_dict(), nonsafe_loaded_model.state_dict())
+
+
+def test_merge_weights_safetensors(model, path):
+    # Should now be saved at `path/merged.safetensors`
+    merge_fsdp_weights(path / "pytorch_model_fsdp_0", path, use_safetensors=True)
+    check_safetensors_weights(path, model)
+
+
+def test_merge_weights_command_safetensors(model, path):
+    args = parser.parse_args([str(path / "pytorch_model_fsdp_0"), str(path)])
+    merge_command(args)
+    check_safetensors_weights(path, model)
+
+
+def test_merge_weights_pytorch(model, path):
+    # Should now be saved at `path/merged.bin`
+    merge_fsdp_weights(path / "pytorch_model_fsdp_0", path, use_safetensors=False)
+    check_pytorch_weights(path, model)
+
+
+def test_merge_weights_command_pytorch(model, path):
+    args = parser.parse_args([str(path / "pytorch_model_fsdp_0"), str(path), "--use-safetensors", "False"])
+    merge_command(args)
+    check_safetensors_weights(path, model)
 
 
 if __name__ == "__main__":
@@ -127,7 +148,9 @@ if __name__ == "__main__":
 
             # Finally we can test
             test_merge_weights_safetensors(model, out_path)
+            test_merge_weights_command_safetensors(model, out_path)
             test_merge_weights_pytorch(model, out_path)
+            test_merge_weights_command_pytorch(model, out_path)
         except Exception:
             raise
         finally:

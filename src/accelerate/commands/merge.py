@@ -42,10 +42,10 @@ def merge_command_parser(subparsers=None):
         help="The path to save the merged weights. Defaults to the current directory. ",
     )
     parser.add_argument(
-        "--safe_serialization",
+        "--unsafe_serialization",
         action="store_false",
-        help="Whether to save the merged weights as `.safetensors` rather than `.pth` (recommended).",
         default=True,
+        help="Whether to save the merged weights as `.bin` rather than `.safetensors` (not recommended).",
     )
     parser.add_argument(
         "--remove_checkpoint_dir",
