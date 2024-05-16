@@ -18,7 +18,7 @@ from pathlib import Path
 import torch
 
 from ..logging import get_logger
-from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME
+from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .imports import is_torch_distributed_available
 from .modeling import is_peft_model
 from .other import save
@@ -213,11 +213,11 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
         optimizer.load_state_dict(flattened_osd)
 
 
-def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: str, use_safetensors: bool = True):
+def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: str, safe_serialization: bool = True):
     """
     Passthrough to `torch.distributed.checkpoint.format_utils.dcp_to_torch_save`
 
-    Will save to `{save_path}/merged.bin`.
+    Will save under `save_path` as either `model.safetensors` or `pytorch_model.bin`.
     """
     state_dict = {}
     save_path = Path(save_path)
@@ -227,28 +227,22 @@ def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: st
         planner=dist_cp_format_utils._EmptyStateDictLoadPlanner(),
         no_dist=True,
     )
-    # if we just have a folder, use merged
-    if save_path.suffix == "":
-        fname = "merged"
-        if use_safetensors:
-            fname += ".safetensors"
-        else:
-            fname += ".bin"
-        save_path = save_path / fname
+    save_path = save_path / SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
 
     # To handle if state is a dict like {model: {...}}
     if len(state_dict.keys()) == 1:
         state_dict = state_dict[list(state_dict)[0]]
-    save(state_dict, save_path, safe_serialization=use_safetensors)
+    save(state_dict, save_path, safe_serialization=safe_serialization)
     return save_path
 
 
 def merge_fsdp_weights(
-    checkpoint_dir: str, output_path: str, use_safetensors: bool = True, remove_checkpoint_dir: bool = False
+    checkpoint_dir: str, output_path: str, safe_serialization: bool = True, remove_checkpoint_dir: bool = False
 ):
     """
-    Merge the weights from multiple FSDP checkpoints into a single combined checkpoint. Should be used if
-    `SHARDED_STATE_DICT` was used for the model. Weights will be saved to `{output_path}/merged.pth`.
+    Merge the weights from sharded FSDP model checkpoints into a single combined checkpoint. Should be used if
+    `SHARDED_STATE_DICT` was used for the model. Weights will be saved to `{output_path}/model.safetensors` if
+    `safe_serialization` else `pytorch_model.bin`.
 
     Note: this is a CPU-bound process.
 
@@ -257,7 +251,7 @@ def merge_fsdp_weights(
             The directory containing the FSDP checkpoints (can be either the model or optimizer).
         output_path (`str`):
             The path to save the merged checkpoint.
-        use_safetensors (`bool`, *optional*, defaults to `True`):
+        safe_serialization (`bool`, *optional*, defaults to `True`):
             Whether to save the merged weights with safetensors (recommended).
         remove_checkpoint_dir (`bool`, *optional*, defaults to `False`):
             Whether to remove the checkpoint directory after merging.
@@ -268,7 +262,7 @@ def merge_fsdp_weights(
     state = PartialState()
     if state.is_main_process:
         logger.info(f"Merging FSDP weights from {checkpoint_dir}")
-        save_path = _distributed_checkpoint_to_merged_weights(checkpoint_dir, output_path, use_safetensors)
+        save_path = _distributed_checkpoint_to_merged_weights(checkpoint_dir, output_path, safe_serialization)
         logger.info(f"Successfully merged FSDP weights and saved to {save_path}")
         if remove_checkpoint_dir:
             logger.info(f"Removing old checkpoint directory {checkpoint_dir}")

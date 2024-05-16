@@ -168,9 +168,9 @@ a single dictionary to load back into the model later after training you can use
 from accelerate.utils import merge_fsdp_weights
 
 # Our weights are saved usually in a `pytorch_model_fsdp_{model_number}` folder
-merge_fsdp_weights("pytorch_model_fsdp_0", "output_path", use_safetensors=True)
+merge_fsdp_weights("pytorch_model_fsdp_0", "output_path", safe_serialization=True)
 ```
-The final output will then either be saved to `merged.safetensors` or `merged.bin` (if `use_safetensors=False` is passed). 
+The final output will then either be saved to `model.safetensors` or `pytorch_model.bin` (if `safe_serialization=False` is passed). 
 
 This can also be called using the CLI:
 ```bash

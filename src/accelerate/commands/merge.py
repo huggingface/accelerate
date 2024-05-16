@@ -18,13 +18,15 @@ from accelerate.utils import merge_fsdp_weights
 
 
 description = """Utility to merge the weights from multiple FSDP checkpoints into a single combined checkpoint. Should be used if
-`SHARDED_STATE_DICT` was used for the model. Weights will be saved to `{output_path}/merged.pth`.
+`SHARDED_STATE_DICT` was used for the model. Weights will be saved to `{output_path}`.
 
 This is a CPU-bound process and requires enough RAM to load the entire model state dict."""
 
 
 def merge_command(args):
-    merge_fsdp_weights(args.checkpoint_directory, args.output_path, not args.use_pytorch, args.remove_checkpoint_dir)
+    merge_fsdp_weights(
+        args.checkpoint_directory, args.output_path, args.safe_serialization, args.remove_checkpoint_dir
+    )
 
 
 def merge_command_parser(subparsers=None):
@@ -40,10 +42,10 @@ def merge_command_parser(subparsers=None):
         help="The path to save the merged weights. Defaults to the current directory. ",
     )
     parser.add_argument(
-        "--use_pytorch",
-        action="store_true",
-        help="Whether to save the merged weights as `.pth` rather than `.safetensors` (not recommended).",
-        default=False,
+        "--safe_serialization",
+        action="store_false",
+        help="Whether to save the merged weights as `.safetensors` rather than `.pth` (recommended).",
+        default=True,
     )
     parser.add_argument(
         "--remove_checkpoint_dir",
