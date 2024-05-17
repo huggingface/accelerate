@@ -217,7 +217,8 @@ def notebook_launcher(
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
                 print(f"Launching training on {num_processes} GPUs.")
                 try:
-                    rdzv_conf = rdzv_conf or {}
+                    if rdvz_conf is None:
+                        rdvz_conf = {}
                     if rdzv_backend == "static":
                         rdzv_conf["rank"] = node_rank
                         if not rdzv_endpoint:
