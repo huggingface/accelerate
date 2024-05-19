@@ -279,6 +279,8 @@ def get_cluster_input():
                         float,
                         default=1.0,
                     )
+                else:
+                    deepspeed_config["gradient_clipping"] = 0.0
                 if deepspeed_config["zero_stage"] == 3:
                     deepspeed_config["zero3_save_16bit_model"] = _ask_field(
                         "Do you want to save 16-bit model weights when using ZeRO Stage-3? [yes/NO]: ",
