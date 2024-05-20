@@ -154,6 +154,8 @@ class InitProcessGroupKwargs(KwargsHandler):
     [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
     information on each argument.
 
+    Note: If `timeout` is set to `None`, the default will be based upon how `backend` is set.
+
     ```python
     from datetime import timedelta
     from accelerate import Accelerator
@@ -166,7 +168,12 @@ class InitProcessGroupKwargs(KwargsHandler):
 
     backend: Optional[str] = "nccl"
     init_method: Optional[str] = None
-    timeout: timedelta = timedelta(seconds=1800)
+    timeout: Optional[timedelta] = None
+
+    def __post_init__(self):
+        if self.timeout is None:
+            seconds = 1800 if self.backend != "nccl" else 600
+            self.timeout = timedelta(seconds=seconds)
 
 
 # Literals
@@ -1220,6 +1227,8 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             FullOptimStateDictConfig,
             FullStateDictConfig,
+            ShardedOptimStateDictConfig,
+            ShardedStateDictConfig,
             StateDictType,
         )
 
@@ -1230,6 +1239,11 @@ class FullyShardedDataParallelPlugin:
                 self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        elif self.state_dict_type == StateDictType.SHARDED_STATE_DICT:
+            if self.state_dict_config is None:
+                self.state_dict_config = ShardedStateDictConfig(offload_to_cpu=True)
+            if self.optim_state_dict_config is None:
+                self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
 
 
 @dataclass
