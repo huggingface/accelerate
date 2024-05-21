@@ -32,7 +32,7 @@ if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_availab
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 # `dist_cp_format_utils is only available from pt>=2.3.0
-if is_torch_version(">=", "2.3.0"):
+if is_torch_version(">=", "2.3.0") and is_torch_distributed_available():
     import torch.distributed.checkpoint.format_utils as dist_cp_format_utils
 
 
