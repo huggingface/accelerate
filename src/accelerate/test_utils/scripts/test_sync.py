@@ -295,8 +295,8 @@ def test_gradient_accumulation_with_opt_and_scheduler(
             )
 
         if did_step:
-            opt.zero_grad()  # needs to be guarded by logic as to when we should zero grads
-            ddp_opt.zero_grad()
+            opt.zero_grad()  # flush gradients every accum step
+        ddp_opt.zero_grad()
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
