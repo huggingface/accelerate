@@ -261,7 +261,7 @@ def merge_fsdp_weights(
     from accelerate.state import PartialState
 
     if not is_torch_version(">=", "2.3.0"):
-        raise ValueError("Make sure to have torch>=2.3.0 installed in order to use `merge_fsdp_weights`")
+        raise ValueError("`merge_fsdp_weights` requires PyTorch >= 2.3.0`")
 
     # To setup `save` to work
     state = PartialState()
