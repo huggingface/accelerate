@@ -27,11 +27,13 @@ from .versions import is_torch_version
 
 if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
     import torch.distributed.checkpoint as dist_cp
-    import torch.distributed.checkpoint.format_utils as dist_cp_format_utils
     from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner, DefaultSavePlanner
     from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+# `dist_cp_format_utils is only available from pt>=2.3.0
+if is_torch_version(">=", "2.3.0") and is_torch_distributed_available():
+    import torch.distributed.checkpoint.format_utils as dist_cp_format_utils
 
 
 logger = get_logger(__name__)
@@ -257,6 +259,9 @@ def merge_fsdp_weights(
             Whether to remove the checkpoint directory after merging.
     """
     from accelerate.state import PartialState
+
+    if not is_torch_version(">=", "2.3.0"):
+        raise ValueError("`merge_fsdp_weights` requires PyTorch >= 2.3.0`")
 
     # To setup `save` to work
     state = PartialState()
