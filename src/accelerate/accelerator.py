@@ -44,8 +44,10 @@ from .utils import (
     MODEL_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
+    SAFE_WEIGHTS_PATTERN_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    WEIGHTS_PATTERN_NAME,
     AutocastKwargs,
     DataLoaderConfiguration,
     DeepSpeedPlugin,
@@ -97,7 +99,6 @@ from .utils import (
     save,
     save_fsdp_model,
     save_fsdp_optimizer,
-    shard_checkpoint,
     wait_for_everyone,
 )
 from .utils.constants import FSDP_PYTORCH_VERSION
@@ -2727,6 +2728,7 @@ class Accelerator:
         >>> accelerator.save_model(model, save_directory)
         ```
         """
+        from huggingface_hub import split_torch_state_dict_into_shards
 
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -2751,9 +2753,11 @@ class Accelerator:
         if safe_serialization:
             state_dict = clean_state_dict_for_safetensors(state_dict)
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+        filename_pattern = SAFE_WEIGHTS_PATTERN_NAME if safe_serialization else WEIGHTS_PATTERN_NAME
 
-        # Shard the model if it is too big.
-        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
+        state_dict_split = split_torch_state_dict_into_shards(
+            state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+        )
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
@@ -2769,31 +2773,36 @@ class Accelerator:
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
-                and filename not in shards.keys()
+                and filename not in state_dict_split.filename_to_tensors.keys()
                 and reg.fullmatch(filename_no_suffix) is not None
                 and PartialState().is_main_process
             ):
                 os.remove(full_filename)
 
         # Save the model
-        for shard_file, shard in shards.items():
-            self.save(shard, os.path.join(save_directory, shard_file), safe_serialization=safe_serialization)
+        for filename, tensors in state_dict_split.filename_to_tensors.items():
+            shard = {tensor: state_dict[tensor] for tensor in tensors}
+            self.save(shard, os.path.join(save_directory, filename), safe_serialization=safe_serialization)
 
-        if index is None:
-            path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
-            logger.info(f"Model weights saved in {path_to_weights}")
-        else:
+        # Save index if sharded
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": state_dict_split.metadata,
+                "weight_map": state_dict_split.tensor_to_filename,
+            }
             save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
             save_index_file = os.path.join(save_directory, save_index_file)
-            # Save the index as well
             with open(save_index_file, "w", encoding="utf-8") as f:
                 content = json.dumps(index, indent=2, sort_keys=True) + "\n"
                 f.write(content)
             logger.info(
                 f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
                 f"index located at {save_index_file}."
             )
+        else:
+            path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
+            logger.info(f"Model weights saved in {path_to_weights}")
 
     def register_save_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
         """
