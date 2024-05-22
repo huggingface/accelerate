@@ -31,6 +31,7 @@ from typing import Any, Callable, Union
 
 import torch
 import torch.utils.hooks as hooks
+from huggingface_hub import split_torch_state_dict_into_shards
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -2728,7 +2729,6 @@ class Accelerator:
         >>> accelerator.save_model(model, save_directory)
         ```
         """
-        from huggingface_hub import split_torch_state_dict_into_shards
 
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
