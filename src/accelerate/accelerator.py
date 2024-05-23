@@ -128,9 +128,7 @@ if is_megatron_lm_available():
         MegatronLMSchedulerWrapper,
         megatron_lm_initialize,
         megatron_lm_prepare_data_loader,
-        megatron_lm_prepare_model,
-        megatron_lm_prepare_optimizer,
-        megatron_lm_prepare_scheduler,
+        megatron_lm_prepare_model_optimizer_scheduler,
     )
 
 from torch.distributed.algorithms.join import Join
@@ -1811,7 +1809,6 @@ class Accelerator:
         model = None
         optimizer = None
         scheduler = None
-        is_dummy_scheduler = False
         batch_data = None
         for obj in args:
             if isinstance(obj, torch.utils.data.DataLoader) and batch_data is None:
@@ -1837,6 +1834,9 @@ class Accelerator:
 
         # initialize megatron-lm
         megatron_lm_initialize(self, args_defaults=megatron_lm_plugin.megatron_lm_default_args)
+
+        (model, optimizer, scheduler) = megatron_lm_prepare_model_optimizer_scheduler(self)
+
         counter = 0
         result = []
         for obj in args:
@@ -1851,13 +1851,6 @@ class Accelerator:
                 counter += 1
             else:
                 result.append(obj)
-
-        if model is not None:
-            model = megatron_lm_prepare_model(self)
-        if optimizer is not None:
-            optimizer = megatron_lm_prepare_optimizer(self, model)
-        if scheduler is not None:
-            scheduler = megatron_lm_prepare_scheduler(self, optimizer, scheduler)
 
         if model is not None:
             model = MegatronEngine(self, model, optimizer, scheduler)
