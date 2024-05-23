@@ -994,14 +994,14 @@ class Accelerator:
             model.require_backward_grad_sync = old_require_backward_grad_sync
             model.require_forward_param_sync = old_require_forward_param_sync
 
-    def _do_sync(self, force: bool = False):
+    def _do_sync(self):
         "Sets the right `sync_gradients` context and either resets or increases `self.step`"
         if self.gradient_state.sync_with_dataloader and self.gradient_state.end_of_dataloader:
             self.step = 0
             self.gradient_state._set_sync_gradients(True)
         else:
             self.step += 1
-            self.gradient_state._set_sync_gradients(force or ((self.step % self.gradient_state.num_steps) == 0))
+            self.gradient_state._set_sync_gradients((self.step % self.gradient_state.num_steps) == 0)
 
     @property
     def sync_gradients(self):
@@ -1047,12 +1047,21 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        # sync_each_batch=True will guarantee below that self.sync_gradients=True, therefore
-        # resulting in the nullcontext always being selected.
-        self._do_sync(force=self.gradient_state.plugin_kwargs.get("sync_each_batch", False))
+        self._do_sync()
+
+        allow_gradient_sync = (
+            self.sync_gradients  # must sync if sync gradients need to complete an optimizer step
+            or (
+                # the no_sync context stops the gradients from reducing during distributed training
+                # bringing speedup (potentially at some costs). Here, no_sync can be prevented
+                # by setting sync_each_batch = True.
+                self.use_distributed  # only relevant in distributed settings
+                and self.gradient_state.plugin_kwargs.get("sync_each_batch", False)
+            )
+        )
         with contextlib.ExitStack() as cm_stack:
             for m in models:
-                cm_stack.enter_context(contextlib.nullcontext() if self.sync_gradients else self.no_sync(m))
+                cm_stack.enter_context(contextlib.nullcontext() if allow_gradient_sync else self.no_sync(m))
             yield
 
     @contextmanager
