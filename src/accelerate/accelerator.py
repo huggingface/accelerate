@@ -1408,7 +1408,7 @@ class Accelerator:
                     if (self.device.index is not None) or (current_device_index != 0):
                         raise ValueError(
                             "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
-                            "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
+                            "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}` or `device_map={'':torch.xpu.current_device()}`"
                         )
 
             if "cpu" in model_devices or "disk" in model_devices:
