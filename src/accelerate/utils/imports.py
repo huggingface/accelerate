@@ -173,14 +173,14 @@ def is_deepspeed_available():
     return _is_package_available("deepspeed")
 
 
-def is_pippy_available():
+def is_pippy_available(max_version=None):
     package_exists = _is_package_available("pippy", "torchpippy")
     if package_exists:
         pippy_version = version.parse(importlib.metadata.version("torchpippy"))
-        if compare_versions(pippy_version, ">", "0.1.1") and compare_versions(pippy_version, "<=", "0.2.0"):
-            return "0.1.1-0.2.0"
-        elif compare_versions(pippy_version, ">", "0.2.0"):
-            return ">0.2.0"
+        min_version = compare_versions(pippy_version, ">", "0.1.1")
+        if max_version is not None:
+            return compare_versions(pippy_version, "=<", max_version) and min_version
+        return min_version
     return False
 
 
