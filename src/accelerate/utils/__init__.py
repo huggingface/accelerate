@@ -50,6 +50,7 @@ from .dataclasses import (
     SageMakerDistributedType,
     TensorInformation,
     TorchDynamoPlugin,
+    add_model_config_to_megatron_parser,
 )
 from .environment import (
     are_libraries_initialized,
@@ -179,7 +180,7 @@ if is_deepspeed_available():
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model
-from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, save_fsdp_model, save_fsdp_optimizer
+from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, merge_fsdp_weights, save_fsdp_model, save_fsdp_optimizer
 from .launch import (
     PrepareForLaunch,
     _filter_args,
@@ -204,7 +205,7 @@ from .megatron_lm import (
 )
 from .megatron_lm import initialize as megatron_lm_initialize
 from .megatron_lm import prepare_data_loader as megatron_lm_prepare_data_loader
-from .megatron_lm import prepare_model as megatron_lm_prepare_model
+from .megatron_lm import prepare_model_optimizer_scheduler as megatron_lm_prepare_model_optimizer_scheduler
 from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
 from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size, release_memory

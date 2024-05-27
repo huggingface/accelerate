@@ -807,27 +807,40 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not (torch.cuda.is_available() or is_npu_available() or is_mlu_available() or is_xpu_available()):
-            max_memory = {}
-
-        else:
-            # Make sure CUDA is initialized on each GPU to have the right memory info.
-            if is_npu_available():
-                for i in range(torch.npu.device_count()):
+        max_memory = {}
+        # Make sure CUDA is initialized on each GPU to have the right memory info.
+        if is_npu_available():
+            for i in range(torch.npu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("npu", i))
-                max_memory = {i: torch.npu.mem_get_info(i)[0] for i in range(torch.npu.device_count())}
-            elif is_mlu_available():
-                for i in range(torch.mlu.device_count()):
+                    max_memory[i] = torch.npu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_mlu_available():
+            for i in range(torch.mlu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("mlu", i))
-                max_memory = {i: torch.mlu.mem_get_info(i)[0] for i in range(torch.mlu.device_count())}
-            elif is_xpu_available():
-                for i in range(torch.xpu.device_count()):
+                    max_memory[i] = torch.mlu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_xpu_available():
+            for i in range(torch.xpu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
-                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
-            else:
-                for i in range(torch.cuda.device_count()):
+                    max_memory[i] = torch.xpu.max_memory_allocated(i)
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        else:
+            for i in range(torch.cuda.device_count()):
+                try:
                     _ = torch.tensor([0], device=i)
-                max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+                    max_memory[i] = torch.cuda.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         # allocate everything in the mps device as the RAM is shared
         if is_mps_available():
             max_memory["mps"] = psutil.virtual_memory().available
@@ -918,6 +931,17 @@ def load_offloaded_weights(model, index, offload_folder):
         tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
         weight = load_offloaded_weight(tensor_file, metadata)
         set_module_tensor_to_device(model, param_name, "cpu", value=weight, fp16_statistics=fp16_statistics)
+
+
+def get_module_leaves(module_sizes):
+    module_children = {}
+    for module in module_sizes:
+        if module == "" or "." not in module:
+            continue
+        parent = module.rsplit(".", 1)[0]
+        module_children[parent] = module_children.get(parent, 0) + 1
+    leaves = [module for module in module_sizes if module_children.get(module, 0) == 0 and module != ""]
+    return leaves
 
 
 def get_balanced_memory(
@@ -1029,10 +1053,10 @@ def get_balanced_memory(
         buffer = 0
 
     # Compute mean of final modules. In the first dict of module sizes, leaves are the parameters
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
+    leaves = get_module_leaves(module_sizes)
     module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
     # Once removed, leaves are the final modules.
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
+    leaves = get_module_leaves(module_sizes)
     mean_leaves = int(sum([module_sizes[n] for n in leaves]) / max(len(leaves), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer

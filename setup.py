@@ -65,6 +65,7 @@ setup(
             "accelerate-config=accelerate.commands.config:main",
             "accelerate-estimate-memory=accelerate.commands.estimate:main",
             "accelerate-launch=accelerate.commands.launch:main",
+            "accelerate-merge-weights=accelerate.commands.merge:main",
         ]
     },
     python_requires=">=3.8.0",
