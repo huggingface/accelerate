@@ -59,9 +59,8 @@ def release_memory(*objects):
         torch.mlu.empty_cache()
     elif is_npu_available():
         torch.npu.empty_cache()
-    elif is_mps_available():
-        if hasattr(torch, "mps"):
-            torch.mps.empty_cache()
+    elif is_mps_available(min_version="2.0"):
+        torch.mps.empty_cache()
     else:
         torch.cuda.empty_cache()
     return objects
