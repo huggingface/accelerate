@@ -38,6 +38,7 @@ from accelerate.utils import (
     is_ipex_available,
     is_mlu_available,
     is_npu_available,
+    is_pytest_available,
     is_xpu_available,
     set_seed,
     synchronize_rng_states,
@@ -692,6 +693,24 @@ def test_split_between_processes_tensor():
     state.wait_for_everyone()
 
 
+def test_split_between_processes_evenly():
+    state = AcceleratorState()
+    if state.num_processes in (1, 2, 4, 8):
+        data = list(range(17))
+        num_samples_per_process = len(data) // state.num_processes
+        num_extras = len(data) % state.num_processes
+        with state.split_between_processes(data) as results:
+            if state.process_index < num_extras:
+                assert (
+                    len(results) == num_samples_per_process + 1
+                ), f"Each Process should have even elements. Expected: {num_samples_per_process + 1}, Actual: {len(results)}"
+            else:
+                assert (
+                    len(results) == num_samples_per_process
+                ), f"Each Process should have even elements. Expected: {num_samples_per_process}, Actual: {len(results)}"
+    state.wait_for_everyone()
+
+
 def test_trigger():
     accelerator = Accelerator()
     # should start with being false
@@ -757,6 +776,10 @@ def main():
         test_split_between_processes_tensor()
 
         if state.process_index == 0:
+            print("\n**Test split between processes evenly**")
+        test_split_between_processes_evenly()
+
+        if state.process_index == 0:
             print("\n**Test split between processes as a datasets.Dataset**")
         if is_datasets_available():
             from datasets import Dataset as datasets_Dataset
@@ -793,9 +816,10 @@ def main():
         print("\n**Breakpoint trigger test**")
     test_trigger()
 
-    if state.local_process_index == 0:
-        print("\n**Test reinstantiated state**")
-    test_reinstantiated_state()
+    if is_pytest_available():
+        if state.local_process_index == 0:
+            print("\n**Test reinstantiated state**")
+        test_reinstantiated_state()
 
 
 if __name__ == "__main__":

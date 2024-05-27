@@ -161,6 +161,22 @@ When using transformers `save_pretrained`, pass `state_dict=accelerator.get_stat
 
 You can then pass `state` into the `save_pretrained` method.  There are several modes for `StateDictType` and `FullStateDictConfig` that you can use to control the behavior of `state_dict`.  For more information, see the [PyTorch documentation](https://pytorch.org/docs/stable/fsdp.html).
 
+If you choose to use `StateDictType.SHARDED_STATE_DICT`, the weights of the model during `Accelerator.save_state` will be split into `n` files for each sub-split on the model. To merge them back into
+a single dictionary to load back into the model later after training you can use the `merge_weights` utility:
+
+```py
+from accelerate.utils import merge_fsdp_weights
+
+# Our weights are saved usually in a `pytorch_model_fsdp_{model_number}` folder
+merge_fsdp_weights("pytorch_model_fsdp_0", "output_path", safe_serialization=True)
+```
+The final output will then either be saved to `model.safetensors` or `pytorch_model.bin` (if `safe_serialization=False` is passed). 
+
+This can also be called using the CLI:
+```bash
+accelerate merge-weights pytorch_model_fsdp_0/ output_path
+```
+
 
 ## Mapping between FSDP sharding strategies and DeepSpeed ZeRO Stages
 * `FULL_SHARD` maps to the DeepSpeed `ZeRO Stage-3`. Shards optimizer states, gradients and parameters.
@@ -175,3 +191,10 @@ You can then pass `state` into the `save_pretrained` method.  There are several 
 
 For more control, users can leverage the `FullyShardedDataParallelPlugin`. After creating an instance of this class, users can pass it to the Accelerator class instantiation.
 For more information on these options, please refer to the PyTorch [FullyShardedDataParallel](https://github.com/pytorch/pytorch/blob/0df2e863fbd5993a7b9e652910792bd21a516ff3/torch/distributed/fsdp/fully_sharded_data_parallel.py#L236) code.
+
+
+<Tip>
+
+    For those interested in the similarities and differences between FSDP and DeepSpeed, please check out the [concept guide here](../concept_guides/fsdp_and_deepspeed.md)!
+    
+</Tip>

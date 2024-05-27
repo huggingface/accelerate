@@ -729,3 +729,10 @@ Papers:
 
 Finally, please, remember that 🤗 `Accelerate` only integrates DeepSpeed, therefore if you
 have any problems or questions with regards to DeepSpeed usage, please, file an issue with [DeepSpeed GitHub](https://github.com/microsoft/DeepSpeed/issues).
+
+
+<Tip>
+
+    For those interested in the similarities and differences between FSDP and DeepSpeed, please check out the [concept guide here](../concept_guides/fsdp_and_deepspeed.md)!
+    
+</Tip>

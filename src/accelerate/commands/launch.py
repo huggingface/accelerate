@@ -304,6 +304,15 @@ def launch_command_parser(subparsers=None):
         help="Tee std streams into a log file and also to console.",
     )
     distributed_args.add_argument(
+        "--log_dir",
+        type=str,
+        default=None,
+        help=(
+            "Base directory to use for log files when using torchrun/torch.distributed.run as launcher. "
+            "Use with --tee to redirect std streams info log files."
+        ),
+    )
+    distributed_args.add_argument(
         "--role",
         type=str,
         default="default",
@@ -574,6 +583,12 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0."
         " (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_activation_checkpointing",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
     )
 
     # megatron_lm args
@@ -1034,8 +1049,8 @@ def _validate_launch_command(args):
         defaults is not None and defaults.compute_environment != ComputeEnvironment.AMAZON_SAGEMAKER
     )
     if is_aws_env_disabled and args.num_cpu_threads_per_process is None:
-        args.num_cpu_threads_per_process = 1
-        if args.use_cpu and args.num_processes >= 1:
+        args.num_cpu_threads_per_process = get_int_from_env(["OMP_NUM_THREADS"], 1)
+        if args.use_cpu and args.num_processes >= 1 and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0:
             local_size = get_int_from_env(
                 ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
             )

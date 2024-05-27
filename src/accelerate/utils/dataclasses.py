@@ -154,6 +154,8 @@ class InitProcessGroupKwargs(KwargsHandler):
     [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
     information on each argument.
 
+    Note: If `timeout` is set to `None`, the default will be based upon how `backend` is set.
+
     ```python
     from datetime import timedelta
     from accelerate import Accelerator
@@ -166,7 +168,12 @@ class InitProcessGroupKwargs(KwargsHandler):
 
     backend: Optional[str] = "nccl"
     init_method: Optional[str] = None
-    timeout: timedelta = timedelta(seconds=1800)
+    timeout: Optional[timedelta] = None
+
+    def __post_init__(self):
+        if self.timeout is None:
+            seconds = 1800 if self.backend != "nccl" else 600
+            self.timeout = timedelta(seconds=seconds)
 
 
 # Literals
@@ -524,6 +531,14 @@ class DataLoaderConfiguration:
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
+    non_blocking: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator will utilize non-blocking host-to-device"
+            " transfers, allowing for better overlap between dataloader communication and computation.  Recommended that the"
+            " prepared dataloader has `pin_memory` set to `True` to work properly."
+        },
+    )
 
 
 @dataclass
@@ -686,11 +701,11 @@ class DeepSpeedPlugin:
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
-    offload_optimizer_device: bool = field(
+    offload_optimizer_device: str = field(
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3."},
     )
-    offload_param_device: bool = field(
+    offload_param_device: str = field(
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."},
     )
@@ -975,11 +990,13 @@ class DeepSpeedPlugin:
             )
 
     def set_moe_leaf_modules(self, model):
-        from deepspeed.utils import set_z3_leaf_modules
-
         if self.transformer_moe_cls_names is None:
             self.transformer_moe_cls_names = os.environ.get("ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES", None)
         if self.transformer_moe_cls_names is not None:
+            if compare_versions("deepspeed", "<", "0.14.0"):
+                raise ImportError("DeepSpeed version must be >= 0.14.0 to use MOE support. Please update DeepSpeed.")
+            from deepspeed.utils import set_z3_leaf_modules
+
             class_names = self.transformer_moe_cls_names.split(",")
             transformer_moe_cls = []
             for layer_class in class_names:
@@ -1133,6 +1150,13 @@ class FullyShardedDataParallelPlugin:
         self.forward_prefetch = str_to_bool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
         self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
+        if str_to_bool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1 and not self.sync_module_states:
+            warnings.warn(
+                "sync_module_states cannot be False since efficient cpu ram loading enabled. "
+                "Setting sync_module_states to True."
+            )
+            self.sync_module_states = True
+
         if self.sync_module_states:
             if is_npu_available():
                 device = torch.npu.current_device()
@@ -1203,6 +1227,8 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             FullOptimStateDictConfig,
             FullStateDictConfig,
+            ShardedOptimStateDictConfig,
+            ShardedStateDictConfig,
             StateDictType,
         )
 
@@ -1213,6 +1239,11 @@ class FullyShardedDataParallelPlugin:
                 self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        elif self.state_dict_type == StateDictType.SHARDED_STATE_DICT:
+            if self.state_dict_config is None:
+                self.state_dict_config = ShardedStateDictConfig(offload_to_cpu=True)
+            if self.optim_state_dict_config is None:
+                self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
 
 
 @dataclass
@@ -1367,6 +1398,14 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom prepare model function."},
     )
+    custom_megatron_datasets_provider_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom megatron train_valid_test datasets provider function."},
+    )
+    custom_get_batch_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom get batch function."},
+    )
 
     # remaining args such as enabling Alibi/ROPE positional embeddings,
     # wandb logging, Multi-Query Attention, etc.
@@ -1433,87 +1472,15 @@ class MegatronLMPlugin:
             self.megatron_lm_default_args.update(self.other_megatron_args)
 
     def set_network_size_args(self, model, batch_data=None):
-        # Check if the model is either BERT, GPT or T5 else raise error
-        # set 'num_layers', 'hidden_size', 'num_attention_heads', 'max_position_embeddings'
-        if "megatron-bert" in model.config.model_type.lower():
-            model_type_name = "bert"
-            num_layers = model.config.num_hidden_layers
-            hidden_size = model.config.hidden_size
-            num_attention_heads = model.config.num_attention_heads
-            max_position_embeddings = model.config.max_position_embeddings
-            num_labels = model.config.num_labels
-            orig_vocab_size = model.config.vocab_size
-            if "maskedlm" in model.__class__.__name__.lower():
-                pretraining_flag = True
-            if self.seq_length is not None:
-                if self.encoder_seq_length is not None:
-                    warnings.warn("Both `seq_length` and `encoder_seq_length` are set. Using `encoder_seq_length`.")
-                self.seq_length = self.encoder_seq_length
-            elif self.encoder_seq_length is not None:
-                self.seq_length = self.encoder_seq_length
-            elif batch_data is not None:
-                self.seq_length = batch_data["input_ids"].shape[1]
-            else:
-                self.seq_length = max_position_embeddings
-            self.megatron_lm_default_args["seq_length"] = self.seq_length
-        elif "gpt2" in model.config.model_type.lower():
-            model_type_name = "gpt"
-            num_layers = model.config.n_layer
-            hidden_size = model.config.n_embd
-            num_attention_heads = model.config.n_head
-            max_position_embeddings = model.config.n_positions
-            orig_vocab_size = model.config.vocab_size
-            pretraining_flag = True
-            if self.seq_length is not None:
-                if self.decoder_seq_length is not None:
-                    warnings.warn("Both `seq_length` and `decoder_seq_length` are set. Using `decoder_seq_length`.")
-                self.seq_length = self.decoder_seq_length
-            elif self.decoder_seq_length is not None:
-                self.seq_length = self.decoder_seq_length
-            elif batch_data is not None:
-                self.seq_length = batch_data["input_ids"].shape[1]
-            else:
-                self.seq_length = max_position_embeddings
-            self.megatron_lm_default_args["seq_length"] = self.seq_length
-            self.megatron_lm_default_args["return_logits"] = self.return_logits
-            self.megatron_lm_default_args["tokenizer_type"] = "GPT2BPETokenizer"
-        elif "t5" in model.config.model_type.lower():
-            model_type_name = "t5"
-            num_layers = model.config.num_layers
-            hidden_size = model.config.d_model
-            num_attention_heads = model.config.num_heads
-            max_position_embeddings = model.config.n_positions if hasattr(model.config, "n_positions") else 1024
-            orig_vocab_size = model.config.vocab_size
-            pretraining_flag = True
-            if self.encoder_seq_length is None:
-                if batch_data is not None:
-                    self.encoder_seq_length = batch_data["input_ids"].shape[1]
-                else:
-                    self.encoder_seq_length = max_position_embeddings
-            if self.decoder_seq_length is None:
-                if batch_data is not None:
-                    self.decoder_seq_length = batch_data["labels"].shape[1]
-                else:
-                    self.decoder_seq_length = max_position_embeddings
-
-            self.megatron_lm_default_args["encoder_seq_length"] = self.encoder_seq_length
-            self.megatron_lm_default_args["decoder_seq_length"] = self.decoder_seq_length
-        else:
-            raise ValueError(
-                "🤗 Accelerate Megatron-LM integration supports only BERT, GPT and T5 model. "
-                "Please check the model you are using is one of those."
-            )
-
-        self.megatron_lm_default_args["model_type_name"] = model_type_name
-        self.megatron_lm_default_args["num_layers"] = num_layers
-        self.megatron_lm_default_args["hidden_size"] = hidden_size
-        self.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
-        self.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
-        self.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
-        self.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
-        self.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
-        if model_type_name == "bert":
-            self.megatron_lm_default_args["num_labels"] = num_labels
+        model_config_type = model.config.model_type.lower()
+        for model_type in MODEL_CONFIGS_TO_MEGATRON_PARSERS.keys():
+            if model_type in model_config_type:
+                MODEL_CONFIGS_TO_MEGATRON_PARSERS[model_type](self, model, batch_data)
+                return
+        raise ValueError(
+            f"Accelerate Megatron-LM integration not supports {model_config_type} model. "
+            "You can add your own model config parser."
+        )
 
     def set_mixed_precision(self, mixed_precision):
         if mixed_precision == "fp16":
@@ -1588,6 +1555,116 @@ class MegatronLMPlugin:
                 self.megatron_lm_default_args[key] = True
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
+
+
+MODEL_CONFIGS_TO_MEGATRON_PARSERS = {}
+
+
+def add_model_config_to_megatron_parser(model_type: str):
+    def add_model_config_parser_helper(func):
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        MODEL_CONFIGS_TO_MEGATRON_PARSERS[model_type] = func
+        return wrapper
+
+    return add_model_config_parser_helper
+
+
+@add_model_config_to_megatron_parser("megatron-bert")
+def parse_bert_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "bert"
+    num_layers = model.config.num_hidden_layers
+    hidden_size = model.config.hidden_size
+    num_attention_heads = model.config.num_attention_heads
+    max_position_embeddings = model.config.max_position_embeddings
+    num_labels = model.config.num_labels
+    orig_vocab_size = model.config.vocab_size
+    if "maskedlm" in model.__class__.__name__.lower():
+        pretraining_flag = True
+    if megatron_lm_plugin.seq_length is not None:
+        if megatron_lm_plugin.encoder_seq_length is not None:
+            warnings.warn("Both `seq_length` and `encoder_seq_length` are set. Using `encoder_seq_length`.")
+        megatron_lm_plugin.seq_length = megatron_lm_plugin.encoder_seq_length
+    elif megatron_lm_plugin.encoder_seq_length is not None:
+        megatron_lm_plugin.seq_length = megatron_lm_plugin.encoder_seq_length
+    elif batch_data is not None:
+        megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+    else:
+        megatron_lm_plugin.seq_length = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["num_labels"] = num_labels
+
+
+@add_model_config_to_megatron_parser("gpt2")
+def parse_gpt2_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "gpt"
+    num_layers = model.config.n_layer
+    hidden_size = model.config.n_embd
+    num_attention_heads = model.config.n_head
+    max_position_embeddings = model.config.n_positions
+    orig_vocab_size = model.config.vocab_size
+    pretraining_flag = True
+    if megatron_lm_plugin.seq_length is not None:
+        if megatron_lm_plugin.decoder_seq_length is not None:
+            warnings.warn("Both `seq_length` and `decoder_seq_length` are set. Using `decoder_seq_length`.")
+        megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+    elif megatron_lm_plugin.decoder_seq_length is not None:
+        megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+    elif batch_data is not None:
+        megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+    else:
+        megatron_lm_plugin.seq_length = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "GPT2BPETokenizer"
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+
+
+@add_model_config_to_megatron_parser("t5")
+def parse_t5_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "t5"
+    num_layers = model.config.num_layers
+    hidden_size = model.config.d_model
+    num_attention_heads = model.config.num_heads
+    max_position_embeddings = model.config.n_positions if hasattr(model.config, "n_positions") else 1024
+    orig_vocab_size = model.config.vocab_size
+    pretraining_flag = True
+    if megatron_lm_plugin.encoder_seq_length is None:
+        if batch_data is not None:
+            megatron_lm_plugin.encoder_seq_length = batch_data["input_ids"].shape[1]
+        else:
+            megatron_lm_plugin.encoder_seq_length = max_position_embeddings
+    if megatron_lm_plugin.decoder_seq_length is None:
+        if batch_data is not None:
+            megatron_lm_plugin.decoder_seq_length = batch_data["labels"].shape[1]
+        else:
+            megatron_lm_plugin.decoder_seq_length = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["encoder_seq_length"] = megatron_lm_plugin.encoder_seq_length
+    megatron_lm_plugin.megatron_lm_default_args["decoder_seq_length"] = megatron_lm_plugin.decoder_seq_length
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
 
 
 @dataclass

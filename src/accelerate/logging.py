@@ -54,6 +54,8 @@ class MultiProcessAdapter(logging.LoggerAdapter):
             )
         main_process_only = kwargs.pop("main_process_only", True)
         in_order = kwargs.pop("in_order", False)
+        # set `stacklevel` to exclude ourself in `Logger.findCaller()` while respecting user's choice
+        kwargs.setdefault("stacklevel", 2)
 
         if self.isEnabledFor(level):
             if self._should_log(main_process_only):

@@ -1,0 +1,8 @@
+compute_environment: AMAZON_SAGEMAKER
+debug: false
+distributed_type: NO
+mixed_precision: fp16
+debug: false
+use_cpu: false
+ec2_instance_type: MY_TYPE
+iam_role_name: MY_ROLE

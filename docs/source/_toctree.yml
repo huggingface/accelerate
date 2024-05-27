@@ -78,6 +78,8 @@
     title: Executing and deferring jobs
   - local: concept_guides/gradient_synchronization
     title: Gradient synchronization
+  - local: concept_guides/fsdp_and_deepspeed
+    title: FSDP vs DeepSpeed
   - local: concept_guides/low_precision_training
     title: How training in low-precision environments is possible (FP8)
   - local: concept_guides/training_tpu

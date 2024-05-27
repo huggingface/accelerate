@@ -18,7 +18,7 @@ import warnings
 import torch
 
 from .state import AcceleratorState, GradientState
-from .utils import DistributedType, honor_type, is_torch_xla_available
+from .utils import DistributedType, honor_type, is_lomo_available, is_torch_xla_available
 
 
 if is_torch_xla_available():
@@ -134,6 +134,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self.optimizer.eval()
 
     def step(self, closure=None):
+        if is_lomo_available():
+            from lomo_optim import AdaLomo, Lomo
+
         if (
             not self.gradient_state.is_xla_gradients_synced
             and self.accelerator_state.distributed_type == DistributedType.XLA
@@ -141,6 +144,12 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             gradients = xm._fetch_gradients(self.optimizer)
             xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
             self.gradient_state.is_xla_gradients_synced = True
+
+        if is_lomo_available():
+            #  `step` should be a no-op for LOMO optimizers.
+            if isinstance(self.optimizer, (Lomo, AdaLomo)):
+                return
+
         if self.gradient_state.sync_gradients:
             if self.scaler is not None:
                 self.optimizer.step = self._optimizer_patched_step_method
