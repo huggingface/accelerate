@@ -267,7 +267,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(
         step_model(model, input, target, accelerator, False)
         opt.step()
 
-        if ((iteration + 1) % 2 == 0) or ((iteration + 1) == len(dataloader)) or sync_each_batch:
+        if ((iteration + 1) % 2 == 0) or ((iteration + 1) == len(dataloader)):
             if split_batches:
                 sched.step()
             else:
@@ -284,18 +284,18 @@ def test_gradient_accumulation_with_opt_and_scheduler(
         assert (
             opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"]
         ), f'Learning rates found in each optimizer did not align\nopt: {opt.param_groups[0]["lr"]}\nDDP opt: {ddp_opt.param_groups[0]["lr"]}\n'
-        did_step = (((iteration + 1) % 2) == 0) or ((iteration + 1) == len(dataloader)) or sync_each_batch
+        did_step = (((iteration + 1) % 2) == 0) or ((iteration + 1) == len(dataloader))
         if accelerator.num_processes > 1:
             check_model_parameters(
                 model,
                 ddp_model,
-                did_step,
+                did_step or sync_each_batch,  # syncs at each grad_accum interval of if sync_each_batch==True
                 iteration,
-                rtol=1e-3,  # somehow needs a relative tolerance
+                rtol=1e-3,  # needs a relative tolerance due to roundoff errors
             )
 
-        if ((iteration + 1) % 2 == 0) or ((iteration + 1) == len(dataloader)) or sync_each_batch:
-            opt.zero_grad()  # needs to be guarded by logic as to when we should zero grads
+        if did_step:
+            opt.zero_grad()  # flush gradients every accum step
         ddp_opt.zero_grad()
 
         # Shuffle ddp_input on each iteration
