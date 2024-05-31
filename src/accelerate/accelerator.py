@@ -475,6 +475,8 @@ class Accelerator:
                 self.scaler = torch.mlu.amp.GradScaler(**kwargs)
             elif is_npu_available():
                 self.scaler = torch.npu.amp.GradScaler(**kwargs)
+            elif is_xpu_available():
+                self.scaler = torch.amp.GradScaler("xpu", **kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
@@ -1286,9 +1288,9 @@ class Accelerator:
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.use_ipex:
-                args = self._prepare_ipex(*args)
+                args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
-                args = self._prepare_ipex(*args)
+                args = self._prepare_ipex_or_xpu(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1896,14 +1898,18 @@ class Accelerator:
 
         return tuple(result)
 
-    def _prepare_ipex(self, *args):
-        if not is_ipex_available():
-            raise ImportError(
-                "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-        else:
-            import intel_extension_for_pytorch as ipex
+    def _prepare_ipex_or_xpu(self, *args):
+        """
+        Prepares model and optimizer for training with IPEX or XPU acceleration. This covers 3 cases, IPEX compiled
+        with CPU only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock
+        pytorch starting from version 2.4.
+        """
+        if self.state.use_ipex:
+            if not is_ipex_available():
+                raise ImportError(
+                    "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
+                    " to https://github.com/intel/intel-extension-for-pytorch."
+                )
 
         model = None
         optimizer = None
@@ -1916,12 +1922,12 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
-            if self.device.type == "xpu" and is_xpu_available():
+            if self.device.type == "xpu":
                 model = model.to(self.device)
-                model, optimizer = torch.xpu.optimize(
-                    model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1"
-                )
-            else:
+            # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
+            if is_ipex_available():
+                import intel_extension_for_pytorch as ipex
+
                 model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
