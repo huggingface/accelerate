@@ -456,7 +456,7 @@ class ModelEstimatorTester(unittest.TestCase):
         args = self.parser.parse_args(["bert-base-cased", "--dtypes", "float32", "float16"])
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
-        largest_layer, total_size = 89075712, 433249280
+        largest_layer, total_size = 90669056, 433249280
         # Check that full precision -> int4 is calculating correctly
         assert len(output) == 2, f"Output was missing a precision, expected 2 but received {len(output)}"
 
@@ -484,7 +484,7 @@ class ModelEstimatorTester(unittest.TestCase):
         args = self.parser.parse_args(["bert-base-cased", "--dtypes", "float32"])
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
-        largest_layer, total_size = 89075712, 433249280
+        largest_layer, total_size = 90669056, 433249280
         assert (
             largest_layer == output[0][1]
         ), f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"

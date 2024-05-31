@@ -15,4 +15,6 @@ rendered properly in your Markdown viewer.
 
 # Utilities for Fully Sharded Data Parallelism
 
+[[autodoc]] utils.merge_fsdp_weights
+
 [[autodoc]] utils.FullyShardedDataParallelPlugin
