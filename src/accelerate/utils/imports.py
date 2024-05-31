@@ -302,8 +302,10 @@ def is_mlflow_available():
     return False
 
 
-def is_mps_available():
-    return is_torch_version(">=", "1.12") and torch.backends.mps.is_available() and torch.backends.mps.is_built()
+def is_mps_available(min_version="1.12"):
+    # With torch 1.12, you can use torch.backends.mps
+    # With torch 2.0.0, you can use torch.mps
+    return is_torch_version(">=", min_version) and torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
 
 def is_ipex_available():
