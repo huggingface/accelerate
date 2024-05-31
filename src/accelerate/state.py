@@ -101,6 +101,11 @@ class ThreadLocalSharedDict(threading.local):
     def __set__(self, obj, value):
         self._storage = value
 
+def _get_shared_dict_type():
+    # Prefer global shared dictionary, except when using TPU or `backend == threaded`
+    if is_torch_xla_available() or (torch.distributed.is_initialized() and torch.distributed.get_backend() == "threaded"):
+        return ThreadLocalSharedDict
+    return dict
 
 # Prefer global shared dictionary, except when using TPU.
 SharedDict = dict if not is_torch_xla_available() else ThreadLocalSharedDict
@@ -162,6 +167,9 @@ class PartialState:
     ]
 
     def __init__(self, cpu: bool = False, **kwargs):
+        # This is needed when we are launching tests and have the `threaded` backend
+        if _get_shared_dict_type() != self._shared_state.__class__:
+            PartialState._shared_state = _get_shared_dict_type()()
         self.__dict__ = self._shared_state
         if not self.initialized:
             self._cpu = cpu
@@ -185,7 +193,7 @@ class PartialState:
             self.backend = backend
             self.distributed_type = distributed_type
             use_deepspeed = False
-            if not cpu and self.backend != "xla":
+            if not cpu and self.backend != "xla" and not torch.distributed.is_initialized():
                 if int(os.environ.get("LOCAL_RANK", -1)) != -1:
                     # Deal with spawning deepspeed
                     if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
@@ -274,9 +282,13 @@ class PartialState:
             else:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
-                self.local_process_index = (
-                    int(os.environ.get("LOCAL_RANK", -1)) if dist_information is None else dist_information.local_rank
-                )
+                # Setting `local_process_index` requires some care
+                if dist_information is not None:
+                    self.local_process_index = dist_information.local_rank
+                elif backend == "threaded":
+                    self.local_process_index = self.process_index
+                else:
+                    self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
             self.set_device()
             # Now we can change to deepseed
             if use_deepspeed:
@@ -712,7 +724,8 @@ class PartialState:
         distributed_type = None
         if torch.distributed.is_initialized():
             backend = torch.distributed.get_backend()
-            distributed_type = DistributedType.MULTI_GPU
+            if backend == "threaded":
+                distributed_type = DistributedType.MULTI_GPU
         if sagemaker_dp:
             import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
