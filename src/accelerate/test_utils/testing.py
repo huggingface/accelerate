@@ -30,7 +30,7 @@ import torch
 
 import accelerate
 
-from ..state import AcceleratorState, PartialState
+from ..state import PartialState, PartialState
 from ..utils import (
     gather,
     is_bnb_available,
@@ -427,14 +427,14 @@ class TempDirTestCase(unittest.TestCase):
 class AccelerateTestCase(unittest.TestCase):
     """
     A TestCase class that will reset the accelerator state at the end of every test. Every test that checks or utilizes
-    the `AcceleratorState` class should inherit from this to avoid silent failures due to state being shared between
+    the `PartialState` class should inherit from this to avoid silent failures due to state being shared between
     tests.
     """
 
     def tearDown(self):
         super().tearDown()
-        # Reset the state of the AcceleratorState singleton.
-        AcceleratorState._reset_state()
+        # Reset the state of the PartialState singleton.
+        PartialState._reset_state()
         PartialState._reset_state()
 
 
@@ -472,7 +472,7 @@ class MockingTestCase(unittest.TestCase):
 
 
 def are_the_same_tensors(tensor):
-    state = AcceleratorState()
+    state = PartialState()
     tensor = tensor[None].clone().to(state.device)
     tensors = gather(tensor).cpu()
     tensor = tensor[0].cpu()

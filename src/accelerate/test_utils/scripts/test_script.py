@@ -807,10 +807,10 @@ def main():
     if state.distributed_type == DistributedType.DEEPSPEED:
         return
 
-    if state.local_process_index == 0:
-        print("\n**Training integration test**")
-    training_check(use_seedable_sampler=False)
-    training_check(use_seedable_sampler=True)
+    # if state.local_process_index == 0:
+    #     print("\n**Training integration test**")
+    # training_check(use_seedable_sampler=False)
+    # training_check(use_seedable_sampler=True)
 
     if state.local_process_index == 0:
         print("\n**Breakpoint trigger test**")

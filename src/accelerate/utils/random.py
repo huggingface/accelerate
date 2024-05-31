@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 import numpy as np
 import torch
 
-from ..state import AcceleratorState
+from ..state import PartialState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, RNGType
 from .imports import is_mlu_available, is_npu_available, is_torch_xla_available, is_xpu_available
@@ -41,7 +41,7 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
             Whether to use deterministic algorithms where available. Can slow down training.
     """
     if device_specific:
-        seed += AcceleratorState().process_index
+        seed += PartialState().process_index
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -84,7 +84,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         rng_state = generator.get_state()
 
     # Broadcast the rng state from device 0 to other devices
-    state = AcceleratorState()
+    state = PartialState()
     if state.distributed_type == DistributedType.XLA:
         rng_state = rng_state.to(xm.xla_device())
         xm.collective_broadcast([rng_state])

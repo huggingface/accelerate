@@ -710,6 +710,9 @@ class PartialState:
     ) -> tuple[str, DistributedType]:
         "Prepares any imports needed before initializing the distributed backend and sets `self.backend` properly"
         distributed_type = None
+        if torch.distributed.is_initialized():
+            backend = torch.distributed.get_backend()
+            distributed_type = DistributedType.MULTI_GPU
         if sagemaker_dp:
             import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
@@ -718,7 +721,7 @@ class PartialState:
         elif is_torch_xla_available():
             backend = "xla"
             distributed_type = DistributedType.XLA
-        elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
+        elif not cpu and int(os.environ.get("LOCAL_RANK", -1)) != -1:
             if is_mlu_available():
                 backend = "cncl"
                 distributed_type = DistributedType.MULTI_MLU
