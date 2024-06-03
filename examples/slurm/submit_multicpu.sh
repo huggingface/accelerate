@@ -45,7 +45,7 @@ export SCRIPT="complete_nlp_example.py"
 export SCRIPT_ARGS=" \
     --mixed_precision fp16 \
     --cpu \
-    --output_dir ~/localdisk/okhleif/output \
+    --output_dir ~/output \
     "
     
 # This step is necessary because accelerate launch does not handle multiline arguments properly
