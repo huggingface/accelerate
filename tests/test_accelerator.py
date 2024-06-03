@@ -282,6 +282,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert torch.allclose(expected, output, atol=1e-5)
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    @require_cuda
     def test_get_state_dict_from_offload(self, use_safetensors):
         accelerator = Accelerator()
 
