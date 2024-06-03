@@ -1793,6 +1793,7 @@ class Accelerator:
 
     def _prepare_megatron_lm(self, *args):
         megatron_lm_plugin = self.state.megatron_lm_plugin
+        micro_batch_size = None
         if not megatron_lm_plugin.megatron_dataset_flag:
             batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
             if len(batch_sizes) == 0:
@@ -1811,10 +1812,14 @@ class Accelerator:
                 if isinstance(obj, MegatronLMDummyDataLoader):
                     micro_batch_size = obj.dataset_args["micro_batch_size"]
                     break
-
-        dp_degree = self.num_processes // (megatron_lm_plugin.tp_degree * megatron_lm_plugin.pp_degree)
-        megatron_lm_plugin.set_training_args(micro_batch_size, dp_degree)
-
+        if micro_batch_size is not None:
+            dp_degree = self.num_processes // (megatron_lm_plugin.tp_degree * megatron_lm_plugin.pp_degree)
+            megatron_lm_plugin.set_training_args(micro_batch_size, dp_degree)
+        else:
+            raise ValueError(
+                "When you do not pass the dataloader parameter, the `data_parallel_size`, "
+                "`micro_batch_size`, and `global_batch_size` megatron parameters will not be updated."
+            )
         model = None
         optimizer = None
         scheduler = None
@@ -1822,7 +1827,7 @@ class Accelerator:
         for obj in args:
             if isinstance(obj, torch.utils.data.DataLoader) and batch_data is None:
                 batch_data = next(iter(obj))
-            if isinstance(obj, torch.nn.Module):
+            elif isinstance(obj, torch.nn.Module):
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
@@ -1834,8 +1839,7 @@ class Accelerator:
         if optimizer is not None:
             megatron_lm_plugin.set_optimizer_type(optimizer)
         if scheduler is not None:
-            is_dummy_scheduler = isinstance(scheduler, MegatronLMDummyScheduler)
-            if not is_dummy_scheduler:
+            if not isinstance(scheduler, MegatronLMDummyScheduler):
                 raise ValueError(
                     "You can't use a custom scheduler with Megatron-LM. Please use the `accelerate.utils.MegatronLMDummyScheduler` instead."
                 )
@@ -1845,6 +1849,7 @@ class Accelerator:
         megatron_lm_initialize(self, args_defaults=megatron_lm_plugin.megatron_lm_default_args)
 
         (model, optimizer, scheduler) = megatron_lm_prepare_model_optimizer_scheduler(self)
+        self.wait_for_everyone()
 
         counter = 0
         result = []
@@ -1875,16 +1880,18 @@ class Accelerator:
                 result[i] = optimizer
             elif isinstance(result[i], MegatronLMDummyScheduler):
                 result[i] = scheduler
+
         if model is not None:
             self._models.append(model)
+            if len(self._models) > 1:
+                raise AssertionError(
+                    "You can't use same `Accelerator()` instance with multiple models when using Megatron-LM"
+                )
         if optimizer is not None:
             self._optimizers.append(optimizer)
         if scheduler is not None:
             self._schedulers.append(scheduler)
-        if len(self._models) > 1:
-            raise AssertionError(
-                "You can't use same `Accelerator()` instance with multiple models when using Megatron-LM"
-            )
+
         return tuple(result)
 
     def _prepare_ipex(self, *args):
