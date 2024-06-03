@@ -107,7 +107,10 @@ cd ..
 4. Installing Megatron-LM
 
 ```
-pip install git+https://github.com/huggingface/Megatron-LM.git
+git clone https://github.com/NVIDIA/Megatron-LM.git
+cd Megatron-LM
+git checkout core_r0.5.0
+pip install --no-use-pep517 -e .
 ```
 
 ## Accelerate Megatron-LM Plugin
