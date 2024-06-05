@@ -961,17 +961,7 @@ def get_balanced_memory(
     elif is_mlu_available():
         num_devices = len([d for d in max_memory if torch.device(d).type == "mlu" and max_memory[d] > 0])
     elif is_xpu_available():
-        num_devices = len(
-            [
-                d
-                for d in max_memory
-                if (
-                    d != "cpu"
-                    and (torch.device(d).type == "xpu" or torch.xpu.get_device_properties(d).dev_type == "gpu")
-                )
-                and max_memory[d] > 0
-            ]
-        )
+        num_devices = len([d for d in max_memory if torch.device(d).type == "xpu" and max_memory[d] > 0])
     else:
         num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
 
