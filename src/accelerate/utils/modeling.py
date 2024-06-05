@@ -442,7 +442,11 @@ def set_module_tensor_to_device(
                     elif module.bias is None:
                         # if no bias exists, we can quantize right away
                         module = module.cuda(device_index)
-            elif module.__class__.__name__ == "Linear4bit" and getattr(module.weight, "quant_state", None) is None:
+            elif (
+                module.__class__.__name__ == "Linear4bit"
+                and getattr(module.weight, "quant_state", None) is None
+                and str(module.weight.device) != "meta"
+            ):
                 # quantize only if necessary
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
@@ -803,27 +807,40 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not (torch.cuda.is_available() or is_npu_available() or is_mlu_available() or is_xpu_available()):
-            max_memory = {}
-
-        else:
-            # Make sure CUDA is initialized on each GPU to have the right memory info.
-            if is_npu_available():
-                for i in range(torch.npu.device_count()):
+        max_memory = {}
+        # Make sure CUDA is initialized on each GPU to have the right memory info.
+        if is_npu_available():
+            for i in range(torch.npu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("npu", i))
-                max_memory = {i: torch.npu.mem_get_info(i)[0] for i in range(torch.npu.device_count())}
-            elif is_mlu_available():
-                for i in range(torch.mlu.device_count()):
+                    max_memory[i] = torch.npu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_mlu_available():
+            for i in range(torch.mlu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("mlu", i))
-                max_memory = {i: torch.mlu.mem_get_info(i)[0] for i in range(torch.mlu.device_count())}
-            elif is_xpu_available():
-                for i in range(torch.xpu.device_count()):
+                    max_memory[i] = torch.mlu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_xpu_available():
+            for i in range(torch.xpu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
-                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
-            else:
-                for i in range(torch.cuda.device_count()):
+                    max_memory[i] = torch.xpu.max_memory_allocated(i)
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        else:
+            for i in range(torch.cuda.device_count()):
+                try:
                     _ = torch.tensor([0], device=i)
-                max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+                    max_memory[i] = torch.cuda.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         # allocate everything in the mps device as the RAM is shared
         if is_mps_available():
             max_memory["mps"] = psutil.virtual_memory().available
@@ -914,6 +931,17 @@ def load_offloaded_weights(model, index, offload_folder):
         tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
         weight = load_offloaded_weight(tensor_file, metadata)
         set_module_tensor_to_device(model, param_name, "cpu", value=weight, fp16_statistics=fp16_statistics)
+
+
+def get_module_leaves(module_sizes):
+    module_children = {}
+    for module in module_sizes:
+        if module == "" or "." not in module:
+            continue
+        parent = module.rsplit(".", 1)[0]
+        module_children[parent] = module_children.get(parent, 0) + 1
+    leaves = [module for module in module_sizes if module_children.get(module, 0) == 0 and module != ""]
+    return leaves
 
 
 def get_balanced_memory(
@@ -1016,10 +1044,10 @@ def get_balanced_memory(
         buffer = 0
 
     # Compute mean of final modules. In the first dict of module sizes, leaves are the parameters
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
+    leaves = get_module_leaves(module_sizes)
     module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
     # Once removed, leaves are the final modules.
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
+    leaves = get_module_leaves(module_sizes)
     mean_leaves = int(sum([module_sizes[n] for n in leaves]) / max(len(leaves), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
@@ -1525,6 +1553,49 @@ def get_state_dict_offloaded_model(model: nn.Module):
             placeholders.remove(key)
     if placeholders:
         logger.warning(f"The following tensors were not saved because they were still on meta device: {placeholders}")
+
+    return state_dict
+
+
+def get_state_dict_from_offload(
+    module: nn.Module,
+    module_name: str,
+    state_dict: Dict[str, Union[str, torch.tensor]],
+    device_to_put_offload: Union[int, str, torch.device] = "cpu",
+):
+    """
+    Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defualts
+    to cpu).
+
+    Args:
+        module: (`torch.nn.Module`):
+            The module we want to retrieve a state dictionary from
+        module_name: (`str`):
+            The name of the module of interest
+        state_dict (`Dict[str, Union[int, str, torch.device]]`):
+            Dictionary of {module names: parameters}
+        device_to_put_offload (`Union[int, str, torch.device]`):
+            Device to load offloaded parameters into, defaults to the cpu.
+    """
+    from ..hooks import AlignDevicesHook
+
+    root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
+    preforward = False
+    if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+        # assign the device to which the offloaded parameters will be sent
+        original_device = module._hf_hook.execution_device
+        module._hf_hook.execution_device = device_to_put_offload
+        module._hf_hook.pre_forward(module)
+        preforward = True
+
+    for m_key in module.state_dict():
+        params = module.state_dict()[m_key]
+        if (root + f".{m_key}") in state_dict:
+            state_dict[root + f".{m_key}"] = params
+
+    if preforward:
+        module._hf_hook.post_forward(module, torch.tensor([]))
+        module._hf_hook.execution_device = original_device
 
     return state_dict
 

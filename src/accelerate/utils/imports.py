@@ -20,7 +20,6 @@ from functools import lru_cache
 
 import torch
 from packaging import version
-from packaging.version import parse
 
 from .environment import parse_flag_from_env, str_to_bool
 from .versions import compare_versions, is_torch_version
@@ -220,12 +219,7 @@ def is_megatron_lm_available():
     if str_to_bool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
         package_exists = importlib.util.find_spec("megatron") is not None
         if package_exists:
-            try:
-                megatron_version = parse(importlib.metadata.version("megatron-lm"))
-                return compare_versions(megatron_version, ">=", "2.2.0")
-            except Exception as e:
-                warnings.warn(f"Parse Megatron version failed. Exception:{e}")
-                return False
+            return True
 
 
 def is_transformers_available():
@@ -308,8 +302,10 @@ def is_mlflow_available():
     return False
 
 
-def is_mps_available():
-    return is_torch_version(">=", "1.12") and torch.backends.mps.is_available() and torch.backends.mps.is_built()
+def is_mps_available(min_version="1.12"):
+    # With torch 1.12, you can use torch.backends.mps
+    # With torch 2.0.0, you can use torch.mps
+    return is_torch_version(">=", min_version) and torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
 
 def is_ipex_available():

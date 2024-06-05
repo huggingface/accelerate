@@ -41,6 +41,7 @@ class MultiDeviceTester(unittest.TestCase):
     data_loop_file_path = path_in_accelerate_package("test_utils", "scripts", "test_distributed_data_loop.py")
     operation_file_path = path_in_accelerate_package("test_utils", "scripts", "test_ops.py")
     pippy_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_pippy.py")
+    merge_weights_file_path = path_in_accelerate_package("test_utils", "scripts", "test_merge_weights.py")
 
     @require_multi_device
     def test_multi_device(self):
@@ -60,6 +61,13 @@ class MultiDeviceTester(unittest.TestCase):
     def test_pad_across_processes(self):
         print(f"Found {device_count} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd)
+
+    @require_multi_device
+    def test_multi_device_merge_fsdp_weights(self):
+        print(f"Found {device_count} devices.")
+        cmd = DEFAULT_LAUNCH_COMMAND + [self.merge_weights_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
