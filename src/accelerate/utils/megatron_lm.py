@@ -362,8 +362,12 @@ def prepare_data_loader(accelerator, dataloader):
         ) = dataloader.build_train_valid_test_data_iterators(accelerator)
         args.micro_batch_size = args.micro_batch_size // args.num_micro_batches
 
-        train_data_iterator = _handle_megatron_data_iterator(accelerator=accelerator, data_iterator=train_data_iterator)
-        valid_data_iterator = _handle_megatron_data_iterator(accelerator=accelerator, data_iterator=valid_data_iterator)
+        train_data_iterator = _handle_megatron_data_iterator(
+            accelerator=accelerator, data_iterator=train_data_iterator
+        )
+        valid_data_iterator = _handle_megatron_data_iterator(
+            accelerator=accelerator, data_iterator=valid_data_iterator
+        )
         test_data_iterator = _handle_megatron_data_iterator(accelerator=accelerator, data_iterator=test_data_iterator)
 
         return train_data_iterator, valid_data_iterator, test_data_iterator
