@@ -99,7 +99,7 @@ def get_launch_command(**kwargs) -> list:
     return command
 
 
-DEFAULT_LAUNCH_COMMAND = get_launch_command(num_processes=device_count)
+DEFAULT_LAUNCH_COMMAND = get_launch_command(num_processes=device_count, monitor_interval=0.1)
 
 
 def parse_flag_from_env(key, default=False):
