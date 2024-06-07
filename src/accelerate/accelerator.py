@@ -3123,7 +3123,9 @@ class Accelerator:
             f for f in os.listdir(input_dir) if re.search(r"^custom_checkpoint_\d+\.pkl$", f) is not None
         ]
         if len(custom_checkpoints) != len(self._custom_objects):
-            err = "Number of custom checkpoints in folder {input_dir} does not match the number of registered objects:"
+            err = (
+                f"Number of custom checkpoints in folder {input_dir} does not match the number of registered objects:"
+            )
             err += f"\n\tFound checkpoints: {len(custom_checkpoints)}"
             err += f"\n\tRegistered objects: {len(self._custom_objects)}\n"
             err += "Please make sure to only load checkpoints from folders that were created with the same set of registered objects,"
