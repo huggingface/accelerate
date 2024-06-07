@@ -262,6 +262,22 @@ class AcceleratorTester(AccelerateTestCase):
             assert abs(model_signature - get_signature(model)) < 1e-3
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_sharded_model(self, use_safetensors):
+        accelerator = Accelerator()
+        inputs = torch.randn(3, 3)
+        model = ModelForTest()
+        expected = model(inputs)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # By setting it to 100, we will split the model int 3 shards
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors, max_shard_size=100)
+            # make sure loaded weights match
+            load_checkpoint_in_model(model, tmpdirname)
+            output = model(inputs)
+
+        assert torch.allclose(expected, output, atol=1e-5)
+
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_model_offload(self, use_safetensors):
         accelerator = Accelerator()
 

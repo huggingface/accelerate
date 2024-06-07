@@ -230,6 +230,11 @@ def shard_checkpoint(
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
     """
+    logger.warning(
+        "Note that `shard_checkpoint` is deprecated and will be removed in  0.33.0. We recommend you using "
+        "split_torch_state_dict_into_shards from huggingface_hub library"
+    )
+
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
     sharded_state_dicts = [{}]

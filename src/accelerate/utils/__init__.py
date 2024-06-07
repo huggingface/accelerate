@@ -18,6 +18,7 @@ from .constants import (
     SAFE_MODEL_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
+    SAFE_WEIGHTS_PATTERN_NAME,
     SAMPLER_NAME,
     SCALER_NAME,
     SCHEDULER_NAME,
@@ -25,6 +26,7 @@ from .constants import (
     TORCH_LAUNCH_PARAMS,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    WEIGHTS_PATTERN_NAME,
 )
 from .dataclasses import (
     AutocastKwargs,
