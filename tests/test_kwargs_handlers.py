@@ -127,7 +127,6 @@ class KwargsHandlerTester(unittest.TestCase):
         return param.grad
 
     @require_multi_device
-    @unittest.mock.patch("torch.nn.parallel.DistributedDataParallel.register_comm_hook")
     @pytest.mark.parametrize(
         ("comm_hook", "comm_wrapper"),
         [
@@ -142,7 +141,7 @@ class KwargsHandlerTester(unittest.TestCase):
             (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.BF16),
         ],
     )
-    def test_ddp_fp16_comm_hook(self, mock_register_comm_hook, comm_hook, comm_wrapper):
+    def test_ddp_fp16_comm_hook(self, comm_hook, comm_wrapper):
         ddp_kwargs = DistributedDataParallelKwargs(
             comm_hook=comm_hook,
             comm_wrapper=comm_wrapper,
@@ -157,10 +156,6 @@ class KwargsHandlerTester(unittest.TestCase):
         )
         reference_grads = self._run_and_get_grads(reference_model, accelerator.local_process_index)
 
-        if comm_hook == DDPCommunicationHookType.NO:
-            assert not mock_register_comm_hook.called
-        else:
-            assert mock_register_comm_hook.called
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
 
 
