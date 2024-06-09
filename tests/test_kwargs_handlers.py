@@ -17,14 +17,14 @@ import os
 import unittest
 from dataclasses import dataclass
 
-import pytest
 import torch
 
-from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs, GradScalerKwargs
+from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
     require_non_xpu,
@@ -38,16 +38,6 @@ class MockClass(KwargsHandler):
     a: int = 0
     b: bool = False
     c: float = 3.0
-
-
-class MockModel(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        torch.manual_seed(0)
-        self.p = torch.nn.Parameter(torch.randn(40, 20))
-
-    def forward(self, x, rank):
-        return self.p * x ** (1 + rank)
 
 
 class KwargsHandlerTester(unittest.TestCase):
@@ -127,36 +117,9 @@ class KwargsHandlerTester(unittest.TestCase):
         return param.grad
 
     @require_multi_device
-    @pytest.mark.parametrize(
-        ("comm_hook", "comm_wrapper"),
-        [
-            (DDPCommunicationHookType.NO, DDPCommunicationHookType.NO),
-            (DDPCommunicationHookType.FP16, DDPCommunicationHookType.NO),
-            (DDPCommunicationHookType.BF16, DDPCommunicationHookType.NO),
-            (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.NO),
-            (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.FP16),
-            (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BF16),
-            (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.NO),
-            (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.FP16),
-            (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.BF16),
-        ],
-    )
-    def test_ddp_fp16_comm_hook(self, comm_hook, comm_wrapper):
-        ddp_kwargs = DistributedDataParallelKwargs(
-            comm_hook=comm_hook,
-            comm_wrapper=comm_wrapper,
-        )
-        accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
-
-        model = accelerator.prepare(MockModel())
-        hook_grads = self._run_and_get_grads(model, accelerator.local_process_index)
-
-        reference_model = torch.nn.parallel.DistributedDataParallel(
-            MockModel(), device_ids=[accelerator.local_process_index], output_device=accelerator.local_process_index
-        )
-        reference_grads = self._run_and_get_grads(reference_model, accelerator.local_process_index)
-
-        torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
+    def test_ddp_comm_hook(self):
+        cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]
+        execute_subprocess_async(cmd)
 
 
 def main():
