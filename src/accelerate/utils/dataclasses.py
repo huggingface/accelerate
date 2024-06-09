@@ -57,6 +57,29 @@ class KwargsHandler:
         return {k: v for k, v in this_dict.items() if default_dict[k] != v}
 
 
+class EnumWithContains(enum.EnumMeta):
+    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
+
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class BaseEnum(enum.Enum, metaclass=EnumWithContains):
+    "An enum class that can get the value of an item with `str(Enum.key)`"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        "Method to list all the possible items in `cls`"
+        return list(map(str, cls))
+
+
 @dataclass
 class AutocastKwargs(KwargsHandler):
     """
@@ -77,6 +100,91 @@ class AutocastKwargs(KwargsHandler):
 
     enabled: bool = True
     cache_enabled: bool = None
+
+
+class DDPCommunicationHookType(str, BaseEnum):
+    """
+    Represents a type of communication hook used in DDP.
+
+    Values:
+
+        - **NO** -- No communication hook.
+        - **FP16** -- Using half precision.
+        - **BF16** -- Using brain floating point precision.
+        - **POWER_SGD** -- Using POWER_SGD.
+        - **BATCHED_POWER_SGD** -- Using BATCHED_POWER_SGD.
+    """
+
+    # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
+    NO = "no"
+    FP16 = "fp16"
+    BF16 = "bf16"
+    POWER_SGD = "power_sgd"
+    BATCHED_POWER_SGD = "batched_power_sgd"
+
+
+@dataclass
+class DDPCommunicationHook:
+    """
+    Use this object in your [`Accelerator`] to customize the behavior of the communication hook used in DDP.
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import DDPCommunicationHook, DistributedDataParallelKwargs
+
+    kwargs = DistributedDataParallelKwargs(
+        ddp_comm_hook=DDPCCommunicationHook("fp16")
+    ) 
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
+
+    Args:
+        hook (`DDPCommunicationHookType`, *optional*, default to `DDPCommunicationHookType.NO`):
+            The type of communication hook used in DDP.
+        hook_wrapper (`DDPCommunicationHookType`, *optional*, default to `DDPCommunicationHookType.NO`):
+            The type of hook wrapper used in DDP.
+        state (`DDPCommunicationHookType`, *optional*, default to `DDPCommunicationHookType.NO`):
+            The type of state used in DDP.
+        state_option (`dict`, *optional*, default to `{}`):
+            The options for the state used in DDP.
+  """
+
+    hook: DDPCommunicationHookType = field(
+        default=DDPCommunicationHookType.NO,
+        metadata={
+            "help": "The type of communication hook used in DDP.",
+        },
+    )
+    hook_wrapper: Literal[DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16] = field(
+        default=DDPCommunicationHookType.NO,
+        metadata={
+            "help": "The type of hook wrapper used in DDP.",
+        },
+    )
+    state: Literal[DDPCommunicationHookType.NO, DDPCommunicationHookType.POWER_SGD] = field(
+        default=DDPCommunicationHookType.NO,
+        metadata={
+            "help": "The type of state used in DDP.",
+        },
+    )
+    state_option: dict = field(
+        default_factory=dict,
+        metadata={
+            "help": "The options for the state used in DDP.",
+        },
+    )
+
+    def __post_init__(self):
+        if self.hook not in DDPCommunicationHookType:
+            raise ValueError(f"Invalid value for hook: {self.hook}")
+
+        if self.hook_wrapper not in {DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16}:
+            raise ValueError(f"Invalid value for hook_wrapper: {self.hook_wrapper}")
+
+        if self.state not in {DDPCommunicationHookType.NO, DDPCommunicationHookType.POWER_SGD}:
+            raise ValueError(f"Invalid value for state: {self.state}")
 
 
 @dataclass
@@ -113,6 +221,45 @@ class DistributedDataParallelKwargs(KwargsHandler):
     check_reduction: bool = False
     gradient_as_bucket_view: bool = False
     static_graph: bool = False
+    ddp_comm_hook: Optional[DDPCommunicationHook] = None
+
+    def to_dict(self):
+        return {k: v for k, v in super().to_dict().items() if k != "ddp_comm_hook"}
+
+    def register_comm_hook(self, model):
+        from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
+
+        if self.ddp_comm_hook is None:
+            return
+
+        hook_map: Dict[DDPCommunicationHookType, Callable] = {
+            DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
+            DDPCommunicationHookType.BF16: default_hooks.bf16_compress_hook,
+            DDPCommunicationHookType.POWER_SGD: powerSGD_hook.powerSGD_hook,
+            DDPCommunicationHookType.BATCHED_POWER_SGD: powerSGD_hook.batched_powerSGD_hook,
+        }
+
+        wrapper_map: Dict[DDPCommunicationHookType, Callable] = {
+            DDPCommunicationHookType.FP16: default_hooks.fp16_compress_wrapper,
+            DDPCommunicationHookType.BF16: default_hooks.bf16_compress_wrapper,
+        }
+
+        hook: Optional[Callable] = hook_map.get(self.ddp_comm_hook.hook)
+        wrapper: Optional[Callable] = wrapper_map.get(self.ddp_comm_hook.hook_wrapper)
+
+        if hook and wrapper:
+            hook = wrapper(hook)
+
+        if hook:
+            state = (
+                powerSGD_hook.PowerSGDState(**self.ddp_comm_hook.state_option)
+                if self.state in {DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD}
+                else None
+            )
+            model.register_comm_hook(
+                state=state,
+                hook=hook,
+            )
 
 
 @dataclass
@@ -266,29 +413,6 @@ class FP8RecipeKwargs(KwargsHandler):
                 raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
 
 
-class EnumWithContains(enum.EnumMeta):
-    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
-
-    def __contains__(cls, item):
-        try:
-            cls(item)
-        except ValueError:
-            return False
-        return True
-
-
-class BaseEnum(enum.Enum, metaclass=EnumWithContains):
-    "An enum class that can get the value of an item with `str(Enum.key)`"
-
-    def __str__(self):
-        return self.value
-
-    @classmethod
-    def list(cls):
-        "Method to list all the possible items in `cls`"
-        return list(map(str, cls))
-
-
 class DeprecatedFieldDescriptor:
     """
     Descriptor for deprecated fields in an enum class.
@@ -374,26 +498,6 @@ class ComputeEnvironment(str, enum.Enum):
     # Subclassing str as well as Enum allows the `ComputeEnvironment` to be JSON-serializable out of the box.
     LOCAL_MACHINE = "LOCAL_MACHINE"
     AMAZON_SAGEMAKER = "AMAZON_SAGEMAKER"
-
-
-class DDPCommHookType(str, BaseEnum):
-    """
-    Represents a type of communication hook used in DDP.
-
-    Values:
-
-        - **NO** -- No communication hook.
-        - **FP16** -- Using half precision.
-        - **BF16** -- Using brain floating point precision.
-        - **POWER_SGD** -- Using POWER_SGD.
-    """
-
-    # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
-    NO = "NO"
-    FP16 = "FP16"
-    BF16 = "BF16"
-    POWER_SGD = "POWER_SGD"
-    BATCHED_POWER_SGD = "BATCHED_POWER_SGD"
 
 
 class DynamoBackend(str, BaseEnum):
@@ -656,96 +760,6 @@ class GradientAccumulationPlugin(KwargsHandler):
             "help": "Whether to synchronize setting the gradients at each data batch. Setting to `True` may reduce memory requirements when using gradient accumulation with distributed training, at expense of speed."
         },
     )
-
-
-@dataclass
-class DDPCommunicationHookPlugin:
-    """
-    Use this object in your [`Accelerator`] to customize the behavior of the communication hook used in DDP.
-
-    Example:
-
-    ```python
-    from accelerate import Accelerator
-    from accelerate.utils import DDPCommunicationHookPlugin
-
-    plugin = DDPCommunicationHookPlugin(hook="fp16")
-    accelerator = Accelerator(ddp_communication_hook_plugin=plugin)
-    ```
-
-    Args:
-        hook (`DDPCommHookType`, *optional*, defaults to "NO"):
-            The communication hook to use in DDP. Must be one of `NO`, `FP16`, `BF16`, or `POWER_SGD`.
-        hook_wrapper (`Literal[DDPCommHookType.NO, DDPCommHookType.FP16, DDPCommHookType.BF16]`, *optional*, defaults to "NO"):
-            The communication hook wrapper to use in DDP. Must be one of `NO`, `FP16`, or `BF16`.
-        state (`Literal[DDPCommHookType.NO, DDPCommHookType.POWER_SGD]`, *optional*, defaults to "NO"):
-            The communication hook state to use in DDP. Must be one of `NO`, or `POWER_SGD`.
-        state_option (`dict`, *optional*, defaults to `{}`):
-            A dictionary of options to pass to the communication hook. Only applicable when using `POWER_SGD`.
-    """
-
-    hook: DDPCommHookType = field(
-        default=DDPCommHookType.NO,
-        metadata={
-            "help": "The communication hook to use in DDP. Must be one of `NO`, `FP16`, `BF16`, or `POWER_SGD`."
-        },
-    )
-    hook_wrapper: Literal[DDPCommHookType.NO, DDPCommHookType.FP16, DDPCommHookType.BF16] = field(
-        default=DDPCommHookType.NO,
-        metadata={"help": "The communication hook wrapper to use in DDP. Must be one of `NO`, `FP16`, or `BF16`."},
-    )
-    state: Literal[DDPCommHookType.NO, DDPCommHookType.POWER_SGD] = field(
-        default=DDPCommHookType.NO,
-        metadata={"help": "The communication hook state to use in DDP. Must be one of `NO`, or `POWER_SGD`."},
-    )
-    state_option: dict = field(
-        default_factory=dict,
-        metadata={
-            "help": "A dictionary of options to pass to the communication hook. Only applicable when using `POWER_SGD`."
-        },
-    )
-
-    def __post_init__(self):
-        if self.hook not in DDPCommHookType:
-            raise ValueError(f"Invalid value for hook: {self.hook}")
-
-        if self.hook_wrapper not in {DDPCommHookType.NO, DDPCommHookType.FP16, DDPCommHookType.BF16}:
-            raise ValueError(f"Invalid value for hook_wrapper: {self.hook_wrapper}")
-
-        if self.state not in {DDPCommHookType.NO, DDPCommHookType.POWER_SGD}:
-            raise ValueError(f"Invalid value for state: {self.state}")
-
-    def register_comm_hook(self, model):
-        from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
-
-        hook_map: Dict[DDPCommHookType, Callable] = {
-            DDPCommHookType.FP16: default_hooks.fp16_compress_hook,
-            DDPCommHookType.BF16: default_hooks.bf16_compress_hook,
-            DDPCommHookType.POWER_SGD: powerSGD_hook.powerSGD_hook,
-            DDPCommHookType.BATCHED_POWER_SGD: powerSGD_hook.batched_powerSGD_hook,
-        }
-
-        wrapper_map: Dict[DDPCommHookType, Callable] = {
-            DDPCommHookType.FP16: default_hooks.fp16_compress_wrapper,
-            DDPCommHookType.BF16: default_hooks.bf16_compress_wrapper,
-        }
-
-        hook: Optional[Callable] = hook_map.get(self.hook)
-        wrapper: Optional[Callable] = wrapper_map.get(self.hook_wrapper)
-
-        if hook and wrapper:
-            hook = wrapper(hook)
-
-        if hook:
-            state = (
-                powerSGD_hook.PowerSGDState(**self.state_option)
-                if self.state in {DDPCommHookType.POWER_SGD, DDPCommHookType.BATCHED_POWER_SGD}
-                else None
-            )
-            model.register_comm_hook(
-                state=state,
-                hook=hook,
-            )
 
 
 @dataclass

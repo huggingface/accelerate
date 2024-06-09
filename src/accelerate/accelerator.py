@@ -48,7 +48,6 @@ from .utils import (
     WEIGHTS_NAME,
     AutocastKwargs,
     DataLoaderConfiguration,
-    DDPCommunicationHookPlugin,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -226,8 +225,6 @@ class Accelerator:
         gradient_accumulation_plugin ([`~utils.GradientAccumulationPlugin`], *optional*):
             A configuration for how gradient accumulation should be handled, if more tweaking than just the
             `gradient_accumulation_steps` is needed.
-        ddp_communication_hook_plugin ([`~utils.DDPCommunicationHookPlugin`], *optional*):
-            A configuration for how DDP communication hooks should be handled.
 
     **Available attributes:**
 
@@ -261,7 +258,6 @@ class Accelerator:
         project_dir: str | os.PathLike | None = None,
         project_config: ProjectConfiguration | None = None,
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
-        ddp_communication_hook_plugin: DDPCommunicationHookPlugin | None = None,
         dispatch_batches: bool | None = _dispatch_batches,
         even_batches: bool = _even_batches,
         use_seedable_sampler: bool = _use_seedable_sampler,
@@ -424,8 +420,6 @@ class Accelerator:
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
-
-        self.ddp_communication_hook_plugin = ddp_communication_hook_plugin
 
         self.device_placement = device_placement
         if dataloader_config is None:
@@ -1442,8 +1436,8 @@ class Accelerator:
                     model = torch.nn.parallel.DistributedDataParallel(
                         model, device_ids=device_ids, output_device=output_device, **kwargs
                     )
-                    if self.ddp_communication_hook_plugin is not None:
-                        self.ddp_communication_hook_plugin.register_comm_hook(model)
+                    if self.ddp_handler is not None:
+                        self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
@@ -1562,6 +1556,8 @@ class Accelerator:
             elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
+                if self.ddp_handler is not None:
+                    self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
