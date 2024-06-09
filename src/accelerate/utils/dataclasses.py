@@ -124,70 +124,6 @@ class DDPCommunicationHookType(str, BaseEnum):
 
 
 @dataclass
-class DDPCommunicationHook:
-    """
-    Use this object in your [`Accelerator`] to customize the behavior of the communication hook used in DDP.
-
-    Example:
-
-    ```python
-    from accelerate import Accelerator
-    from accelerate.utils import DDPCommunicationHook, DistributedDataParallelKwargs
-
-    kwargs = DistributedDataParallelKwargs(
-        ddp_comm_hook=DDPCCommunicationHook("fp16")
-    ) 
-    accelerator = Accelerator(kwargs_handlers=[kwargs])
-    ```
-
-    Args:
-        hook (`DDPCommunicationHookType`, *optional*, default to `DDPCommunicationHookType.NO`):
-            The type of communication hook used in DDP.
-        hook_wrapper (`DDPCommunicationHookType`, *optional*, default to `DDPCommunicationHookType.NO`):
-            The type of hook wrapper used in DDP.
-        state (`DDPCommunicationHookType`, *optional*, default to `DDPCommunicationHookType.NO`):
-            The type of state used in DDP.
-        state_option (`dict`, *optional*, default to `{}`):
-            The options for the state used in DDP.
-  """
-
-    hook: DDPCommunicationHookType = field(
-        default=DDPCommunicationHookType.NO,
-        metadata={
-            "help": "The type of communication hook used in DDP.",
-        },
-    )
-    hook_wrapper: Literal[DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16] = field(
-        default=DDPCommunicationHookType.NO,
-        metadata={
-            "help": "The type of hook wrapper used in DDP.",
-        },
-    )
-    state: Literal[DDPCommunicationHookType.NO, DDPCommunicationHookType.POWER_SGD] = field(
-        default=DDPCommunicationHookType.NO,
-        metadata={
-            "help": "The type of state used in DDP.",
-        },
-    )
-    state_option: dict = field(
-        default_factory=dict,
-        metadata={
-            "help": "The options for the state used in DDP.",
-        },
-    )
-
-    def __post_init__(self):
-        if self.hook not in DDPCommunicationHookType:
-            raise ValueError(f"Invalid value for hook: {self.hook}")
-
-        if self.hook_wrapper not in {DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16}:
-            raise ValueError(f"Invalid value for hook_wrapper: {self.hook_wrapper}")
-
-        if self.state not in {DDPCommunicationHookType.NO, DDPCommunicationHookType.POWER_SGD}:
-            raise ValueError(f"Invalid value for state: {self.state}")
-
-
-@dataclass
 class DistributedDataParallelKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize how your model is wrapped in a
@@ -221,16 +157,19 @@ class DistributedDataParallelKwargs(KwargsHandler):
     check_reduction: bool = False
     gradient_as_bucket_view: bool = False
     static_graph: bool = False
-    ddp_comm_hook: Optional[DDPCommunicationHook] = None
 
-    def to_dict(self):
-        return {k: v for k, v in super().to_dict().items() if k != "ddp_comm_hook"}
+    comm_hook: DDPCommunicationHookType = DDPCommunicationHookType.NO
+    comm_wrapper: Literal[
+        DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16
+    ] = DDPCommunicationHookType.NO
+    comm_state: Literal[DDPCommunicationHookType.NO, DDPCommunicationHookType.POWER_SGD] = DDPCommunicationHookType.NO
+    comm_state_option: dict = field(default_factory=dict)
+
+    def to_dict(self, ignore_keys=("comm_hook", "comm_hook_wrapper", "comm_hook_state", "comm_hook_state_option")):
+        return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
 
     def register_comm_hook(self, model):
         from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
-
-        if self.ddp_comm_hook is None:
-            return
 
         hook_map: Dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
@@ -244,16 +183,16 @@ class DistributedDataParallelKwargs(KwargsHandler):
             DDPCommunicationHookType.BF16: default_hooks.bf16_compress_wrapper,
         }
 
-        hook: Optional[Callable] = hook_map.get(self.ddp_comm_hook.hook)
-        wrapper: Optional[Callable] = wrapper_map.get(self.ddp_comm_hook.hook_wrapper)
+        hook: Optional[Callable] = hook_map.get(self.comm_hook)
+        wrapper: Optional[Callable] = wrapper_map.get(self.comm_wrapper)
 
         if hook and wrapper:
             hook = wrapper(hook)
 
         if hook:
             state = (
-                powerSGD_hook.PowerSGDState(**self.ddp_comm_hook.state_option)
-                if self.state in {DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD}
+                powerSGD_hook.PowerSGDState(**self.comm_state_option)
+                if self.comm_state in (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD)
                 else None
             )
             model.register_comm_hook(
