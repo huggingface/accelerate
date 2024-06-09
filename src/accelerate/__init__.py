@@ -30,6 +30,7 @@ from .state import PartialState
 from .utils import (
     AutocastKwargs,
     DataLoaderConfiguration,
+    DDPCommunicationHookType,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
