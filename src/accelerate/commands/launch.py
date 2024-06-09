@@ -340,7 +340,7 @@ def launch_command_parser(subparsers=None):
     distributed_args.add_argument(
         "--monitor_interval",
         type=float,
-        default=5,
+        default=0.1,
         help="Interval, in seconds, to monitor the state of workers.",
     )
     parser.add_argument(

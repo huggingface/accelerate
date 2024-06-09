@@ -638,7 +638,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
             assert config["gradient_clipping"] == 1.0
             assert config["zero_optimization"]["reduce_bucket_size"] == (hidden_size * hidden_size)
-            assert config["zero_optimization"]["stage3_prefetch_bucket_size"] == ((0.9 * hidden_size) * hidden_size)
+            assert config["zero_optimization"]["stage3_prefetch_bucket_size"] == int((0.9 * hidden_size) * hidden_size)
             assert config["zero_optimization"]["stage3_param_persistence_threshold"] == (10 * hidden_size)
             assert not config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
 
@@ -695,7 +695,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 )
                 zero_opt = accelerator.deepspeed_config["zero_optimization"]
                 assert zero_opt["reduce_bucket_size"] == (hidden_size * hidden_size)
-                assert zero_opt["stage3_prefetch_bucket_size"] == (0.9 * hidden_size) * hidden_size
+                assert zero_opt["stage3_prefetch_bucket_size"] == int((0.9 * hidden_size) * hidden_size)
                 assert zero_opt["stage3_param_persistence_threshold"] == (10 * hidden_size)
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)

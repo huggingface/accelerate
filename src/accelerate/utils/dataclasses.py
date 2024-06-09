@@ -1468,6 +1468,10 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom get batch function."},
     )
+    custom_loss_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom loss function."},
+    )
 
     # remaining args such as enabling Alibi/ROPE positional embeddings,
     # wandb logging, Multi-Query Attention, etc.
@@ -1624,6 +1628,7 @@ MODEL_CONFIGS_TO_MEGATRON_PARSERS = {}
 
 def add_model_config_to_megatron_parser(model_type: str):
     def add_model_config_parser_helper(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
 
@@ -1642,6 +1647,7 @@ def parse_bert_config(megatron_lm_plugin, model, batch_data):
     max_position_embeddings = model.config.max_position_embeddings
     num_labels = model.config.num_labels
     orig_vocab_size = model.config.vocab_size
+    pretraining_flag = False
     if "maskedlm" in model.__class__.__name__.lower():
         pretraining_flag = True
     if megatron_lm_plugin.seq_length is not None:
@@ -1726,6 +1732,40 @@ def parse_t5_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
     megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+
+
+@add_model_config_to_megatron_parser("llama")
+def parse_llama_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "gpt"
+    num_layers = model.config.num_hidden_layers
+    pretraining_flag = True
+    hidden_size = model.config.hidden_size
+    num_attention_heads = model.config.num_attention_heads
+    orig_vocab_size = model.config.vocab_size
+
+    max_position_embeddings = model.config.max_position_embeddings
+    seq_length = getattr(model.config, "max_sequence_length", None)
+    if megatron_lm_plugin.seq_length is None:
+        if seq_length is not None:
+            megatron_lm_plugin.seq_length = seq_length
+        elif megatron_lm_plugin.decoder_seq_length is not None:
+            megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+        elif batch_data is not None:
+            megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+        else:
+            megatron_lm_plugin.seq_length = max_position_embeddings
+
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "Llama2Tokenizer"
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
 
 

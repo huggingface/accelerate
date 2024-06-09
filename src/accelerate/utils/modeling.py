@@ -230,6 +230,11 @@ def shard_checkpoint(
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
     """
+    logger.warning(
+        "Note that `shard_checkpoint` is deprecated and will be removed in  0.33.0. We recommend you using "
+        "split_torch_state_dict_into_shards from huggingface_hub library"
+    )
+
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
     sharded_state_dicts = [{}]
@@ -985,23 +990,14 @@ def get_balanced_memory(
     max_memory = get_max_memory(max_memory)
 
     if is_npu_available():
-        num_devices = len([d for d in max_memory if torch.device(d).type == "npu" and max_memory[d] > 0])
+        expected_device_type = "npu"
     elif is_mlu_available():
-        num_devices = len([d for d in max_memory if torch.device(d).type == "mlu" and max_memory[d] > 0])
+        expected_device_type = "mlu"
     elif is_xpu_available():
-        num_devices = len(
-            [
-                d
-                for d in max_memory
-                if (
-                    d != "cpu"
-                    and (torch.device(d).type == "xpu" or torch.xpu.get_device_properties(d).dev_type == "gpu")
-                )
-                and max_memory[d] > 0
-            ]
-        )
+        expected_device_type = "xpu"
     else:
-        num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+        expected_device_type = "cuda"
+    num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
 
     if num_devices == 0:
         return max_memory

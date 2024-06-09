@@ -20,6 +20,7 @@ from functools import lru_cache
 
 import torch
 from packaging import version
+from packaging.version import parse
 
 from .environment import parse_flag_from_env, str_to_bool
 from .versions import compare_versions, is_torch_version
@@ -217,9 +218,14 @@ def is_torchvision_available():
 
 def is_megatron_lm_available():
     if str_to_bool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
-        package_exists = importlib.util.find_spec("megatron") is not None
-        if package_exists:
-            return True
+        if importlib.util.find_spec("megatron") is not None:
+            try:
+                megatron_version = parse(importlib.metadata.version("megatron-core"))
+                if compare_versions(megatron_version, "==", "0.5.0"):
+                    return importlib.util.find_spec(".data", "megatron")
+            except Exception as e:
+                warnings.warn(f"Parse Megatron version failed. Exception:{e}")
+                return False
 
 
 def is_transformers_available():
