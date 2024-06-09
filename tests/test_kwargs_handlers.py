@@ -108,14 +108,6 @@ class KwargsHandlerTester(unittest.TestCase):
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
-    def _run_and_get_grads(self, model, rank):
-        torch.manual_seed(2024)
-        input = torch.randn(40, 20)
-        output = model(input, rank)
-        output.mean().backward()
-        param = next(model.parameters())
-        return param.grad
-
     @require_multi_device
     def test_ddp_comm_hook(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]

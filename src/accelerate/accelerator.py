@@ -418,7 +418,6 @@ class Accelerator:
                 parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
             )
             gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
-
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
