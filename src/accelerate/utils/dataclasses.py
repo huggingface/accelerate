@@ -108,11 +108,11 @@ class DDPCommunicationHookType(str, BaseEnum):
 
     Values:
 
-        - **NO** -- No communication hook.
-        - **FP16** -- Using half precision.
-        - **BF16** -- Using brain floating point precision.
-        - **POWER_SGD** -- Using POWER_SGD.
-        - **BATCHED_POWER_SGD** -- Using BATCHED_POWER_SGD.
+        - **NO** -- no communication hook
+        - **FP16** -- DDP communication hook to compress the gradients in FP16
+        - **BF16** -- DDP communication hook to compress the gradients in BF16
+        - **POWER_SGD** -- DDP communication hook to use PowerSGD
+        - **BATCHED_POWER_SGD** -- DDP communication hook to use batched PowerSGD
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
