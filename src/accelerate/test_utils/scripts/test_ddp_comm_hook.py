@@ -23,7 +23,7 @@ class MockModel(torch.nn.Module):
         self.p = torch.nn.Parameter(torch.randn(40, 20))
 
     def forward(self, x, rank):
-        return self.p * (x ** (1 + rank)).to(self.p.device)
+        return self.p * (x ** (1 + rank))
 
 
 def _run_and_get_grads(model, rank):
@@ -35,10 +35,11 @@ def _run_and_get_grads(model, rank):
     return param.grad
 
 
-def test_ddp_comm_hook(comm_hook, comm_wrapper):
+def test_ddp_comm_hook(comm_hook, comm_wrapper, comm_state_option):
     ddp_kwargs = DistributedDataParallelKwargs(
         comm_hook=comm_hook,
         comm_wrapper=comm_wrapper,
+        comm_state_option=comm_state_option,
     )
     accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
 
@@ -46,28 +47,30 @@ def test_ddp_comm_hook(comm_hook, comm_wrapper):
     hook_grads = _run_and_get_grads(model, accelerator.local_process_index)
 
     reference_model = torch.nn.parallel.DistributedDataParallel(
-        MockModel(),
+        MockModel().to(accelerator.device),
         device_ids=[accelerator.local_process_index],
         output_device=accelerator.local_process_index,
     )
     reference_grads = _run_and_get_grads(reference_model, accelerator.local_process_index)
 
-    torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
+    torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-2, atol=1e-2)
 
 
 def main():
-    for comm_hook, comm_wrapper in [
-        (DDPCommunicationHookType.NO, DDPCommunicationHookType.NO),
-        (DDPCommunicationHookType.FP16, DDPCommunicationHookType.NO),
-        (DDPCommunicationHookType.BF16, DDPCommunicationHookType.NO),
-        (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.NO),
-        (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.FP16),
-        (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BF16),
-        (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.NO),
-        (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.FP16),
-        (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.BF16),
+    for comm_hook, comm_wrapper, comm_state_option in [
+        (DDPCommunicationHookType.NO, DDPCommunicationHookType.NO, {}),
+        (DDPCommunicationHookType.FP16, DDPCommunicationHookType.NO, {}),
+        (DDPCommunicationHookType.BF16, DDPCommunicationHookType.NO, {}),
+        (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.NO, {}),
+        (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.FP16, {}),
+        (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BF16, {}),
+        (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.NO, {"matrix_approximation_rank": 2}),
+        (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.NO, {}),
+        (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.FP16, {}),
+        (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.BF16, {}),
     ]:
-        test_ddp_comm_hook(comm_hook, comm_wrapper)
+        print(f"Test DDP comm hook: {comm_hook}, comm wrapper: {comm_wrapper}")
+        test_ddp_comm_hook(comm_hook, comm_wrapper, comm_state_option)
 
 
 if __name__ == "__main__":

@@ -164,7 +164,7 @@ class DistributedDataParallelKwargs(KwargsHandler):
     ] = DDPCommunicationHookType.NO
     comm_state_option: dict = field(default_factory=dict)
 
-    def to_dict(self, ignore_keys=("comm_hook", "comm_hook_wrapper", "comm_hook_state", "comm_hook_state_option")):
+    def to_dict(self, ignore_keys=("comm_hook", "comm_wrapper", "comm_state_option")):
         return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
 
     def register_comm_hook(self, model):
@@ -190,7 +190,7 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
         if hook:
             state = (
-                powerSGD_hook.PowerSGDState(**self.comm_state_option)
+                powerSGD_hook.PowerSGDState(None, **self.comm_state_option)
                 if self.comm_hook in (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD)
                 else None
             )
