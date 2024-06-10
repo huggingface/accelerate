@@ -13,6 +13,7 @@
 # limitations under the License.
 import copy
 import gc
+import logging
 import os
 import unittest
 from collections import OrderedDict
@@ -45,6 +46,7 @@ from accelerate.test_utils import (
 from accelerate.utils import is_torch_version, offload_state_dict
 
 
+logger = logging.getLogger(__name__)
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 
 
@@ -305,6 +307,32 @@ class BigModelingTester(unittest.TestCase):
                 tokenizer.decode(outputs[0].tolist())
                 == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
             )
+
+    @require_non_cpu
+    def test_dispatch_model_and_remove_hook(self):
+        model = ModelForTest()
+        device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": 0}
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir)
+            output = model(x)
+            remove_hook_from_submodules(model)
+            # need to check if we get any warning
+            with self.assertLogs(level="WARNING") as cm:
+                # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
+                # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
+                model.to(0)
+                logger.warning("Dummy warning")
+            self.assertEqual(len(cm.records), 1)
+            self.assertIn(
+                "Dummy warning",
+                cm.records[0].message,
+            )
+            output_bis = model(x.to(0))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
+            assert torch.allclose(expected, output_bis.cpu(), atol=1e-5)
 
     @require_non_cpu
     def test_dispatch_model(self):

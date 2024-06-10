@@ -202,6 +202,12 @@ def remove_hook_from_module(module: nn.Module, recurse=False):
             module.forward = module._old_forward
         delattr(module, "_old_forward")
 
+    # Remove accelerate added warning hooks
+    module.__dict__.pop('to', None)
+    module.__dict__.pop('cuda', None)
+    module.__dict__.pop('xpu', None)
+    module.__dict__.pop('npu', None)
+
     if recurse:
         for child in module.children():
             remove_hook_from_module(child, recurse)
