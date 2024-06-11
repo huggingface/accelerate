@@ -211,7 +211,7 @@ def main():
         type=str,
         default="no",
         choices=["no", "fp16", "bf16", "power_sgd", "batched_power_sgd"],
-        help="DDP Communication hook to use. Choose between no, fp16, bf16, power_sgd, and batched_power_sgd.",
+        help="DDP Communication hook to use. Choose between `no`, `fp16`, `bf16`, `power_sgd`, and `batched_power_sgd`.",
     )
     # New Code #
     parser.add_argument(
