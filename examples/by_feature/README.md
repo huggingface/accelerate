@@ -88,4 +88,14 @@ These arguments should be added at the end of any method for starting the python
 accelerate launch ./local_sgd.py --local_sgd_steps 4
 ```
 
+### DDP Communication Hook (`ddp_comm_hook.py`)
 
+- Shows how to use DDP Communication Hooks to control and optimize gradient communication across workers in a DistributedDataParallel setup.
+- Arguments available:
+  - `ddp_comm_hook`, the type of DDP communication hook to use. Choose between `no`, `fp16`, `bf16`, `power_sgd`, and `batched_power_sgd`.
+
+These arguments should be added at the end of any method for starting the python script (such as `accelerate launch`, `python -m torch.distributed.run`), such as:
+
+```bash
+accelerate launch ./ddp_comm_hook.py --mixed_precision fp16 --ddp_comm_hook power_sgd
+```
