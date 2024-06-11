@@ -102,7 +102,7 @@ class AutocastKwargs(KwargsHandler):
     cache_enabled: bool = None
 
 
-class DDPCommunicationHookType(str, BaseEnum):
+class DDPCommunicationHookType(BaseEnum):
     """
     Represents a type of communication hook used in DDP.
 
@@ -115,7 +115,6 @@ class DDPCommunicationHookType(str, BaseEnum):
         - **BATCHED_POWER_SGD** -- DDP communication hook to use batched PowerSGD
     """
 
-    # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
     NO = "no"
     FP16 = "fp16"
     BF16 = "bf16"
