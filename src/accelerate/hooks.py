@@ -30,6 +30,9 @@ from .utils.modeling import get_non_persistent_buffers
 from .utils.other import recursive_getattr
 
 
+_accelerate_added_attributes = ["to", "cuda", "npu", "xpu", "mlu"]
+
+
 class ModelHook:
     """
     A hook that contains callbacks to be executed just before and after the forward method of a model. The difference
@@ -202,11 +205,9 @@ def remove_hook_from_module(module: nn.Module, recurse=False):
             module.forward = module._old_forward
         delattr(module, "_old_forward")
 
-    # Remove accelerate added warning hooks
-    module.__dict__.pop('to', None)
-    module.__dict__.pop('cuda', None)
-    module.__dict__.pop('xpu', None)
-    module.__dict__.pop('npu', None)
+    # Remove accelerate added warning hooks from dispatch_model
+    for attr in _accelerate_added_attributes:
+        module.__dict__.pop(attr, None)
 
     if recurse:
         for child in module.children():
