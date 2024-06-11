@@ -38,13 +38,24 @@ def run_import_time(command: str):
 
 @require_tuna
 class ImportSpeedTester(TempDirTestCase):
+    """
+    Test suite which checks if imports have seen slowdowns
+    based on a particular baseline.
+
+    If the error messages are not clear enough to get a
+    full view of what is slowing things down (or to
+    figure out how deep the initial depth should be),
+    please view the profile with the `tuna` framework:
+    `tuna import.log`.
+    """
+
     clear_on_setup = False
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         output = run_import_time("import torch")
-        with open(f"{cls.tmpdir}/pytorch_results.log", "w") as f:
+        with open(cls.tmpdir / "pytorch_results.log", "w") as f:
             f.write(output)
         data = read_import_profile(f"{cls.tmpdir}/pytorch_results.log")
         total_time = calculate_total_time(data)
@@ -52,9 +63,9 @@ class ImportSpeedTester(TempDirTestCase):
 
     def test_base_import(self):
         output = run_import_time("import accelerate")
-        with open(f"{self.tmpdir}/base_results.log", "w") as f:
+        with open(self.tmpdir / "base_results.log", "w") as f:
             f.write(output)
-        data = read_import_profile(f"{self.tmpdir}/base_results.log")
+        data = read_import_profile(self.tmpdir / "base_results.log")
         total_time = calculate_total_time(data)
         pct_more = total_time / self.pytorch_time
         # Base import should never be more than 10% slower than raw torch import
@@ -66,9 +77,9 @@ class ImportSpeedTester(TempDirTestCase):
 
     def test_cli_import(self):
         output = run_import_time("from accelerate.commands.launch import launch_command_parser")
-        with open(f"{self.tmpdir}/cli_results.log", "w") as f:
+        with open(self.tmpdir / "cli_results.log", "w") as f:
             f.write(output)
-        data = read_import_profile(f"{self.tmpdir}/cli_results.log")
+        data = read_import_profile(self.tmpdir / "cli_results.log")
         total_time = calculate_total_time(data)
         pct_more = total_time / self.pytorch_time
         # Base import should never be more than 10% slower than raw torch import
