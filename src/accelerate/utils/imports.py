@@ -81,6 +81,10 @@ def get_ccl_version():
     return importlib.metadata.version("oneccl_bind_pt")
 
 
+def is_tuna_interpreter_available():
+    return _is_package_available("tuna_interpreter")
+
+
 def is_pynvml_available():
     return _is_package_available("pynvml")
 

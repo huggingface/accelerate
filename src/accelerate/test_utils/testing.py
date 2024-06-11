@@ -52,6 +52,7 @@ from ..utils import (
     is_torch_xla_available,
     is_torchvision_available,
     is_transformers_available,
+    is_tuna_interpreter_available,
     is_wandb_available,
     is_xpu_available,
     str_to_bool,
@@ -375,6 +376,14 @@ def require_pippy(test_case):
     Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed
     """
     return unittest.skipUnless(is_pippy_available(), "test requires pippy")(test_case)
+
+
+def require_tuna(test_case):
+    """
+    Decorator marking a test that requires tuna interpreter installed. These tests are skipped when tuna isn't
+    installed
+    """
+    return unittest.skipUnless(is_tuna_interpreter_available(), "test requires tuna interpreter")(test_case)
 
 
 _atleast_one_tracker_available = (

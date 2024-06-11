@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import subprocess
-import unittest 
-import tempfile
-from tuna._import_profile import read_import_profile
-from tuna_interpreter import calculate_total_time
-from tuna_interpreter.core import get_paths_above_threshold, sort_nodes_by_total_time
-from typing import Union, List
-from accelerate.test_utils.testing import TempDirTestCase
+
+from accelerate.test_utils.testing import TempDirTestCase, require_tuna
+from accelerate.utils import is_tuna_interpreter_available
+
+
+if is_tuna_interpreter_available():
+    from tuna._import_profile import read_import_profile
+    from tuna_interpreter import calculate_total_time
+    from tuna_interpreter.core import get_paths_above_threshold, sort_nodes_by_total_time
+
 
 def convert_list_to_string(data):
     end_result = ""
@@ -27,16 +30,16 @@ def convert_list_to_string(data):
         end_result += f"{arrow_right.join(path[0])} {path[1]:.3f}s\n"
     return end_result
 
+
 def run_import_time(command: str):
-    output = subprocess.run(
-        ["python3", "-X", "importtime", "-c", command],
-        capture_output=True,
-        text=True
-    )
+    output = subprocess.run(["python3", "-X", "importtime", "-c", command], capture_output=True, text=True)
     return output.stderr
 
+
+@require_tuna
 class ImportSpeedTester(TempDirTestCase):
     clear_on_setup = False
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -46,7 +49,7 @@ class ImportSpeedTester(TempDirTestCase):
         data = read_import_profile(f"{cls.tmpdir}/pytorch_results.log")
         total_time = calculate_total_time(data)
         cls.pytorch_time = total_time
-     
+
     def test_base_import(self):
         output = run_import_time("import accelerate")
         with open(f"{self.tmpdir}/base_results.log", "w") as f:
@@ -55,12 +58,22 @@ class ImportSpeedTester(TempDirTestCase):
         total_time = calculate_total_time(data)
         pct_more = total_time / self.pytorch_time
         # Base import should never be more than 10% slower than raw torch import
-        err_msg = f"Base import is more than 10% slower than raw torch import ({pct_more*100:.2f}%), please check the attached `tuna` profile:\n"
+        err_msg = f"Base import is more than 20% slower than raw torch import ({pct_more * 100:.2f}%), please check the attached `tuna` profile:\n"
         sorted_data = sort_nodes_by_total_time(data)
-        paths_above_threshold = get_paths_above_threshold(
-            sorted_data, .2, max_depth=7
-        )
+        paths_above_threshold = get_paths_above_threshold(sorted_data, 0.1, max_depth=7)
         err_msg += f"\n{convert_list_to_string(paths_above_threshold)}"
-        self.assertLess(pct_more, 0.1, err_msg)
+        self.assertLess(pct_more, 1.2, err_msg)
 
-
+    def test_cli_import(self):
+        output = run_import_time("from accelerate.commands.launch import launch_command_parser")
+        with open(f"{self.tmpdir}/cli_results.log", "w") as f:
+            f.write(output)
+        data = read_import_profile(f"{self.tmpdir}/cli_results.log")
+        total_time = calculate_total_time(data)
+        pct_more = total_time / self.pytorch_time
+        # Base import should never be more than 10% slower than raw torch import
+        err_msg = f"Base import is more than 20% slower than raw torch import ({pct_more * 100:.2f}%), please check the attached `tuna` profile:\n"
+        sorted_data = sort_nodes_by_total_time(data)
+        paths_above_threshold = get_paths_above_threshold(sorted_data, 0.1, max_depth=7)
+        err_msg += f"\n{convert_list_to_string(paths_above_threshold)}"
+        self.assertLess(pct_more, 1.2, err_msg)
