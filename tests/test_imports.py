@@ -18,8 +18,7 @@ from accelerate.utils import is_tuna_interpreter_available
 
 
 if is_tuna_interpreter_available():
-    from tuna._import_profile import read_import_profile
-    from tuna_interpreter import calculate_total_time
+    from tuna_interpreter import read_import_profile, calculate_total_time
     from tuna_interpreter.core import get_paths_above_threshold, sort_nodes_by_total_time
 
 
