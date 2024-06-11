@@ -219,7 +219,7 @@ def main():
         type=str,
         default="no",
         choices=["no", "fp16", "bf16"],
-        help="DDP Communication wrapper to use. Choose between no, fp16, and bf16.",
+        help="DDP Communication wrapper to use. Choose between `no`, `fp16`, and `bf16`.",
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
