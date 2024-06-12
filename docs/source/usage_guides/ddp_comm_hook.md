@@ -225,7 +225,9 @@ for data, targets in data_loader:
     optimizer.zero_grad()
 ```
 
-## Additional Options for DDP Communication Hooks
+## DDP Communication Hooks utilities
+
+There are two additional utilities for supporting optional functionalities with the communication hooks.
 
 ### comm_wrapper
 
