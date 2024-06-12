@@ -58,6 +58,8 @@
       title: Apple M1 GPUs
     - local: usage_guides/ipex
       title: IPEX training with CPU
+    - local: usage_guides/ddp_comm_hook
+      title: DDP Communication Hooks
     title: Training
   - isExpanded: true
     sections:
