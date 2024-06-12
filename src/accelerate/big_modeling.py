@@ -457,6 +457,7 @@ def dispatch_model(
 
             return wrapper
 
+        # Make sure to update _accelerate_added_attributes in hooks.py if you add any hook
         model.to = add_warning(model.to, model)
         if is_npu_available():
             model.npu = add_warning(model.npu, model)
