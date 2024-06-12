@@ -81,7 +81,7 @@ for data, targets in data_loader:
     optimizer.zero_grad()
 ```
 
-### Using PowerSGD Hook with PyTorch
+### PowerSGD Hook
 
 ```python
 import torch
