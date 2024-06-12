@@ -25,9 +25,7 @@ Distributed Data Parallel (DDP) communication hooks provide a generic interface 
 
 In this tutorial, you will see how to quickly set up DDP communication hooks and perform training with the utilities provided in 🤗 Accelerate, which can be as simple as adding just one new line of code!
 
-## Using DDP Communication Hooks with PyTorch's `DistributedDataParallel`
-
-### Using FP16 Compression Hook with PyTorch
+## FP16 Compression Hook
 
 ```python
 import torch
