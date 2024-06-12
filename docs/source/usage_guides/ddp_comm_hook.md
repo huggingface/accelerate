@@ -228,4 +228,50 @@ for data, targets in data_loader:
     optimizer.zero_grad()
 ```
 
+## Additional Options for DDP Communication Hooks
+
+### comm_wrapper
+
+`comm_wrapper` is an option to wrap a communication hook with additional functionality. For example, it can be used to combine FP16 compression with other communication strategies. Currently supported wrappers are `no`, `fp16`, and `bf16`.
+
+### comm_state_option
+
+`comm_state_option` allows you to pass additional state information required by certain communication hooks. This is particularly useful for stateful hooks like `PowerSGD`, which require maintaining hyperparameters and internal states across training steps. Below is an example showcasing the use of `comm_state_option` with the `PowerSGD` hook.
+
+```python
+from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs
+import torch
+
+class MyModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layer = torch.nn.Linear(10, 10)
+
+    def forward(self, x):
+        return self.layer(x)
+
+# DDP Communication Hook setup
+ddp_kwargs = DistributedDataParallelKwargs(
+    comm_hook=DDPCommunicationHookType.POWER_SGD,
+    comm_state_option={"matrix_approximation_rank": 2}
+)
+accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
+
+model = MyModel()
+optimizer = torch.optim.Adam(model.parameters())
+data_loader = DataLoader(dataset, batch_size=16)
+
+model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
+
+# Training loop
+for data, targets in data_loader:
+    outputs = model(data)
+    loss = criterion(outputs, targets)
+    accelerator.backward(loss)
+    optimizer.step()
+    optimizer.zero_grad()
+```
+
+For more advanced usage and additional hooks, refer to the [PyTorch DDP Communication Hooks documentation](https://pytorch.org/docs/stable/ddp_comm_hooks.html).
+
 This demonstrates how to use DDP communication hooks to optimize gradient communication in distributed training with the 🤗 Accelerate library.
