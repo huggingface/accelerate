@@ -53,7 +53,7 @@ for data, targets in data_loader:
     optimizer.zero_grad()
 ```
 
-### Using BF16 Compression Hook with PyTorch
+### BF16 Compression Hook
 
 ```python
 import torch
