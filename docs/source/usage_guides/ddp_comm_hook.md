@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DDP Communication Hooks
 
-DDP communication hooks provide a generic interface to control how gradients are communicated across workers by overriding the vanilla allreduce in `DistributedDataParallel`. A few built-in communication hooks are provided, and users can easily apply any of these hooks to optimize communication.
+Distributed Data Parallel (DDP) communication hooks provide a generic interface to control how gradients are communicated across workers by overriding the vanilla allreduce in `DistributedDataParallel`. A few built-in communication hooks are provided, and users can easily apply any of these hooks to optimize communication.
 
 ## Brief Descriptions of DDP Communication Hooks
 
