@@ -88,7 +88,15 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
         num_machines = args.num_machines
         num_processes = getattr(args, "num_processes", None)
         nproc_per_node = str(num_processes // num_machines) if num_processes and num_machines else "1"
-        cmd += [mpi_app_name, hostfile_arg, args.mpirun_hostfile, proc_per_node_arg, nproc_per_node, bind_to_arg, bind_to]
+        cmd += [
+            mpi_app_name,
+            hostfile_arg,
+            args.mpirun_hostfile,
+            proc_per_node_arg,
+            nproc_per_node,
+            bind_to_arg,
+            bind_to,
+        ]
         if num_processes:
             cmd += [num_proc_arg, str(num_processes)]
     if not args.no_python:
