@@ -44,7 +44,7 @@ def merge_command_parser(subparsers=None):
     parser.add_argument(
         "--unsafe_serialization",
         action="store_false",
-        default=True,
+        default=False,
         help="Whether to save the merged weights as `.bin` rather than `.safetensors` (not recommended).",
     )
     parser.add_argument(
