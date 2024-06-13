@@ -23,9 +23,12 @@ Distributed Data Parallel (DDP) communication hooks provide a generic interface 
 - **BF16 Compression Hook**: Similar to FP16, but uses the Brain Floating Point format (`torch.bfloat16`), which can be more efficient on certain hardware.
 - **PowerSGD Hook**: An advanced gradient compression algorithm that provides high compression rates and can accelerate bandwidth-bound distributed training.
 
-In this tutorial, you will see how to quickly set up DDP communication hooks and perform training with the utilities provided in 🤗 Accelerate, which can be as simple as adding just one new line of code!
+In this tutorial, you will see how to quickly set up DDP communication hooks and perform training with the utilities provided in 🤗 Accelerate, which can be as simple as adding just one new line of code! This demonstrates how to use DDP communication hooks to optimize gradient communication in distributed training with the 🤗 Accelerate library.
 
 ## FP16 Compression Hook
+
+<hfoptions id="fp16">
+<hfoption id="PyTorch">
 
 ```python
 import torch
@@ -53,68 +56,8 @@ for data, targets in data_loader:
     optimizer.zero_grad()
 ```
 
-### BF16 Compression Hook
-
-```python
-import torch
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed.algorithms.ddp_comm_hooks import default_hooks
-
-class MyModel(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.layer = torch.nn.Linear(10, 10)
-
-    def forward(self, x):
-        return self.layer(x)
-
-model = MyModel()
-model = DDP(model, device_ids=[torch.cuda.current_device()])
-model.register_comm_hook(state=None, hook=default_hooks.bf16_compress_hook)
-
-# Training loop
-for data, targets in data_loader:
-    outputs = model(data)
-    loss = criterion(outputs, targets)
-    loss.backward()
-    optimizer.step()
-    optimizer.zero_grad()
-```
-
-### PowerSGD Hook
-
-```python
-import torch
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed.algorithms.ddp_comm_hooks import powerSGD_hook
-
-class MyModel(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.layer = torch.nn.Linear(10, 10)
-
-    def forward(self, x):
-        return self.layer(x)
-
-model = MyModel()
-model = DDP(model, device_ids=[torch.cuda.current_device()])
-state = powerSGD_hook.PowerSGDState(process_group=None)
-model.register_comm_hook(state=state, hook=powerSGD_hook.powerSGD_hook)
-
-# Training loop
-for data, targets in data_loader:
-    outputs = model(data)
-    loss = criterion(outputs, targets)
-    loss.backward()
-    optimizer.step()
-    optimizer.zero_grad()
-```
-
-## Converting it to 🤗 Accelerate
-
-Now, let's see how to use the same hooks with the 🤗 Accelerate library.
-
-### Using FP16 Compression Hook with 🤗 Accelerate
+</hfoption>
+<hfoption id="Accelerate">
 
 ```python
 from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs
@@ -147,13 +90,48 @@ for data, targets in data_loader:
     optimizer.zero_grad()
 ```
 
-### Using BF16 Compression Hook with 🤗 Accelerate
+</hfoption>
+</hfoptions>
+
+### BF16 Compression Hook
 
 <Tip warning={true}>
 
 BF16 Compression Hook API is experimental, and it requires NCCL version later than 2.9.6.
 
 </Tip>
+
+<hfoptions id="bf16">
+<hfoption id="PyTorch">
+
+```python
+import torch
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.algorithms.ddp_comm_hooks import default_hooks
+
+class MyModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layer = torch.nn.Linear(10, 10)
+
+    def forward(self, x):
+        return self.layer(x)
+
+model = MyModel()
+model = DDP(model, device_ids=[torch.cuda.current_device()])
+model.register_comm_hook(state=None, hook=default_hooks.bf16_compress_hook)
+
+# Training loop
+for data, targets in data_loader:
+    outputs = model(data)
+    loss = criterion(outputs, targets)
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+```
+
+</hfoption>
+<hfoption id="Accelerate">
 
 ```python
 from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs
@@ -186,13 +164,49 @@ for data, targets in data_loader:
     optimizer.zero_grad()
 ```
 
-### Using PowerSGD Hook with 🤗 Accelerate
+</hfoption>
+</hfoptions>
+
+### PowerSGD Hook
 
 <Tip warning={true}>
 
 PowerSGD typically requires extra memory of the same size as the model’s gradients to enable error feedback, which can compensate for biased compressed communication and improve accuracy.
 
 </Tip>
+
+<hfoptions id="powerSGD">
+<hfoption id="PyTorch">
+
+```python
+import torch
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.algorithms.ddp_comm_hooks import powerSGD_hook
+
+class MyModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layer = torch.nn.Linear(10, 10)
+
+    def forward(self, x):
+        return self.layer(x)
+
+model = MyModel()
+model = DDP(model, device_ids=[torch.cuda.current_device()])
+state = powerSGD_hook.PowerSGDState(process_group=None)
+model.register_comm_hook(state=state, hook=powerSGD_hook.powerSGD_hook)
+
+# Training loop
+for data, targets in data_loader:
+    outputs = model(data)
+    loss = criterion(outputs, targets)
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+```
+
+</hfoption>
+<hfoption id="Accelerate">
 
 ```python
 from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs
@@ -225,6 +239,9 @@ for data, targets in data_loader:
     optimizer.zero_grad()
 ```
 
+</hfoption>
+</hfoptions>
+
 ## DDP Communication Hooks utilities
 
 There are two additional utilities for supporting optional functionalities with the communication hooks.
@@ -232,6 +249,40 @@ There are two additional utilities for supporting optional functionalities with 
 ### comm_wrapper
 
 `comm_wrapper` is an option to wrap a communication hook with additional functionality. For example, it can be used to combine FP16 compression with other communication strategies. Currently supported wrappers are `no`, `fp16`, and `bf16`.
+
+```python
+from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs
+import torch
+
+class MyModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layer = torch.nn.Linear(10, 10)
+
+    def forward(self, x):
+        return self.layer(x)
+
+# DDP Communication Hook setup
+ddp_kwargs = DistributedDataParallelKwargs(
+    comm_hook=DDPCommunicationHookType.POWER_SGD,
+    comm_wrapper=DDPCommunicationHookType.FP16
+)
+accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
+
+model = MyModel()
+optimizer = torch.optim.Adam(model.parameters())
+data_loader = DataLoader(dataset, batch_size=16)
+
+model, optimizer, data_loader = accelerator.prepare(model, optimizer, data_loader)
+
+# Training loop
+for data, targets in data_loader:
+    outputs = model(data)
+    loss = criterion(outputs, targets)
+    accelerator.backward(loss)
+    optimizer.step()
+    optimizer.zero_grad()
+```
 
 ### comm_state_option
 
@@ -273,4 +324,4 @@ for data, targets in data_loader:
 
 For more advanced usage and additional hooks, refer to the [PyTorch DDP Communication Hooks documentation](https://pytorch.org/docs/stable/ddp_comm_hooks.html).
 
-This demonstrates how to use DDP communication hooks to optimize gradient communication in distributed training with the 🤗 Accelerate library.
+
