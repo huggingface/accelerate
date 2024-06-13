@@ -19,10 +19,9 @@ head_node_ip=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
 ######################
 
 # Setup env variables for distributed jobs
-MASTER_PORT="${MASTER_PORT:-29555 }"
+export MASTER_PORT="${MASTER_PORT:-29555 }"
 echo "head_node_ip=${head_node_ip}"
 echo "MASTER_PORT=${MASTER_PORT}"
-
 
 INSTANCES_PER_NODE="${INSTANCES_PER_NODE:-1}"
 
@@ -31,13 +30,9 @@ if [[ $SLURM_NNODES == 1 ]] && [[ $INSTANCES_PER_NODE == 1 ]]; then
   LAUNCHER=""
 else
   # Setup env variables for distributed jobs
-  export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-  export MASTER_PORT="${MASTER_PORT:-25679}"
   export CCL_WORKER_COUNT="${CCL_WORKER_COUNT:-2}"
   export OMP_NUM_THREADS=56
   
-  echo "MASTER_ADDR=${MASTER_ADDR}"
-  echo "MASTER_PORT=${MASTER_PORT}"
   echo "CCL_WORKER_COUNT=${CCL_WORKER_COUNT}"
   echo "OMP_NUM_THREADS=${OMP_NUM_THREADS}"
 
@@ -50,7 +45,7 @@ else
     --num_machines $SLURM_NNODES \
     --rdzv_backend c10d \
     --num_cpu_threads_per_process $OMP_NUM_THREADS \
-    --main_process_ip $MASTER_ADDR \
+    --main_process_ip $head_node_ip \
     --main_process_port $MASTER_PORT \
     --mpirun_hostfile $HOSTFILE_PATH \
     --mpirun_ccl $CCL_WORKER_COUNT"
