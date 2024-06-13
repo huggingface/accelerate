@@ -432,7 +432,7 @@ def dispatch_model(
             [device for device in set(device_map.values()) if device in ("cpu", "disk")]
         )
         if len(offloaded_devices_str) > 0:
-            logging.warning(
+            logger.warning(
                 f"Some parameters are on the meta device device because they were offloaded to the {offloaded_devices_str}."
             )
 
