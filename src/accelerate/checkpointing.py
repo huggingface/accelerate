@@ -184,6 +184,9 @@ def load_accelerator_state(
             What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
         load_model_func_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the model's `load_state_dict` method.
+
+    Returns:
+        `dict`: Contains the `Accelerator` attributes to override while loading the state.
     """
     # stores the `Accelerator` attributes to override
     override_attributes = dict()
