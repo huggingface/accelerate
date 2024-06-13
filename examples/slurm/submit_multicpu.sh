@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
-#SBATCH --job-name=hf_pytorch
-#SBATCH --nodes=2
-#SBATCH --ntasks-per-node=1
+#SBATCH --job-name=multicpu
+#SBATCH --nodes=2                       # number of Nodes
+#SBATCH --ntasks-per-node=1             # number of MP tasks
 #SBATCH --exclusive
 #SBATCH --output=output/torch_%A.log
 #SBATCH --cpus-per-task=56
@@ -23,15 +23,6 @@ MASTER_PORT="${MASTER_PORT:-29555 }"
 echo "head_node_ip=${head_node_ip}"
 echo "MASTER_PORT=${MASTER_PORT}"
 
-# Write hostfile
-HOSTFILE_PATH=hostfile
-scontrol show hostname $SLURM_JOB_NODELIST | perl -ne 'chomb; print "$_"x1'> ${HOSTFILE_PATH}
-
-CMD=$@
-if [ -z "${CMD}" ]; then
-  echo "No command parameters were passed to the script. This script expects the python script with args to be passed as a parameter."
-  exit 1
-fi
 
 INSTANCES_PER_NODE="${INSTANCES_PER_NODE:-1}"
 
@@ -42,15 +33,13 @@ else
   # Setup env variables for distributed jobs
   export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
   export MASTER_PORT="${MASTER_PORT:-25679}"
-  export WORLD_SIZE=$(($SLURM_NNODES * $SLURM_NTASKS_PER_NODE * $INSTANCES_PER_NODE))
   export CCL_WORKER_COUNT="${CCL_WORKER_COUNT:-2}"
-  # export SLURM_CPU_BIND=socket
   export OMP_NUM_THREADS=56
   
   echo "MASTER_ADDR=${MASTER_ADDR}"
   echo "MASTER_PORT=${MASTER_PORT}"
-  echo "WORLD_SIZE=${WORLD_SIZE}"
   echo "CCL_WORKER_COUNT=${CCL_WORKER_COUNT}"
+  echo "OMP_NUM_THREADS=${OMP_NUM_THREADS}"
 
   # Write hostfile
   HOSTFILE_PATH=hostfile
@@ -68,8 +57,14 @@ else
 fi
 
 # This step is necessary because accelerate launch does not handle multiline arguments properly
-export CMD="$LAUNCHER ${CMD}" 
-
+export SCRIPT="/accelerate/examples/complete_nlp_example.py"
+export SCRIPT_ARGS=" \
+    --cpu \
+    --output_dir /accelerate/examples/output \
+    "
+    
+# This step is necessary because accelerate launch does not handle multiline arguments properly
+export CMD="$LAUNCHER $SCRIPT $SCRIPT_ARGS" 
 # Print the command
 echo $CMD
 echo ""
