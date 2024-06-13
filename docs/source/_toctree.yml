@@ -48,6 +48,8 @@
       title: Low precision (FP8) training
     - local: usage_guides/deepspeed
       title: DeepSpeed
+    - local: usage_guides/ddp_comm_hook
+      title: DDP Communication Hooks
     - local: usage_guides/fsdp
       title: Fully Sharded Data Parallelism
     - local: usage_guides/megatron_lm

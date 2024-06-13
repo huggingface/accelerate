@@ -34,6 +34,7 @@ from .dataclasses import (
     ComputeEnvironment,
     CustomDtype,
     DataLoaderConfiguration,
+    DDPCommunicationHookType,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,

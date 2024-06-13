@@ -57,6 +57,29 @@ class KwargsHandler:
         return {k: v for k, v in this_dict.items() if default_dict[k] != v}
 
 
+class EnumWithContains(enum.EnumMeta):
+    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
+
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class BaseEnum(enum.Enum, metaclass=EnumWithContains):
+    "An enum class that can get the value of an item with `str(Enum.key)`"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        "Method to list all the possible items in `cls`"
+        return list(map(str, cls))
+
+
 @dataclass
 class AutocastKwargs(KwargsHandler):
     """
@@ -77,6 +100,26 @@ class AutocastKwargs(KwargsHandler):
 
     enabled: bool = True
     cache_enabled: bool = None
+
+
+class DDPCommunicationHookType(BaseEnum):
+    """
+    Represents a type of communication hook used in DDP.
+
+    Values:
+
+        - **NO** -- no communication hook
+        - **FP16** -- DDP communication hook to compress the gradients in FP16
+        - **BF16** -- DDP communication hook to compress the gradients in BF16
+        - **POWER_SGD** -- DDP communication hook to use PowerSGD
+        - **BATCHED_POWER_SGD** -- DDP communication hook to use batched PowerSGD
+    """
+
+    NO = "no"
+    FP16 = "fp16"
+    BF16 = "bf16"
+    POWER_SGD = "power_sgd"
+    BATCHED_POWER_SGD = "batched_power_sgd"
 
 
 @dataclass
@@ -113,6 +156,47 @@ class DistributedDataParallelKwargs(KwargsHandler):
     check_reduction: bool = False
     gradient_as_bucket_view: bool = False
     static_graph: bool = False
+
+    comm_hook: DDPCommunicationHookType = DDPCommunicationHookType.NO
+    comm_wrapper: Literal[
+        DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16
+    ] = DDPCommunicationHookType.NO
+    comm_state_option: dict = field(default_factory=dict)
+
+    def to_dict(self, ignore_keys=("comm_hook", "comm_wrapper", "comm_state_option")):
+        return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
+
+    def register_comm_hook(self, model):
+        from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
+
+        hook_map: Dict[DDPCommunicationHookType, Callable] = {
+            DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
+            DDPCommunicationHookType.BF16: default_hooks.bf16_compress_hook,
+            DDPCommunicationHookType.POWER_SGD: powerSGD_hook.powerSGD_hook,
+            DDPCommunicationHookType.BATCHED_POWER_SGD: powerSGD_hook.batched_powerSGD_hook,
+        }
+
+        wrapper_map: Dict[DDPCommunicationHookType, Callable] = {
+            DDPCommunicationHookType.FP16: default_hooks.fp16_compress_wrapper,
+            DDPCommunicationHookType.BF16: default_hooks.bf16_compress_wrapper,
+        }
+
+        hook: Optional[Callable] = hook_map.get(self.comm_hook)
+        wrapper: Optional[Callable] = wrapper_map.get(self.comm_wrapper)
+
+        if hook and wrapper:
+            hook = wrapper(hook)
+
+        if hook:
+            state = (
+                powerSGD_hook.PowerSGDState(None, **self.comm_state_option)
+                if self.comm_hook in (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD)
+                else None
+            )
+            model.register_comm_hook(
+                state=state,
+                hook=hook,
+            )
 
 
 @dataclass
@@ -264,29 +348,6 @@ class FP8RecipeKwargs(KwargsHandler):
         elif self.backend == "MSAMP":
             if self.opt_level not in get_args(OptLevel):
                 raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
-
-
-class EnumWithContains(enum.EnumMeta):
-    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
-
-    def __contains__(cls, item):
-        try:
-            cls(item)
-        except ValueError:
-            return False
-        return True
-
-
-class BaseEnum(enum.Enum, metaclass=EnumWithContains):
-    "An enum class that can get the value of an item with `str(Enum.key)`"
-
-    def __str__(self):
-        return self.value
-
-    @classmethod
-    def list(cls):
-        "Method to list all the possible items in `cls`"
-        return list(map(str, cls))
 
 
 class DeprecatedFieldDescriptor:
