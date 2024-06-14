@@ -70,7 +70,7 @@ def _get_mpirun_args():
         return mpi_app, "--hostfile", "-n", "--npernode", "--bind-to"
     else:
         # Intel MPI and MVAPICH both use the same arg names
-        return mpi_app, "-f", "-n", "-ppn"
+        return mpi_app, "-f", "-n", "-ppn", ""
 
 
 def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
@@ -94,11 +94,11 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
             args.mpirun_hostfile,
             proc_per_node_arg,
             nproc_per_node,
-            bind_to_arg,
-            bind_to,
         ]
         if num_processes:
             cmd += [num_proc_arg, str(num_processes)]
+        if bind_to_arg:
+            cmd += [bind_to_arg, bind_to]
     if not args.no_python:
         cmd.append(sys.executable)
         if args.module:
