@@ -64,7 +64,7 @@ def get_backend():
     elif is_cuda_available():
         return "cuda", torch.cuda.device_count(), torch.cuda.memory_allocated
     elif is_mps_available(min_version="2.0"):
-        return "mps", 1, torch.mps.current_allocated_memory()
+        return "mps", 1, torch.mps.current_allocated_memory
     elif is_mps_available():
         return "mps", 1, 0
     elif is_mlu_available():

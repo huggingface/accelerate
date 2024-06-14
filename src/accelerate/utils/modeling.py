@@ -41,6 +41,7 @@ from .imports import (
     is_torch_xla_available,
     is_xpu_available,
 )
+from .memory import clear_device_cache
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import compare_versions
@@ -458,14 +459,7 @@ def set_module_tensor_to_device(
                     module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
     if device != "cpu":
-        if is_npu_available():
-            torch.npu.empty_cache()
-        elif is_mlu_available():
-            torch.mlu.empty_cache()
-        elif is_xpu_available():
-            torch.xpu.empty_cache()
-        else:
-            torch.cuda.empty_cache()
+        clear_device_cache()
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
     # order to avoid duplicating memory, see above.
