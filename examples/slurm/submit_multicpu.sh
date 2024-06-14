@@ -4,8 +4,8 @@
 #SBATCH --nodes=2                       # number of Nodes
 #SBATCH --ntasks-per-node=1             # number of MP tasks
 #SBATCH --exclusive
-#SBATCH --output=output/torch_%A.log
-#SBATCH --cpus-per-task=56
+#SBATCH --output=O-%x.%j
+#SBATCH --error=E-%x.%j
 
 ######################
 ### Set enviroment ###
@@ -30,11 +30,8 @@ if [[ $SLURM_NNODES == 1 ]] && [[ $INSTANCES_PER_NODE == 1 ]]; then
   LAUNCHER=""
 else
   # Setup env variables for distributed jobs
-  export CCL_WORKER_COUNT="${CCL_WORKER_COUNT:-2}"
-  export OMP_NUM_THREADS=56
-  
+  export CCL_WORKER_COUNT="${CCL_WORKER_COUNT:-2}"  
   echo "CCL_WORKER_COUNT=${CCL_WORKER_COUNT}"
-  echo "OMP_NUM_THREADS=${OMP_NUM_THREADS}"
 
   # Write hostfile
   HOSTFILE_PATH=hostfile
