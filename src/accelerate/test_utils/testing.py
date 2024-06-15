@@ -66,7 +66,7 @@ def get_backend():
     elif is_mps_available(min_version="2.0"):
         return "mps", 1, torch.mps.current_allocated_memory
     elif is_mps_available():
-        return "mps", 1, 0
+        return "mps", 1, lambda: 0
     elif is_mlu_available():
         return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
     elif is_npu_available():
@@ -74,7 +74,7 @@ def get_backend():
     elif is_xpu_available():
         return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
     else:
-        return "cpu", 1, 0
+        return "cpu", 1, lambda: 0
 
 
 torch_device, device_count, memory_allocated_func = get_backend()
