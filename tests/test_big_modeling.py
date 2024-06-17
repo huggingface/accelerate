@@ -779,7 +779,7 @@ class BigModelingTester(unittest.TestCase):
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.weight.device == torch.device("meta")
-        assert new_model.linear2.weight.device == torch.device(0)
+        assert new_model.linear2.weight.device == torch.device(torch_device)
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
@@ -802,8 +802,8 @@ class BigModelingTester(unittest.TestCase):
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.weight.device == torch.device("meta")
         assert new_model.linear2.weight.device == torch.device("meta")
-        assert new_model.linear3.weight.device == torch.device(0)
-        assert new_model.linear4.weight.device == torch.device(1)
+        assert new_model.linear3.weight.device == torch.device(torch_device)
+        assert new_model.linear4.weight.device == torch.device(f"{torch_device.split(':')[0]}:1")
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
@@ -828,8 +828,8 @@ class BigModelingTester(unittest.TestCase):
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.linear.weight.device == torch.device("meta")
         assert new_model.linear2.linear.weight.device == torch.device("meta")
-        assert new_model.linear3.linear.weight.device == torch.device(0)
-        assert new_model.linear4.linear.weight.device == torch.device(0)
+        assert new_model.linear3.linear.weight.device == torch.device(torch_device)
+        assert new_model.linear4.linear.weight.device == torch.device(torch_device)
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
@@ -854,8 +854,8 @@ class BigModelingTester(unittest.TestCase):
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.linear.weight.device == torch.device("meta")
         assert new_model.linear2.linear.weight.device == torch.device("meta")
-        assert new_model.linear3.linear.weight.device == torch.device(0)
-        assert new_model.linear4.linear.weight.device == torch.device(1)
+        assert new_model.linear3.linear.weight.device == torch.device(torch_device)
+        assert new_model.linear4.linear.weight.device == torch.device(f"{torch_device.split(':')[0]}:1")
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)

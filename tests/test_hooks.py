@@ -165,22 +165,22 @@ class HooksModelTester(unittest.TestCase):
         add_hook_to_module(model.linear1, AlignDevicesHook(execution_device=0))
         add_hook_to_module(model.batchnorm, AlignDevicesHook(execution_device=0))
         add_hook_to_module(model.linear2, AlignDevicesHook(execution_device=1))
-
-        assert model.linear1.weight.device == torch.device(0)
-        assert model.batchnorm.weight.device == torch.device(0)
-        assert model.batchnorm.running_mean.device == torch.device(0)
-        assert model.linear2.weight.device == torch.device(1)
+        
+        assert model.linear1.weight.device == torch.device(torch_device)
+        assert model.batchnorm.weight.device == torch.device(torch_device)
+        assert model.batchnorm.running_mean.device == torch.device(torch_device)
+        assert model.linear2.weight.device == torch.device(f"{torch_device.split(':')[0]}:1")
 
         # We can still make a forward pass. The input does not need to be on any particular device
         x = torch.randn(2, 3)
         output = model(x)
-        assert output.device == torch.device(1)
+        assert output.device == torch.device(f"{torch_device.split(':')[0]}:1")
 
         # We can add a general hook to put back output on same device as input.
         add_hook_to_module(model, AlignDevicesHook(io_same_device=True))
         x = torch.randn(2, 3).to(torch_device)
         output = model(x)
-        assert output.device == torch.device(0)
+        assert output.device == torch.device(torch_device)
 
     def test_align_devices_as_cpu_offload(self):
         model = ModelForTest()
