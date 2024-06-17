@@ -323,14 +323,14 @@ class BigModelingTester(unittest.TestCase):
             with self.assertLogs(level="WARNING") as cm:
                 # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
                 # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
-                model.to(0)
+                model.to(torch_device)
                 logger.warning("Dummy warning")
             self.assertEqual(len(cm.records), 1)
             self.assertIn(
                 "Dummy warning",
                 cm.records[0].message,
             )
-            output_bis = model(x.to(0))
+            output_bis = model(x.to(torch_device))
             assert torch.allclose(expected, output.cpu(), atol=1e-5)
             assert torch.allclose(expected, output_bis.cpu(), atol=1e-5)
 
