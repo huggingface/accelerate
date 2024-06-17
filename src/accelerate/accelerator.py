@@ -27,11 +27,28 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
-from typing import Any, Callable, Union
+from typing import (
+    Any,
+    Callable,
+    Iterator,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeAlias,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import torch
+import torch.distributed
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
+from torch.distributed.algorithms.join import Joinable
+from typing_extensions import TypeVarTuple, Unpack
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -105,6 +122,7 @@ from .utils import (
 from .utils.constants import FSDP_PYTORCH_VERSION
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
+from .utils.typing import take_annotation_from
 
 
 if is_deepspeed_available():
@@ -158,6 +176,18 @@ _split_batches = object()
 _dispatch_batches = object()
 _even_batches = object()
 _use_seedable_sampler = object()
+
+# Type hinting
+T_split_between_processes = TypeVar("T_split_between_processes", bound=Union[Sequence, dict, torch.Tensor])
+Ts_prepare = TypeVarTuple(
+    name="Ts_prepare",
+)
+T_Module = TypeVar("T_Module", bound=torch.nn.Module)
+T_DataLoader = TypeVar("T_DataLoader", bound=torch.utils.data.DataLoader)
+T_Optimizer = TypeVar("T_Optimizer", bound=torch.optim.Optimizer)
+T_LRScheduler = TypeVar("T_LRScheduler", bound=LRScheduler)
+Recurcive_Tensor: TypeAlias = Union[torch.Tensor, Mapping[str, "Recurcive_Tensor"], Sequence["Recurcive_Tensor"]]
+T_Recurcive_Tensor = TypeVar("T_Recurcive_Tensor", bound=Recurcive_Tensor)
 
 
 class Accelerator:
@@ -610,7 +640,9 @@ class Accelerator:
         return self.state.mixed_precision
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
+    def split_between_processes(
+        self, inputs: T_split_between_processes, apply_padding: bool = False
+    ) -> Iterator[T_split_between_processes]:
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -651,7 +683,7 @@ class Accelerator:
         with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
             yield inputs
 
-    def on_main_process(self, function: Callable[..., Any] = None):
+    def on_main_process(self, function: Optional[Callable[..., Any]] = None):
         """
         A decorator that will run the decorated function on the main process only. Can also be called using the
         `PartialState` class.
@@ -690,7 +722,7 @@ class Accelerator:
 
         return _inner
 
-    def on_local_main_process(self, function: Callable[..., Any] = None):
+    def on_local_main_process(self, function: Optional[Callable[..., Any]] = None):
         """
         A decorator that will run the decorated function on the local main process only. Can also be called using the
         `PartialState` class.
@@ -771,7 +803,7 @@ class Accelerator:
 
         return _inner
 
-    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
+    def on_process(self, function: Optional[Callable[..., Any]] = None, process_index: Optional[int] = None):
         """
         A decorator that will run the decorated function on a given process index only. Can also be called using the
         `PartialState` class.
@@ -816,7 +848,9 @@ class Accelerator:
 
         return _inner
 
-    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
+    def on_local_process(
+        self, function: Optional[Callable[..., Any]] = None, local_process_index: Optional[int] = None
+    ):
         """
         A decorator that will run the decorated function on a given local process index only. Can also be called using
         the `PartialState` class.
@@ -909,7 +943,7 @@ class Accelerator:
             yield
 
     @contextmanager
-    def no_sync(self, model):
+    def no_sync(self, model: torch.nn.Module):
         """
         A context manager to disable gradient synchronizations across DDP processes by calling
         `torch.nn.parallel.DistributedDataParallel.no_sync`.
@@ -951,7 +985,7 @@ class Accelerator:
 
     @staticmethod
     @contextmanager
-    def trigger_sync_in_backward(model):
+    def trigger_sync_in_backward(model: torch.nn.Module):
         """Trigger the sync of the gradients in the next backward pass of the model after multiple forward passes under
         `Accelerator.no_sync` (only applicable in multi-GPU scenarios).
 
@@ -1020,11 +1054,11 @@ class Accelerator:
         return self.gradient_state.num_steps
 
     @gradient_accumulation_steps.setter
-    def gradient_accumulation_steps(self, gradient_accumulation_steps):
+    def gradient_accumulation_steps(self, gradient_accumulation_steps: int):
         self.gradient_state.plugin_kwargs.update({"num_steps": gradient_accumulation_steps})
 
     @contextmanager
-    def accumulate(self, *models):
+    def accumulate(self, *models: torch.nn.Module):
         """
         A context manager that will lightly wrap around and perform gradient accumulation automatically
 
@@ -1069,7 +1103,7 @@ class Accelerator:
             yield
 
     @contextmanager
-    def join_uneven_inputs(self, joinables, even_batches=None):
+    def join_uneven_inputs(self, joinables: List[Joinable], even_batches: Optional[bool] = None):
         """
         A context manager that facilitates distributed training or evaluation on uneven inputs, which acts as a wrapper
         around `torch.distributed.algorithms.join`. This is useful when the total batch size does not evenly divide the
@@ -1156,6 +1190,7 @@ class Accelerator:
             with contextlib.nullcontext(joinables):
                 yield
 
+    @take_annotation_from(print)
     def print(self, *args, **kwargs):
         """
         Drop in replacement of `print()` to only print once per server.
@@ -1188,7 +1223,9 @@ class Accelerator:
         # Return the unprocessed object if previous criteria was not met
         return obj
 
-    def prepare(self, *args, device_placement=None):
+    def prepare(
+        self, *args: Unpack[Ts_prepare], device_placement: Optional[List[Optional[bool]]] = None
+    ) -> Tuple[Unpack[Ts_prepare]]:
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
         order.
@@ -1324,7 +1361,9 @@ class Accelerator:
 
         return result if len(result) > 1 else result[0]
 
-    def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, evaluation_mode: bool = False):
+    def prepare_model(
+        self, model: T_Module, device_placement: Optional[bool] = None, evaluation_mode: Optional[bool] = False
+    ) -> T_Module:
         """
         Prepares a PyTorch model for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -1977,8 +2016,8 @@ class Accelerator:
         return tuple(result)
 
     def prepare_data_loader(
-        self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
-    ):
+        self, data_loader: T_DataLoader, device_placement=None, slice_fn_for_dispatch=None
+    ) -> T_DataLoader:
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -2029,7 +2068,7 @@ class Accelerator:
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
 
-    def prepare_optimizer(self, optimizer: torch.optim.Optimizer, device_placement=None):
+    def prepare_optimizer(self, optimizer: T_Optimizer, device_placement=None) -> T_Optimizer:
         """
         Prepares a PyTorch Optimizer for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -2070,7 +2109,7 @@ class Accelerator:
         self._optimizers.append(optimizer)
         return optimizer
 
-    def prepare_scheduler(self, scheduler: LRScheduler):
+    def prepare_scheduler(self, scheduler: T_LRScheduler) -> T_LRScheduler:
         """
         Prepares a PyTorch Scheduler for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -2111,7 +2150,8 @@ class Accelerator:
         self._schedulers.append(scheduler)
         return scheduler
 
-    def backward(self, loss, **kwargs):
+    # TODO(julien-blanchon): Type hint the kwargs using the loss.backward function signature
+    def backward(self, loss: torch.nn.Module, **kwargs):
         """
         Scales the gradients in accordance to the `GradientAccumulationPlugin` and calls the correct `backward()` based
         on the configuration.
@@ -2239,6 +2279,8 @@ class Accelerator:
                     opt = opt.optimizer
                 self.scaler.unscale_(opt)
 
+    # TODO(julien-blanchon): Something is wrong with the annotation here
+    # @take_annotation_from(torch.nn.utils.clip_grad_norm_)
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
         """
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
@@ -2269,7 +2311,7 @@ class Accelerator:
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
-                    return model.clip_grad_norm_(max_norm, norm_type)
+                    return cast(torch.Tensor, model.clip_grad_norm_(max_norm, norm_type))
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
@@ -2290,6 +2332,8 @@ class Accelerator:
         self.unscale_gradients()
         return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
+    # TODO(julien-blanchon): Something is wrong with the annotation here
+    # @take_annotation_from(torch.nn.utils.clip_grad_value_)
     def clip_grad_value_(self, parameters, clip_value):
         """
         Should be used in place of `torch.nn.utils.clip_grad_value_`.
@@ -2317,7 +2361,7 @@ class Accelerator:
         self.unscale_gradients()
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
-    def gather(self, tensor):
+    def gather(self, tensor: T_Recurcive_Tensor) -> T_Recurcive_Tensor:
         """
         Gather the values in *tensor* across all processes and concatenate them on the first dimension. Useful to
         regroup the predictions from all processes when doing evaluation.
@@ -2422,7 +2466,9 @@ class Accelerator:
             # Dataset had no length or raised an error
             return data
 
-    def reduce(self, tensor, reduction="sum", scale=1.0):
+    def reduce(
+        self, tensor: T_Recurcive_Tensor, reduction: Literal["sum", "mean", "none"] = "sum", scale: float = 1.0
+    ) -> T_Recurcive_Tensor:
         """
         Reduce the values in *tensor* across all processes based on *reduction*.
 
@@ -2456,9 +2502,11 @@ class Accelerator:
         tensor([4, 6])
         ```
         """
-        return reduce(tensor, reduction, scale)
+        return reduce(tensor, reduction, scale)  # type: ignore
 
-    def pad_across_processes(self, tensor, dim=0, pad_index=0, pad_first=False):
+    def pad_across_processes(
+        self, tensor: T_Recurcive_Tensor, dim: int = 0, pad_index: int = 0, pad_first: bool = False
+    ) -> T_Recurcive_Tensor:
         """
         Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so
         they can safely be gathered.
@@ -2491,9 +2539,9 @@ class Accelerator:
         torch.Size([2])
         ```
         """
-        return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)
+        return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)  # type: ignore
 
-    def unwrap_model(self, model, keep_fp32_wrapper: bool = True):
+    def unwrap_model(self, model: T_Module, keep_fp32_wrapper: bool = True) -> T_Module:
         """
         Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`]. Useful before saving
         the model.
@@ -3177,10 +3225,10 @@ class Accelerator:
                 self.deepspeed_engine_wrapped.engine.destroy()
             self.deepspeed_engine_wrapped = None
         objects = release_memory(*objects)
-        self._schedulers = []
-        self._optimizers = []
-        self._models = []
-        self._dataloaders = []
+        self._schedulers: list[torch.optim.lr_scheduler.LRScheduler] = []
+        self._optimizers: list[torch.optim.Optimizer] = []
+        self._models: list[torch.nn.Module] = []
+        self._dataloaders: list[torch.utils.data.DataLoader] = []
         self.step = 0
         return objects
 
