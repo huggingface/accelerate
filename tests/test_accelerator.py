@@ -23,10 +23,10 @@ import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
 
-from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
+from accelerate import infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
-from accelerate.test_utils import require_bnb, require_multi_device, require_non_cpu, slow, torch_device
+from accelerate.test_utils import require_bnb, require_multi_gpu, require_non_cpu, slow, torch_device
 from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_non_torch_xla
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
@@ -429,7 +429,7 @@ class AcceleratorTester(AccelerateTestCase):
             getattr(valid_dl, "_is_accelerate_prepared", False) is True
         ), "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
 
-    @require_non_torch_xla
+    @require_cuda
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
@@ -446,7 +446,7 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         model = accelerator.prepare(model)
 
-    @require_non_torch_xla
+    @require_cuda
     @slow
     @require_bnb
     def test_accelerator_bnb_cpu_error(self):
@@ -472,20 +472,12 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             model = accelerator.prepare(model)
 
-    @require_non_torch_xla
+    @require_cuda
     @slow
     @require_bnb
-    @require_multi_device
     def test_accelerator_bnb_multi_device(self):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
-
-        if torch_device == "cuda":
-            PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
-        elif torch_device == "npu":
-            PartialState._shared_state = {"distributed_type": DistributedType.MULTI_NPU}
-        else:
-            raise ValueError(f"{torch_device} is not supported in test_accelerator_bnb_multi_device.")
 
         with init_empty_weights():
             model = AutoModelForCausalLM.from_pretrained(
@@ -511,7 +503,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_non_torch_xla
     @slow
     @require_bnb
-    @require_multi_device
+    @require_multi_gpu
     def test_accelerator_bnb_multi_device_no_distributed(self):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
