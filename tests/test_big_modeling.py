@@ -868,8 +868,8 @@ class BigModelingTester(unittest.TestCase):
 
         inputs = torch.randn(3, 4)
         outputs = model1(inputs)
-        assert outputs.device == torch.device(0)
-        assert model1.weight.device == torch.device(0)
+        assert outputs.device == torch.device(torch_device)
+        assert model1.weight.device == torch.device(torch_device)
 
         hook1.offload()
         assert model1.weight.device == torch.device("cpu")
@@ -879,13 +879,13 @@ class BigModelingTester(unittest.TestCase):
         assert model2.weight.device == torch.device("cpu")
 
         outputs = model1(inputs)
-        assert outputs.device == torch.device(0)
-        assert model1.weight.device == torch.device(0)
+        assert outputs.device == torch.device(torch_device)
+        assert model1.weight.device == torch.device(torch_device)
 
         outputs = model2(outputs)
-        assert outputs.device == torch.device(0)
+        assert outputs.device == torch.device(torch_device)
         assert model1.weight.device == torch.device("cpu")
-        assert model2.weight.device == torch.device(0)
+        assert model2.weight.device == torch.device(torch_device)
 
         hook2.offload()
         assert model2.weight.device == torch.device("cpu")
