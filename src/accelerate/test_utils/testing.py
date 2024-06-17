@@ -378,7 +378,7 @@ def require_pippy(test_case):
     return unittest.skipUnless(is_pippy_available(), "test requires pippy")(test_case)
 
 
-def require_tuna(test_case):
+def require_tuna_interpreter(test_case):
     """
     Decorator marking a test that requires tuna interpreter installed. These tests are skipped when tuna isn't
     installed

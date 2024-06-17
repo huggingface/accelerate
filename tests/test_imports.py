@@ -13,7 +13,7 @@
 # limitations under the License.
 import subprocess
 
-from accelerate.test_utils.testing import TempDirTestCase, require_tuna
+from accelerate.test_utils.testing import TempDirTestCase, require_tuna_interpreter
 from accelerate.utils import is_tuna_interpreter_available
 
 
@@ -35,7 +35,7 @@ def run_import_time(command: str):
     return output.stderr
 
 
-@require_tuna
+@require_tuna_interpreter
 class ImportSpeedTester(TempDirTestCase):
     """
     Test suite which checks if imports have seen slowdowns
