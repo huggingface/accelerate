@@ -116,11 +116,6 @@ if is_deepspeed_available():
         DummyScheduler,
     )
 
-if is_fp8_available():
-    import transformer_engine.common.recipe as te_recipe
-    from transformer_engine.pytorch import fp8_autocast
-
-
 if is_megatron_lm_available():
     from .utils import (
         MegatronEngine,
@@ -1375,6 +1370,10 @@ class Accelerator:
 
         # We prepare fp8 after, allowing for bf16 autocast to happen first
         if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
+            # Import here to keep base imports fast
+            import transformer_engine.common.recipe as te_recipe
+            from transformer_engine.pytorch import fp8_autocast
+            
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
                     convert_model(model)
