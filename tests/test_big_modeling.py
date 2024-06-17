@@ -922,7 +922,7 @@ class BigModelingTester(unittest.TestCase):
         assert model.h[(-1)].self_attention.query_key_value.weight.dtype == torch.int8
         assert model.h[(-1)].self_attention.query_key_value.weight.device.index == 1
 
-    @require_non_torch_xla
+    @require_cuda
     @slow
     @require_bnb
     def test_dispatch_model_int8_simple(self):
