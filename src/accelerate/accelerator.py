@@ -179,9 +179,7 @@ _use_seedable_sampler = object()
 
 # Type hinting
 T_split_between_processes = TypeVar("T_split_between_processes", bound=Union[Sequence, dict, torch.Tensor])
-Ts_prepare = TypeVarTuple(
-    name="Ts_prepare",
-)
+Ts_prepare = TypeVarTuple(name="Ts_prepare")
 T_Module = TypeVar("T_Module", bound=torch.nn.Module)
 T_DataLoader = TypeVar("T_DataLoader", bound=torch.utils.data.DataLoader)
 T_Optimizer = TypeVar("T_Optimizer", bound=torch.optim.Optimizer)
