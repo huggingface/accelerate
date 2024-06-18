@@ -23,7 +23,7 @@ import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
 
-from accelerate import infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
+from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_gpu, require_non_cpu, slow, torch_device
@@ -472,12 +472,20 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             model = accelerator.prepare(model)
 
-    @require_cuda
+    @require_non_torch_xla
     @slow
     @require_bnb
+    @require_multi_gpu
     def test_accelerator_bnb_multi_device(self):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
+
+        if torch_device == "cuda":
+            PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
+        elif torch_device == "npu":
+            PartialState._shared_state = {"distributed_type": DistributedType.MULTI_NPU}
+        else:
+            raise ValueError(f"{torch_device} is not supported in test_accelerator_bnb_multi_device.")
 
         with init_empty_weights():
             model = AutoModelForCausalLM.from_pretrained(
