@@ -803,7 +803,7 @@ class BigModelingTester(unittest.TestCase):
         assert new_model.linear1.weight.device == torch.device("meta")
         assert new_model.linear2.weight.device == torch.device("meta")
         assert new_model.linear3.weight.device == torch.device(torch_device)
-        assert new_model.linear4.weight.device == torch.device(f"{torch_device.split(':')[0]}:1")
+        assert new_model.linear4.weight.device == torch.device(torch_device.replace(":0", ":1"))
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
@@ -855,7 +855,7 @@ class BigModelingTester(unittest.TestCase):
         assert new_model.linear1.linear.weight.device == torch.device("meta")
         assert new_model.linear2.linear.weight.device == torch.device("meta")
         assert new_model.linear3.linear.weight.device == torch.device(torch_device)
-        assert new_model.linear4.linear.weight.device == torch.device(f"{torch_device.split(':')[0]}:1")
+        assert new_model.linear4.linear.weight.device == torch.device(torch_device.replace(":0", ":1"))
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
