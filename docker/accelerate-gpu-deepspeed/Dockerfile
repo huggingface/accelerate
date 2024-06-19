@@ -26,6 +26,7 @@ RUN source activate accelerate && \
     python3 -m pip install --no-cache-dir \
     git+https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers,deepspeed] \
     --extra-index-url https://download.pytorch.org/whl/cu117
+RUN source activate accelerate && pip uninstall wandb -y
 
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 

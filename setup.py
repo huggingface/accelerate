@@ -39,7 +39,7 @@ extras["testing"] = extras["test_prod"] + extras["test_dev"]
 extras["deepspeed"] = ["deepspeed<=0.14.0"]
 extras["rich"] = ["rich"]
 
-extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive"]
+extras["test_trackers"] = ["comet-ml", "tensorboard", "dvclive"]
 extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
 extras["sagemaker"] = [
@@ -70,7 +70,7 @@ setup(
     },
     python_requires=">=3.8.0",
     install_requires=[
-        "numpy>=1.17,<2.0.0",
+        "numpy>=1.17",
         "packaging>=20.0",
         "psutil",
         "pyyaml",
