@@ -655,7 +655,7 @@ class BigModelingTester(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 model.to(0)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_dispatch_model_move_model_warning(self):
         model = ModelForTest()
         device_map = {"linear1": 0, "batchnorm": 0, "linear2": 1}
@@ -664,7 +664,7 @@ class BigModelingTester(unittest.TestCase):
             with self.assertLogs("accelerate.big_modeling", level="WARNING"):
                 model.to("cpu")
             with self.assertLogs("accelerate.big_modeling", level="WARNING"):
-                model.cuda(0)
+                model.to(torch_device)
             with self.assertRaises(RuntimeError):
                 x = torch.randn(2, 3)
                 model(x)
