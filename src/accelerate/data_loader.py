@@ -34,6 +34,7 @@ from .utils import (
     slice_tensors,
     synchronize_rng_states,
 )
+from torch.utils.data import DistributedSampler
 
 
 logger = get_logger(__name__)
@@ -941,8 +942,17 @@ def prepare_data_loader(
         generator = torch.Generator().manual_seed(42)
         dataloader.generator = generator
         dataloader.sampler.generator = generator
+    
+    is_distributed_sampler = isinstance(
+        dataloader.sampler.sampler if sampler_is_batch_sampler else dataloader.sampler,
+        DistributedSampler
+    )
+
+    if is_distributed_sampler and split_batches:
+        raise ValueError("Using `split_batches=True` with a `DistributedSampler` is not supported.")
+
     # No change if no multiprocess
-    if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
+    if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches and not is_distributed_sampler:
         if isinstance(new_dataset, IterableDataset):
             if getattr(dataloader.dataset, "generator", None) is not None:
                 synchronized_generator = dataloader.dataset.generator

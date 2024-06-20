@@ -106,6 +106,7 @@ from .utils import (
 from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
+from .utils import parallel_state as mpu
 
 
 if is_deepspeed_available():
@@ -1634,11 +1635,16 @@ class Accelerator:
             gradient_accumulation_steps=self.gradient_accumulation_steps,
         )
 
+        if mpu.model_parallel_is_initialized():
+            world_size = mpu.get_data_parallel_world_size()
+        else:
+            world_size = self.num_processes
+
         config_kwargs = {
             "train_micro_batch_size_per_gpu": batch_size_per_device,
             "train_batch_size": batch_size_per_device
             * deepspeed_plugin.get_value("gradient_accumulation_steps")
-            * self.num_processes,
+            * world_size,
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
@@ -1758,6 +1764,8 @@ class Accelerator:
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
             kwargs = dict(model=model, config_params=self.deepspeed_config)
+            if mpu.model_parallel_is_initialized():
+                kwargs["mpu"] = mpu
             if optimizer is not None:
                 if isinstance(optimizer, (DummyOptim)):
                     kwargs["model_parameters"] = optimizer.params
