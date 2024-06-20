@@ -997,7 +997,13 @@ def get_balanced_memory(
         expected_device_count = torch.xpu.device_count()
     else:
         expected_device_count = torch.cuda.device_count()
-    num_devices = len([d for d in max_memory if d != "cpu" and int(d) < expected_device_count and max_memory[d] > 0])
+    num_devices = len(
+        [
+            d
+            for d in max_memory
+            if d not in ["mps", "cpu", "disk"] and int(d) < expected_device_count and max_memory[d] > 0
+        ]
+    )
 
     if num_devices == 0:
         return max_memory
