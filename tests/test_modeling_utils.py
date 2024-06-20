@@ -743,12 +743,12 @@ class ModelingUtilsTester(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 checkpoint_file = os.path.join(tmp_dir, "model.safetensors")
                 save_file(state_dict, checkpoint_file, metadata={"format": "pt"})
+
                 loaded_state_dict = load_state_dict(checkpoint_file, device_map=device_map)
 
             for param, device in device_map.items():
                 device = device if device != "disk" else "cpu"
-                expected_device = torch.device(torch_device) if isinstance(device, int) else torch.device(device)
-                assert loaded_state_dict[param].device == expected_device
+                assert loaded_state_dict[param].device == torch.device(device)
 
     def test_convert_file_size(self):
         result = convert_file_size_to_int("0MB")
