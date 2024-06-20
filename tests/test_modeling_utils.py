@@ -704,7 +704,7 @@ class ModelingUtilsTester(unittest.TestCase):
         assert len(w) == 0
         assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": "cpu", "linear3": "cpu"}
 
-    @require_non_cpu
+    @require_cuda
     def test_get_balanced_memory(self):
         model = ModelForTest()
         # model has size 236: linear1 64, batchnorm 72, linear2 100
