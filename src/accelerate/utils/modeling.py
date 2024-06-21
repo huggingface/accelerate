@@ -1456,12 +1456,11 @@ def load_state_dict(checkpoint_file, device_map=None):
             if len(set(device_map.values())) == 1:
                 device = list(device_map.values())[0]
                 target_device = device
-                if is_xpu_available() and isinstance(device, int):
+                if is_xpu_available():
                     if compare_versions("safetensors", "<", "0.4.2"):
-                        raise ImportError(
-                            "Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors."
-                        )
-                    target_device = f"xpu:{device}"
+                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
+                    if isinstance(device, int):
+                        target_device = f"xpu:{device}"
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1493,12 +1492,11 @@ def load_state_dict(checkpoint_file, device_map=None):
                 progress_bar = None
             for device in devices:
                 target_device = device
-                if is_xpu_available() and isinstance(device, int):
+                if is_xpu_available():
                     if compare_versions("safetensors", "<", "0.4.2"):
-                        raise ImportError(
-                            "Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors."
-                        )
-                    target_device = f"xpu:{device}"
+                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
+                    if isinstance(device, int):
+                        target_device = f"xpu:{device}"
 
                 with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
                     for key in device_weights[device]:
