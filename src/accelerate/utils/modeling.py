@@ -1459,7 +1459,7 @@ def load_state_dict(checkpoint_file, device_map=None):
                 if is_xpu_available() and isinstance(device, int):
                     if compare_versions("safetensors", "<", "0.4.2"):
                         raise ImportError(
-                            "Safetensors version must be >= 0.4.2 for Intel GPU. Please update safetensors."
+                            "Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors."
                         )
                     target_device = f"xpu:{device}"
 
@@ -1493,10 +1493,10 @@ def load_state_dict(checkpoint_file, device_map=None):
                 progress_bar = None
             for device in devices:
                 target_device = device
-                if isinstance(device, int) and is_xpu_available():
+                if is_xpu_available() and isinstance(device, int):
                     if compare_versions("safetensors", "<", "0.4.2"):
                         raise ImportError(
-                            "Safetensors version must be >= 0.4.2 for Intel GPU. Please update safetensors."
+                            "Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors."
                         )
                     target_device = f"xpu:{device}"
 
