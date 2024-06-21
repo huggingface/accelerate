@@ -1616,6 +1616,7 @@ def load_checkpoint_in_model(
     keep_in_fp32_modules: List[str] = None,
     offload_8bit_bnb: bool = False,
     strict: bool = False,
+    ignore_unexpected_keys: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -1656,6 +1657,8 @@ def load_checkpoint_in_model(
         strict (`bool`, *optional*, defaults to `False`):
             Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
             state_dict.
+        ignore_unexpected_keys (`bool`, *optional*, defaults to `False`):
+            Whether to log warning for unexpected keys in checkpoint state_dict. Applicable for quantized models.
 
     """
     if offload_8bit_bnb:
@@ -1813,7 +1816,7 @@ def load_checkpoint_in_model(
         del loaded_checkpoint
         gc.collect()
 
-    if not strict and len(unexpected_keys) > 0:
+    if not strict and not ignore_unexpected_keys and len(unexpected_keys) > 0:
         logger.warning(
             f"Some weights of the model checkpoint at {checkpoint} were not used when"
             f" initializing {model.__class__.__name__}: {unexpected_keys}. This may or may not be an issue - make sure that the checkpoint does not have unnecessary parameters, or that the model definition correctly corresponds to the checkpoint."
