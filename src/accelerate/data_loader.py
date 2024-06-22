@@ -394,8 +394,6 @@ class DataLoaderStateMixin:
 class DataLoaderWrapper:
     """
     Class that wraps around a PyTorch `DataLoader` (or subclasses of `DataLoader`, such as torchdata's `StatefulDataLoader`).
-
-
     """
     def __init__(self, dataset, **kwargs):
         if False and is_torchdata_stateful_dataloader_available():
