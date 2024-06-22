@@ -377,6 +377,8 @@ def check_seedable_sampler():
         for batch in train_dl:
             new_items.append(batch["x"])
     new_items = torch.cat(new_items)
+    print(original_items)
+    print(new_items)
     assert torch.allclose(original_items, new_items), "Did not obtain the same items with the same seed and epoch."
 
 

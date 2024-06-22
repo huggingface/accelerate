@@ -393,7 +393,8 @@ class DataLoaderStateMixin:
 
 class DataLoaderWrapper:
     """
-    Class that wraps around a PyTorch `DataLoader` (or subclasses, such as torchdata's `StatefulDataLoader`).
+    Class that wraps around a PyTorch `DataLoader` (or subclasses of `DataLoader`, such as torchdata's `StatefulDataLoader`).
+
 
     """
     def __init__(self, dataset, **kwargs):
@@ -401,12 +402,14 @@ class DataLoaderWrapper:
             self.dataloader = StatefulDataLoader(dataset, **kwargs)
         else:
             self.dataloader = DataLoader(dataset, **kwargs)
-        
         for attr in self.dataloader.__dict__.keys():
             setattr(self, attr, getattr(self.dataloader, attr))
 
     def __iter__(self):
         return self.dataloader.__iter__()
+    
+    def __len__(self):
+        return self.dataloader.__len__()
 
 class DataLoaderShard(DataLoaderWrapper, DataLoaderStateMixin):
     """
