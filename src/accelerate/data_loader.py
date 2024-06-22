@@ -19,6 +19,8 @@ from typing import Callable, List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
+from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
+
 from .logging import get_logger
 from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
 from .utils import (
@@ -35,6 +37,8 @@ from .utils import (
     synchronize_rng_states,
 )
 
+if is_torchdata_stateful_dataloader_available():
+    from torchdata.stateful_dataloader import StatefulDataLoader
 
 logger = get_logger(__name__)
 
@@ -387,10 +391,26 @@ class DataLoaderStateMixin:
         "Cleans up the gradient state after exiting the dataloader"
         self.gradient_state._remove_dataloader(self)
 
-
-class DataLoaderShard(DataLoader, DataLoaderStateMixin):
+class DataLoaderWrapper:
     """
-    Subclass of a PyTorch `DataLoader` that will deal with device placement and current distributed setup.
+    Class that wraps around a PyTorch `DataLoader` (or subclasses, such as torchdata's `StatefulDataLoader`).
+
+    """
+    def __init__(self, dataset, **kwargs):
+        if False and is_torchdata_stateful_dataloader_available():
+            self.dataloader = StatefulDataLoader(dataset, **kwargs)
+        else:
+            self.dataloader = DataLoader(dataset, **kwargs)
+        
+        for attr in self.dataloader.__dict__.keys():
+            setattr(self, attr, getattr(self.dataloader, attr))
+
+    def __iter__(self):
+        return self.dataloader.__iter__()
+
+class DataLoaderShard(DataLoaderWrapper, DataLoaderStateMixin):
+    """
+    Subclass of `DataLoaderWrapper` that will deal with device placement and current distributed setup.
 
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
@@ -559,9 +579,9 @@ if is_torch_xla_available():
             return self._loader.batch_sampler
 
 
-class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
+class DataLoaderDispatcher(DataLoaderWrapper, DataLoaderStateMixin):
     """
-    Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
+    Subclass of `DataLoaderWrapper` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
 
     Args:
