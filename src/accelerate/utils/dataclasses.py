@@ -364,6 +364,7 @@ class ProfileKwargs(KwargsHandler):
     with_stack: bool = False
     with_flops: bool = False
     with_modules: bool = False
+    json_trace_path: Optional[str] = None
 
     def _get_profiler_activity(self, activity: ProfilerActivity) -> List[torch.profiler.ProfilerActivity]:
         if activity := activity.upper() in torch.profiler.ProfilerActivity.__members__:

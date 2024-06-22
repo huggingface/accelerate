@@ -110,6 +110,13 @@ class KwargsHandlerTester(unittest.TestCase):
 
         for option in schedule_options:
             count = 0
+            steps_per_cycle = option["wait"] + option["warmup"] + option["active"]
+            effective_steps = max(0, total_steps - option.get("skip_first", 0))
+            cycles = effective_steps // steps_per_cycle
+            if option["repeat"] > 0:
+                expected_count = min(cycles, option["repeat"])
+            else:
+                expected_count = cycles
 
             def on_trace_ready(prof):
                 nonlocal count
@@ -127,17 +134,6 @@ class KwargsHandlerTester(unittest.TestCase):
 
             # Assert
             assert isinstance(prof, torch.profiler.profile)
-
-            # Calculate the expected count value
-            steps_per_cycle = option["wait"] + option["warmup"] + option["active"]
-            effective_steps = max(0, total_steps - option.get("skip_first", 0))
-            cycles = effective_steps // steps_per_cycle
-
-            if option["repeat"] > 0:
-                expected_count = min(cycles, option["repeat"])
-            else:
-                expected_count = cycles
-
             assert count == expected_count, f"Option: {option}, Expected count: {expected_count}, but got {count}"
 
     def test_torch_dynamo_plugin(self):

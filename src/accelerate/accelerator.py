@@ -3367,7 +3367,12 @@ class Accelerator:
     def profile(self, profile_handler: ProfileKwargs | None = None):
         if profile_handler is None:
             profile_handler = self.profile_handler or ProfileKwargs()
-        yield from profile_handler.build()
+        profiler: torch.profiler.profile = profile_handler.build()
+
+        yield from profiler
+
+        if profile_handler.json_trace_path is not None:
+            profiler.export_chrome_trace(profile_handler.json_trace_path)
 
     @property
     def optimizer_step_was_skipped(self):
