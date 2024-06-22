@@ -356,6 +356,54 @@ ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda"]
 
 @dataclass
 class ProfileKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the profiler. Please refer to the
+    documentation of this [context manager](https://pytorch.org/docs/stable/profiler.html#torch.profiler.profile) for
+    more information on each argument.
+
+    <Tip warning={true}>
+
+    `torch.profiler` is only available in PyTorch 1.8.1 and later versions.
+
+    </Tip>
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import ProfileKwargs
+
+    kwargs = ProfileKwargs(activities=["cpu", "cuda"])
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
+
+    Args:
+        activities (`List[str]`, *optional*, default to `None`):
+            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, or `"cuda"`.
+        schedule_option (`Dict[str, int]`, *optional*, default to `None`):
+            The schedule option to use for the profiler. Available keys are `wait`, `warmup`, `active`, `repeat` and
+            `skip_first` The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the
+            warmup for the next `warmup` steps, then do the active recording for the next `active` steps and then
+            repeat the cycle starting with `wait` steps. The optional number of cycles is specified with the `repeat`
+            parameter, the zero value means that the cycles will continue until the profiling is finished.
+        on_trace_ready (`Callable`, *optional*, default to `None`):
+            Callable that is called at each step when schedule returns `ProfilerAction.RECORD_AND_SAVE` during the
+            profiling.
+        record_shapes (`bool`, *optional*, default to `False`):
+            Save information about operator’s input shapes.
+        profile_memory (`bool`, *optional*, default to `False`):
+            Track tensor memory allocation/deallocation
+        with_stack (`bool`, *optional*, default to `False`):
+            Record source information (file and line number) for the ops.
+        with_flops (`bool`, *optional*, default to `False`):
+            Use formula to estimate the FLOPS of specific operators
+        with_modules (`bool`, *optional*, default to `False`):
+            Record module hierarchy (including function names) corresponding to the callstack of the op.
+        json_trace_path (`str`, *optional*, default to `None`):
+            Exports the collected trace in Chrome JSON format. Chrome use 'chrome://tracing' view json file. Defaults
+            to None, which means profiling does not store json files.
+    """
+
     activities: Optional[List[ProfilerActivity]] = None
     schedule_option: Optional[Dict[str, int]] = None
     on_trace_ready: Optional[Callable] = None
@@ -367,6 +415,13 @@ class ProfileKwargs(KwargsHandler):
     json_trace_path: Optional[str] = None
 
     def _get_profiler_activity(self, activity: ProfilerActivity) -> List[torch.profiler.ProfilerActivity]:
+        """Get the profiler activity from the string.
+
+        Args:
+            activity (str): The profiler activity name.
+
+        Returns:
+            List[torch.profiler.ProfilerActivity]: The profiler activity."""
         if activity := activity.upper() in torch.profiler.ProfilerActivity.__members__:
             return torch.profiler.ProfilerActivity[activity]
         else:
@@ -375,6 +430,9 @@ class ProfileKwargs(KwargsHandler):
     def build(self) -> torch.profiler.profile:
         """
         Build a profiler object with the current configuration.
+
+        Returns:
+            torch.profiler.profile: The profiler object.
         """
         return torch.profiler.profile(
             activities=[self._get_profiler_activity(activity) for activity in self.activities]

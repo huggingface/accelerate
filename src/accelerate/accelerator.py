@@ -221,8 +221,8 @@ class Accelerator:
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
         kwargs_handlers (list of [`~utils.KwargsHandler`], *optional*)
-            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training or mixed
-            precision are created. See [kwargs](kwargs) for more information.
+            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training, profiling
+            or mixed precision are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or [`~utils.DynamoBackend`], *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
         gradient_accumulation_plugin ([`~utils.GradientAccumulationPlugin`], *optional*):
@@ -3365,6 +3365,56 @@ class Accelerator:
 
     @contextmanager
     def profile(self, profile_handler: ProfileKwargs | None = None):
+        """
+        Will profile the code inside the context manager. The profile will be saved to a Chrome Trace file if
+        `profile_handler.json_trace_path` is set.
+
+        A different `profile_handler` can be passed in to override the one set in the `Accelerator` object.
+
+        Args:
+            profile_handler (`ProfileKwargs`, *optional*):
+                The profile handler to use for this context manager. If not passed, will use the one set in the
+                `Accelerator` object.
+
+        Example:
+
+        ```python
+        # Profile with default settings
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+        with accelerator.profile() as prof:
+            train()
+        print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
+
+
+        # Profile with custom callalbe handler
+        from accelerate import Accelerator
+        from accelerate.utils import ProfileKwargs
+
+
+        def custom_handler(prof):
+            print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
+
+
+        kwargs = ProfileKwargs(schedule_option=dict(wait=1, warmup=1, active=1), on_trace_ready=custom_handler)
+        accelerator = Accelerator(kwarg_handler=[kwargs])
+        with accelerator.profile() as prof:
+            for _ in range(10):
+                train_iteration()
+                prof.step()
+
+
+        # Profile with chrome trace file
+        from accelerate import Accelerator
+        from accelerate.utils import ProfileKwargs
+
+        kwargs = ProfileKwargs(json_trace_path="profile.json")
+        accelerator = Accelerator(kwarg_handler=[kwargs])
+        with accelerator.profile():
+            train()
+        ```
+        """
         if profile_handler is None:
             profile_handler = self.profile_handler or ProfileKwargs()
         profiler: torch.profiler.profile = profile_handler.build()
