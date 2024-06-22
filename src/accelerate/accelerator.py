@@ -64,6 +64,7 @@ from .utils import (
     LoggerType,
     MegatronLMPlugin,
     PrecisionType,
+    ProfileKwargs,
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
@@ -341,6 +342,7 @@ class Accelerator:
         self.init_handler = None
         self.fp8_recipe_handler = None
         self.autocast_handler = None
+        self.profile_handler = None
         self.has_lomo_optimizer = False
 
         if kwargs_handlers is not None:
@@ -373,6 +375,11 @@ class Accelerator:
                         raise ValueError("You can only pass one `AutocastKwargs` in `kwargs_handler`.")
                     else:
                         self.autocast_handler = handler
+                elif isinstance(handler, ProfileKwargs):
+                    if self.profile_handler is not None:
+                        raise ValueError("You can only pass one `ProfileKwargs` in `kwargs_handler`.")
+                    else:
+                        self.profile_handler = handler
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -3355,6 +3362,12 @@ class Accelerator:
         # TODO: should the `yield` be in a try/finally block?
         yield
         autocast_context.__exit__(*sys.exc_info())
+
+    @contextmanager
+    def profile(self, profile_handler: ProfileKwargs | None = None):
+        if profile_handler is None:
+            profile_handler = self.profile_handler or ProfileKwargs()
+        yield from profile_handler.build()
 
     @property
     def optimizer_step_was_skipped(self):

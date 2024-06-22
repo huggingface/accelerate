@@ -350,6 +350,45 @@ class FP8RecipeKwargs(KwargsHandler):
                 raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
 
 
+# Literal
+ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda"]
+
+
+@dataclass
+class ProfileKwargs(KwargsHandler):
+    activities: Optional[List[ProfilerActivity]] = None
+    schedule_option: Optional[Dict[str, int]] = None
+    on_trace_ready: Optional[Callable] = None
+    record_shapes: bool = False
+    profile_memory: bool = False
+    with_stack: bool = False
+    with_flops: bool = False
+    with_modules: bool = False
+
+    def _get_profiler_activity(self, activity: ProfilerActivity) -> List[torch.profiler.ProfilerActivity]:
+        if activity := activity.upper() in torch.profiler.ProfilerActivity.__members__:
+            return torch.profiler.ProfilerActivity[activity]
+        else:
+            raise ValueError(f"Invalid profiler activity: {activity}")
+
+    def build(self) -> torch.profiler.profile:
+        """
+        Build a profiler object with the current configuration.
+        """
+        return torch.profiler.profile(
+            activities=[self._get_profiler_activity(activity) for activity in self.activities]
+            if self.activities is not None
+            else None,
+            schedule=torch.profiler.schedule(**self.schedule_option) if self.schedule_option is not None else None,
+            on_trace_ready=self.on_trace_ready,
+            record_shapes=self.record_shapes,
+            profile_memory=self.profile_memory,
+            with_stack=self.with_stack,
+            with_flops=self.with_flops,
+            with_modules=self.with_modules,
+        )
+
+
 class DeprecatedFieldDescriptor:
     """
     Descriptor for deprecated fields in an enum class.

@@ -29,7 +29,7 @@ from accelerate.test_utils import (
     require_non_cpu,
     require_non_xpu,
 )
-from accelerate.utils import AutocastKwargs, KwargsHandler, TorchDynamoPlugin, clear_environment
+from accelerate.utils import AutocastKwargs, KwargsHandler, ProfileKwargs, TorchDynamoPlugin, clear_environment
 from accelerate.utils.dataclasses import DistributedType
 
 
@@ -95,6 +95,50 @@ class KwargsHandlerTester(unittest.TestCase):
             g_float16 = torch.mm(d_float32, f_float32)
             # We should be back in fp16
             assert g_float16.dtype == torch.float16
+
+    def test_profile_kwargs(self):
+        # Arrange
+        schedule_options = [
+            dict(wait=1, warmup=1, active=2, repeat=1),
+            dict(wait=2, warmup=2, active=2, repeat=2),
+            dict(wait=0, warmup=1, active=3, repeat=3, skip_first=1),
+            dict(wait=3, warmup=2, active=1, repeat=1, skip_first=2),
+            dict(wait=1, warmup=0, active=1, repeat=5),
+        ]
+
+        total_steps = 100
+
+        for option in schedule_options:
+            count = 0
+
+            def on_trace_ready(prof):
+                nonlocal count
+                count += 1
+                print(prof.key_averages().table(sort_by="cpu_memory_usage", row_limit=-1))
+
+            kwargs = ProfileKwargs(on_trace_ready=on_trace_ready, schedule_option=option)
+            accelerator = Accelerator(kwargs_handlers=[kwargs])
+
+            # Act
+            with accelerator.profile() as prof:
+                for _ in range(total_steps):
+                    prof.step()
+                    torch.tensor([1, 2, 3, 4, 5], device=accelerator.device)
+
+            # Assert
+            assert isinstance(prof, torch.profiler.profile)
+
+            # Calculate the expected count value
+            steps_per_cycle = option["wait"] + option["warmup"] + option["active"]
+            effective_steps = max(0, total_steps - option.get("skip_first", 0))
+            cycles = effective_steps // steps_per_cycle
+
+            if option["repeat"] > 0:
+                expected_count = min(cycles, option["repeat"])
+            else:
+                expected_count = cycles
+
+            assert count == expected_count, f"Option: {option}, Expected count: {expected_count}, but got {count}"
 
     def test_torch_dynamo_plugin(self):
         with clear_environment():
