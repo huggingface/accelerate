@@ -413,3 +413,13 @@ def is_xpu_available(check_device=False):
 
 def is_dvclive_available():
     return _is_package_available("dvclive")
+
+def is_torchdata_available():
+    return _is_package_available("torchdata")
+
+# TODO: Remove this function once stateful_dataloader is a stable feature in torchdata.
+def is_torchdata_stateful_dataloader_available():
+    if not _is_package_available("torchdata"):
+        return False
+    import torchdata
+    return hasattr(torchdata, "stateful_dataloader") and hasattr(torchdata.stateful_dataloader, "StatefulDataLoader")

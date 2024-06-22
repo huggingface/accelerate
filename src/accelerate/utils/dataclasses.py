@@ -717,6 +717,14 @@ class DataLoaderConfiguration:
             " prepared dataloader has `pin_memory` set to `True` to work properly."
         },
     )
+    use_stateful_dataloader: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to true, the dataloader prepared by the Accelerator will be backed by "
+            "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires a version" 
+            " of `torchdata` with StatefulDataLoader to be installed."
+        },
+    )
 
 
 @dataclass
