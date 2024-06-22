@@ -37,8 +37,6 @@ from .utils import (
     synchronize_rng_states,
 )
 
-if is_torchdata_stateful_dataloader_available():
-    from torchdata.stateful_dataloader import StatefulDataLoader
 
 logger = get_logger(__name__)
 
@@ -391,27 +389,10 @@ class DataLoaderStateMixin:
         "Cleans up the gradient state after exiting the dataloader"
         self.gradient_state._remove_dataloader(self)
 
-class DataLoaderWrapper:
-    """
-    Class that wraps around a PyTorch `DataLoader` (or subclasses of `DataLoader`, such as torchdata's `StatefulDataLoader`).
-    """
-    def __init__(self, dataset, **kwargs):
-        if False and is_torchdata_stateful_dataloader_available():
-            self.dataloader = StatefulDataLoader(dataset, **kwargs)
-        else:
-            self.dataloader = DataLoader(dataset, **kwargs)
-        for attr in self.dataloader.__dict__.keys():
-            setattr(self, attr, getattr(self.dataloader, attr))
 
-    def __iter__(self):
-        return self.dataloader.__iter__()
-    
-    def __len__(self):
-        return self.dataloader.__len__()
-
-class DataLoaderShard(DataLoaderWrapper, DataLoaderStateMixin):
+class DataLoaderShard(DataLoader, DataLoaderStateMixin):
     """
-    Subclass of `DataLoaderWrapper` that will deal with device placement and current distributed setup.
+    Subclass of a PyTorch `DataLoader` that will deal with device placement and current distributed setup.
 
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
@@ -580,9 +561,9 @@ if is_torch_xla_available():
             return self._loader.batch_sampler
 
 
-class DataLoaderDispatcher(DataLoaderWrapper, DataLoaderStateMixin):
+class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     """
-    Subclass of `DataLoaderWrapper` that will iterate and preprocess on process 0 only, then dispatch on each
+    Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
 
     Args:
@@ -796,6 +777,13 @@ class DataLoaderDispatcher(DataLoaderWrapper, DataLoaderStateMixin):
             if hasattr(self.batch_sampler, "batch_sampler"):
                 self.batch_sampler.batch_sampler.sampler = sampler
 
+if is_torchdata_stateful_dataloader_available():
+    from torchdata.stateful_dataloader import StatefulDataLoader
+
+    class StatefulDataLoaderShard(DataLoaderShard, StatefulDataLoader, DataLoaderStateMixin):
+        """
+        Subclass of DataLoaderShard which inherits from torchdata's `StatefulDataLoader`
+        """
 
 def get_sampler(dataloader):
     """
