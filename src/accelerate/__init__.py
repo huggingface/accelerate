@@ -37,6 +37,7 @@ from .utils import (
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
+    ProfileKwargs,
     find_executable_batch_size,
     infer_auto_device_map,
     is_rich_available,
