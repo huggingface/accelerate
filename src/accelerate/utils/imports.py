@@ -419,7 +419,7 @@ def is_torchdata_available():
 
 # TODO: Remove this function once stateful_dataloader is a stable feature in torchdata.
 def is_torchdata_stateful_dataloader_available():
-    if not _is_package_available("torchdata"):
+    if not is_torchdata_available():
         return False
     import torchdata
     return hasattr(torchdata, "stateful_dataloader") and hasattr(torchdata.stateful_dataloader, "StatefulDataLoader")

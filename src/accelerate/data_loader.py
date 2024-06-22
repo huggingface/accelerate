@@ -777,13 +777,14 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             if hasattr(self.batch_sampler, "batch_sampler"):
                 self.batch_sampler.batch_sampler.sampler = sampler
 
+
 if is_torchdata_stateful_dataloader_available():
     from torchdata.stateful_dataloader import StatefulDataLoader
-
     class StatefulDataLoaderShard(DataLoaderShard, StatefulDataLoader, DataLoaderStateMixin):
         """
         Subclass of DataLoaderShard which inherits from torchdata's `StatefulDataLoader`
         """
+        pass
 
 def get_sampler(dataloader):
     """
