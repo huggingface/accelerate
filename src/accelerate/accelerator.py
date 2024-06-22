@@ -3417,9 +3417,9 @@ class Accelerator:
         """
         if profile_handler is None:
             profile_handler = self.profile_handler or ProfileKwargs()
-        profiler: torch.profiler.profile = profile_handler.build()
 
-        yield from profiler
+        with profile_handler.build() as profiler:
+            yield profiler
 
         if self.is_main_process and profile_handler.json_trace_path is not None:
             profiler.export_chrome_trace(profile_handler.json_trace_path)
