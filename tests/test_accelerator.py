@@ -230,7 +230,7 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator = Accelerator()
             assert str(accelerator.state.device) == "cuda:64"
 
-    @parameterized.expand([(True,), (False,)], name_func=parameterized_custom_name_func)
+    @parameterized.expand((True, False), name_func=parameterized_custom_name_func)
     def test_save_load_model(self, use_safetensors):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
@@ -249,7 +249,7 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator.load_state(tmpdirname)
             assert abs(model_signature - get_signature(model)) < 1e-3
 
-    @parameterized.expand([(True,), (False,)], name_func=parameterized_custom_name_func)
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_model(self, use_safetensors):
         accelerator = Accelerator()
         model = torch.nn.Linear(10, 10)
@@ -261,7 +261,7 @@ class AcceleratorTester(AccelerateTestCase):
             load_checkpoint_in_model(model, tmpdirname)
             assert abs(model_signature - get_signature(model)) < 1e-3
 
-    @parameterized.expand([(True,), (False,)], name_func=parameterized_custom_name_func)
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_sharded_model(self, use_safetensors):
         accelerator = Accelerator()
         inputs = torch.randn(3, 3)
@@ -277,7 +277,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         assert torch.allclose(expected, output, atol=1e-5)
 
-    @parameterized.expand([(True,), (False,)], name_func=parameterized_custom_name_func)
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_model_offload(self, use_safetensors):
         accelerator = Accelerator()
 
@@ -298,7 +298,11 @@ class AcceleratorTester(AccelerateTestCase):
         assert torch.allclose(expected, output, atol=1e-5)
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+<<<<<<< HEAD
     @require_non_cpu
+=======
+    @require_cuda
+>>>>>>> efa1e7d (checkout?)
     def test_get_state_dict_from_offload(self, use_safetensors):
         accelerator = Accelerator()
 
@@ -325,7 +329,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert cpu_onloaded_layer_weight.device.type == "cpu"
         assert device_onloaded_layer_weight.device.type == torch_device
 
-    @parameterized.expand([(True,), (False,)], name_func=parameterized_custom_name_func)
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_load_model_with_hooks(self, use_safetensors):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
