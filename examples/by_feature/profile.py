@@ -182,7 +182,11 @@ def training_function(config, args):
                 optimizer.zero_grad()
 
             # New Code #
-            print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=-1))
+            print(
+                prof.key_averages().table(
+                    sort_by="self_cpu_time_total" if args.cpu else "self_cuda_time_total", row_limit=-1
+                )
+            )
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):

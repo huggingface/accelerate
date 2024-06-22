@@ -3371,8 +3371,9 @@ class Accelerator:
 
         yield from profiler
 
-        if profile_handler.json_trace_path is not None:
+        if self.is_main_process and profile_handler.json_trace_path is not None:
             profiler.export_chrome_trace(profile_handler.json_trace_path)
+        self.wait_for_everyone()
 
     @property
     def optimizer_step_was_skipped(self):
