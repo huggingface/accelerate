@@ -394,10 +394,10 @@ class DataLoaderStateMixin:
         self.gradient_state._remove_dataloader(self)
 
 
-# TODO: Maybe generalize this class?
 class DataLoaderAdapter:
     """
-    A class which wraps around a PyTorch `DataLoader` (or variants of it) to be used with the `Accelerator`.
+    A class which wraps around a PyTorch `DataLoader` (or variants of it) to be used with the `Accelerator`. For
+    compatability reasons, this class inherits from the class it wraps around, so it can be used as a drop-in.
     """
 
     def __init__(self, dataset, use_stateful_dataloader=False, batch_sampler=None, **kwargs):
@@ -409,26 +409,17 @@ class DataLoaderAdapter:
         else:
             self.base_dataloader = DataLoader(dataset, **kwargs)
 
+        # Dynamically mixin the parent class. See https://stackoverflow.com/a/31075641
+        # This is pretty awkward, but it's the only way to make `isinstance(obj, StatefulDataLoader)` work transparently.
+        # It would be better if DataLoaderAdapter does not inherit from DataLoader, but that would not be backwards compatible.
+        base_cls = self.__class__
+        base_cls_name = self.__class__.__name__
+        parent_cls_name = self.base_dataloader.__class__
+        self.__class__ = type(base_cls_name, (base_cls, parent_cls_name), {})
+
+        # Allow this class to transparently pass through attributes from the underlying class
         for attr in self.base_dataloader.__dict__.keys():
             setattr(self, attr, getattr(self.base_dataloader, attr))
-
-    def __iter__(self):
-        return iter(self.base_dataloader)
-
-    def __len__(self):
-        return len(self.base_dataloader)
-
-    def load_state_dict(self):
-        """
-        Only supported for `StatefulDataLoader`.
-        """
-        return self.base_dataloader.load_state_dict()
-
-    def state_dict(self):
-        """
-        Only supported for `StatefulDataLoader`.
-        """
-        return self.base_dataloader.state_dict()
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -1055,6 +1046,7 @@ def prepare_data_loader(
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
             slice_fn=slice_fn_for_dispatch,
+            use_stateful_dataloader=use_stateful_dataloader,
             **kwargs,
         )
     elif sampler_is_batch_sampler:
@@ -1067,7 +1059,7 @@ def prepare_data_loader(
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
             synchronized_generator=synchronized_generator,
-            **kwargs,
+            use_stateful_dataloader=use_stateful_dataloader**kwargs,
         )
     else:
         dataloader = DataLoaderShard(
@@ -1078,6 +1070,7 @@ def prepare_data_loader(
             synchronized_generator=synchronized_generator,
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
+            use_stateful_dataloader=use_stateful_dataloader,
             **kwargs,
         )
 
@@ -1177,6 +1170,7 @@ def skip_first_batches(dataloader, num_batches=0):
             split_batches=dataloader.split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader._drop_last,
+            use_stateful_dataloader=dataloader.use_stateful_dataloader,
             **kwargs,
         )
     elif isinstance(dataloader, DataLoaderShard):
@@ -1193,12 +1187,17 @@ def skip_first_batches(dataloader, num_batches=0):
             device=dataloader.device,
             rng_types=dataloader.rng_types,
             synchronized_generator=dataloader.synchronized_generator,
+            use_stateful_dataloader=dataloader.use_stateful_dataloader,
             **kwargs,
         )
     else:
         if new_batch_sampler is None:
             # Need to manually skip batches in the dataloader
-            dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
+            dataloader = SkipDataLoader(
+                dataset, skip_batches=num_batches, use_stateful_dataloader=dataloader.use_stateful_dataloader, **kwargs
+            )
+        elif is_torchdata_stateful_dataloader_available() and isinstance(dataloader, StatefulDataLoader):
+            dataloader = StatefulDataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
 
