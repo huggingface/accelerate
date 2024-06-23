@@ -3415,8 +3415,7 @@ class Accelerator:
             train()
         ```
         """
-        if profile_handler is None:
-            profile_handler = self.profile_handler or ProfileKwargs()
+        profile_handler = profile_handler or self.profile_handler or ProfileKwargs()
 
         with profile_handler.build() as profiler:
             yield profiler
