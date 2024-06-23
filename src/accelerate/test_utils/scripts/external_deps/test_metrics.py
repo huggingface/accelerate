@@ -227,6 +227,7 @@ def test_gather_for_metrics_drop_last():
     num_items = (10 * accelerator.num_processes) + 1
     dataloader = DataLoader(range(num_items), batch_size=per_device_batch_size, drop_last=True)
     dataloader = accelerator.prepare(dataloader)
+
     iterator = iter(dataloader)
     next(iterator)  # Skip first batch tensor([0, 1, 2, 3, 4], device='cuda:0')
     batch = next(iterator)
@@ -234,6 +235,11 @@ def test_gather_for_metrics_drop_last():
 
     # Should return a full set of complete batches from each GPU
     num_expected_items = per_device_batch_size * accelerator.num_processes
+    print("dataloader.batch_size:", dataloader.batch_size)
+    print("accelerator.num_processes:", accelerator.num_processes)
+    print("gathered_items:", gathered_items)
+    print("batch:", batch)
+    print("len(dataloader):", len(dataloader))
     assert gathered_items.size(0) == (
         num_expected_items
     ), f"Expected number of items: {num_expected_items}, Actual: {gathered_items.size(0)}"

@@ -405,9 +405,9 @@ class DataLoaderAdapter:
         if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
             raise ValueError("StatefulDataLoader is not available. Please install torchdata to use it.")
         if use_stateful_dataloader:
-            self.base_dataloader = StatefulDataLoader(dataset, **kwargs)
+            self.base_dataloader = StatefulDataLoader(dataset, batch_sampler=batch_sampler **kwargs)
         else:
-            self.base_dataloader = DataLoader(dataset, **kwargs)
+            self.base_dataloader = DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
 
         # Dynamically mixin the parent class. See https://stackoverflow.com/a/31075641
         # This is pretty awkward, but it's the only way to make `isinstance(obj, StatefulDataLoader)` work transparently.
