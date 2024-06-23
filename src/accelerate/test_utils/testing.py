@@ -424,6 +424,7 @@ def require_torchdata_stateful_dataloader(test_case):
     else:
         return test_case
 
+
 class TempDirTestCase(unittest.TestCase):
     """
     A TestCase class that keeps a single `tempfile.TemporaryDirectory` open for the duration of the class, wipes its

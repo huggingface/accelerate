@@ -20,6 +20,8 @@ import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
+
+
 if is_torchdata_stateful_dataloader_available():
     from torchdata.stateful_dataloader import StatefulDataLoader
 
@@ -38,7 +40,6 @@ from .utils import (
     slice_tensors,
     synchronize_rng_states,
 )
-
 
 
 logger = get_logger(__name__)
@@ -392,11 +393,13 @@ class DataLoaderStateMixin:
         "Cleans up the gradient state after exiting the dataloader"
         self.gradient_state._remove_dataloader(self)
 
+
 # TODO: Maybe generalize this class?
 class DataLoaderAdapter:
     """
     A class which wraps around a PyTorch `DataLoader` (or variants of it) to be used with the `Accelerator`.
     """
+
     def __init__(self, dataset, use_stateful_dataloader=False, batch_sampler=None, **kwargs):
         self.use_stateful_dataloader = use_stateful_dataloader
         if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
@@ -405,16 +408,16 @@ class DataLoaderAdapter:
             self.base_dataloader = StatefulDataLoader(dataset, **kwargs)
         else:
             self.base_dataloader = DataLoader(dataset, **kwargs)
-        
+
         for attr in self.base_dataloader.__dict__.keys():
             setattr(self, attr, getattr(self.base_dataloader, attr))
 
     def __iter__(self):
         return iter(self.base_dataloader)
-    
+
     def __len__(self):
         return len(self.base_dataloader)
-    
+
     def load_state_dict(self):
         """
         Only supported for `StatefulDataLoader`.
@@ -426,6 +429,7 @@ class DataLoaderAdapter:
         Only supported for `StatefulDataLoader`.
         """
         return self.base_dataloader.state_dict()
+
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     """
@@ -603,8 +607,8 @@ if is_torch_xla_available():
 
 class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
     """
-    Subclass of `DataLoaderAdapter` that will iterate and preprocess on process 0 only, then dispatch on each
-    process their part of the batch.
+    Subclass of `DataLoaderAdapter` that will iterate and preprocess on process 0 only, then dispatch on each process
+    their part of the batch.
 
     Args:
         split_batches (`bool`, *optional*, defaults to `False`):
@@ -916,8 +920,8 @@ def prepare_data_loader(
             `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
         use_stateful_dataloader (`bool`, *optional*, defaults to `False`):
             "If set to true, the dataloader prepared by the Accelerator will be backed by "
-            "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires a version" 
-            " of `torchdata` with StatefulDataLoader to be installed."
+            "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
+            This requires a version" " of `torchdata` with StatefulDataLoader to be installed."
 
 
     Returns:

@@ -570,7 +570,7 @@ class Accelerator:
     @property
     def non_blocking(self):
         return self.dataloader_config.non_blocking
-    
+
     @property
     def use_stateful_dataloader(self):
         return self.dataloader_config.use_stateful_dataloader
@@ -1589,9 +1589,13 @@ class Accelerator:
 
         deepspeed_plugin = self.state.deepspeed_plugin
 
-        is_dataloader_present = any((isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter)) for obj in args)
+        is_dataloader_present = any(
+            (isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter)) for obj in args
+        )
         result = [
-            self._prepare_one(obj, first_pass=True) if (isinstance(obj, torch.utils.data.DataLoader or isinstance(obj, DataLoaderAdapter))) else obj
+            self._prepare_one(obj, first_pass=True)
+            if (isinstance(obj, torch.utils.data.DataLoader or isinstance(obj, DataLoaderAdapter)))
+            else obj
             for obj in args
         ]
 
@@ -1842,7 +1846,9 @@ class Accelerator:
         scheduler = None
         batch_data = None
         for obj in args:
-            if (isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter)) and batch_data is None:
+            if (
+                isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter)
+            ) and batch_data is None:
                 batch_data = next(iter(obj))
             elif isinstance(obj, torch.nn.Module):
                 model = obj
@@ -1871,7 +1877,7 @@ class Accelerator:
         counter = 0
         result = []
         for obj in args:
-            if (isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter)):
+            if isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter):
                 result.append(megatron_lm_prepare_data_loader(self, obj))
                 counter += 1
             elif isinstance(obj, MegatronLMDummyDataLoader):
