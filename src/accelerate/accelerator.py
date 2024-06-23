@@ -103,7 +103,7 @@ from .utils import (
     save_fsdp_optimizer,
     wait_for_everyone,
 )
-from .utils.constants import FSDP_PYTORCH_VERSION
+from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_NAME
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -3367,7 +3367,7 @@ class Accelerator:
     def profile(self, profile_handler: ProfileKwargs | None = None):
         """
         Will profile the code inside the context manager. The profile will be saved to a Chrome Trace file if
-        `profile_handler.json_trace_path` is set.
+        `profile_handler.output_trace_dir` is set.
 
         A different `profile_handler` can be passed in to override the one set in the `Accelerator` object.
 
@@ -3409,7 +3409,7 @@ class Accelerator:
         from accelerate import Accelerator
         from accelerate.utils import ProfileKwargs
 
-        kwargs = ProfileKwargs(json_trace_path="profile.json")
+        kwargs = ProfileKwargs(output_trace_dir="output_trace")
         accelerator = Accelerator(kwarg_handler=[kwargs])
         with accelerator.profile():
             train()
@@ -3421,8 +3421,13 @@ class Accelerator:
         with profile_handler.build() as profiler:
             yield profiler
 
-        if self.is_main_process and profile_handler.json_trace_path is not None:
-            profiler.export_chrome_trace(profile_handler.json_trace_path)
+        if profile_handler.output_trace_dir is None:
+            return
+
+        os.makedirs(profile_handler.output_trace_dir, exist_ok=True)
+        profiler.export_chrome_trace(
+            os.path.join(profile_handler.output_trace_dir, f"{PROFILE_NAME}_{self.process_index}.json")
+        )
         self.wait_for_everyone()
 
     @property

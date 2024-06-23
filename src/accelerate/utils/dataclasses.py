@@ -399,7 +399,7 @@ class ProfileKwargs(KwargsHandler):
             Use formula to estimate the FLOPS of specific operators
         with_modules (`bool`, *optional*, default to `False`):
             Record module hierarchy (including function names) corresponding to the callstack of the op.
-        json_trace_path (`str`, *optional*, default to `None`):
+        output_trace_dir (`str`, *optional*, default to `None`):
             Exports the collected trace in Chrome JSON format. Chrome use 'chrome://tracing' view json file. Defaults
             to None, which means profiling does not store json files.
     """
@@ -412,7 +412,7 @@ class ProfileKwargs(KwargsHandler):
     with_stack: bool = False
     with_flops: bool = False
     with_modules: bool = False
-    json_trace_path: Optional[str] = None
+    output_trace_dir: Optional[str] = None
 
     def _get_profiler_activity(self, activity: ProfilerActivity) -> List[torch.profiler.ProfilerActivity]:
         """Get the profiler activity from the string.

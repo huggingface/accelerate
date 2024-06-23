@@ -125,7 +125,7 @@ def training_function(config, args):
         record_shapes=args.record_shapes,
         profile_memory=args.profile_memory,
         with_flops=args.with_flops,
-        json_trace_path=args.json_trace_path,
+        output_trace_dir=args.output_trace_dir,
     )
     # Initialize accelerator
     accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, kwargs_handlers=[profile_kwargs])
@@ -239,7 +239,7 @@ def main():
     )
     # New Code #
     parser.add_argument(
-        "--json_trace_path",
+        "--output_trace_dir",
         type=str,
         default=None,
         help="If passed, will save a json trace to the specified path.",

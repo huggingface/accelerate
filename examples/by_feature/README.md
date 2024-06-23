@@ -111,11 +111,11 @@ Arguments available:
 - `--profile_memory`: If passed, profiles memory usage.
 - `--with_stack`: If passed, profiles stack traces.
 - `--with_flops`: If passed, profiles floating point operations (FLOPS).
-- `--json_trace_path`: If specified, saves the profiling trace to the given path in JSON format.
+- `--output_trace_dir`: If specified, saves the profiling trace to the given path in JSON format.
 - `--cpu`: If passed, trains on the CPU instead of GPU.
 
 These arguments should be added at the end of any method for starting the Python script (such as `python`, `accelerate launch`, `python -m torchrun`), such as:
 
 ```bash
-accelerate launch ./profiler.py --record_shapes --profile_memory --with_flops --json_trace_path "profiler.json"
+accelerate launch ./profiler.py --record_shapes --profile_memory --with_flops --output_trace_dir "profiler.json"
 ```
