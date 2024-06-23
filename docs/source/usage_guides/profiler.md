@@ -14,13 +14,15 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-## Profiler
+# Profiler
 
 Profiler is a tool that allows the collection of performance metrics during training and inference. Profiler’s context manager API can be used to better understand what model operators are the most expensive, examine their input shapes and stack traces, study device kernel activity, and visualize the execution trace. It provides insights into the performance of your model, allowing you to optimize and improve it.
 
 This guide explains how to use PyTorch Profiler to measure the time and memory consumption of the model’s operators and how to integrate this with 🤗 Accelerate. We will cover various use cases and provide examples for each.
 
-### Using profiler to analyze execution time
+## Using profiler to analyze execution time
+
+Profiler allows one to check which operators were called during the execution of a code range wrapped with a profiler context manager.
 
 Let’s see how we can use profiler to analyze the execution time:
 
@@ -90,11 +92,81 @@ The resulting table output (omitting some columns):
 Self CPU time total: 67.016ms
 ```
 
+To get a finer granularity of results and include operator input shapes, pass `group_by_input_shape=True` (note: this requires running the profiler with `record_shapes=True`):
+
+```python
+print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=10))
+```
+
+## Using profiler to analyze memory consumption
+
+Profiler can also show the amount of memory (used by the model’s tensors) that was allocated (or released) during the execution of the model’s operators. To enable memory profiling functionality pass `profile_memory=True`.
+
+<hfoptions id="memory consumption">
+<hfoption id="PyTorch">
+
+```python
+model = models.resnet18()
+inputs = torch.randn(5, 3, 224, 224)
+
+with profile(activities=[ProfilerActivity.CPU],
+        profile_memory=True, record_shapes=True) as prof:
+    model(inputs)
+
+print(prof.key_averages().table(sort_by="self_cpu_memory_usage", row_limit=10))
+```
+
+</hfoption>
+<hfoption id="Accelerate">
+
+```python
+model = models.resnet18()
+inputs = torch.randn(5, 3, 224, 224)
+
+profile_kwargs = ProfileKwargs(
+    activities=["cpu"],
+    profile_memory=True,
+    record_shapes=True
+)
+
+accelerator = Accelerator(cpu=True, kwargs_handlers=[profile_kwargs])
+model = accelerator.prepare(model)
+
+with accelerator.profile() as prof:
+    model(inputs)
+
+print(prof.key_averages().table(sort_by="self_cpu_memory_usage", row_limit=10))
+```
+
+The resulting table output (omitting some columns):
+
+```
+---------------------------------  ------------  ------------  ------------  
+                             Name       CPU Mem  Self CPU Mem    # of Calls  
+---------------------------------  ------------  ------------  ------------  
+                      aten::empty      94.85 Mb      94.85 Mb           205  
+    aten::max_pool2d_with_indices      11.48 Mb      11.48 Mb             1  
+                      aten::addmm      19.53 Kb      19.53 Kb             1  
+                       aten::mean      10.00 Kb      10.00 Kb             1  
+              aten::empty_strided         492 b         492 b             5  
+                        aten::cat         240 b         240 b             6  
+                        aten::abs         480 b         240 b             4  
+              aten::masked_select         120 b         112 b             1  
+                         aten::ne          61 b          53 b             3  
+                         aten::eq          30 b          30 b             1  
+---------------------------------  ------------  ------------  ------------  
+Self CPU time total: 69.332ms
+```
+
+</hfoption>
+</hfoption>
+
+
 ## Exporting chrome trace
 
 You can examine the sequence of profiled operators and CUDA kernels in Chrome trace viewer (`chrome://tracing`):
 
-![exporting](https://pytorch.org/tutorials/_images/trace_img.png)
+![exporting](../imgs/profile_export.png)
 
 <hfoptions id="exporting chrome trace">
 <hfoption id="PyTorch">
@@ -195,64 +267,14 @@ with accelerator.profile() as prof:
 </hfoption>
 </hfoption>
 
-## Additional Arguments
+## FLOPS
 
-### Stack Traces
-
-Enabling stack tracing can provide more detailed information about where time is being spent in your code.
-
-<hfoptions id="stack traces">
-<hfoption id="PyTorch">
-
-```python
-with profile(
-    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-    with_stack=True
-) as prof:
-    model(inputs)
-
-print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
-```
-
-The resulting table output (omitting some columns):
-
-```
--------------------------------------------------------  ------------  ------------  
-                                                   Name      Self CPU     Self CUDA  
--------------------------------------------------------  ------------  ------------  
-                                aten::cudnn_convolution     136.164ms       2.916ms  
-cudnn_infer_maxwell_scudnn_winograd_128x128_ldg1_ldg...       0.000us       1.703ms  
--------------------------------------------------------  ------------  ------------  
-Self CPU time total: 294.445ms
-Self CUDA time total: 4.100ms
-```
-
-</hfoption>
-<hfoptions id="Accelerate">
-
-```python
-profile_kwargs = ProfileKwargs(
-    with_stack=True
-)
-accelerator = Accelerator(kwargs_handlers=[profile_kwargs])
-
-with accelerator.profile() as prof:
-    model(inputs)
-
-print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
-```
-
-</hfoption>
-</hfoption>
-
-### FLOPS
+Use formula to estimate the FLOPs (floating point operations) of specific operators (matrix multiplication and 2D convolution).
 
 To measure floating-point operations (FLOPS):
 
 <hfoptions id="FLOPS">
-<hfoption
-
- id="PyTorch">
+<hfoption id="PyTorch">
 
 ```python
 with profile(
