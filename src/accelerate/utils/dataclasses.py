@@ -414,14 +414,15 @@ class ProfileKwargs(KwargsHandler):
     with_modules: bool = False
     output_trace_dir: Optional[str] = None
 
-    def _get_profiler_activity(self, activity: ProfilerActivity) -> List[torch.profiler.ProfilerActivity]:
+    def _get_profiler_activity(self, activity: ProfilerActivity) -> torch.profiler.ProfilerActivity:
         """Get the profiler activity from the string.
 
         Args:
             activity (str): The profiler activity name.
 
         Returns:
-            List[torch.profiler.ProfilerActivity]: The profiler activity."""
+            torch.profiler.ProfilerActivity: The profiler activity.
+        """
 
         profiler_activity_map: dict[str, torch.profiler.ProfilerActivity] = {
             "cpu": torch.profiler.ProfilerActivity.CPU,
