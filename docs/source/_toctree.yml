@@ -60,6 +60,8 @@
       title: Apple M1 GPUs
     - local: usage_guides/ipex
       title: IPEX training with CPU
+    - local: usage_guides/profiler
+      title: Profiler
     title: Training
   - isExpanded: true
     sections:

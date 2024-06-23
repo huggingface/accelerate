@@ -382,7 +382,7 @@ class ProfileKwargs(KwargsHandler):
             The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, or `"cuda"`.
         schedule_option (`Dict[str, int]`, *optional*, default to `None`):
             The schedule option to use for the profiler. Available keys are `wait`, `warmup`, `active`, `repeat` and
-            `skip_first` The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the
+            `skip_first`. The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the
             warmup for the next `warmup` steps, then do the active recording for the next `active` steps and then
             repeat the cycle starting with `wait` steps. The optional number of cycles is specified with the `repeat`
             parameter, the zero value means that the cycles will continue until the profiling is finished.
@@ -422,10 +422,17 @@ class ProfileKwargs(KwargsHandler):
 
         Returns:
             List[torch.profiler.ProfilerActivity]: The profiler activity."""
-        if activity := activity.upper() in torch.profiler.ProfilerActivity.__members__:
-            return torch.profiler.ProfilerActivity[activity]
-        else:
+
+        profiler_activity_map: dict[str, torch.profiler.ProfilerActivity] = {
+            "cpu": torch.profiler.ProfilerActivity.CPU,
+            "xpu": torch.profiler.ProfilerActivity.XPU,
+            "mita": torch.profiler.ProfilerActivity.MTIA,
+            "cuda": torch.profiler.ProfilerActivity.CUDA,
+        }
+
+        if activity not in profiler_activity_map:
             raise ValueError(f"Invalid profiler activity: {activity}")
+        return profiler_activity_map[activity]
 
     def build(self) -> torch.profiler.profile:
         """
