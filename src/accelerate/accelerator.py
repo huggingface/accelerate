@@ -3381,18 +3381,15 @@ class Accelerator:
         ```python
         # Profile with default settings
         from accelerate import Accelerator
+        from accelerate.utils import ProfileKwargs
 
         accelerator = Accelerator()
         with accelerator.profile() as prof:
             train()
-        print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
+        accelerator.print(prof.key_averages().table())
 
 
-        # Profile with custom callalbe handler
-        from accelerate import Accelerator
-        from accelerate.utils import ProfileKwargs
-
-
+        # Profile with the custom handler
         def custom_handler(prof):
             print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
 
@@ -3405,10 +3402,7 @@ class Accelerator:
                 prof.step()
 
 
-        # Profile with chrome trace file
-        from accelerate import Accelerator
-        from accelerate.utils import ProfileKwargs
-
+        # Profile and export to Chrome Trace
         kwargs = ProfileKwargs(output_trace_dir="output_trace")
         accelerator = Accelerator(kwarg_handler=[kwargs])
         with accelerator.profile():
