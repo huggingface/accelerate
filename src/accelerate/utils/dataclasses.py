@@ -442,11 +442,16 @@ class ProfileKwargs(KwargsHandler):
         Returns:
             torch.profiler.profile: The profiler object.
         """
+        activities: Optional[List[ProfilerActivity]] = None
+        if self.activities is not None:
+            activities = [self._get_profiler_activity(activity) for activity in self.activities]
+        schedule: Optional[torch.profiler.schedule] = None
+        if self.schedule_option is not None:
+            schedule = torch.profiler.schedule(**self.schedule_option)
+
         return torch.profiler.profile(
-            activities=[self._get_profiler_activity(activity) for activity in self.activities]
-            if self.activities is not None
-            else None,
-            schedule=torch.profiler.schedule(**self.schedule_option) if self.schedule_option is not None else None,
+            activities=activities,
+            schedule=schedule,
             on_trace_ready=self.on_trace_ready,
             record_shapes=self.record_shapes,
             profile_memory=self.profile_memory,
