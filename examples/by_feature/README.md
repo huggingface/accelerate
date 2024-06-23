@@ -100,7 +100,7 @@ These arguments should be added at the end of any method for starting the python
 accelerate launch ./ddp_comm_hook.py --mixed_precision fp16 --ddp_comm_hook power_sgd
 ```
 
-### Profile (`profile.py`)
+### Profiler (`profiler.py`)
 
 - Shows how to use the profiling capabilities of `Accelerate` to profile PyTorch models during training.
 - Uses the `ProfileKwargs` handler to customize profiling options, including activities, scheduling, and additional profiling options.
@@ -117,5 +117,5 @@ Arguments available:
 These arguments should be added at the end of any method for starting the Python script (such as `python`, `accelerate launch`, `python -m torchrun`), such as:
 
 ```bash
-accelerate launch ./profile.py --record_shapes --profile_memory --with_stack --with_flops --json_trace_path "profile.json" --cpu
+accelerate launch ./profiler.py --record_shapes --profile_memory --with_flops --json_trace_path "profiler.json"
 ```

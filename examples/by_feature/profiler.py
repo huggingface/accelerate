@@ -124,7 +124,6 @@ def training_function(config, args):
     profile_kwargs = ProfileKwargs(
         record_shapes=args.record_shapes,
         profile_memory=args.profile_memory,
-        with_stack=args.with_stack,
         with_flops=args.with_flops,
         json_trace_path=args.json_trace_path,
     )
@@ -168,25 +167,25 @@ def training_function(config, args):
     # Now we train the model
     for epoch in range(num_epochs):
         model.train()
-        for step, batch in enumerate(train_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
-            # We use the new `accumulate` context manager to perform gradient accumulation
-            # New Code #
-            with accelerator.accumulate(model), accelerator.profile() as prof:
-                output = model(**batch)
-                loss = output.loss
-                accelerator.backward(loss)
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
-
-            # New Code #
-            print(
-                prof.key_averages().table(
-                    sort_by="self_cpu_time_total" if args.cpu else "self_cuda_time_total", row_limit=-1
-                )
+        # New Code #
+        with accelerator.profile() as prof:
+            for step, batch in enumerate(train_dataloader):
+                # We could avoid this line since we set the accelerator with `device_placement=True`.
+                batch.to(accelerator.device)
+                # We use the new `accumulate` context manager to perform gradient accumulation
+                with accelerator.accumulate(model):
+                    output = model(**batch)
+                    loss = output.loss
+                    accelerator.backward(loss)
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
+        # New Code #
+        accelerator.print(
+            prof.key_averages().table(
+                sort_by="self_cpu_time_total" if args.cpu else "self_cuda_time_total", row_limit=-1
             )
+        )
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
@@ -222,7 +221,6 @@ def main():
         "--record_shapes",
         action="store_true",
         default=False,
-        type=bool,
         help="If passed, will record shapes for profiling.",
     )
     # New Code #
@@ -230,29 +228,19 @@ def main():
         "--profile_memory",
         action="store_true",
         default=False,
-        type=bool,
         help="If passed, will profile memory.",
-    )
-    # New Code #
-    parser.add_argument(
-        "--with_stack",
-        action="store_true",
-        default=False,
-        type=bool,
-        help="If passed, will profile stack.",
     )
     # New Code #
     parser.add_argument(
         "--with_flops",
         action="store_true",
         default=False,
-        type=bool,
         help="If passed, will profile flops.",
     )
     # New Code #
     parser.add_argument(
         "--json_trace_path",
-        type=str | None,
+        type=str,
         default=None,
         help="If passed, will save a json trace to the specified path.",
     )
