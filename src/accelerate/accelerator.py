@@ -103,7 +103,7 @@ from .utils import (
     save_fsdp_optimizer,
     wait_for_everyone,
 )
-from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_NAME
+from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -3426,7 +3426,9 @@ class Accelerator:
 
         os.makedirs(profile_handler.output_trace_dir, exist_ok=True)
         profiler.export_chrome_trace(
-            os.path.join(profile_handler.output_trace_dir, f"{PROFILE_NAME}_{self.process_index}.json")
+            os.path.join(
+                profile_handler.output_trace_dir, PROFILE_PATTERN_NAME.format(suffix=f"_{self.process_index}")
+            )
         )
         self.wait_for_everyone()
 
