@@ -410,20 +410,21 @@ class StatefulDataLoaderTester(unittest.TestCase):
     @require_torchdata_stateful_dataloader
     def test_skip_data_loader(self):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
-
+        assert isinstance(dataloader, StatefulDataLoader)
         assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
     @require_torchdata_stateful_dataloader
     def test_skip_first_batches(self):
         dataloader = StatefulDataLoader(list(range(16)), batch_size=4)
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
-
+        assert isinstance(new_dataloader, StatefulDataLoader)
         assert [t.tolist() for t in new_dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
     @require_torchdata_stateful_dataloader
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4, use_stateful_dataloader=True)
-
+        assert dataloader.use_stateful_dataloader
+        assert isinstance(dataloader, StatefulDataLoader)
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
 
@@ -435,7 +436,7 @@ class StatefulDataLoaderTester(unittest.TestCase):
     def test_end_of_dataloader_dispatcher(self):
         Accelerator()
         dataloader = DataLoaderDispatcher(range(16), batch_size=4, use_stateful_dataloader=True)
-
+        assert isinstance(dataloader, StatefulDataLoader)
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
 
