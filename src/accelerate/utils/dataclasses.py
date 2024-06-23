@@ -431,7 +431,7 @@ class ProfileKwargs(KwargsHandler):
         }
 
         if activity not in profiler_activity_map:
-            raise ValueError(f"Invalid profiler activity: {activity}")
+            raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
         return profiler_activity_map[activity]
 
     def build(self) -> torch.profiler.profile:
