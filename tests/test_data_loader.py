@@ -27,17 +27,15 @@ from accelerate.data_loader import (
     SkipDataLoader,
     skip_first_batches,
 )
-
-from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
 from accelerate.test_utils.testing import require_torchdata_stateful_dataloader
+from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
+
 
 if is_torchdata_stateful_dataloader_available():
     from torchdata.stateful_dataloader import (
         StatefulDataLoader,
     )
-    from accelerate.data_loader import (
-        DataLoaderAdapter,
-    )
+
 
 class RandomIterableDataset(IterableDataset):
     # For testing, an iterable dataset of random length
@@ -409,7 +407,6 @@ class DataLoaderTester(unittest.TestCase):
 
 
 class StatefulDataLoaderTester(unittest.TestCase):
-
     @require_torchdata_stateful_dataloader
     def test_skip_data_loader(self):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
