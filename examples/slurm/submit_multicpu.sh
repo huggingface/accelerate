@@ -10,7 +10,7 @@
 ######################
 ### Set enviroment ###
 ######################
-source activateEnviroment.sh
+source activateEnvironment.sh
 
 ######################
 #### Set network #####
