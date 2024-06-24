@@ -31,6 +31,8 @@
       title: Model quantization
     - local: usage_guides/tracking
       title: Experiment trackers
+    - local: usage_guides/profiler
+      title: Profiler
     - local: usage_guides/checkpoint
       title: Save and load training states
     - local: basic_tutorials/troubleshooting
@@ -60,8 +62,6 @@
       title: Apple M1 GPUs
     - local: usage_guides/ipex
       title: IPEX training with CPU
-    - local: usage_guides/profiler
-      title: Profiler
     title: Training
   - isExpanded: true
     sections:

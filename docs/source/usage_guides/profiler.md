@@ -138,6 +138,9 @@ with accelerator.profile() as prof:
 print(prof.key_averages().table(sort_by="self_cpu_memory_usage", row_limit=10))
 ```
 
+</hfoption>
+</hfoptions>
+
 The resulting table output (omitting some columns):
 
 ```
@@ -157,9 +160,6 @@ The resulting table output (omitting some columns):
 ---------------------------------  ------------  ------------  ------------  
 Self CPU time total: 69.332ms
 ```
-
-</hfoption>
-</hfoptions>
 
 
 ## Exporting chrome trace
@@ -301,6 +301,9 @@ with accelerator.profile() as prof:
 print(prof.key_averages().table(sort_by="flops", row_limit=10))
 ```
 
+</hfoption>
+</hfoptions>
+
 The resulting table output (omitting some columns):
 
 ```
@@ -322,8 +325,7 @@ Self CPU time total: 21.938ms
 Self CUDA time total: 4.165ms
 ```
 
-</hfoption>
-</hfoptions>
+
 
 ## Conclusion and Further Information
 
