@@ -41,7 +41,6 @@ else
     --num_processes $((SLURM_NNODES * ${INSTANCES_PER_NODE})) \
     --num_machines $SLURM_NNODES \
     --rdzv_backend c10d \
-    --num_cpu_threads_per_process $OMP_NUM_THREADS \
     --main_process_ip $head_node_ip \
     --main_process_port $MASTER_PORT \
     --mpirun_hostfile $HOSTFILE_PATH \
@@ -49,10 +48,11 @@ else
 fi
 
 # This step is necessary because accelerate launch does not handle multiline arguments properly
-export SCRIPT="/accelerate/examples/complete_nlp_example.py"
+export ACCELERATE_DIR="${ACCELERATE_DIR:-/accelerate}"
+export SCRIPT="${ACCELERATE_DIR}/examples/complete_nlp_example.py"
 export SCRIPT_ARGS=" \
     --cpu \
-    --output_dir /accelerate/examples/output \
+    --output_dir ${ACCELERATE_DIR}/examples/output \
     "
     
 # This step is necessary because accelerate launch does not handle multiline arguments properly
