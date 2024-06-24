@@ -70,7 +70,7 @@ print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 ```
 
 </hfoption>
-</hfoption>
+</hfoptions>
 
 The resulting table output (omitting some columns):
 
@@ -159,7 +159,7 @@ Self CPU time total: 69.332ms
 ```
 
 </hfoption>
-</hfoption>
+</hfoptions>
 
 
 ## Exporting chrome trace
@@ -182,7 +182,7 @@ prof.export_chrome_trace("trace.json")
 ```
 
 </hfoption>
-<hfoptions id="Accelerate">
+<hfoption id="Accelerate">
 
 ```python
 profile_kwargs = ProfileKwargs(
@@ -200,7 +200,7 @@ with accelerator.profile() as prof:
 ```
 
 </hfoption>
-</hfoption>
+</hfoptions>
 
 ## Using Profiler to Analyze Long-Running Jobs
 
@@ -241,7 +241,7 @@ with profile(
 ```
 
 </hfoption>
-<hfoptions id="Accelerate">
+<hfoption id="Accelerate">
 
 ```python
 def trace_handler(p):
@@ -265,7 +265,7 @@ with accelerator.profile() as prof:
 ```
 
 </hfoption>
-</hfoption>
+</hfoptions>
 
 ## FLOPS
 
@@ -287,7 +287,7 @@ print(prof.key_averages().table(sort_by="flops", row_limit=10))
 ```
 
 </hfoption>
-<hfoptions id="Accelerate">
+<hfoption id="Accelerate">
 
 ```python
 profile_kwargs = ProfileKwargs(
@@ -323,7 +323,7 @@ Self CUDA time total: 4.165ms
 ```
 
 </hfoption>
-</hfoption>
+</hfoptions>
 
 ## Conclusion and Further Information
 
