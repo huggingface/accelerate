@@ -396,7 +396,7 @@ class DataLoaderStateMixin:
         self.gradient_state._remove_dataloader(self)
 
 
-class DataLoaderAdapter:
+class DataLoaderAdapter(DataLoaderStateMixin):
     """
     A class which wraps around a PyTorch `DataLoader` (or variants of it) to be used with the `Accelerator`. For
     compatability reasons, this class inherits from the class it wraps around, so it can be used as a drop-in.
@@ -434,7 +434,7 @@ class DataLoaderAdapter:
             self.dl_state_dict = self.base_dataloader.state_dict()
 
 
-class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
+class DataLoaderShard(DataLoaderAdapter):
     """
     Subclass of `DataLoaderAdapter` that will deal with device placement and current distributed setup.
 
@@ -609,7 +609,7 @@ if is_torch_xla_available():
             return self._loader.batch_sampler
 
 
-class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
+class DataLoaderDispatcher(DataLoaderAdapter):
     """
     Subclass of `DataLoaderAdapter` that will iterate and preprocess on process 0 only, then dispatch on each process
     their part of the batch.

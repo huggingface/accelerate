@@ -34,7 +34,7 @@ import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import DataLoaderAdapter, DataLoaderDispatcher, prepare_data_loader, skip_first_batches
+from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .hooks import AlignDevicesHook
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
@@ -1178,7 +1178,7 @@ class Accelerator:
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer
         if first_pass:
-            if isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter):
+            if isinstance(obj, torch.utils.data.DataLoader):
                 return self.prepare_data_loader(obj, device_placement=device_placement)
             elif isinstance(obj, torch.nn.Module):
                 return self.prepare_model(obj, device_placement=device_placement)
@@ -1585,11 +1585,11 @@ class Accelerator:
         deepspeed_plugin = self.state.deepspeed_plugin
 
         is_dataloader_present = any(
-            (isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter)) for obj in args
+            (isinstance(obj, torch.utils.data.DataLoader)) for obj in args
         )
         result = [
             self._prepare_one(obj, first_pass=True)
-            if (isinstance(obj, torch.utils.data.DataLoader or isinstance(obj, DataLoaderAdapter)))
+            if (isinstance(obj, torch.utils.data.DataLoader))
             else obj
             for obj in args
         ]
@@ -1841,9 +1841,7 @@ class Accelerator:
         scheduler = None
         batch_data = None
         for obj in args:
-            if (
-                isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter)
-            ) and batch_data is None:
+            if isinstance(obj, torch.utils.data.DataLoader) and batch_data is None:
                 batch_data = next(iter(obj))
             elif isinstance(obj, torch.nn.Module):
                 model = obj
@@ -1872,7 +1870,7 @@ class Accelerator:
         counter = 0
         result = []
         for obj in args:
-            if isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, DataLoaderAdapter):
+            if isinstance(obj, torch.utils.data.DataLoader):
                 result.append(megatron_lm_prepare_data_loader(self, obj))
                 counter += 1
             elif isinstance(obj, MegatronLMDummyDataLoader):
