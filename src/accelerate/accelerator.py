@@ -3419,9 +3419,7 @@ class Accelerator:
 
         os.makedirs(profile_handler.output_trace_dir, exist_ok=True)
         profiler.export_chrome_trace(
-            os.path.join(
-                profile_handler.output_trace_dir, PROFILE_PATTERN_NAME.format(suffix=f"_{self.process_index}")
-            )
+            os.path.join(profile_handler.output_trace_dir, PROFILE_PATTERN_NAME.format(suffix=self.process_index))
         )
         self.wait_for_everyone()
 
