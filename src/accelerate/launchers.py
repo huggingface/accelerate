@@ -234,7 +234,6 @@ def notebook_launcher(
                         max_restarts=max_restarts,
                         monitor_interval=monitor_interval,
                         start_method="fork",
-                        log_line_prefix_template=os.environ.get("TORCHELASTIC_LOG_LINE_PREFIX_TEMPLATE"),
                     )
                     elastic_launch(config=launch_config, entrypoint=function)(*args)
                 except ProcessRaisedException as e:
