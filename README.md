@@ -22,22 +22,12 @@ limitations under the License.
 
 <p align="center">
     <!-- Uncomment when CircleCI is set up
-    <a href="https://circleci.com/gh/huggingface/accelerate">
-        <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/master">
-    </a>
+    <a href="https://circleci.com/gh/huggingface/accelerate"><img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/master"></a>
     -->
-    <a href="https://github.com/huggingface/accelerate/blob/main/LICENSE">
-        <img alt="License" src="https://img.shields.io/github/license/huggingface/accelerate.svg?color=blue">
-    </a>
-    <a href="https://huggingface.co/docs/accelerate/index.html">
-        <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/docs/accelerate/index.html.svg?down_color=red&down_message=offline&up_message=online">
-    </a>
-    <a href="https://github.com/huggingface/accelerate/releases">
-        <img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/accelerate.svg">
-    </a>
-    <a href="https://github.com/huggingface/accelerate/blob/main/CODE_OF_CONDUCT.md">
-        <img alt="Contributor Covenant" src="https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg">
-    </a>
+    <a href="https://github.com/huggingface/accelerate/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/huggingface/accelerate.svg?color=blue"></a>
+    <a href="https://huggingface.co/docs/accelerate/index.html"><img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/docs/accelerate/index.html.svg?down_color=red&down_message=offline&up_message=online"></a>
+    <a href="https://github.com/huggingface/accelerate/releases"><img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/accelerate.svg"></a>
+    <a href="https://github.com/huggingface/accelerate/blob/main/CODE_OF_CONDUCT.md"><img alt="Contributor Covenant" src="https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg"></a>
 </p>
 
 <h3 align="center">

@@ -63,8 +63,10 @@ def get_backend():
         return "xla", torch.cuda.device_count(), torch.cuda.memory_allocated
     elif is_cuda_available():
         return "cuda", torch.cuda.device_count(), torch.cuda.memory_allocated
-    elif is_mps_available():
+    elif is_mps_available(min_version="2.0"):
         return "mps", 1, torch.mps.current_allocated_memory()
+    elif is_mps_available():
+        return "mps", 1, 0
     elif is_mlu_available():
         return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
     elif is_npu_available():
@@ -97,7 +99,7 @@ def get_launch_command(**kwargs) -> list:
     return command
 
 
-DEFAULT_LAUNCH_COMMAND = get_launch_command(num_processes=device_count)
+DEFAULT_LAUNCH_COMMAND = get_launch_command(num_processes=device_count, monitor_interval=0.1)
 
 
 def parse_flag_from_env(key, default=False):

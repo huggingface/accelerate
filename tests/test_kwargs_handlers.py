@@ -24,6 +24,7 @@ from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
     require_non_xpu,
@@ -106,6 +107,11 @@ class KwargsHandlerTester(unittest.TestCase):
             dynamo_plugin_kwargs = TorchDynamoPlugin().to_kwargs()
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
+
+    @require_multi_device
+    def test_ddp_comm_hook(self):
+        cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]
+        execute_subprocess_async(cmd)
 
 
 def main():

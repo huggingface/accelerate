@@ -223,6 +223,7 @@ def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: st
     """
     state_dict = {}
     save_path = Path(save_path)
+    save_path.mkdir(exist_ok=True)
     dist_cp_format_utils._load_state_dict(
         state_dict,
         storage_reader=dist_cp.FileSystemReader(checkpoint_dir),

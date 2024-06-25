@@ -54,6 +54,7 @@ EXCLUDE_EXAMPLES = [
     "deepspeed_with_config_support.py",
     "megatron_lm_gpt_pretraining.py",
     "early_stopping.py",
+    "ddp_comm_hook.py",
 ]
 
 
@@ -245,6 +246,11 @@ class FeatureExamplesTests(TempDirTestCase):
 
     def test_early_stopping(self):
         testargs = ["examples/by_feature/early_stopping.py"]
+        run_command(self.launch_args + testargs)
+
+    @require_multi_gpu
+    def test_ddp_comm_hook(self):
+        testargs = ["examples/by_feature/ddp_comm_hook.py", "--ddp_comm_hook", "fp16"]
         run_command(self.launch_args + testargs)
 
     @require_multi_gpu

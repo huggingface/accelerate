@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import dataclasses
 import math
 import os
 from abc import ABC
@@ -58,7 +57,7 @@ if is_megatron_lm_available():
     from megatron.core.distributed import DistributedDataParallel as LocalDDP
     from megatron.core.distributed import finalize_model_grads
     from megatron.core.enums import ModelType
-    from megatron.core.optimizer import OptimizerConfig, get_megatron_optimizer
+    from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_model_parallel_src_rank
     from megatron.core.pipeline_parallel import get_forward_backward_func
     from megatron.core.utils import get_model_config
     from megatron.data.dataset_utils import build_train_valid_test_datasets
@@ -66,12 +65,14 @@ if is_megatron_lm_available():
     from megatron.initialize import (
         _compile_dependencies,
         _init_autoresume,
+        _initialize_distributed,
         _set_random_seed,
         set_jit_fusion_options,
         write_args_to_tensorboard,
     )
     from megatron.model import BertModel, Float16Module, GPTModel, T5Model
     from megatron.model.classification import Classification
+    from megatron.optimizer import get_megatron_optimizer
     from megatron.text_generation.communication import broadcast_int_list, broadcast_tensor
     from megatron.text_generation.generation import (
         beam_search_and_return_on_first_stage,
@@ -105,7 +106,7 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             "The Megatron LM model weights are initialized at random in `accelerator.prepare`. "
             "Please use `accelerator.load_checkpoint` to load a pre-trained checkpoint matching the distributed setup."
         )
-    config = core_transformer_config_from_args(get_args())
+    config = core_transformer_config_from_args(args)
     if args.model_type_name == "bert":
         if args.pretraining_flag:
             num_tokentypes = 2 if args.bert_binary_head else 0
@@ -127,7 +128,11 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             )
     elif args.model_type_name == "gpt":
         model = GPTModel(
-            num_tokentypes=0, parallel_output=True, pre_process=pre_process, post_process=post_process, config=config
+            config=config,
+            num_tokentypes=0,
+            parallel_output=True,
+            pre_process=pre_process,
+            post_process=post_process,
         )
     elif args.model_type_name == "t5":
         model = T5Model(
@@ -195,6 +200,12 @@ class MegatronLMDummyDataLoader:
     def set_megatron_data_args(self):
         args = get_args()
         for key, value in self.dataset_args.items():
+            old_value = getattr(args, key, "")
+            if old_value != value:
+                print(
+                    f"WARNING: MegatronLMDummyDataLoader overriding arguments for "
+                    f"{key}:{old_value} with {key}:{value}"
+                )
             setattr(args, key, value)
 
     def get_train_valid_test_datasets_provider(self, accelerator):
@@ -235,6 +246,26 @@ class MegatronLMDummyDataLoader:
 
         if accelerator.state.megatron_lm_plugin.custom_megatron_datasets_provider_function is not None:
             return accelerator.state.megatron_lm_plugin.custom_megatron_datasets_provider_function
+        try:
+            args = get_args()
+            # Use '--no-use-pep517 -e' to pip install nvidia's megatron from source
+            if args.model_type_name == "bert":
+                from pretrain_bert import train_valid_test_datasets_provider
+
+                train_valid_test_datasets_provider.is_distributed = True
+                return train_valid_test_datasets_provider
+            elif args.model_type_name == "gpt":
+                from pretrain_gpt import train_valid_test_datasets_provider
+
+                train_valid_test_datasets_provider.is_distributed = True
+                return train_valid_test_datasets_provider
+            elif args.model_type_name == "t5":
+                from pretrain_t5 import train_valid_test_datasets_provider
+
+                train_valid_test_datasets_provider.is_distributed = True
+                return train_valid_test_datasets_provider
+        except ImportError:
+            pass
         return train_valid_test_datasets_provider
 
     def build_train_valid_test_data_iterators(self, accelerator):
@@ -259,6 +290,24 @@ class MegatronLMDummyDataLoader:
         return train_data_iterator, valid_data_iterator, test_data_iterator
 
 
+def _handle_megatron_data_iterator(accelerator, data_iterator):
+    class DummyMegatronDataloader:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return {}
+
+    is_data_iterator_empty = data_iterator is None
+    is_src_data_iterator_empty = torch.tensor(is_data_iterator_empty, dtype=torch.bool, device=accelerator.device)
+    torch.distributed.broadcast(
+        is_src_data_iterator_empty, get_tensor_model_parallel_src_rank(), group=get_tensor_model_parallel_group()
+    )
+    if not is_src_data_iterator_empty and is_data_iterator_empty:
+        return DummyMegatronDataloader()
+    return data_iterator
+
+
 def prepare_data_loader(accelerator, dataloader):
     accelerator.print("Preparing dataloader")
     args = get_args()
@@ -280,12 +329,15 @@ def prepare_data_loader(accelerator, dataloader):
             kwargs["batch_size"] = micro_batch_size
 
         dataloader = torch.utils.data.DataLoader(dataloader.dataset, **kwargs)
+        # split_batches:
+        # Megatron only needs to fetch different data between different dp groups,
+        # and does not need to split the data within the dp group.
         return prepare_data_loader(
             dataloader,
             accelerator.device,
             num_processes=mpu.get_data_parallel_world_size(),
             process_index=mpu.get_data_parallel_rank(),
-            split_batches=accelerator.split_batches,
+            split_batches=False,
             put_on_device=True,
             rng_types=accelerator.rng_types.copy(),
             dispatch_batches=accelerator.dispatch_batches,
@@ -300,6 +352,9 @@ def prepare_data_loader(accelerator, dataloader):
         else:
             args.consumed_train_samples, args.consumed_valid_samples, args.consumed_test_samples = 0, 0, 0
         args.micro_batch_size = args.micro_batch_size * args.num_micro_batches
+        # In order to be compatible with data in transform format,
+        # it needs to increase the size of mbs first,
+        # and then split the large batch data into some mbs.
         (
             train_data_iterator,
             valid_data_iterator,
@@ -307,17 +362,13 @@ def prepare_data_loader(accelerator, dataloader):
         ) = dataloader.build_train_valid_test_data_iterators(accelerator)
         args.micro_batch_size = args.micro_batch_size // args.num_micro_batches
 
-        class DummyMegatronDataloader:
-            def __iter__(self):
-                return self
-
-            def __next__(self):
-                return {}
-
-        if train_data_iterator is None:
-            train_data_iterator = DummyMegatronDataloader()
-            valid_data_iterator = DummyMegatronDataloader()
-            test_data_iterator = DummyMegatronDataloader()
+        train_data_iterator = _handle_megatron_data_iterator(
+            accelerator=accelerator, data_iterator=train_data_iterator
+        )
+        valid_data_iterator = _handle_megatron_data_iterator(
+            accelerator=accelerator, data_iterator=valid_data_iterator
+        )
+        test_data_iterator = _handle_megatron_data_iterator(accelerator=accelerator, data_iterator=test_data_iterator)
 
         return train_data_iterator, valid_data_iterator, test_data_iterator
 
@@ -342,13 +393,7 @@ class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
 def prepare_optimizer(accelerator, model):
     accelerator.print("Preparing optimizer")
     args = get_args()
-    kwargs = {}
-    for f in dataclasses.fields(OptimizerConfig):
-        if hasattr(args, f.name):
-            kwargs[f.name] = getattr(args, f.name)
-    config = OptimizerConfig(**kwargs)
-    optimizer = get_megatron_optimizer(config, model, args.no_wd_decay_cond, args.scale_lr_cond, args.lr_mult)
-    return optimizer
+    return get_megatron_optimizer(model, args.no_wd_decay_cond, args.scale_lr_cond, args.lr_mult)
 
 
 # scheduler utilities
@@ -402,7 +447,7 @@ class AbstractTrainStep(ABC):
     def get_forward_step_func(self):
         pass
 
-    def get_loss_func(self):
+    def get_loss_func(self, accelerator):
         pass
 
 
@@ -417,7 +462,7 @@ class BertTrainStep(AbstractTrainStep):
     def __init__(self, accelerator, args):
         super().__init__("BertTrainStep")
         self.get_batch = self.get_batch_func(accelerator, args.megatron_dataset_flag)
-        self.loss_func = self.get_loss_func(args.pretraining_flag, args.num_labels)
+        self.loss_func = self.get_loss_func(accelerator, args.pretraining_flag, args.num_labels)
         self.forward_step = self.get_forward_step_func(args.pretraining_flag, args.bert_binary_head)
         if not args.model_return_dict:
             self.model_output_class = None
@@ -477,11 +522,18 @@ class BertTrainStep(AbstractTrainStep):
         if accelerator.state.megatron_lm_plugin.custom_get_batch_function is not None:
             return accelerator.state.megatron_lm_plugin.custom_get_batch_function
         if megatron_dataset_flag:
+            try:
+                # Use '--no-use-pep517 -e' to pip install nvidia's megatron from source
+                from pretrain_bert import get_batch
+
+                return get_batch
+            except ImportError:
+                pass
             return get_batch_megatron
         else:
             return get_batch_transformer
 
-    def get_loss_func(self, pretraining_flag, num_labels):
+    def get_loss_func(self, accelerator, pretraining_flag, num_labels):
         def loss_func_pretrain(loss_mask, sentence_order, output_tensor):
             lm_loss_, sop_logits = output_tensor
 
@@ -515,6 +567,8 @@ class BertTrainStep(AbstractTrainStep):
             averaged_losses = average_losses_across_data_parallel_group([loss])
             return loss, {"loss": averaged_losses[0]}
 
+        if accelerator.state.megatron_lm_plugin.custom_loss_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_loss_function
         if pretraining_flag:
             return loss_func_pretrain
         else:
@@ -548,7 +602,7 @@ class GPTTrainStep(AbstractTrainStep):
     def __init__(self, accelerator, args):
         super().__init__("GPTTrainStep")
         self.get_batch = self.get_batch_func(accelerator, args.megatron_dataset_flag)
-        self.loss_func = self.get_loss_func()
+        self.loss_func = self.get_loss_func(accelerator)
         self.forward_step = self.get_forward_step_func()
         self.eod_token = args.padded_vocab_size - 1
         if args.vocab_file is not None:
@@ -607,11 +661,18 @@ class GPTTrainStep(AbstractTrainStep):
         if accelerator.state.megatron_lm_plugin.custom_get_batch_function is not None:
             return accelerator.state.megatron_lm_plugin.custom_get_batch_function
         if megatron_dataset_flag:
+            try:
+                # Use '--no-use-pep517 -e' to pip install nvidia's megatron from source
+                from pretrain_gpt import get_batch
+
+                return get_batch
+            except ImportError:
+                pass
             return get_batch_megatron
         else:
             return get_batch_transformer
 
-    def get_loss_func(self):
+    def get_loss_func(self, accelerator):
         args = get_args()
 
         def loss_func(loss_mask, output_tensor):
@@ -644,6 +705,8 @@ class GPTTrainStep(AbstractTrainStep):
                 output_dict.update({"logits": logits})
             return loss, output_dict
 
+        if accelerator.state.megatron_lm_plugin.custom_loss_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_loss_function
         return loss_func
 
     def get_forward_step_func(self):
@@ -669,7 +732,7 @@ class T5TrainStep(AbstractTrainStep):
     def __init__(self, accelerator, args):
         super().__init__("T5TrainStep")
         self.get_batch = self.get_batch_func(accelerator, args.megatron_dataset_flag)
-        self.loss_func = self.get_loss_func()
+        self.loss_func = self.get_loss_func(accelerator)
         self.forward_step = self.get_forward_step_func()
         if not args.model_return_dict:
             self.model_output_class = None
@@ -759,11 +822,18 @@ class T5TrainStep(AbstractTrainStep):
         if accelerator.state.megatron_lm_plugin.custom_get_batch_function is not None:
             return accelerator.state.megatron_lm_plugin.custom_get_batch_function
         if megatron_dataset_flag:
+            try:
+                # Use '--no-use-pep517 -e' to pip install nvidia's megatron from source
+                from pretrain_t5 import get_batch
+
+                return get_batch
+            except ImportError:
+                pass
             return get_batch_megatron
         else:
             return get_batch_transformer
 
-    def get_loss_func(self):
+    def get_loss_func(self, accelerator):
         def loss_func(loss_mask, output_tensor):
             lm_loss_ = output_tensor.float()
             lm_loss = torch.sum(lm_loss_.view(-1) * loss_mask.reshape(-1)) / loss_mask.sum()
@@ -773,6 +843,8 @@ class T5TrainStep(AbstractTrainStep):
 
             return loss, {"lm loss": averaged_losses[0]}
 
+        if accelerator.state.megatron_lm_plugin.custom_loss_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_loss_function
         return loss_func
 
     def get_forward_step_func(self):
@@ -790,6 +862,18 @@ class T5TrainStep(AbstractTrainStep):
             return output_tensor, partial(self.loss_func, loss_mask)
 
         return forward_step
+
+
+def finish_mpu_init():
+    # torch.distributed initialization
+    args = get_args()
+    # Pytorch distributed.
+    _initialize_distributed()
+
+    # Random seeds for reproducibility.
+    if args.rank == 0:
+        print(f"> setting random seeds to {args.seed} ...")
+    _set_random_seed(args.seed, args.data_parallel_random_init)
 
 
 # intialize megatron setup
@@ -819,37 +903,6 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     # set global args, build tokenizer, and set adlr-autoresume,
     # tensorboard-writer, and timers.
     set_global_variables(args)
-
-    # torch.distributed initialization
-    def finish_mpu_init():
-        args = get_args()
-        # Pytorch distributed.
-        device_count = torch.cuda.device_count()
-        args.rank = torch.distributed.get_rank()
-        args.world_size = torch.distributed.get_world_size()
-        if device_count > 0:
-            device = args.rank % device_count
-            if args.local_rank is not None:
-                assert args.local_rank == device, "expected local-rank to be the same as rank % device-count."
-            else:
-                args.local_rank = device
-
-            # Set the tensor model-parallel, pipeline model-parallel, and
-            # data-parallel communicators.
-            if mpu.model_parallel_is_initialized():
-                print("model parallel is already initialized")
-            else:
-                mpu.initialize_model_parallel(
-                    args.tensor_model_parallel_size,
-                    args.pipeline_model_parallel_size,
-                    args.virtual_pipeline_model_parallel_size,
-                    args.pipeline_model_parallel_split_rank,
-                )
-
-        # Random seeds for reproducibility.
-        if args.rank == 0:
-            print(f"> setting random seeds to {args.seed} ...")
-        _set_random_seed(args.seed, args.data_parallel_random_init)
 
     # Megatron's MPU is the master. Complete initialization right away.
     finish_mpu_init()
@@ -910,13 +963,11 @@ class MegatronEngine(torch.nn.Module):
         self.iteration = 0
         self.report_memory_flag = True
         self.num_floating_point_operations_so_far = 0
+        self.module_config = None
         if args.tensorboard_dir is not None:
             write_args_to_tensorboard()
 
-    def train(self):
-        for model_module in self.module:
-            model_module.train()
-
+    def get_module_config(self):
         args = get_args()
         config = get_model_config(self.module[0])
         # Setup some training config params
@@ -940,6 +991,14 @@ class MegatronEngine(torch.nn.Module):
             if len(self.module) == 1:
                 config.param_sync_func = config.param_sync_func[0]
         config.finalize_model_grads_func = finalize_model_grads
+        return config
+
+    def train(self):
+        for model_module in self.module:
+            model_module.train()
+
+        if self.module_config is None:
+            self.module_config = self.get_module_config()
 
         self.log_eval_results()
 
@@ -947,17 +1006,11 @@ class MegatronEngine(torch.nn.Module):
         for model_module in self.module:
             model_module.eval()
 
-    def train_step(self, **batch_data):
-        """
-        Training step for Megatron-LM
+        if self.module_config is None:
+            self.module_config = self.get_module_config()
 
-        Args:
-            batch_data (:obj:`dict`): The batch data to train on.
-        """
-
+    def get_batch_data_iterator(self, batch_data):
         args = get_args()
-        config = get_model_config(self.module[0])
-
         data_chunks = []
         if len(batch_data) > 0:
             if args.num_micro_batches > 1:
@@ -979,6 +1032,17 @@ class MegatronEngine(torch.nn.Module):
             )
         else:
             batch_data_iterator = iter(data_chunks) if len(batch_data) > 0 else None
+        return batch_data_iterator
+
+    def train_step(self, **batch_data):
+        """
+        Training step for Megatron-LM
+
+        Args:
+            batch_data (:obj:`dict`): The batch data to train on.
+        """
+
+        batch_data_iterator = self.get_batch_data_iterator(batch_data)
 
         loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad = train_step(
             forward_step_func=self.train_step_handler.forward_step,
@@ -986,7 +1050,7 @@ class MegatronEngine(torch.nn.Module):
             model=self.module,
             optimizer=self.optimizer,
             opt_param_scheduler=self.scheduler,
-            config=config,
+            config=self.module_config,
         )
 
         self.optimizer.skipped_iter = skipped_iter == 1
@@ -1002,19 +1066,7 @@ class MegatronEngine(torch.nn.Module):
         """
 
         args = get_args()
-        data_chunks = []
-        if args.num_micro_batches > 1:
-            for i in range(0, args.num_micro_batches):
-                data_chunks.append(
-                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
-                )
-        else:
-            data_chunks = [batch_data]
-
-        if len(self.module) > 1:
-            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
-        else:
-            batch_data_iterator = iter(data_chunks)
+        batch_data_iterator = self.get_batch_data_iterator(batch_data)
         forward_backward_func = get_forward_backward_func()
         loss_dicts = forward_backward_func(
             forward_step_func=self.train_step_handler.forward_step,
@@ -1043,8 +1095,7 @@ class MegatronEngine(torch.nn.Module):
                 else:
                     loss_reduced[key] = torch.concat(losses_reduced_for_key)
             return loss_reduced
-        else:
-            return {}
+        return {}
 
     def forward(self, **batch_data):
         # During training, we use train_step()
@@ -1097,7 +1148,7 @@ class MegatronEngine(torch.nn.Module):
                         key + "_num_iters", torch.cuda.FloatTensor([0.0])
                     ) + torch.cuda.FloatTensor([1.0])
 
-        loss = torch.tensor(0.0, device=args.local_rank)
+        loss = torch.tensor(0.0, device=torch.cuda.current_device())
         for key in loss_dict:
             if len(loss_dict[key].shape) == 0:
                 loss += loss_dict[key]
@@ -1105,7 +1156,6 @@ class MegatronEngine(torch.nn.Module):
         logits = None
         if "logits" in loss_dict:
             logits = loss_dict["logits"]
-        # loss = reduce(loss)
         if self.train_step_handler.model_output_class is not None:
             return self.train_step_handler.model_output_class(loss=loss, logits=logits)
         return loss

@@ -48,7 +48,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.31.0.dev0",
+    version="0.32.0.dev0",
     description="Accelerate",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -70,7 +70,7 @@ setup(
     },
     python_requires=">=3.8.0",
     install_requires=[
-        "numpy>=1.17",
+        "numpy>=1.17,<2.0.0",
         "packaging>=20.0",
         "psutil",
         "pyyaml",

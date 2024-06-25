@@ -230,6 +230,11 @@ def shard_checkpoint(
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
     """
+    logger.warning(
+        "Note that `shard_checkpoint` is deprecated and will be removed in  0.33.0. We recommend you using "
+        "split_torch_state_dict_into_shards from huggingface_hub library"
+    )
+
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
     sharded_state_dicts = [{}]
@@ -442,7 +447,11 @@ def set_module_tensor_to_device(
                     elif module.bias is None:
                         # if no bias exists, we can quantize right away
                         module = module.cuda(device_index)
-            elif module.__class__.__name__ == "Linear4bit" and getattr(module.weight, "quant_state", None) is None:
+            elif (
+                module.__class__.__name__ == "Linear4bit"
+                and getattr(module.weight, "quant_state", None) is None
+                and str(module.weight.device) != "meta"
+            ):
                 # quantize only if necessary
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
@@ -981,23 +990,14 @@ def get_balanced_memory(
     max_memory = get_max_memory(max_memory)
 
     if is_npu_available():
-        num_devices = len([d for d in max_memory if torch.device(d).type == "npu" and max_memory[d] > 0])
+        expected_device_type = "npu"
     elif is_mlu_available():
-        num_devices = len([d for d in max_memory if torch.device(d).type == "mlu" and max_memory[d] > 0])
+        expected_device_type = "mlu"
     elif is_xpu_available():
-        num_devices = len(
-            [
-                d
-                for d in max_memory
-                if (
-                    d != "cpu"
-                    and (torch.device(d).type == "xpu" or torch.xpu.get_device_properties(d).dev_type == "gpu")
-                )
-                and max_memory[d] > 0
-            ]
-        )
+        expected_device_type = "xpu"
     else:
-        num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+        expected_device_type = "cuda"
+    num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
 
     if num_devices == 0:
         return max_memory
@@ -1558,6 +1558,49 @@ def get_state_dict_offloaded_model(model: nn.Module):
             placeholders.remove(key)
     if placeholders:
         logger.warning(f"The following tensors were not saved because they were still on meta device: {placeholders}")
+
+    return state_dict
+
+
+def get_state_dict_from_offload(
+    module: nn.Module,
+    module_name: str,
+    state_dict: Dict[str, Union[str, torch.tensor]],
+    device_to_put_offload: Union[int, str, torch.device] = "cpu",
+):
+    """
+    Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defualts
+    to cpu).
+
+    Args:
+        module: (`torch.nn.Module`):
+            The module we want to retrieve a state dictionary from
+        module_name: (`str`):
+            The name of the module of interest
+        state_dict (`Dict[str, Union[int, str, torch.device]]`):
+            Dictionary of {module names: parameters}
+        device_to_put_offload (`Union[int, str, torch.device]`):
+            Device to load offloaded parameters into, defaults to the cpu.
+    """
+    from ..hooks import AlignDevicesHook
+
+    root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
+    preforward = False
+    if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+        # assign the device to which the offloaded parameters will be sent
+        original_device = module._hf_hook.execution_device
+        module._hf_hook.execution_device = device_to_put_offload
+        module._hf_hook.pre_forward(module)
+        preforward = True
+
+    for m_key in module.state_dict():
+        params = module.state_dict()[m_key]
+        if (root + f".{m_key}") in state_dict:
+            state_dict[root + f".{m_key}"] = params
+
+    if preforward:
+        module._hf_hook.post_forward(module, torch.tensor([]))
+        module._hf_hook.execution_device = original_device
 
     return state_dict
 

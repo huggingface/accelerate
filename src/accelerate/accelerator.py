@@ -31,6 +31,7 @@ from typing import Any, Callable, Union
 
 import torch
 import torch.utils.hooks as hooks
+from huggingface_hub import split_torch_state_dict_into_shards
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -44,8 +45,10 @@ from .utils import (
     MODEL_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
+    SAFE_WEIGHTS_PATTERN_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    WEIGHTS_PATTERN_NAME,
     AutocastKwargs,
     DataLoaderConfiguration,
     DeepSpeedPlugin,
@@ -97,7 +100,6 @@ from .utils import (
     save,
     save_fsdp_model,
     save_fsdp_optimizer,
-    shard_checkpoint,
     wait_for_everyone,
 )
 from .utils.constants import FSDP_PYTORCH_VERSION
@@ -473,6 +475,8 @@ class Accelerator:
                 self.scaler = torch.mlu.amp.GradScaler(**kwargs)
             elif is_npu_available():
                 self.scaler = torch.npu.amp.GradScaler(**kwargs)
+            elif is_xpu_available():
+                self.scaler = torch.amp.GradScaler("xpu", **kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
@@ -1284,9 +1288,9 @@ class Accelerator:
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.use_ipex:
-                args = self._prepare_ipex(*args)
+                args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
-                args = self._prepare_ipex(*args)
+                args = self._prepare_ipex_or_xpu(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1435,6 +1439,8 @@ class Accelerator:
                     model = torch.nn.parallel.DistributedDataParallel(
                         model, device_ids=device_ids, output_device=output_device, **kwargs
                     )
+                    if self.ddp_handler is not None:
+                        self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
@@ -1553,6 +1559,8 @@ class Accelerator:
             elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
+                if self.ddp_handler is not None:
+                    self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
@@ -1706,7 +1714,7 @@ class Accelerator:
                 config_kwargs.update(
                     {
                         "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
-                        "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
+                        "zero_optimization.stage3_prefetch_bucket_size": int(0.9 * hidden_size * hidden_size),
                         "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
                     }
                 )
@@ -1793,6 +1801,7 @@ class Accelerator:
 
     def _prepare_megatron_lm(self, *args):
         megatron_lm_plugin = self.state.megatron_lm_plugin
+        micro_batch_size = None
         if not megatron_lm_plugin.megatron_dataset_flag:
             batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
             if len(batch_sizes) == 0:
@@ -1811,10 +1820,14 @@ class Accelerator:
                 if isinstance(obj, MegatronLMDummyDataLoader):
                     micro_batch_size = obj.dataset_args["micro_batch_size"]
                     break
-
-        dp_degree = self.num_processes // (megatron_lm_plugin.tp_degree * megatron_lm_plugin.pp_degree)
-        megatron_lm_plugin.set_training_args(micro_batch_size, dp_degree)
-
+        if micro_batch_size is not None:
+            dp_degree = self.num_processes // (megatron_lm_plugin.tp_degree * megatron_lm_plugin.pp_degree)
+            megatron_lm_plugin.set_training_args(micro_batch_size, dp_degree)
+        else:
+            raise ValueError(
+                "When you do not pass the dataloader parameter, the `data_parallel_size`, "
+                "`micro_batch_size`, and `global_batch_size` megatron parameters will not be updated."
+            )
         model = None
         optimizer = None
         scheduler = None
@@ -1822,7 +1835,7 @@ class Accelerator:
         for obj in args:
             if isinstance(obj, torch.utils.data.DataLoader) and batch_data is None:
                 batch_data = next(iter(obj))
-            if isinstance(obj, torch.nn.Module):
+            elif isinstance(obj, torch.nn.Module):
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
@@ -1834,8 +1847,7 @@ class Accelerator:
         if optimizer is not None:
             megatron_lm_plugin.set_optimizer_type(optimizer)
         if scheduler is not None:
-            is_dummy_scheduler = isinstance(scheduler, MegatronLMDummyScheduler)
-            if not is_dummy_scheduler:
+            if not isinstance(scheduler, MegatronLMDummyScheduler):
                 raise ValueError(
                     "You can't use a custom scheduler with Megatron-LM. Please use the `accelerate.utils.MegatronLMDummyScheduler` instead."
                 )
@@ -1845,6 +1857,7 @@ class Accelerator:
         megatron_lm_initialize(self, args_defaults=megatron_lm_plugin.megatron_lm_default_args)
 
         (model, optimizer, scheduler) = megatron_lm_prepare_model_optimizer_scheduler(self)
+        self.wait_for_everyone()
 
         counter = 0
         result = []
@@ -1875,26 +1888,32 @@ class Accelerator:
                 result[i] = optimizer
             elif isinstance(result[i], MegatronLMDummyScheduler):
                 result[i] = scheduler
+
         if model is not None:
             self._models.append(model)
+            if len(self._models) > 1:
+                raise AssertionError(
+                    "You can't use same `Accelerator()` instance with multiple models when using Megatron-LM"
+                )
         if optimizer is not None:
             self._optimizers.append(optimizer)
         if scheduler is not None:
             self._schedulers.append(scheduler)
-        if len(self._models) > 1:
-            raise AssertionError(
-                "You can't use same `Accelerator()` instance with multiple models when using Megatron-LM"
-            )
+
         return tuple(result)
 
-    def _prepare_ipex(self, *args):
-        if not is_ipex_available():
-            raise ImportError(
-                "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-        else:
-            import intel_extension_for_pytorch as ipex
+    def _prepare_ipex_or_xpu(self, *args):
+        """
+        Prepares model and optimizer for training with IPEX or XPU acceleration. This covers 3 cases, IPEX compiled
+        with CPU only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock
+        pytorch starting from version 2.4.
+        """
+        if self.state.use_ipex:
+            if not is_ipex_available():
+                raise ImportError(
+                    "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
+                    " to https://github.com/intel/intel-extension-for-pytorch."
+                )
 
         model = None
         optimizer = None
@@ -1907,12 +1926,12 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
-            if self.device.type == "xpu" and is_xpu_available():
+            if self.device.type == "xpu":
                 model = model.to(self.device)
-                model, optimizer = torch.xpu.optimize(
-                    model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1"
-                )
-            else:
+            # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
+            if is_ipex_available():
+                import intel_extension_for_pytorch as ipex
+
                 model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
@@ -2753,9 +2772,11 @@ class Accelerator:
         if safe_serialization:
             state_dict = clean_state_dict_for_safetensors(state_dict)
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+        filename_pattern = SAFE_WEIGHTS_PATTERN_NAME if safe_serialization else WEIGHTS_PATTERN_NAME
 
-        # Shard the model if it is too big.
-        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
+        state_dict_split = split_torch_state_dict_into_shards(
+            state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+        )
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
@@ -2771,31 +2792,36 @@ class Accelerator:
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
-                and filename not in shards.keys()
+                and filename not in state_dict_split.filename_to_tensors.keys()
                 and reg.fullmatch(filename_no_suffix) is not None
                 and PartialState().is_main_process
             ):
                 os.remove(full_filename)
 
         # Save the model
-        for shard_file, shard in shards.items():
-            self.save(shard, os.path.join(save_directory, shard_file), safe_serialization=safe_serialization)
+        for filename, tensors in state_dict_split.filename_to_tensors.items():
+            shard = {tensor: state_dict[tensor] for tensor in tensors}
+            self.save(shard, os.path.join(save_directory, filename), safe_serialization=safe_serialization)
 
-        if index is None:
-            path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
-            logger.info(f"Model weights saved in {path_to_weights}")
-        else:
+        # Save index if sharded
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": state_dict_split.metadata,
+                "weight_map": state_dict_split.tensor_to_filename,
+            }
             save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
             save_index_file = os.path.join(save_directory, save_index_file)
-            # Save the index as well
             with open(save_index_file, "w", encoding="utf-8") as f:
                 content = json.dumps(index, indent=2, sort_keys=True) + "\n"
                 f.write(content)
             logger.info(
                 f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
                 f"index located at {save_index_file}."
             )
+        else:
+            path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
+            logger.info(f"Model weights saved in {path_to_weights}")
 
     def register_save_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
         """
@@ -3116,7 +3142,9 @@ class Accelerator:
             f for f in os.listdir(input_dir) if re.search(r"^custom_checkpoint_\d+\.pkl$", f) is not None
         ]
         if len(custom_checkpoints) != len(self._custom_objects):
-            err = "Number of custom checkpoints in folder {input_dir} does not match the number of registered objects:"
+            err = (
+                f"Number of custom checkpoints in folder {input_dir} does not match the number of registered objects:"
+            )
             err += f"\n\tFound checkpoints: {len(custom_checkpoints)}"
             err += f"\n\tRegistered objects: {len(self._custom_objects)}\n"
             err += "Please make sure to only load checkpoints from folders that were created with the same set of registered objects,"

@@ -433,7 +433,7 @@ Only the `auto` fields specified in above examples are handled by `prepare` meth
 The `auto` values are calculated as:
 
 - `reduce_bucket_size`: `hidden_size * hidden_size`
-- `stage3_prefetch_bucket_size`: `0.9 * hidden_size * hidden_size`
+- `stage3_prefetch_bucket_size`: `int(0.9 * hidden_size * hidden_size)`
 - `stage3_param_persistence_threshold`: `10 * hidden_size`
 
 For the `auto` feature to work for these 3 config entries - Accelerate will use `model.config.hidden_size` or `max(model.config.hidden_sizes)` as `hidden_size`. If neither of these is available, the launching will fail and you will have to set these 3 config entries manually. Remember the first 2 config entries are the communication buffers - the larger they are the more efficient the comms will be, and the larger they are the more GPU memory they will consume, so it's a tunable performance trade-off.

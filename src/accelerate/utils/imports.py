@@ -20,6 +20,7 @@ from functools import lru_cache
 
 import torch
 from packaging import version
+from packaging.version import parse
 
 from .environment import parse_flag_from_env, str_to_bool
 from .versions import compare_versions, is_torch_version
@@ -217,9 +218,14 @@ def is_torchvision_available():
 
 def is_megatron_lm_available():
     if str_to_bool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
-        package_exists = importlib.util.find_spec("megatron") is not None
-        if package_exists:
-            return True
+        if importlib.util.find_spec("megatron") is not None:
+            try:
+                megatron_version = parse(importlib.metadata.version("megatron-core"))
+                if compare_versions(megatron_version, "==", "0.5.0"):
+                    return importlib.util.find_spec(".data", "megatron")
+            except Exception as e:
+                warnings.warn(f"Parse Megatron version failed. Exception:{e}")
+                return False
 
 
 def is_transformers_available():
@@ -302,8 +308,10 @@ def is_mlflow_available():
     return False
 
 
-def is_mps_available():
-    return is_torch_version(">=", "1.12") and torch.backends.mps.is_available() and torch.backends.mps.is_built()
+def is_mps_available(min_version="1.12"):
+    # With torch 1.12, you can use torch.backends.mps
+    # With torch 2.0.0, you can use torch.mps
+    return is_torch_version(">=", min_version) and torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
 
 def is_ipex_available():
@@ -335,7 +343,6 @@ def is_mlu_available(check_device=False):
     if importlib.util.find_spec("torch_mlu") is None:
         return False
 
-    import torch
     import torch_mlu  # noqa: F401
 
     if check_device:
@@ -351,10 +358,9 @@ def is_mlu_available(check_device=False):
 @lru_cache
 def is_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
-    if importlib.util.find_spec("torch") is None or importlib.util.find_spec("torch_npu") is None:
+    if importlib.util.find_spec("torch_npu") is None:
         return False
 
-    import torch
     import torch_npu  # noqa: F401
 
     if check_device:
@@ -369,19 +375,23 @@ def is_npu_available(check_device=False):
 
 @lru_cache
 def is_xpu_available(check_device=False):
+    """
+    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and
+    potentially if a XPU is in the environment
+    """
+
     "check if user disables it explicitly"
     if not parse_flag_from_env("ACCELERATE_USE_XPU", default=True):
         return False
-    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
-    if is_ipex_available():
-        import torch
 
+    if is_ipex_available():
         if is_torch_version("<=", "1.12"):
             return False
-    else:
-        return False
 
-    import intel_extension_for_pytorch  # noqa: F401
+        import intel_extension_for_pytorch  # noqa: F401
+    else:
+        if is_torch_version("<=", "2.3"):
+            return False
 
     if check_device:
         try:
