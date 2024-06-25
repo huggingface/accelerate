@@ -634,6 +634,8 @@ class AcceleratorTester(AccelerateTestCase):
             print(i, input)
             if i == 2:
                 state_dict = prepared_train_dl.state_dict()
+                # When breaking out without fully going through the iterator, must call end() to unregister this iterator from gradient state.
+                prepared_train_dl.end()
                 break
 
         for i, input in enumerate(prepared_train_dl):
