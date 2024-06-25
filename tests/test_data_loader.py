@@ -15,6 +15,7 @@
 import random
 import unittest
 
+import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
 from accelerate import Accelerator
@@ -438,8 +439,59 @@ class StatefulDataLoaderTester(unittest.TestCase):
         dataloader = DataLoaderDispatcher(range(16), batch_size=4, use_stateful_dataloader=True)
         assert isinstance(dataloader, StatefulDataLoader)
         for idx, _ in enumerate(dataloader):
+            print(idx)
             assert dataloader.end_of_dataloader == (idx == 3)
 
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
+
+    @require_torchdata_stateful_dataloader
+    def test_dataloader_state_dict(self):
+        """
+        Test that saving a stateful dataloader's state, then loading it back, gives the same results.
+        """
+        dataset = list(range(16))
+        dataloader = DataLoaderShard(dataset, batch_size=4, use_stateful_dataloader=True)
+
+        assert dataloader.use_stateful_dataloader
+        assert isinstance(dataloader, StatefulDataLoader)
+        vals = []        
+        for idx, val in enumerate(dataloader):
+            vals.append(val)
+            if idx == 1:
+                sd = dataloader.state_dict()
+        assert len(vals) == 4
+
+        dataloader2 = DataLoaderShard(dataset, batch_size=4, use_stateful_dataloader=True)
+        dataloader2.load_state_dict(sd)
+
+        data1 = vals[2:]
+        data2 = list(dataloader2)
+        for d1, d2 in zip(data1, data2):
+            assert torch.allclose(d1, d2)
+        
+    @require_torchdata_stateful_dataloader
+    def test_dataloader_dispatcher_state_dict(self):
+        """
+        Test that saving a stateful dataloader's state, then loading it back, gives the same results.
+        """
+        dataset = list(range(16))
+        dataloader = DataLoaderDispatcher(dataset, batch_size=4, use_stateful_dataloader=True)
+
+        assert dataloader.use_stateful_dataloader
+        assert isinstance(dataloader, StatefulDataLoader)
+        vals = []        
+        for idx, val in enumerate(dataloader):
+            vals.append(val)
+            if idx == 1:
+                sd = dataloader.state_dict()
+        assert len(vals) == 4
+
+        dataloader2 = DataLoaderDispatcher(dataset, batch_size=4, use_stateful_dataloader=True)
+        dataloader2.load_state_dict(sd)
+
+        data1 = vals[2:]
+        data2 = list(dataloader2)
+        for d1, d2 in zip(data1, data2):
+            assert torch.allclose(d1, d2)

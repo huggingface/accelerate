@@ -27,18 +27,30 @@ from accelerate import DistributedType, infer_auto_device_map, init_empty_weight
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_gpu, require_non_cpu, slow, torch_device
-from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_non_torch_xla
+from accelerate.test_utils.testing import (
+    AccelerateTestCase,
+    require_cuda,
+    require_non_torch_xla,
+    require_torchdata_stateful_dataloader,
+)
 from accelerate.utils import patch_environment
+from accelerate.utils.dataclasses import DataLoaderConfiguration
+from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
 
 
-def create_components():
+if is_torchdata_stateful_dataloader_available():
+    from torchdata.stateful_dataloader import (
+        StatefulDataLoader,
+    )
+
+
+def create_components(dataset_size=3):
     model = torch.nn.Linear(2, 4)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1.0)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.01, steps_per_epoch=2, epochs=1)
-    train_dl = DataLoader(TensorDataset(torch.tensor([1, 2, 3])))
-    valid_dl = DataLoader(TensorDataset(torch.tensor([4, 5, 6])))
-
+    train_dl = DataLoader(TensorDataset(torch.tensor([i for i in range(1, dataset_size+1)])))
+    valid_dl = DataLoader(TensorDataset(torch.tensor([i+dataset_size for i in range(1, dataset_size+1)])))
     return model, optimizer, scheduler, train_dl, valid_dl
 
 
@@ -575,3 +587,79 @@ class AcceleratorTester(AccelerateTestCase):
         # check that pickle roundtrip works
         model_loaded = pickle.loads(pickle.dumps(model))
         model_loaded(inputs)
+
+    # Ideally would be a parameterized test which works with either stateful or non-stateful dataloaders, but dependencies are a bit awkward.
+    @require_torchdata_stateful_dataloader
+    def test_prepared_objects_are_referenced_with_stateful_dataloader(self):
+        """Test that setting `use_stateful_dataloader=True` in `DataLoaderConfiguration` prepares a `StatefulDataLoader` object instead of a `DataLoader` object."""
+        dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
+        accelerator = Accelerator(dataloader_config=dataloader_config)
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+
+        (
+            prepared_model,
+            prepared_optimizer,
+            prepared_scheduler,
+            prepared_train_dl,
+            prepared_valid_dl,
+        ) = accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
+
+        assert prepared_model in accelerator._models
+        assert prepared_optimizer in accelerator._optimizers
+        assert prepared_scheduler in accelerator._schedulers
+        assert prepared_train_dl in accelerator._dataloaders
+        assert prepared_valid_dl in accelerator._dataloaders
+        assert isinstance(prepared_train_dl, StatefulDataLoader)
+        assert isinstance(prepared_valid_dl, StatefulDataLoader)
+
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    @require_torchdata_stateful_dataloader
+    def test_save_model_with_stateful_dataloader(self, use_safetensors):
+        """Test that saving and loading a model with a stateful dataloader returns the same model, and that the dataloader's iterator is restored properly."""
+        dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
+        accelerator = Accelerator(dataloader_config=dataloader_config)
+
+        model, optimizer, scheduler, train_dl, valid_dl = create_components(dataset_size=6)
+        (
+            prepared_model,
+            prepared_optimizer,
+            prepared_scheduler,
+            prepared_train_dl,
+            prepared_valid_dl,
+        ) = accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
+
+        assert isinstance(prepared_train_dl, StatefulDataLoader)
+        assert isinstance(prepared_valid_dl, StatefulDataLoader)
+
+        print("len before iterating", len(prepared_train_dl))
+        # Perform 3 training iterations to ensure the dataloader's iterator is advanced
+        for i, input in enumerate(prepared_train_dl):
+            print(i, input)
+            if i == 2:
+                state_dict = prepared_train_dl.state_dict()
+                break
+
+        for i, input in enumerate(prepared_train_dl):
+            print("Pass of initial dict yielding input {}".format(input), prepared_train_dl.state_dict())
+
+        print("State dict to be loaded", state_dict)
+        prepared_train_dl.load_state_dict(state_dict)
+        print("State dict immediately after loading", prepared_train_dl.state_dict())
+
+        for i, input in enumerate(prepared_train_dl):
+            print("Pass of loaded dict yielding input {}".format(input), prepared_train_dl.state_dict())
+
+
+        model_signature = get_signature(prepared_model)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+
+            # Save the model's state.
+            accelerator.save_model(prepared_model, tmpdirname, safe_serialization=use_safetensors)
+            
+            # Load the saved model
+            loaded_model = prepared_model
+            load_checkpoint_in_model(loaded_model, tmpdirname)
+            # make sure loaded weights match
+            assert abs(model_signature - get_signature(prepared_model)) < 1e-3
+
+            # iterate through both dataloaders and assert their behaviors are identical
