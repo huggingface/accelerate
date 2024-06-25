@@ -29,6 +29,7 @@ from accelerate.test_utils import (
     require_non_cpu,
     require_non_xpu,
 )
+from accelerate.test_utils.testing import slow
 from accelerate.utils import AutocastKwargs, KwargsHandler, ProfileKwargs, TorchDynamoPlugin, clear_environment
 from accelerate.utils.dataclasses import DistributedType
 
@@ -96,6 +97,7 @@ class KwargsHandlerTester(unittest.TestCase):
             # We should be back in fp16
             assert g_float16.dtype == torch.float16
 
+    @slow
     def test_profile_kwargs(self):
         # Arrange
         schedule_options = [
