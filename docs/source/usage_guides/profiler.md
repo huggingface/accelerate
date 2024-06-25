@@ -166,7 +166,7 @@ Self CPU time total: 69.332ms
 
 You can examine the sequence of profiled operators and CUDA kernels in Chrome trace viewer (`chrome://tracing`):
 
-![exporting](../imgs/profile_export.png)
+![profile_export](https://github.com/huggingface/accelerate/assets/100389977/5acb193f-6d11-4f7b-9873-c600c19e8172)
 
 <hfoptions id="exporting chrome trace">
 <hfoption id="PyTorch">
