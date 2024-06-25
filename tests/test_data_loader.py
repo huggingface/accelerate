@@ -23,6 +23,7 @@ from accelerate.data_loader import (
     BatchSamplerShard,
     DataLoaderDispatcher,
     DataLoaderShard,
+    DataLoaderStateMixin,
     IterableDatasetShard,
     SkipBatchSampler,
     SkipDataLoader,
@@ -378,6 +379,20 @@ class DataLoaderTester(unittest.TestCase):
         new_batch_sampler = SkipBatchSampler(batch_sampler, 2)
         assert list(new_batch_sampler) == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
+    def test_dataloader_inheritance(self):
+        """`DataLoaderAdapter`'s parent classes are dynamically constructed, assert that subclasses of DataLoaderAdapter are instances of DataLoader and DataLoaderStateMixin."""
+        Accelerator()
+        skip_dl = SkipDataLoader(range(16), batch_size=4, skip_batches=2)
+        dl_shard = DataLoaderShard(range(16), batch_size=4)
+        dl_dispatcher = DataLoaderDispatcher(range(16), batch_size=4)
+        assert isinstance(skip_dl, DataLoader)
+        assert isinstance(dl_shard, DataLoader)
+        assert isinstance(dl_dispatcher, DataLoader)
+
+        assert isinstance(skip_dl, DataLoaderStateMixin)
+        assert isinstance(dl_shard, DataLoaderStateMixin)
+        assert isinstance(dl_dispatcher, DataLoaderStateMixin)
+
     def test_skip_data_loader(self):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2)
         assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
@@ -495,3 +510,18 @@ class StatefulDataLoaderTester(unittest.TestCase):
         data2 = list(dataloader2)
         for d1, d2 in zip(data1, data2):
             assert torch.allclose(d1, d2)
+
+    @require_torchdata_stateful_dataloader
+    def test_dataloader_inheritance(self):
+        """`DataLoaderAdapter`'s parent classes are dynamically constructed, assert that when use_stateful_dataloader=True, subclasses of DataLoaderAdapter are instances of StatefulDataLoader and DataLoaderStateMixin."""
+        Accelerator()
+        skip_dl = SkipDataLoader(range(16), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
+        dl_shard = DataLoaderShard(range(16), batch_size=4, use_stateful_dataloader=True)
+        dl_dispatcher = DataLoaderDispatcher(range(16), batch_size=4, use_stateful_dataloader=True)
+        assert isinstance(skip_dl, StatefulDataLoader)
+        assert isinstance(dl_shard, StatefulDataLoader)
+        assert isinstance(dl_dispatcher, StatefulDataLoader)
+
+        assert isinstance(skip_dl, DataLoaderStateMixin)
+        assert isinstance(dl_shard, DataLoaderStateMixin)
+        assert isinstance(dl_dispatcher, DataLoaderStateMixin)

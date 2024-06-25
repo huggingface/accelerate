@@ -310,7 +310,9 @@ def test_dataloader_break():
     first_dataloader = DataLoader(first_dset, batch_size=16)
     second_dset = RegressionDataset(length=96)
     second_dataloader = DataLoader(second_dset, batch_size=16)
+    print("Dataloaders to be prepared", first_dataloader, second_dataloader)
     first_dataloader, second_dataloader = accelerator.prepare(first_dataloader, second_dataloader)
+    print("Dataloaders prepared", first_dataloader, second_dataloader)
     assert accelerator.gradient_state.active_dataloader is None
     for iteration, _ in enumerate(first_dataloader):
         assert id(accelerator.gradient_state.active_dataloader) == id(first_dataloader)
