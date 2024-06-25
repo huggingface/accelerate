@@ -626,6 +626,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         assert isinstance(prepared_train_dl, StatefulDataLoader)
         assert isinstance(prepared_valid_dl, StatefulDataLoader)
+        assert accelerator.gradient_state.active_dataloader is None
 
         print("len before iterating", len(prepared_train_dl))
         # Perform 3 training iterations to ensure the dataloader's iterator is advanced
