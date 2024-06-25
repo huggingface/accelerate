@@ -112,6 +112,7 @@ class KwargsHandlerTester(unittest.TestCase):
 
         for option in schedule_options:
             count = 0
+            table_outputs = []
             steps_per_cycle = option["wait"] + option["warmup"] + option["active"]
             effective_steps = max(0, total_steps - option.get("skip_first", 0))
             cycles = effective_steps // steps_per_cycle
@@ -122,10 +123,12 @@ class KwargsHandlerTester(unittest.TestCase):
 
             def on_trace_ready(prof):
                 nonlocal count
-                count += 1
-                print(prof.key_averages().table(sort_by="cpu_memory_usage", row_limit=-1))
+                nonlocal table_outputs
 
-            kwargs = ProfileKwargs(on_trace_ready=on_trace_ready, schedule_option=option)
+                count += 1
+                table_outputs.append(prof.key_averages().table(sort_by="cpu_time_total", row_limit=-1))
+
+            kwargs = ProfileKwargs(activities=["cpu"], on_trace_ready=on_trace_ready, schedule_option=option)
             accelerator = Accelerator(kwargs_handlers=[kwargs])
 
             # Act
@@ -137,6 +140,8 @@ class KwargsHandlerTester(unittest.TestCase):
             # Assert
             assert isinstance(prof, torch.profiler.profile)
             assert count == expected_count, f"Option: {option}, Expected count: {expected_count}, but got {count}"
+            for output in table_outputs:
+                self.assertIn("CPU time total:", output)
 
     def test_torch_dynamo_plugin(self):
         with clear_environment():
