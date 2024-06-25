@@ -387,10 +387,12 @@ class DataLoaderStateMixin:
             if not self._drop_last:
                 length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
                 self.remainder = length % self.total_batch_size
+        print("adding dataloader", self)
         self.gradient_state._add_dataloader(self)
 
     def end(self):
         "Cleans up the gradient state after exiting the dataloader"
+        print("removing dataloader", self)
         self.gradient_state._remove_dataloader(self)
 
 
@@ -405,7 +407,7 @@ class DataLoaderAdapter:
         if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
             raise ValueError("StatefulDataLoader is not available. Please install torchdata to use it.")
         if use_stateful_dataloader:
-            self.base_dataloader = StatefulDataLoader(dataset, batch_sampler=batch_sampler **kwargs)
+            self.base_dataloader = StatefulDataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
         else:
             self.base_dataloader = DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
 
@@ -420,6 +422,16 @@ class DataLoaderAdapter:
         # Allow this class to transparently pass through attributes from the underlying class
         for attr in self.base_dataloader.__dict__.keys():
             setattr(self, attr, getattr(self.base_dataloader, attr))
+
+        if hasattr(self.base_dataloader, "state_dict"):
+            self.dl_state_dict = self.base_dataloader.state_dict()
+    
+    def state_dict(self):
+        return self.dl_state_dict
+    
+    def _save_state_dict(self):
+        if hasattr(self.base_dataloader, "state_dict"):
+            self.dl_state_dict = self.base_dataloader.state_dict()
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -498,6 +510,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                 # But we still move it to the device so it is done before `StopIteration` is reached
                 if self.device is not None:
                     current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
+                self._save_state_dict()
                 next_batch = next(dataloader_iter)
                 if batch_index >= self.skip_batches:
                     yield current_batch
@@ -662,12 +675,14 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             try:
                 if self.split_batches:
                     # One batch of the main iterator is dispatched and split.
+                    self._save_state_dict()
                     batch = next(iterator)
                 else:
                     # num_processes batches of the main iterator are concatenated then dispatched and split.
                     # We add the batches one by one so we have the remainder available when drop_last=False.
                     batches = []
                     for _ in range(self.state.num_processes):
+                        self._save_state_dict()
                         batches.append(next(iterator))
                     try:
                         batch = concatenate(batches, dim=0)
