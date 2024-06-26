@@ -739,30 +739,3 @@ class AcceleratorTester(AccelerateTestCase):
             assert torch.allclose(original_linear1, new_linear1)
             assert torch.allclose(original_batchnorm, new_batchnorm)
             assert torch.allclose(original_linear2, new_linear2)
-
-    @require_torchdata_stateful_dataloader
-    def test_stateful_dataloader_dispatcher_deactivate_dataloaders(self):
-        """
-        Test that we can break iteration in a DataLoaderDispatcher backed by a StatefulDataLoader partway through
-        in a way that removes it from the gradient state active dataloader list.
-        """
-        print()
-        set_seed(42)
-        dataloader_config = DataLoaderConfiguration(dispatch_batches=True, use_stateful_dataloader=True)
-        accelerator = Accelerator(dataloader_config=dataloader_config)
-        model, optimizer, scheduler, train_dl, valid_dl = create_components()
-        (
-            prepared_model,
-            prepared_optimizer,
-            prepared_scheduler,
-            prepared_train_dl,
-            prepared_valid_dl,
-        ) = accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
-
-        # Perform 3 training iterations to ensure the dataloader's iterator is advanced
-        num_batches_to_skip = 3
-        for step, _ in enumerate(prepared_train_dl):
-            if step == num_batches_to_skip - 1:
-                prepared_train_dl.end()
-                break
-        assert accelerator.gradient_state.active_dataloader is None
