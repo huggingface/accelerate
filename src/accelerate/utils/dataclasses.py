@@ -572,7 +572,7 @@ class DataLoaderConfiguration:
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
             " and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
-            " underlying dataset is an `IterableDataslet`, `False` otherwise."
+            " underlying dataset is an `IterableDataset`, `False` otherwise."
         },
     )
     even_batches: bool = field(

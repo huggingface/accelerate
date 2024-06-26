@@ -100,6 +100,8 @@ def parameterized_custom_name_func(func, param_num, param):
     param_based_name = "use_safetensors" if param.args[0] is True else "use_pytorch"
     if len(param.args) > 1:
         param_based_name += f"_num_workers_{param.args[1]}"
+    if len(param.args) > 2:
+        param_based_name += "_dispatch_batches" if param.args[2] is True else "_no_dispatch_batches"
     return f"{func.__name__}_{param_based_name}"
 
 
@@ -630,12 +632,15 @@ class AcceleratorTester(AccelerateTestCase):
         assert isinstance(prepared_train_dl, StatefulDataLoader)
         assert isinstance(prepared_valid_dl, StatefulDataLoader)
 
-    @parameterized.expand(itertools.product([True, False], [0, 2]), name_func=parameterized_custom_name_func)
+    @parameterized.expand(itertools.product([True, False], [0, 2], [True, False]), name_func=parameterized_custom_name_func)
     @require_torchdata_stateful_dataloader
-    def test_save_model_with_stateful_dataloader(self, use_safetensors, num_workers):
-        """Test that saving and loading a model with a stateful dataloader returns the same model, and that the dataloader's iterator is restored properly."""
+    def test_save_model_with_stateful_dataloader(self, use_safetensors, num_workers, dispatch_batches):
+        """
+        Test that saving and loading a model with a stateful dataloader returns the same model,
+        and that the dataloader's iterator is restored properly."""
+        print()
         set_seed(42)
-        dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
+        dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=True)
         accelerator = Accelerator(dataloader_config=dataloader_config)
 
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
@@ -673,6 +678,7 @@ class AcceleratorTester(AccelerateTestCase):
                 # TODO: Maybe this could be done automatically?
                 prepared_train_dl.end()
                 break
+
         assert accelerator.gradient_state.active_dataloader is None
 
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -729,3 +735,30 @@ class AcceleratorTester(AccelerateTestCase):
             assert torch.allclose(original_linear1, new_linear1)
             assert torch.allclose(original_batchnorm, new_batchnorm)
             assert torch.allclose(original_linear2, new_linear2)
+
+    @require_torchdata_stateful_dataloader
+    def test_stateful_dataloader_dispatcher_deactivate_dataloaders(self):
+        """
+        Test that we can break iteration in a DataLoaderDispatcher backed by a StatefulDataLoader partway through
+        in a way that removes it from the gradient state active dataloader list.
+        """
+        print()
+        set_seed(42)
+        dataloader_config = DataLoaderConfiguration(dispatch_batches=True, use_stateful_dataloader=True)
+        accelerator = Accelerator(dataloader_config=dataloader_config)
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        (
+            prepared_model,
+            prepared_optimizer,
+            prepared_scheduler,
+            prepared_train_dl,
+            prepared_valid_dl,
+        ) = accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
+
+        # Perform 3 training iterations to ensure the dataloader's iterator is advanced
+        num_batches_to_skip = 3
+        for step, _ in enumerate(prepared_train_dl):
+            if step == num_batches_to_skip - 1:
+                prepared_train_dl.end()
+                break
+        assert accelerator.gradient_state.active_dataloader is None
