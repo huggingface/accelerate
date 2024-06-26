@@ -401,7 +401,6 @@ class DataLoaderTester(unittest.TestCase):
         assert isinstance(dl_shard, DataLoader)
         assert isinstance(dl_dispatcher, DataLoader)
 
-        assert isinstance(skip_dl, DataLoaderStateMixin)
         assert isinstance(dl_shard, DataLoaderStateMixin)
         assert isinstance(dl_dispatcher, DataLoaderStateMixin)
 
@@ -541,7 +540,6 @@ class StatefulDataLoaderTester(unittest.TestCase):
         assert isinstance(dl_shard, StatefulDataLoader)
         assert isinstance(dl_dispatcher, StatefulDataLoader)
 
-        assert isinstance(skip_dl, DataLoaderStateMixin)
         assert isinstance(dl_shard, DataLoaderStateMixin)
         assert isinstance(dl_dispatcher, DataLoaderStateMixin)
 
@@ -570,16 +568,30 @@ class StatefulDataLoaderTester(unittest.TestCase):
             dataset, batch_size=4, num_workers=num_workers, generator=g(), use_stateful_dataloader=True
         )
 
-        stateful_dl_iter = iter(stateful_dl)
-        iterators_under_test = [iter(skip_dl), iter(dl_shard), iter(dl_dispatcher)]
+        dataloaders_under_test = [skip_dl, dl_shard, dl_dispatcher]
 
-        num_batches = 8
+        num_batches_to_skip = 8
+
+        def get_first_n_batches(dl, n, device):
+            """
+            Iterate over the first `n` batches of a dataloader then break, returning the batches in a list.
+            """
+            batches = []
+            for idx, batch in enumerate(dl):
+                if idx == n-1:
+                    if hasattr(dl, "end"):
+                        dl.end()
+                    break
+                batches.append(batch.to(device))
+            return batches
+
         # Iterate over all of the dataloaders identically, expect the same values
-        for _ in range(num_batches):
-            expected_val = next(stateful_dl_iter).to(accelerator.device)
-            for dl_iter in iterators_under_test:
-                val = next(dl_iter).to(accelerator.device)
-                assert torch.allclose(val, expected_val)
+        expected_batches = get_first_n_batches(stateful_dl, num_batches_to_skip, accelerator.device)
+        batches_from_dataloaders = [get_first_n_batches(dl, num_batches_to_skip, accelerator.device) for dl in dataloaders_under_test]
+        
+        for dl_batches in batches_from_dataloaders:
+            for expected, actual in zip(expected_batches, dl_batches):
+                assert torch.allclose(expected, actual)
 
         # The adapters should all produce the same state_dict as the reference stateful dataloader
         expected_state_dict = stateful_dl.state_dict()
@@ -593,7 +605,7 @@ class StatefulDataLoaderTester(unittest.TestCase):
 
         # Load the state dict into new dataloaders
         manual_skip_dl = SkipDataLoader(
-            dataset, batch_size=4, num_workers=num_workers, generator=g(), skip_batches=8, use_stateful_dataloader=True
+            dataset, batch_size=4, num_workers=num_workers, generator=g(), skip_batches=num_batches_to_skip, use_stateful_dataloader=True
         )
         loaded_stateful_dl = StatefulDataLoader(dataset, batch_size=4, num_workers=num_workers, generator=g())
         loaded_stateful_dl.load_state_dict(expected_state_dict)
@@ -611,17 +623,22 @@ class StatefulDataLoaderTester(unittest.TestCase):
         loaded_dl_dispatcher.load_state_dict(expected_state_dict)
 
         # Continue the iteration, expecting identical behavior across the board
-        iterators_under_test.extend(
-            [
-                iter(manual_skip_dl),
-                iter(loaded_stateful_dl),
-                iter(loaded_skip_dl),
-                iter(loaded_dl_shard),
-                iter(loaded_dl_dispatcher),
-            ]
-        )
-        for _ in range(num_batches):
-            expected_val = next(stateful_dl_iter).to(accelerator.device)
-            for dl_iter in iterators_under_test:
-                val = next(dl_iter).to(accelerator.device)
-                assert torch.allclose(val, expected_val)
+        def get_all_batches(dl, device):
+            """
+            Iterate over all batches of a dataloader, returning (batches, num_batches_yielded)
+            """
+            batches = []
+            num_batches_yielded = 0
+            for batch in dl:
+                batches.append(batch.to(device))
+                num_batches_yielded += 1
+            return (batches, num_batches_yielded)
+
+        expected_batch_results = get_all_batches(loaded_stateful_dl, accelerator.device)
+        dataloader_batch_results = [get_all_batches(dl, accelerator.device) for dl in [manual_skip_dl, loaded_skip_dl, loaded_dl_shard, loaded_dl_dispatcher]]
+        for dl_results in dataloader_batch_results:
+            for expected, actual in zip(expected_batches, dl_batches):
+                assert torch.allclose(expected[0], actual[0])
+                assert expected_batch_results[1] == dl_results[1]
+
+        assert accelerator.gradient_state.active_dataloader is None
