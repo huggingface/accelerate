@@ -463,6 +463,10 @@ class DynamoBackend(str, BaseEnum):
         - **ONNXRT** -- Uses ONNXRT for inference on CPU/GPU. Inference only. [Read more](https://onnxruntime.ai/)
         - **TENSORRT** -- Uses ONNXRT to run TensorRT for inference optimizations. [Read
           more](https://github.com/onnx/onnx-tensorrt)
+        - **AOT_TORCHXLA_TRACE_ONCE** -- Uses Pytorch/XLA with TorchDynamo optimization, for training. [Read
+          more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
+        - **TORCHXLA_TRACE_ONCE** -- Uses Pytorch/XLA with TorchDynamo optimization, for inference. [Read
+          more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
         - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
           more](https://github.com/intel/intel-extension-for-pytorch).
         - **TVM** -- Uses Apach TVM for inference optimizations. [Read more](https://tvm.apache.org/)
@@ -481,6 +485,8 @@ class DynamoBackend(str, BaseEnum):
     FX2TRT = "FX2TRT"
     ONNXRT = "ONNXRT"
     TENSORRT = "TENSORRT"
+    AOT_TORCHXLA_TRACE_ONCE = "AOT_TORCHXLA_TRACE_ONCE"
+    TORCHXLA_TRACE_ONCE = "TORCHXLA_TRACE_ONCE"
     IPEX = "IPEX"
     TVM = "TVM"
 
