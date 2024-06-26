@@ -471,8 +471,8 @@ class StatefulDataLoaderTester(unittest.TestCase):
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
 
-    @require_torchdata_stateful_dataloader
     @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
+    @require_torchdata_stateful_dataloader
     def test_dataloader_state_dict(self, num_workers):
         """
         Test that saving a stateful dataloader's state, then loading it back, gives the same results.
@@ -497,8 +497,8 @@ class StatefulDataLoaderTester(unittest.TestCase):
         for d1, d2 in zip(data1, data2):
             assert torch.allclose(d1, d2)
 
-    @require_torchdata_stateful_dataloader
     @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
+    @require_torchdata_stateful_dataloader
     def test_dataloader_dispatcher_state_dict(self, num_workers):
         """
         Test that saving a stateful dataloader's state, then loading it back, gives the same results.
@@ -543,8 +543,8 @@ class StatefulDataLoaderTester(unittest.TestCase):
         assert isinstance(dl_shard, DataLoaderStateMixin)
         assert isinstance(dl_dispatcher, DataLoaderStateMixin)
 
-    @require_torchdata_stateful_dataloader
     @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
+    @require_torchdata_stateful_dataloader
     def test_stateful_dataloader_adapter_equivalent_to_torchdata_stateful_dataloader(self, num_workers):
         """
         Assert that `state_dict()` and `load_state_dict()` for derived subclasses of `DataLoaderAdapter` produce
