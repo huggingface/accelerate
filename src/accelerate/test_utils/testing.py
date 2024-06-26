@@ -29,6 +29,7 @@ from unittest import mock
 import torch
 
 import accelerate
+from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
 
 from ..state import AcceleratorState, PartialState
 from ..utils import (
@@ -417,12 +418,9 @@ def require_torchdata_stateful_dataloader(test_case):
     These tests are skipped when torchdata with stateful_dataloader module isn't installed.
 
     """
-    try:
-        import torchdata.stateful_dataloader  # noqa F401
-    except (ImportError, AssertionError):
-        return unittest.skip("test requires torchdata.stateful_dataloader")(test_case)
-    else:
-        return test_case
+    return unittest.skipUnless(
+        is_torchdata_stateful_dataloader_available(), "test requires torchdata.stateful_dataloader"
+    )(test_case)
 
 
 class TempDirTestCase(unittest.TestCase):
