@@ -387,12 +387,10 @@ class DataLoaderStateMixin:
             if not self._drop_last:
                 length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
                 self.remainder = length % self.total_batch_size
-        print("adding dataloader", self)
         self.gradient_state._add_dataloader(self)
 
     def end(self):
         "Cleans up the gradient state after exiting the dataloader"
-        print("removing dataloader", self)
         self.gradient_state._remove_dataloader(self)
 
 
@@ -404,6 +402,7 @@ class DataLoaderAdapter(DataLoaderStateMixin):
 
     def __init__(self, dataset, use_stateful_dataloader=False, batch_sampler=None, **kwargs):
         self.use_stateful_dataloader = use_stateful_dataloader
+
         if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
             raise ValueError("StatefulDataLoader is not available. Please install torchdata to use it.")
         if use_stateful_dataloader:
@@ -412,26 +411,41 @@ class DataLoaderAdapter(DataLoaderStateMixin):
             self.base_dataloader = DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
 
         # Dynamically mixin the parent class. See https://stackoverflow.com/a/31075641
-        # This is pretty awkward, but it's the only way to make `isinstance(obj, StatefulDataLoader)` work transparently.
-        # It would be better if DataLoaderAdapter does not inherit from DataLoader, but that would not be backwards compatible.
+        # In C++ terms, this is analogous to creating `DataLoaderAdapter<T> : T`, where T is a DataLoader or
+        # StatefulDataLoader
+        #
+        # The same functionality could be achieved by directly creating the required subclasses for both {DataLoader,
+        # StatefulDataLoader}, however that could lead to much messier code, with duplicated classes and conditional
+        # dispatching scattered throughout various functions and files.
+        #
+        # This code is incredibly awkward but it's the only way to make `isinstance(obj, StatefulDataLoader)` work
+        # transparently.
+        #
+        # A more robust solution is for DataLoaderAdapter to not inherit from DataLoader (compose rather than inherit),
+        # but this would not be backwards compatible with existing code which assumes
+        # DataLoaderShard/DataLoaderDispatcher are DataLoaders.
         base_cls = self.__class__
         base_cls_name = self.__class__.__name__
         parent_cls_name = self.base_dataloader.__class__
         self.__class__ = type(base_cls_name, (base_cls, parent_cls_name), {})
 
         # Allow this class to transparently pass through attributes from the underlying class
+        if hasattr(self.base_dataloader, "state_dict"):
+            self.dl_state_dict = self.base_dataloader.state_dict()
+
         for attr in self.base_dataloader.__dict__.keys():
             setattr(self, attr, getattr(self.base_dataloader, attr))
 
-        if hasattr(self.base_dataloader, "state_dict"):
-            self.dl_state_dict = self.base_dataloader.state_dict()
-    
     def state_dict(self):
         return self.dl_state_dict
-    
+
+    def load_state_dict(self, state_dict):
+        super().load_state_dict(state_dict)
+        self.dl_state_dict = self.state_dict
+
     def _save_state_dict(self):
         if hasattr(self.base_dataloader, "state_dict"):
-            self.dl_state_dict = self.base_dataloader.state_dict()
+            self.dl_state_dict = super().state_dict()
 
 
 class DataLoaderShard(DataLoaderAdapter):
@@ -1074,7 +1088,8 @@ def prepare_data_loader(
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
             synchronized_generator=synchronized_generator,
-            use_stateful_dataloader=use_stateful_dataloader**kwargs,
+            use_stateful_dataloader=use_stateful_dataloader,
+            **kwargs,
         )
     else:
         dataloader = DataLoaderShard(
@@ -1140,6 +1155,7 @@ class SkipDataLoader(DataLoaderAdapter):
     def __iter__(self):
         for index, batch in enumerate(super().__iter__()):
             if index >= self.skip_batches:
+                self._save_state_dict()
                 yield batch
 
 
@@ -1215,5 +1231,4 @@ def skip_first_batches(dataloader, num_batches=0):
             dataloader = StatefulDataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
-
     return dataloader

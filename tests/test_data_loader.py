@@ -16,6 +16,7 @@ import random
 import unittest
 
 import torch
+from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
 from accelerate import Accelerator
@@ -30,6 +31,7 @@ from accelerate.data_loader import (
     skip_first_batches,
 )
 from accelerate.test_utils.testing import require_torchdata_stateful_dataloader
+from accelerate.utils.dataclasses import DataLoaderConfiguration
 from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
 
 
@@ -37,6 +39,13 @@ if is_torchdata_stateful_dataloader_available():
     from torchdata.stateful_dataloader import (
         StatefulDataLoader,
     )
+
+
+def parameterized_custom_name_func(func, param_num, param):
+    # customize the test name generator function as we want both params to appear in the sub-test
+    # name, as by default it shows only the first param
+    param_based_name = f"num_workers_{param.args[0]}"
+    return f"{func.__name__}_{param_based_name}"
 
 
 class RandomIterableDataset(IterableDataset):
@@ -380,7 +389,10 @@ class DataLoaderTester(unittest.TestCase):
         assert list(new_batch_sampler) == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
     def test_dataloader_inheritance(self):
-        """`DataLoaderAdapter`'s parent classes are dynamically constructed, assert that subclasses of DataLoaderAdapter are instances of DataLoader and DataLoaderStateMixin."""
+        """
+        `DataLoaderAdapter`'s parent classes are dynamically constructed, assert that subclasses of DataLoaderAdapter
+        are instances of DataLoader and DataLoaderStateMixin.
+        """
         Accelerator()
         skip_dl = SkipDataLoader(range(16), batch_size=4, skip_batches=2)
         dl_shard = DataLoaderShard(range(16), batch_size=4)
@@ -454,7 +466,6 @@ class StatefulDataLoaderTester(unittest.TestCase):
         dataloader = DataLoaderDispatcher(range(16), batch_size=4, use_stateful_dataloader=True)
         assert isinstance(dataloader, StatefulDataLoader)
         for idx, _ in enumerate(dataloader):
-            print(idx)
             assert dataloader.end_of_dataloader == (idx == 3)
 
         # Test it also works on the second iteration
@@ -462,48 +473,53 @@ class StatefulDataLoaderTester(unittest.TestCase):
             assert dataloader.end_of_dataloader == (idx == 3)
 
     @require_torchdata_stateful_dataloader
-    def test_dataloader_state_dict(self):
+    @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
+    def test_dataloader_state_dict(self, num_workers):
         """
         Test that saving a stateful dataloader's state, then loading it back, gives the same results.
         """
         dataset = list(range(16))
-        dataloader = DataLoaderShard(dataset, batch_size=4, use_stateful_dataloader=True)
+        dataloader = DataLoaderShard(dataset, batch_size=4, use_stateful_dataloader=True, num_workers=num_workers)
 
         assert dataloader.use_stateful_dataloader
         assert isinstance(dataloader, StatefulDataLoader)
-        vals = []        
+        vals = []
         for idx, val in enumerate(dataloader):
             vals.append(val)
             if idx == 1:
                 sd = dataloader.state_dict()
         assert len(vals) == 4
 
-        dataloader2 = DataLoaderShard(dataset, batch_size=4, use_stateful_dataloader=True)
+        dataloader2 = DataLoaderShard(dataset, batch_size=4, use_stateful_dataloader=True, num_workers=num_workers)
         dataloader2.load_state_dict(sd)
 
         data1 = vals[2:]
         data2 = list(dataloader2)
         for d1, d2 in zip(data1, data2):
             assert torch.allclose(d1, d2)
-        
+
     @require_torchdata_stateful_dataloader
-    def test_dataloader_dispatcher_state_dict(self):
+    @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
+    def test_dataloader_dispatcher_state_dict(self, num_workers):
         """
         Test that saving a stateful dataloader's state, then loading it back, gives the same results.
         """
+        dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
+        Accelerator(dataloader_config=dataloader_config)
         dataset = list(range(16))
-        dataloader = DataLoaderDispatcher(dataset, batch_size=4, use_stateful_dataloader=True)
+        dataloader = DataLoaderDispatcher(dataset, batch_size=4, use_stateful_dataloader=True, num_workers=num_workers)
 
         assert dataloader.use_stateful_dataloader
         assert isinstance(dataloader, StatefulDataLoader)
-        vals = []        
+        vals = []
         for idx, val in enumerate(dataloader):
             vals.append(val)
             if idx == 1:
                 sd = dataloader.state_dict()
         assert len(vals) == 4
-
-        dataloader2 = DataLoaderDispatcher(dataset, batch_size=4, use_stateful_dataloader=True)
+        dataloader2 = DataLoaderDispatcher(
+            dataset, batch_size=4, use_stateful_dataloader=True, num_workers=num_workers
+        )
         dataloader2.load_state_dict(sd)
 
         data1 = vals[2:]
@@ -513,7 +529,10 @@ class StatefulDataLoaderTester(unittest.TestCase):
 
     @require_torchdata_stateful_dataloader
     def test_dataloader_inheritance(self):
-        """`DataLoaderAdapter`'s parent classes are dynamically constructed, assert that when use_stateful_dataloader=True, subclasses of DataLoaderAdapter are instances of StatefulDataLoader and DataLoaderStateMixin."""
+        """
+        `DataLoaderAdapter`'s parent classes are dynamically constructed, assert that if use_stateful_dataloader=True,
+        subclasses of DataLoaderAdapter are instances of StatefulDataLoader and DataLoaderStateMixin.
+        """
         Accelerator()
         skip_dl = SkipDataLoader(range(16), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
         dl_shard = DataLoaderShard(range(16), batch_size=4, use_stateful_dataloader=True)
@@ -525,3 +544,84 @@ class StatefulDataLoaderTester(unittest.TestCase):
         assert isinstance(skip_dl, DataLoaderStateMixin)
         assert isinstance(dl_shard, DataLoaderStateMixin)
         assert isinstance(dl_dispatcher, DataLoaderStateMixin)
+
+    @require_torchdata_stateful_dataloader
+    @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
+    def test_stateful_dataloader_adapter_equivalent_to_torchdata_stateful_dataloader(self, num_workers):
+        """
+        Assert that `state_dict()` and `load_state_dict()` for derived subclasses of `DataLoaderAdapter` produce
+        the same behavior as `state_dict()` and `load_state_dict()` for `StatefulDataLoader`.
+        """
+        dataset = list(range(64))
+
+        # Set the seed for reproducibility
+        def g():
+            return torch.Generator().manual_seed(42)
+
+        accelerator = Accelerator()
+        stateful_dl = StatefulDataLoader(dataset, batch_size=4, num_workers=num_workers, generator=g())
+        skip_dl = SkipDataLoader(
+            dataset, batch_size=4, num_workers=num_workers, generator=g(), use_stateful_dataloader=True
+        )
+        dl_shard = DataLoaderShard(
+            dataset, batch_size=4, num_workers=num_workers, generator=g(), use_stateful_dataloader=True
+        )
+        dl_dispatcher = DataLoaderDispatcher(
+            dataset, batch_size=4, num_workers=num_workers, generator=g(), use_stateful_dataloader=True
+        )
+
+        stateful_dl_iter = iter(stateful_dl)
+        iterators_under_test = [iter(skip_dl), iter(dl_shard), iter(dl_dispatcher)]
+
+        num_batches = 8
+        # Iterate over all of the dataloaders identically, expect the same values
+        for _ in range(num_batches):
+            expected_val = next(stateful_dl_iter).to(accelerator.device)
+            for dl_iter in iterators_under_test:
+                val = next(dl_iter).to(accelerator.device)
+                assert torch.allclose(val, expected_val)
+
+        # The adapters should all produce the same state_dict as the reference stateful dataloader
+        expected_state_dict = stateful_dl.state_dict()
+        skip_dl_state_dict = skip_dl.state_dict()
+        dl_shard_state_dict = dl_shard.state_dict()
+        dl_dispatcher_state_dict = dl_dispatcher.state_dict()
+
+        assert expected_state_dict == skip_dl_state_dict
+        assert expected_state_dict == dl_shard_state_dict
+        assert expected_state_dict == dl_dispatcher_state_dict
+
+        # Load the state dict into new dataloaders
+        manual_skip_dl = SkipDataLoader(
+            dataset, batch_size=4, num_workers=num_workers, generator=g(), skip_batches=8, use_stateful_dataloader=True
+        )
+        loaded_stateful_dl = StatefulDataLoader(dataset, batch_size=4, num_workers=num_workers, generator=g())
+        loaded_stateful_dl.load_state_dict(expected_state_dict)
+        loaded_skip_dl = SkipDataLoader(
+            dataset, batch_size=4, num_workers=num_workers, generator=g(), use_stateful_dataloader=True
+        )
+        loaded_skip_dl.load_state_dict(expected_state_dict)
+        loaded_dl_shard = DataLoaderShard(
+            dataset, batch_size=4, num_workers=num_workers, generator=g(), use_stateful_dataloader=True
+        )
+        loaded_dl_shard.load_state_dict(expected_state_dict)
+        loaded_dl_dispatcher = DataLoaderDispatcher(
+            dataset, batch_size=4, num_workers=num_workers, generator=g(), use_stateful_dataloader=True
+        )
+        loaded_dl_dispatcher.load_state_dict(expected_state_dict)
+
+        # Continue the iteration, expecting identical behavior across the board
+        iterators_under_test.extend(
+            [
+                iter(manual_skip_dl),
+                iter(loaded_stateful_dl),
+                iter(loaded_skip_dl),
+                iter(loaded_dl_shard),
+                iter(loaded_dl_dispatcher),
+            ]
+        )
+        for _ in range(num_batches):
+            expected_val = next(stateful_dl_iter).to(accelerator.device)
+            for dl_iter in iterators_under_test:
+                val = next(dl_iter).to(accelerator.device)
+                assert torch.allclose(val, expected_val)

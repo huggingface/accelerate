@@ -1584,13 +1584,9 @@ class Accelerator:
 
         deepspeed_plugin = self.state.deepspeed_plugin
 
-        is_dataloader_present = any(
-            (isinstance(obj, torch.utils.data.DataLoader)) for obj in args
-        )
+        is_dataloader_present = any((isinstance(obj, torch.utils.data.DataLoader)) for obj in args)
         result = [
-            self._prepare_one(obj, first_pass=True)
-            if (isinstance(obj, torch.utils.data.DataLoader))
-            else obj
+            self._prepare_one(obj, first_pass=True) if (isinstance(obj, torch.utils.data.DataLoader)) else obj
             for obj in args
         ]
 
