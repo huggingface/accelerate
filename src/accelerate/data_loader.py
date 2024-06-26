@@ -1118,6 +1118,7 @@ class SkipBatchSampler(BatchSampler):
 
     def __init__(self, batch_sampler, skip_batches=0):
         self.batch_sampler = batch_sampler
+        self.sampler = batch_sampler.sampler
         self.skip_batches = skip_batches
 
     def __iter__(self):
