@@ -323,14 +323,14 @@ class BigModelingTester(unittest.TestCase):
             with self.assertLogs(level="WARNING") as cm:
                 # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
                 # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
-                model.to(0)
+                model.to(torch_device)
                 logger.warning("Dummy warning")
             self.assertEqual(len(cm.records), 1)
             self.assertIn(
                 "Dummy warning",
                 cm.records[0].message,
             )
-            output_bis = model(x.to(0))
+            output_bis = model(x.to(torch_device))
             assert torch.allclose(expected, output.cpu(), atol=1e-5)
             assert torch.allclose(expected, output_bis.cpu(), atol=1e-5)
 
@@ -779,7 +779,7 @@ class BigModelingTester(unittest.TestCase):
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.weight.device == torch.device("meta")
-        assert new_model.linear2.weight.device == torch.device(0)
+        assert new_model.linear2.weight.device == torch.device(torch_device)
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
@@ -802,8 +802,8 @@ class BigModelingTester(unittest.TestCase):
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.weight.device == torch.device("meta")
         assert new_model.linear2.weight.device == torch.device("meta")
-        assert new_model.linear3.weight.device == torch.device(0)
-        assert new_model.linear4.weight.device == torch.device(1)
+        assert new_model.linear3.weight.device == torch.device(torch_device)
+        assert new_model.linear4.weight.device == torch.device(torch_device.replace(":0", ":1"))
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
@@ -828,8 +828,8 @@ class BigModelingTester(unittest.TestCase):
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.linear.weight.device == torch.device("meta")
         assert new_model.linear2.linear.weight.device == torch.device("meta")
-        assert new_model.linear3.linear.weight.device == torch.device(0)
-        assert new_model.linear4.linear.weight.device == torch.device(0)
+        assert new_model.linear3.linear.weight.device == torch.device(torch_device)
+        assert new_model.linear4.linear.weight.device == torch.device(torch_device)
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
@@ -854,8 +854,8 @@ class BigModelingTester(unittest.TestCase):
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.linear.weight.device == torch.device("meta")
         assert new_model.linear2.linear.weight.device == torch.device("meta")
-        assert new_model.linear3.linear.weight.device == torch.device(0)
-        assert new_model.linear4.linear.weight.device == torch.device(1)
+        assert new_model.linear3.linear.weight.device == torch.device(torch_device)
+        assert new_model.linear4.linear.weight.device == torch.device(torch_device.replace(":0", ":1"))
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
@@ -868,8 +868,8 @@ class BigModelingTester(unittest.TestCase):
 
         inputs = torch.randn(3, 4)
         outputs = model1(inputs)
-        assert outputs.device == torch.device(0)
-        assert model1.weight.device == torch.device(0)
+        assert outputs.device == torch.device(torch_device)
+        assert model1.weight.device == torch.device(torch_device)
 
         hook1.offload()
         assert model1.weight.device == torch.device("cpu")
@@ -879,13 +879,13 @@ class BigModelingTester(unittest.TestCase):
         assert model2.weight.device == torch.device("cpu")
 
         outputs = model1(inputs)
-        assert outputs.device == torch.device(0)
-        assert model1.weight.device == torch.device(0)
+        assert outputs.device == torch.device(torch_device)
+        assert model1.weight.device == torch.device(torch_device)
 
         outputs = model2(outputs)
-        assert outputs.device == torch.device(0)
+        assert outputs.device == torch.device(torch_device)
         assert model1.weight.device == torch.device("cpu")
-        assert model2.weight.device == torch.device(0)
+        assert model2.weight.device == torch.device(torch_device)
 
         hook2.offload()
         assert model2.weight.device == torch.device("cpu")
@@ -922,7 +922,7 @@ class BigModelingTester(unittest.TestCase):
         assert model.h[(-1)].self_attention.query_key_value.weight.dtype == torch.int8
         assert model.h[(-1)].self_attention.query_key_value.weight.device.index == 1
 
-    @require_non_torch_xla
+    @require_cuda
     @slow
     @require_bnb
     def test_dispatch_model_int8_simple(self):
@@ -985,7 +985,7 @@ class BigModelingTester(unittest.TestCase):
         assert model.h[0].self_attention.query_key_value.weight.dtype == torch.int8
         assert model.h[0].self_attention.query_key_value.weight.device.index == 0
 
-    @require_non_torch_xla
+    @require_cuda
     @slow
     @require_bnb
     def test_dipatch_model_fp4_simple(self):

@@ -343,7 +343,6 @@ def is_mlu_available(check_device=False):
     if importlib.util.find_spec("torch_mlu") is None:
         return False
 
-    import torch
     import torch_mlu  # noqa: F401
 
     if check_device:
@@ -359,10 +358,9 @@ def is_mlu_available(check_device=False):
 @lru_cache
 def is_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
-    if importlib.util.find_spec("torch") is None or importlib.util.find_spec("torch_npu") is None:
+    if importlib.util.find_spec("torch_npu") is None:
         return False
 
-    import torch
     import torch_npu  # noqa: F401
 
     if check_device:
