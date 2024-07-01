@@ -55,6 +55,7 @@ def save_accelerator_state(
     schedulers: list,
     dataloaders: list,
     process_index: int,
+    step: int,
     scaler: GradScaler = None,
     save_on_each_node: bool = False,
     safe_serialization: bool = True,
@@ -82,6 +83,8 @@ def save_accelerator_state(
             A list of dataloader instances to save their sampler states
         process_index (`int`):
             The current process index in the Accelerator state
+        step (`int`):
+            The current step in the internal step tracker
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional gradient scaler instance to save
         save_on_each_node (`bool`, *optional*):
@@ -134,6 +137,7 @@ def save_accelerator_state(
     # Random number generator states
     states = {}
     states_name = f"{RNG_STATE_NAME}_{process_index}.pkl"
+    states["step"] = step
     states["random_state"] = random.getstate()
     states["numpy_random_seed"] = np.random.get_state()
     states["torch_manual_seed"] = torch.get_rng_state()
@@ -180,7 +184,12 @@ def load_accelerator_state(
             What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
         load_model_func_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the model's `load_state_dict` method.
+
+    Returns:
+        `dict`: Contains the `Accelerator` attributes to override while loading the state.
     """
+    # stores the `Accelerator` attributes to override
+    override_attributes = dict()
     if map_location not in [None, "cpu", "on_device"]:
         raise TypeError(
             "Unsupported optimizer map location passed, please choose one of `None`, `'cpu'`, or `'on_device'`"
@@ -240,6 +249,7 @@ def load_accelerator_state(
     # Random states
     try:
         states = torch.load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
+        override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
@@ -252,6 +262,8 @@ def load_accelerator_state(
         logger.info("All random states loaded successfully")
     except Exception:
         logger.info("Could not load random states")
+
+    return override_attributes
 
 
 def save_custom_state(obj, path, index: int = 0, save_on_each_node: bool = False):

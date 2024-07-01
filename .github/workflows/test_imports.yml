@@ -1,0 +1,53 @@
+name: Run Import Tests
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "examples/**"
+      - "setup.py"
+    types: [opened, synchronize, reopened]
+
+env:
+  HF_HOME: ~/hf_cache
+  TESTING_MOCKED_DATALOADERS: "1"
+  IS_GITHUB_CI: "1"
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pytorch-version: [
+          latest,
+          minimum,
+        ]
+    steps:
+    - uses: actions/checkout@v3.1.0
+    - name: Set up python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.8
+    
+    - name: Install the library
+      run: |
+        pip install -e .
+        pip install pytest-reportlog tabulate setuptools git+https://github.com/muellerzr/import-timer
+
+    - name: Show installed libraries
+      run: |
+        pip freeze
+    
+    - name: Run Import Tests
+      env: 
+        PYTORCH_VERSION: ${{ matrix.pytorch-version }}
+      run: |
+        pytest -sv tests/test_imports.py
+
+    - name: Generate Report
+      if: always()
+      run: |
+        python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

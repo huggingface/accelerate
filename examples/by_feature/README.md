@@ -99,3 +99,23 @@ These arguments should be added at the end of any method for starting the python
 ```bash
 accelerate launch ./ddp_comm_hook.py --mixed_precision fp16 --ddp_comm_hook power_sgd
 ```
+
+### Profiler (`profiler.py`)
+
+- Shows how to use the profiling capabilities of `Accelerate` to profile PyTorch models during training.
+- Uses the `ProfileKwargs` handler to customize profiling options, including activities, scheduling, and additional profiling options.
+- Can generate and save profiling traces in JSON format for visualization in Chrome's tracing tool.
+
+Arguments available:
+- `--record_shapes`: If passed, records shapes for profiling.
+- `--profile_memory`: If passed, profiles memory usage.
+- `--with_stack`: If passed, profiles stack traces.
+- `--with_flops`: If passed, profiles floating point operations (FLOPS).
+- `--output_trace_dir`: If specified, saves the profiling trace to the given dir in JSON format.
+- `--cpu`: If passed, trains on the CPU instead of GPU.
+
+These arguments should be added at the end of any method for starting the Python script (such as `python`, `accelerate launch`, `python -m torchrun`), such as:
+
+```bash
+accelerate launch ./profiler.py --record_shapes --profile_memory --with_flops --output_trace_dir "profiler"
+```
