@@ -64,6 +64,7 @@ from .utils import (
     LoggerType,
     MegatronLMPlugin,
     PrecisionType,
+    ProfileKwargs,
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
@@ -102,7 +103,7 @@ from .utils import (
     save_fsdp_optimizer,
     wait_for_everyone,
 )
-from .utils.constants import FSDP_PYTORCH_VERSION
+from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -220,8 +221,8 @@ class Accelerator:
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
         kwargs_handlers (list of [`~utils.KwargsHandler`], *optional*)
-            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training or mixed
-            precision are created. See [kwargs](kwargs) for more information.
+            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training, profiling
+            or mixed precision are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or [`~utils.DynamoBackend`], *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
         gradient_accumulation_plugin ([`~utils.GradientAccumulationPlugin`], *optional*):
@@ -341,6 +342,7 @@ class Accelerator:
         self.init_handler = None
         self.fp8_recipe_handler = None
         self.autocast_handler = None
+        self.profile_handler = None
         self.has_lomo_optimizer = False
 
         if kwargs_handlers is not None:
@@ -373,6 +375,11 @@ class Accelerator:
                         raise ValueError("You can only pass one `AutocastKwargs` in `kwargs_handler`.")
                     else:
                         self.autocast_handler = handler
+                elif isinstance(handler, ProfileKwargs):
+                    if self.profile_handler is not None:
+                        raise ValueError("You can only pass one `ProfileKwargs` in `kwargs_handler`.")
+                    else:
+                        self.profile_handler = handler
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -3357,6 +3364,66 @@ class Accelerator:
         # TODO: should the `yield` be in a try/finally block?
         yield
         autocast_context.__exit__(*sys.exc_info())
+
+    @contextmanager
+    def profile(self, profile_handler: ProfileKwargs | None = None):
+        """
+        Will profile the code inside the context manager. The profile will be saved to a Chrome Trace file if
+        `profile_handler.output_trace_dir` is set.
+
+        A different `profile_handler` can be passed in to override the one set in the `Accelerator` object.
+
+        Args:
+            profile_handler (`ProfileKwargs`, *optional*):
+                The profile handler to use for this context manager. If not passed, will use the one set in the
+                `Accelerator` object.
+
+        Example:
+
+        ```python
+        # Profile with default settings
+        from accelerate import Accelerator
+        from accelerate.utils import ProfileKwargs
+
+        accelerator = Accelerator()
+        with accelerator.profile() as prof:
+            train()
+        accelerator.print(prof.key_averages().table())
+
+
+        # Profile with the custom handler
+        def custom_handler(prof):
+            print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
+
+
+        kwargs = ProfileKwargs(schedule_option=dict(wait=1, warmup=1, active=1), on_trace_ready=custom_handler)
+        accelerator = Accelerator(kwarg_handler=[kwargs])
+        with accelerator.profile() as prof:
+            for _ in range(10):
+                train_iteration()
+                prof.step()
+
+
+        # Profile and export to Chrome Trace
+        kwargs = ProfileKwargs(output_trace_dir="output_trace")
+        accelerator = Accelerator(kwarg_handler=[kwargs])
+        with accelerator.profile():
+            train()
+        ```
+        """
+        profile_handler = profile_handler or self.profile_handler or ProfileKwargs()
+
+        with profile_handler.build() as profiler:
+            yield profiler
+
+        if profile_handler.output_trace_dir is None:
+            return
+
+        os.makedirs(profile_handler.output_trace_dir, exist_ok=True)
+        profiler.export_chrome_trace(
+            os.path.join(profile_handler.output_trace_dir, PROFILE_PATTERN_NAME.format(suffix=self.process_index))
+        )
+        self.wait_for_everyone()
 
     @property
     def optimizer_step_was_skipped(self):
