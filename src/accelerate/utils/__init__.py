@@ -197,19 +197,23 @@ from .launch import (
     prepare_tpu,
 )
 
+# For docs
+from .megatron_lm import (
+    AbstractTrainStep,
+    BertTrainStep,
+    GPTTrainStep,
+    MegatronLMDummyDataLoader,
+    MegatronLMDummyScheduler,
+    T5TrainStep,
+    avg_losses_across_data_parallel_group,
+)
+
 
 if is_megatron_lm_available():
     from .megatron_lm import (
-        AbstractTrainStep,
-        BertTrainStep,
-        GPTTrainStep,
         MegatronEngine,
-        MegatronLMDummyDataLoader,
-        MegatronLMDummyScheduler,
         MegatronLMOptimizerWrapper,
         MegatronLMSchedulerWrapper,
-        T5TrainStep,
-        avg_losses_across_data_parallel_group,
         gather_across_data_parallel_groups,
     )
     from .megatron_lm import initialize as megatron_lm_initialize
