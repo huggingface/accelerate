@@ -80,7 +80,6 @@ from .utils import (
     has_transformer_engine_layers,
     is_bf16_available,
     is_deepspeed_available,
-    is_fp8_available,
     is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
@@ -1373,7 +1372,7 @@ class Accelerator:
             # Import here to keep base imports fast
             import transformer_engine.common.recipe as te_recipe
             from transformer_engine.pytorch import fp8_autocast
-            
+
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
                     convert_model(model)

@@ -54,17 +54,13 @@ class ImportSpeedTester(TempDirTestCase):
     def setUpClass(cls):
         super().setUpClass()
         output = run_import_time("import torch")
-        with open(cls.tmpdir / "pytorch_results.log", "w") as f:
-            f.write(output)
-        data = read_import_profile(f"{cls.tmpdir}/pytorch_results.log")
+        data = read_import_profile(output)
         total_time = calculate_total_time(data)
         cls.pytorch_time = total_time
 
     def test_base_import(self):
         output = run_import_time("import accelerate")
-        with open(self.tmpdir / "base_results.log", "w") as f:
-            f.write(output)
-        data = read_import_profile(self.tmpdir / "base_results.log")
+        data = read_import_profile(output)
         total_time = calculate_total_time(data)
         pct_more = total_time / self.pytorch_time
         # Base import should never be more than 10% slower than raw torch import
@@ -76,9 +72,7 @@ class ImportSpeedTester(TempDirTestCase):
 
     def test_cli_import(self):
         output = run_import_time("from accelerate.commands.launch import launch_command_parser")
-        with open(self.tmpdir / "cli_results.log", "w") as f:
-            f.write(output)
-        data = read_import_profile(self.tmpdir / "cli_results.log")
+        data = read_import_profile(output)
         total_time = calculate_total_time(data)
         pct_more = total_time / self.pytorch_time
         # Base import should never be more than 10% slower than raw torch import
