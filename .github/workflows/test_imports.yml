@@ -35,7 +35,7 @@ jobs:
     - name: Install the library
       run: |
         pip install -e .
-        pip install pytest-reportlog tabulate setuptools git+https://github.com/muellerzr/tuna-interpreter
+        pip install pytest-reportlog tabulate setuptools git+https://github.com/muellerzr/import-timer
 
     - name: Show installed libraries
       run: |

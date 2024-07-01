@@ -83,6 +83,7 @@ from .imports import (
     is_deepspeed_available,
     is_dvclive_available,
     is_fp8_available,
+    is_import_timer_available,
     is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
@@ -105,7 +106,6 @@ from .imports import (
     is_torchvision_available,
     is_transformer_engine_available,
     is_transformers_available,
-    is_tuna_interpreter_available,
     is_wandb_available,
     is_xpu_available,
 )

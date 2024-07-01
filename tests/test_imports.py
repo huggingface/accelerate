@@ -13,13 +13,13 @@
 # limitations under the License.
 import subprocess
 
-from accelerate.test_utils.testing import TempDirTestCase, require_tuna_interpreter
-from accelerate.utils import is_tuna_interpreter_available
+from accelerate.test_utils.testing import TempDirTestCase, require_import_timer
+from accelerate.utils import is_import_timer_available
 
 
-if is_tuna_interpreter_available():
-    from tuna_interpreter import calculate_total_time, read_import_profile
-    from tuna_interpreter.core import get_paths_above_threshold, sort_nodes_by_total_time
+if is_import_timer_available():
+    from import_timer import calculate_total_time, read_import_profile
+    from import_timer.core import get_paths_above_threshold, sort_nodes_by_total_time
 
 
 def convert_list_to_string(data):
@@ -35,7 +35,7 @@ def run_import_time(command: str):
     return output.stderr
 
 
-@require_tuna_interpreter
+@require_import_timer
 class ImportSpeedTester(TempDirTestCase):
     """
     Test suite which checks if imports have seen slowdowns
