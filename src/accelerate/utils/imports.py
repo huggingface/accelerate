@@ -347,7 +347,6 @@ def is_mlu_available(check_device=False):
     if importlib.util.find_spec("torch_mlu") is None:
         return False
 
-    import torch
     import torch_mlu  # noqa: F401
 
     if check_device:
@@ -363,10 +362,9 @@ def is_mlu_available(check_device=False):
 @lru_cache
 def is_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
-    if importlib.util.find_spec("torch") is None or importlib.util.find_spec("torch_npu") is None:
+    if importlib.util.find_spec("torch_npu") is None:
         return False
 
-    import torch
     import torch_npu  # noqa: F401
 
     if check_device:
@@ -381,19 +379,23 @@ def is_npu_available(check_device=False):
 
 @lru_cache
 def is_xpu_available(check_device=False):
+    """
+    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and
+    potentially if a XPU is in the environment
+    """
+
     "check if user disables it explicitly"
     if not parse_flag_from_env("ACCELERATE_USE_XPU", default=True):
         return False
-    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
-    if is_ipex_available():
-        import torch
 
+    if is_ipex_available():
         if is_torch_version("<=", "1.12"):
             return False
-    else:
-        return False
 
-    import intel_extension_for_pytorch  # noqa: F401
+        import intel_extension_for_pytorch  # noqa: F401
+    else:
+        if is_torch_version("<=", "2.3"):
+            return False
 
     if check_device:
         try:

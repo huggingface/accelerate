@@ -31,6 +31,8 @@
       title: Model quantization
     - local: usage_guides/tracking
       title: Experiment trackers
+    - local: usage_guides/profiler
+      title: Profiler
     - local: usage_guides/checkpoint
       title: Save and load training states
     - local: basic_tutorials/troubleshooting
@@ -48,6 +50,8 @@
       title: Low precision (FP8) training
     - local: usage_guides/deepspeed
       title: DeepSpeed
+    - local: usage_guides/ddp_comm_hook
+      title: DDP Communication Hooks
     - local: usage_guides/fsdp
       title: Fully Sharded Data Parallelism
     - local: usage_guides/megatron_lm

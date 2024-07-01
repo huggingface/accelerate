@@ -432,7 +432,7 @@ def dispatch_model(
             [device for device in set(device_map.values()) if device in ("cpu", "disk")]
         )
         if len(offloaded_devices_str) > 0:
-            logging.warning(
+            logger.warning(
                 f"Some parameters are on the meta device device because they were offloaded to the {offloaded_devices_str}."
             )
 
@@ -457,6 +457,7 @@ def dispatch_model(
 
             return wrapper
 
+        # Make sure to update _accelerate_added_attributes in hooks.py if you add any hook
         model.to = add_warning(model.to, model)
         if is_npu_available():
             model.npu = add_warning(model.npu, model)

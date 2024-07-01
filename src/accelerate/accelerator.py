@@ -64,6 +64,7 @@ from .utils import (
     LoggerType,
     MegatronLMPlugin,
     PrecisionType,
+    ProfileKwargs,
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
@@ -101,7 +102,7 @@ from .utils import (
     save_fsdp_optimizer,
     wait_for_everyone,
 )
-from .utils.constants import FSDP_PYTORCH_VERSION
+from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -214,8 +215,8 @@ class Accelerator:
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
         kwargs_handlers (list of [`~utils.KwargsHandler`], *optional*)
-            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training or mixed
-            precision are created. See [kwargs](kwargs) for more information.
+            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training, profiling
+            or mixed precision are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or [`~utils.DynamoBackend`], *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
         gradient_accumulation_plugin ([`~utils.GradientAccumulationPlugin`], *optional*):
@@ -335,6 +336,7 @@ class Accelerator:
         self.init_handler = None
         self.fp8_recipe_handler = None
         self.autocast_handler = None
+        self.profile_handler = None
         self.has_lomo_optimizer = False
 
         if kwargs_handlers is not None:
@@ -367,6 +369,11 @@ class Accelerator:
                         raise ValueError("You can only pass one `AutocastKwargs` in `kwargs_handler`.")
                     else:
                         self.autocast_handler = handler
+                elif isinstance(handler, ProfileKwargs):
+                    if self.profile_handler is not None:
+                        raise ValueError("You can only pass one `ProfileKwargs` in `kwargs_handler`.")
+                    else:
+                        self.profile_handler = handler
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -469,6 +476,8 @@ class Accelerator:
                 self.scaler = torch.mlu.amp.GradScaler(**kwargs)
             elif is_npu_available():
                 self.scaler = torch.npu.amp.GradScaler(**kwargs)
+            elif is_xpu_available():
+                self.scaler = torch.amp.GradScaler("xpu", **kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
@@ -1280,9 +1289,9 @@ class Accelerator:
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.use_ipex:
-                args = self._prepare_ipex(*args)
+                args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
-                args = self._prepare_ipex(*args)
+                args = self._prepare_ipex_or_xpu(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1435,6 +1444,8 @@ class Accelerator:
                     model = torch.nn.parallel.DistributedDataParallel(
                         model, device_ids=device_ids, output_device=output_device, **kwargs
                     )
+                    if self.ddp_handler is not None:
+                        self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
@@ -1553,6 +1564,8 @@ class Accelerator:
             elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
+                if self.ddp_handler is not None:
+                    self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
@@ -1894,14 +1907,18 @@ class Accelerator:
 
         return tuple(result)
 
-    def _prepare_ipex(self, *args):
-        if not is_ipex_available():
-            raise ImportError(
-                "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-        else:
-            import intel_extension_for_pytorch as ipex
+    def _prepare_ipex_or_xpu(self, *args):
+        """
+        Prepares model and optimizer for training with IPEX or XPU acceleration. This covers 3 cases, IPEX compiled
+        with CPU only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock
+        pytorch starting from version 2.4.
+        """
+        if self.state.use_ipex:
+            if not is_ipex_available():
+                raise ImportError(
+                    "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
+                    " to https://github.com/intel/intel-extension-for-pytorch."
+                )
 
         model = None
         optimizer = None
@@ -1914,12 +1931,12 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
-            if self.device.type == "xpu" and is_xpu_available():
+            if self.device.type == "xpu":
                 model = model.to(self.device)
-                model, optimizer = torch.xpu.optimize(
-                    model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1"
-                )
-            else:
+            # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
+            if is_ipex_available():
+                import intel_extension_for_pytorch as ipex
+
                 model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
@@ -2968,6 +2985,7 @@ class Accelerator:
             schedulers,
             dataloaders,
             self.state.process_index,
+            self.step,
             self.scaler,
             save_on_each_node=self.project_configuration.save_on_each_node,
             safe_serialization=safe_serialization,
@@ -3115,7 +3133,7 @@ class Accelerator:
             else:
                 map_location = "cpu"
 
-        load_accelerator_state(
+        override_attributes = load_accelerator_state(
             input_dir,
             models,
             optimizers,
@@ -3126,6 +3144,7 @@ class Accelerator:
             map_location,
             **load_model_func_kwargs,
         )
+        self.step = override_attributes["step"]
         custom_checkpoints = [
             f for f in os.listdir(input_dir) if re.search(r"^custom_checkpoint_\d+\.pkl$", f) is not None
         ]
@@ -3343,6 +3362,66 @@ class Accelerator:
         # TODO: should the `yield` be in a try/finally block?
         yield
         autocast_context.__exit__(*sys.exc_info())
+
+    @contextmanager
+    def profile(self, profile_handler: ProfileKwargs | None = None):
+        """
+        Will profile the code inside the context manager. The profile will be saved to a Chrome Trace file if
+        `profile_handler.output_trace_dir` is set.
+
+        A different `profile_handler` can be passed in to override the one set in the `Accelerator` object.
+
+        Args:
+            profile_handler (`ProfileKwargs`, *optional*):
+                The profile handler to use for this context manager. If not passed, will use the one set in the
+                `Accelerator` object.
+
+        Example:
+
+        ```python
+        # Profile with default settings
+        from accelerate import Accelerator
+        from accelerate.utils import ProfileKwargs
+
+        accelerator = Accelerator()
+        with accelerator.profile() as prof:
+            train()
+        accelerator.print(prof.key_averages().table())
+
+
+        # Profile with the custom handler
+        def custom_handler(prof):
+            print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
+
+
+        kwargs = ProfileKwargs(schedule_option=dict(wait=1, warmup=1, active=1), on_trace_ready=custom_handler)
+        accelerator = Accelerator(kwarg_handler=[kwargs])
+        with accelerator.profile() as prof:
+            for _ in range(10):
+                train_iteration()
+                prof.step()
+
+
+        # Profile and export to Chrome Trace
+        kwargs = ProfileKwargs(output_trace_dir="output_trace")
+        accelerator = Accelerator(kwarg_handler=[kwargs])
+        with accelerator.profile():
+            train()
+        ```
+        """
+        profile_handler = profile_handler or self.profile_handler or ProfileKwargs()
+
+        with profile_handler.build() as profiler:
+            yield profiler
+
+        if profile_handler.output_trace_dir is None:
+            return
+
+        os.makedirs(profile_handler.output_trace_dir, exist_ok=True)
+        profiler.export_chrome_trace(
+            os.path.join(profile_handler.output_trace_dir, PROFILE_PATTERN_NAME.format(suffix=self.process_index))
+        )
+        self.wait_for_everyone()
 
     @property
     def optimizer_step_was_skipped(self):

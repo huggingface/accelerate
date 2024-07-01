@@ -270,7 +270,7 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
     def setUp(self):
         super().setUp()
         # ClearML offline session location is stored in CLEARML_CACHE_DIR
-        self.add_mocks(mock.patch.dict(os.environ, {"CLEARML_CACHE_DIR": self.tmpdir}))
+        self.add_mocks(mock.patch.dict(os.environ, {"CLEARML_CACHE_DIR": str(self.tmpdir)}))
 
     @staticmethod
     def _get_offline_dir(accelerator):

@@ -57,6 +57,29 @@ class KwargsHandler:
         return {k: v for k, v in this_dict.items() if default_dict[k] != v}
 
 
+class EnumWithContains(enum.EnumMeta):
+    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
+
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class BaseEnum(enum.Enum, metaclass=EnumWithContains):
+    "An enum class that can get the value of an item with `str(Enum.key)`"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        "Method to list all the possible items in `cls`"
+        return list(map(str, cls))
+
+
 @dataclass
 class AutocastKwargs(KwargsHandler):
     """
@@ -77,6 +100,26 @@ class AutocastKwargs(KwargsHandler):
 
     enabled: bool = True
     cache_enabled: bool = None
+
+
+class DDPCommunicationHookType(BaseEnum):
+    """
+    Represents a type of communication hook used in DDP.
+
+    Values:
+
+        - **NO** -- no communication hook
+        - **FP16** -- DDP communication hook to compress the gradients in FP16
+        - **BF16** -- DDP communication hook to compress the gradients in BF16
+        - **POWER_SGD** -- DDP communication hook to use PowerSGD
+        - **BATCHED_POWER_SGD** -- DDP communication hook to use batched PowerSGD
+    """
+
+    NO = "no"
+    FP16 = "fp16"
+    BF16 = "bf16"
+    POWER_SGD = "power_sgd"
+    BATCHED_POWER_SGD = "batched_power_sgd"
 
 
 @dataclass
@@ -113,6 +156,47 @@ class DistributedDataParallelKwargs(KwargsHandler):
     check_reduction: bool = False
     gradient_as_bucket_view: bool = False
     static_graph: bool = False
+
+    comm_hook: DDPCommunicationHookType = DDPCommunicationHookType.NO
+    comm_wrapper: Literal[
+        DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16
+    ] = DDPCommunicationHookType.NO
+    comm_state_option: dict = field(default_factory=dict)
+
+    def to_dict(self, ignore_keys=("comm_hook", "comm_wrapper", "comm_state_option")):
+        return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
+
+    def register_comm_hook(self, model):
+        from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
+
+        hook_map: Dict[DDPCommunicationHookType, Callable] = {
+            DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
+            DDPCommunicationHookType.BF16: default_hooks.bf16_compress_hook,
+            DDPCommunicationHookType.POWER_SGD: powerSGD_hook.powerSGD_hook,
+            DDPCommunicationHookType.BATCHED_POWER_SGD: powerSGD_hook.batched_powerSGD_hook,
+        }
+
+        wrapper_map: Dict[DDPCommunicationHookType, Callable] = {
+            DDPCommunicationHookType.FP16: default_hooks.fp16_compress_wrapper,
+            DDPCommunicationHookType.BF16: default_hooks.bf16_compress_wrapper,
+        }
+
+        hook: Optional[Callable] = hook_map.get(self.comm_hook)
+        wrapper: Optional[Callable] = wrapper_map.get(self.comm_wrapper)
+
+        if hook and wrapper:
+            hook = wrapper(hook)
+
+        if hook:
+            state = (
+                powerSGD_hook.PowerSGDState(None, **self.comm_state_option)
+                if self.comm_hook in (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD)
+                else None
+            )
+            model.register_comm_hook(
+                state=state,
+                hook=hook,
+            )
 
 
 @dataclass
@@ -266,27 +350,115 @@ class FP8RecipeKwargs(KwargsHandler):
                 raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
 
 
-class EnumWithContains(enum.EnumMeta):
-    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
-
-    def __contains__(cls, item):
-        try:
-            cls(item)
-        except ValueError:
-            return False
-        return True
+# Literal
+ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda"]
 
 
-class BaseEnum(enum.Enum, metaclass=EnumWithContains):
-    "An enum class that can get the value of an item with `str(Enum.key)`"
+@dataclass
+class ProfileKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the profiler. Please refer to the
+    documentation of this [context manager](https://pytorch.org/docs/stable/profiler.html#torch.profiler.profile) for
+    more information on each argument.
 
-    def __str__(self):
-        return self.value
+    <Tip warning={true}>
 
-    @classmethod
-    def list(cls):
-        "Method to list all the possible items in `cls`"
-        return list(map(str, cls))
+    `torch.profiler` is only available in PyTorch 1.8.1 and later versions.
+
+    </Tip>
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import ProfileKwargs
+
+    kwargs = ProfileKwargs(activities=["cpu", "cuda"])
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
+
+    Args:
+        activities (`List[str]`, *optional*, default to `None`):
+            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, or `"cuda"`.
+        schedule_option (`Dict[str, int]`, *optional*, default to `None`):
+            The schedule option to use for the profiler. Available keys are `wait`, `warmup`, `active`, `repeat` and
+            `skip_first`. The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the
+            warmup for the next `warmup` steps, then do the active recording for the next `active` steps and then
+            repeat the cycle starting with `wait` steps. The optional number of cycles is specified with the `repeat`
+            parameter, the zero value means that the cycles will continue until the profiling is finished.
+        on_trace_ready (`Callable`, *optional*, default to `None`):
+            Callable that is called at each step when schedule returns `ProfilerAction.RECORD_AND_SAVE` during the
+            profiling.
+        record_shapes (`bool`, *optional*, default to `False`):
+            Save information about operator’s input shapes.
+        profile_memory (`bool`, *optional*, default to `False`):
+            Track tensor memory allocation/deallocation
+        with_stack (`bool`, *optional*, default to `False`):
+            Record source information (file and line number) for the ops.
+        with_flops (`bool`, *optional*, default to `False`):
+            Use formula to estimate the FLOPS of specific operators
+        with_modules (`bool`, *optional*, default to `False`):
+            Record module hierarchy (including function names) corresponding to the callstack of the op.
+        output_trace_dir (`str`, *optional*, default to `None`):
+            Exports the collected trace in Chrome JSON format. Chrome use 'chrome://tracing' view json file. Defaults
+            to None, which means profiling does not store json files.
+    """
+
+    activities: Optional[List[ProfilerActivity]] = None
+    schedule_option: Optional[Dict[str, int]] = None
+    on_trace_ready: Optional[Callable] = None
+    record_shapes: bool = False
+    profile_memory: bool = False
+    with_stack: bool = False
+    with_flops: bool = False
+    with_modules: bool = False
+    output_trace_dir: Optional[str] = None
+
+    def _get_profiler_activity(self, activity: ProfilerActivity) -> torch.profiler.ProfilerActivity:
+        """Get the profiler activity from the string.
+
+        Args:
+            activity (str): The profiler activity name.
+
+        Returns:
+            torch.profiler.ProfilerActivity: The profiler activity.
+        """
+
+        profiler_activity_map: dict[str, torch.profiler.ProfilerActivity] = {
+            "cpu": torch.profiler.ProfilerActivity.CPU,
+            "xpu": torch.profiler.ProfilerActivity.XPU,
+            "mita": torch.profiler.ProfilerActivity.MTIA,
+            "cuda": torch.profiler.ProfilerActivity.CUDA,
+        }
+
+        if activity not in profiler_activity_map:
+            raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
+        return profiler_activity_map[activity]
+
+    def build(self) -> torch.profiler.profile:
+        """
+        Build a profiler object with the current configuration.
+
+        Returns:
+            torch.profiler.profile: The profiler object.
+        """
+        activities: Optional[List[ProfilerActivity]] = None
+        if self.activities is not None:
+            activities = [self._get_profiler_activity(activity) for activity in self.activities]
+        schedule: Optional[torch.profiler.schedule] = None
+        if self.schedule_option is not None:
+            schedule = torch.profiler.schedule(**self.schedule_option)
+
+        return torch.profiler.profile(
+            activities=activities,
+            schedule=schedule,
+            on_trace_ready=self.on_trace_ready,
+            record_shapes=self.record_shapes,
+            profile_memory=self.profile_memory,
+            with_stack=self.with_stack,
+            with_flops=self.with_flops,
+            with_modules=self.with_modules,
+        )
 
 
 class DeprecatedFieldDescriptor:
