@@ -81,6 +81,10 @@ def get_ccl_version():
     return importlib.metadata.version("oneccl_bind_pt")
 
 
+def is_import_timer_available():
+    return _is_package_available("import_timer")
+
+
 def is_pynvml_available():
     return _is_package_available("pynvml")
 
