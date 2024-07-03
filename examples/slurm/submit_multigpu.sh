@@ -13,14 +13,15 @@
 ######################
 ### Set enviroment ###
 ######################
-source activateEnviroment.sh
+source activateEnvironment.sh
 export GPUS_PER_NODE=4
 ######################
 
-export SCRIPT=/accelerate/examples/complete_nlp_example.py
+export ACCELERATE_DIR="${ACCELERATE_DIR:-/accelerate}"
+export SCRIPT="${ACCELERATE_DIR}/examples/complete_nlp_example.py"
 export SCRIPT_ARGS=" \
     --mixed_precision fp16 \
-    --output_dir /accelerate/examples/output \
+    --output_dir ${ACCELERATE_DIR}/examples/output \
     --with_tracking \
     "
 
