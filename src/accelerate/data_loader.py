@@ -17,7 +17,7 @@ from contextlib import suppress
 from typing import Callable, List, Optional, Union
 
 import torch
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
+from torch.utils.data import BatchSampler, DataLoader, DistributedSampler, IterableDataset, RandomSampler
 
 from .logging import get_logger
 from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
@@ -34,7 +34,6 @@ from .utils import (
     slice_tensors,
     synchronize_rng_states,
 )
-from torch.utils.data import DistributedSampler
 
 
 logger = get_logger(__name__)
@@ -942,7 +941,7 @@ def prepare_data_loader(
         generator = torch.Generator().manual_seed(42)
         dataloader.generator = generator
         dataloader.sampler.generator = generator
-    
+
     is_distributed_sampler = isinstance(
         dataloader.sampler.sampler if sampler_is_batch_sampler else dataloader.sampler,
         DistributedSampler

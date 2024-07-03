@@ -103,10 +103,10 @@ from .utils import (
     save_fsdp_optimizer,
     wait_for_everyone,
 )
+from .utils import parallel_state as mpu
 from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
-from .utils import parallel_state as mpu
 
 
 if is_deepspeed_available():

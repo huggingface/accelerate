@@ -1,4 +1,6 @@
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+from torch import distributed as dist
+
 
 """Model and data parallel groups."""
 
@@ -9,9 +11,8 @@ get_{model,data}_parallel_{rank,group,world_size}()
 
 
 # Intra-layer model parallel group that the current rank belongs to.
-import torch
-from torch import distributed as dist
-from typing import Optional
+
+
 _TENSOR_MODEL_PARALLEL_GROUP = None
 # Inter-layer model parallel group that the current rank belongs to.
 _PIPELINE_MODEL_PARALLEL_GROUP = None
@@ -165,7 +166,7 @@ def initialize_model_parallel(
 
     num_tensor_model_parallel_groups: int = world_size // tensor_model_parallel_size
     num_pipeline_model_parallel_groups: int = world_size // pipeline_model_parallel_size
-    num_data_parallel_groups: int = world_size // data_parallel_size
+    # num_data_parallel_groups: int = world_size // data_parallel_size
     num_sequence_parallel_groups: int = world_size // sequence_parallel_size
     num_sequence_data_parallel_groups: int = world_size // sequence_parallel_size // data_parallel_size
 
@@ -211,7 +212,7 @@ def initialize_model_parallel(
                 _DATA_PARALLEL_GROUP = group
                 _DATA_PARALLEL_GROUP_GLOO = group_gloo
                 _DATA_PARALLEL_GLOBAL_RANKS = ranks
-    
+
     global _DATA_PARALLEL_ALL_GROUP_RANKS
     _DATA_PARALLEL_ALL_GROUP_RANKS = all_data_parallel_group_ranks
 
