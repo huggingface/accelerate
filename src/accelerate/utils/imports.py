@@ -81,6 +81,10 @@ def get_ccl_version():
     return importlib.metadata.version("oneccl_bind_pt")
 
 
+def is_import_timer_available():
+    return _is_package_available("import_timer")
+
+
 def is_pynvml_available():
     return _is_package_available("pynvml")
 
@@ -242,6 +246,10 @@ def is_peft_available():
 
 def is_timm_available():
     return _is_package_available("timm")
+
+
+def is_triton_available():
+    return _is_package_available("triton")
 
 
 def is_aim_available():

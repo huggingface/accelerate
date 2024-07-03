@@ -32,6 +32,7 @@ from accelerate.test_utils import (
     require_non_torch_xla,
     require_pippy,
     require_torchvision,
+    torch_device,
 )
 from accelerate.utils import patch_environment
 
@@ -72,7 +73,7 @@ class MultiDeviceTester(unittest.TestCase):
             execute_subprocess_async(cmd)
 
     @require_non_torch_xla
-    @require_multi_gpu
+    @require_multi_device
     def test_distributed_data_loop(self):
         """
         This TestCase checks the behaviour that occurs during distributed training or evaluation,
@@ -80,7 +81,16 @@ class MultiDeviceTester(unittest.TestCase):
         """
         print(f"Found {device_count} devices, using 2 devices only")
         cmd = get_launch_command(num_processes=2) + [self.data_loop_file_path]
-        with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
+        env_kwargs = dict(omp_num_threads=1)
+        if torch_device == "xpu":
+            env_kwargs.update(ze_affinity_mask="0,1")
+        elif torch_device == "npu":
+            env_kwargs.update(ascend_rt_visible_devices="0,1")
+        elif torch_device == "mlu":
+            env_kwargs.update(mlu_visible_devices="0,1")
+        else:
+            env_kwargs.update(cuda_visible_devices="0,1")
+        with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
     @require_multi_gpu

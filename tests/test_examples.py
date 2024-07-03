@@ -28,6 +28,7 @@ from accelerate.test_utils.testing import (
     TempDirTestCase,
     get_launch_command,
     require_huggingface_suite,
+    require_multi_device,
     require_multi_gpu,
     require_pippy,
     require_schedulefree,
@@ -55,6 +56,7 @@ EXCLUDE_EXAMPLES = [
     "megatron_lm_gpt_pretraining.py",
     "early_stopping.py",
     "ddp_comm_hook.py",
+    "profiler.py",
 ]
 
 
@@ -248,17 +250,21 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/early_stopping.py"]
         run_command(self.launch_args + testargs)
 
-    @require_multi_gpu
+    def test_profiler(self):
+        testargs = ["examples/by_feature/profiler.py"]
+        run_command(self.launch_args + testargs)
+
+    @require_multi_device
     def test_ddp_comm_hook(self):
         testargs = ["examples/by_feature/ddp_comm_hook.py", "--ddp_comm_hook", "fp16"]
         run_command(self.launch_args + testargs)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_distributed_inference_examples_stable_diffusion(self):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
         run_command(self.launch_args + testargs)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
         run_command(self.launch_args + testargs)
