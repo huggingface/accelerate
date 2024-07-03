@@ -734,7 +734,7 @@ class ModelingUtilsTester(unittest.TestCase):
         max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
         assert {0: 0, "cpu": 100} == max_memory
 
-    @require_cuda
+    @require_non_cpu
     def test_load_state_dict(self):
         state_dict = {k: torch.randn(4, 5) for k in ["a", "b", "c"]}
         device_maps = [{"a": "cpu", "b": 0, "c": "disk"}, {"a": 0, "b": 0, "c": "disk"}, {"a": 0, "b": 0, "c": 0}]
@@ -748,7 +748,10 @@ class ModelingUtilsTester(unittest.TestCase):
 
             for param, device in device_map.items():
                 device = device if device != "disk" else "cpu"
-                assert loaded_state_dict[param].device == torch.device(device)
+                expected_device = (
+                    torch.device(f"{torch_device}:{device}") if isinstance(device, int) else torch.device(device)
+                )
+                assert loaded_state_dict[param].device == expected_device
 
     def test_convert_file_size(self):
         result = convert_file_size_to_int("0MB")
