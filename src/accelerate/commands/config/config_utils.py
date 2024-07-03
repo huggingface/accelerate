@@ -37,6 +37,8 @@ DYNAMO_BACKENDS = [
     "FX2TRT",
     "ONNXRT",
     "TENSORRT",
+    "AOT_TORCHXLA_TRACE_ONCE",
+    "TORHCHXLA_TRACE_ONCE",
     "IPEX",
     "TVM",
 ]
