@@ -56,6 +56,7 @@ EXCLUDE_EXAMPLES = [
     "megatron_lm_gpt_pretraining.py",
     "early_stopping.py",
     "ddp_comm_hook.py",
+    "profiler.py",
 ]
 
 
@@ -247,6 +248,10 @@ class FeatureExamplesTests(TempDirTestCase):
 
     def test_early_stopping(self):
         testargs = ["examples/by_feature/early_stopping.py"]
+        run_command(self.launch_args + testargs)
+
+    def test_profiler(self):
+        testargs = ["examples/by_feature/profiler.py"]
         run_command(self.launch_args + testargs)
 
     @require_multi_device
