@@ -334,7 +334,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert torch.allclose(expected, output, atol=1e-5)
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
-    @require_cuda
+    @require_non_cpu
     def test_get_state_dict_from_offload(self, use_safetensors):
         accelerator = Accelerator()
 
@@ -348,18 +348,18 @@ class AcceleratorTester(AccelerateTestCase):
             cpu_onloaded_layer = get_state_dict_from_offload(
                 model.linear2, "linear2.weight", {"linear2.weight": ""}, device_to_put_offload="cpu"
             )
-            cuda_onloaded_layer = get_state_dict_from_offload(
+            device_onloaded_layer = get_state_dict_from_offload(
                 model.linear2, "linear2.weight", {"linear2.weight": ""}, device_to_put_offload=0
             )
             cpu_onloaded_layer_weight = cpu_onloaded_layer["linear2.weight"]
-            cuda_onloaded_layer_weight = cuda_onloaded_layer["linear2.weight"]
+            device_onloaded_layer_weight = device_onloaded_layer["linear2.weight"]
 
         assert torch.allclose(offloaded_layer_weight, cpu_onloaded_layer_weight)
         assert torch.allclose(
-            offloaded_layer_weight, cuda_onloaded_layer_weight.to("cpu")
+            offloaded_layer_weight, device_onloaded_layer_weight.to("cpu")
         )  # must be on the same device for torch.allclose()
         assert cpu_onloaded_layer_weight.device.type == "cpu"
-        assert cuda_onloaded_layer_weight.device.type == "cuda"
+        assert device_onloaded_layer_weight.device.type == torch_device
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_load_model_with_hooks(self, use_safetensors):

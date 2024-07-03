@@ -41,6 +41,7 @@ from ..utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_dvclive_available,
+    is_import_timer_available,
     is_mlu_available,
     is_mps_available,
     is_npu_available,
@@ -53,6 +54,7 @@ from ..utils import (
     is_torch_xla_available,
     is_torchvision_available,
     is_transformers_available,
+    is_triton_available,
     is_wandb_available,
     is_xpu_available,
     str_to_bool,
@@ -65,9 +67,9 @@ def get_backend():
     elif is_cuda_available():
         return "cuda", torch.cuda.device_count(), torch.cuda.memory_allocated
     elif is_mps_available(min_version="2.0"):
-        return "mps", 1, torch.mps.current_allocated_memory()
+        return "mps", 1, torch.mps.current_allocated_memory
     elif is_mps_available():
-        return "mps", 1, 0
+        return "mps", 1, lambda: 0
     elif is_mlu_available():
         return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
     elif is_npu_available():
@@ -75,7 +77,7 @@ def get_backend():
     elif is_xpu_available():
         return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
     else:
-        return "cpu", 1, 0
+        return "cpu", 1, lambda: 0
 
 
 torch_device, device_count, memory_allocated_func = get_backend()
@@ -213,7 +215,7 @@ def require_transformers(test_case):
 
 def require_timm(test_case):
     """
-    Decorator marking a test that requires transformers. These tests are skipped when they are not.
+    Decorator marking a test that requires timm. These tests are skipped when they are not.
     """
     return unittest.skipUnless(is_timm_available(), "test requires the timm library")(test_case)
 
@@ -223,6 +225,13 @@ def require_torchvision(test_case):
     Decorator marking a test that requires torchvision. These tests are skipped when they are not.
     """
     return unittest.skipUnless(is_torchvision_available(), "test requires the torchvision library")(test_case)
+
+
+def require_triton(test_case):
+    """
+    Decorator marking a test that requires triton. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_triton_available(), "test requires the triton library")(test_case)
 
 
 def require_schedulefree(test_case):
@@ -376,6 +385,14 @@ def require_pippy(test_case):
     Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed
     """
     return unittest.skipUnless(is_pippy_available(), "test requires pippy")(test_case)
+
+
+def require_import_timer(test_case):
+    """
+    Decorator marking a test that requires tuna interpreter installed. These tests are skipped when tuna isn't
+    installed
+    """
+    return unittest.skipUnless(is_import_timer_available(), "test requires tuna interpreter")(test_case)
 
 
 _atleast_one_tracker_available = (

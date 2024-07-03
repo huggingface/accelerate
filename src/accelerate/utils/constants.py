@@ -22,6 +22,7 @@ RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
 SCHEDULER_NAME = "scheduler"
 SAMPLER_NAME = "sampler"
+PROFILE_PATTERN_NAME = "profile_{suffix}.json"
 WEIGHTS_NAME = f"{MODEL_NAME}.bin"
 WEIGHTS_PATTERN_NAME = "pytorch_model{suffix}.bin"
 WEIGHTS_INDEX_NAME = f"{WEIGHTS_NAME}.index.json"
@@ -40,6 +41,7 @@ FSDP_PYTORCH_VERSION = "2.1.0"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich", "mpich"]
 TORCH_DYNAMO_MODES = ["default", "reduce-overhead", "max-autotune"]
+ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION = "2.2.0"
 
 STR_OPERATION_TO_FUNC = {">": op.gt, ">=": op.ge, "==": op.eq, "!=": op.ne, "<=": op.le, "<": op.lt}
 

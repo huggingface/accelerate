@@ -14,7 +14,6 @@
 
 import contextlib
 import gc
-import importlib
 import inspect
 import json
 import logging
@@ -26,7 +25,6 @@ import warnings
 from collections import OrderedDict, defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
-import packaging
 import torch
 import torch.nn as nn
 
@@ -41,6 +39,7 @@ from .imports import (
     is_torch_xla_available,
     is_xpu_available,
 )
+from .memory import clear_device_cache
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import compare_versions
@@ -458,14 +457,7 @@ def set_module_tensor_to_device(
                     module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
     if device != "cpu":
-        if is_npu_available():
-            torch.npu.empty_cache()
-        elif is_mlu_available():
-            torch.mlu.empty_cache()
-        elif is_xpu_available():
-            torch.xpu.empty_cache()
-        else:
-            torch.cuda.empty_cache()
+        clear_device_cache()
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
     # order to avoid duplicating memory, see above.
@@ -1456,7 +1448,15 @@ def load_state_dict(checkpoint_file, device_map=None):
         else:
             # if we only have one device we can load everything directly
             if len(set(device_map.values())) == 1:
-                return safe_load_file(checkpoint_file, device=list(device_map.values())[0])
+                device = list(device_map.values())[0]
+                target_device = device
+                if is_xpu_available():
+                    if compare_versions("safetensors", "<", "0.4.2"):
+                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
+                    if isinstance(device, int):
+                        target_device = f"xpu:{device}"
+
+                return safe_load_file(checkpoint_file, device=target_device)
 
             devices = list(set(device_map.values()) - {"disk"})
             # cpu device should always exist as fallback option
@@ -1486,15 +1486,9 @@ def load_state_dict(checkpoint_file, device_map=None):
                 progress_bar = None
             for device in devices:
                 target_device = device
-
                 if is_xpu_available():
-                    current_safetensors_version = packaging.version.parse(importlib.metadata.version("safetensors"))
-
-                    if compare_versions(current_safetensors_version, "<", "0.4.2"):
-                        raise ModuleNotFoundError(
-                            f"You need at least safetensors 0.4.2 for Intel GPU, while you have {current_safetensors_version}"
-                        )
-
+                    if compare_versions("safetensors", "<", "0.4.2"):
+                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
                     if isinstance(device, int):
                         target_device = f"xpu:{device}"
 
