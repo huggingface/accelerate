@@ -748,10 +748,7 @@ class ModelingUtilsTester(unittest.TestCase):
 
             for param, device in device_map.items():
                 device = device if device != "disk" else "cpu"
-                expected_device = (
-                    torch.device(f"{torch_device}:{device}") if isinstance(device, int) else torch.device(device)
-                )
-                assert loaded_state_dict[param].device == expected_device
+                assert loaded_state_dict[param].device == torch.device(device)
 
     def test_convert_file_size(self):
         result = convert_file_size_to_int("0MB")
