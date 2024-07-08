@@ -1020,11 +1020,15 @@ def _validate_launch_command(args):
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
         if args.debug is None:
             args.debug = False
-        if not args.multi_gpu and (
-            (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
-            or (is_mlu_available() and torch.mlu.device_count() > 1)
-            or (is_npu_available() and torch.npu.device_count() > 1)
-            or (torch.cuda.device_count() > 1)
+        if (
+            not args.multi_gpu
+            and args.num_processes > 1
+            and (
+                (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
+                or (is_mlu_available() and torch.mlu.device_count() > 1)
+                or (is_npu_available() and torch.npu.device_count() > 1)
+                or (torch.cuda.device_count() > 1)
+            )
         ):
             warned.append(
                 "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
