@@ -31,6 +31,7 @@ from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, requ
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
 
+
 class ModelWithTiedWeights(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -39,12 +40,9 @@ class ModelWithTiedWeights(torch.nn.Module):
         self.linear2.weight = self.linear1.weight
         self.linear2.bias = self.linear1.bias
 
-        # need to add this for compliance with other methods
-        self.weight = self.linear1.weight
-        self.bias = self.linear1.bias
-
     def forward(self, x):
         return self.linear2(self.linear1(x))
+
 
 def create_components(tied_weights=False):
     model = ModelWithTiedWeights() if tied_weights else torch.nn.Linear(2, 4)
