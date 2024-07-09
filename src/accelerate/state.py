@@ -778,7 +778,6 @@ class PartialState:
         else:
             if device == "gpu":
                 device = "cuda"
-            assert device in ("cpu", "cuda", "mlu", "npu", "xpu")
             device_module = getattr(torch, device)
             device_index = self.local_process_index % device_module.device_count()
             self.device = torch.device(device, device_index)
