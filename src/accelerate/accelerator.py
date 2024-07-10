@@ -86,6 +86,7 @@ from .utils import (
     is_megatron_lm_available,
     is_mlu_available,
     is_msamp_available,
+    is_musa_available,
     is_npu_available,
     is_torch_version,
     is_torch_xla_available,
@@ -293,6 +294,9 @@ class Accelerator:
             if is_mlu_available():
                 if compare_versions("deepspeed-mlu", "<", "0.10.1"):
                     raise ImportError("DeepSpeed MLU version must be >= 0.10.1. Please update DeepSpeed MLU.")
+            elif is_musa_available():
+                if compare_versions("deepspeed", ">", "0.14.3"):
+                    raise ImportError("DeepSpeed MUSA version must be <= 0.14.3. Please downgrade DeepSpeed.")
             elif compare_versions("deepspeed", "<", "0.9.3"):
                 raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
 
@@ -461,7 +465,7 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "npu", "xla", "mlu") or is_torch_xla_available(
+            if self.device.type not in ("xpu", "cuda", "npu", "xla", "mlu", "musa") or is_torch_xla_available(
                 check_is_tpu=True
             ):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
@@ -474,6 +478,8 @@ class Accelerator:
                 self.scaler = xamp.GradScaler(**kwargs)
             elif is_mlu_available():
                 self.scaler = torch.mlu.amp.GradScaler(**kwargs)
+            elif is_musa_available():
+                self.scalar = torch.musa.amp.GradScaler(**kwargs)
             elif is_npu_available():
                 self.scaler = torch.npu.amp.GradScaler(**kwargs)
             elif is_xpu_available():
@@ -1118,6 +1124,7 @@ class Accelerator:
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_XPU,
         ):
             dl_even_batches_values = []
@@ -1430,6 +1437,7 @@ class Accelerator:
             if self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
+                DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
             ):
@@ -3127,6 +3135,7 @@ class Accelerator:
             if self.num_processes > 1 and self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
+                DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
             ):
                 map_location = "on_device"
