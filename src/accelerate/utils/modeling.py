@@ -407,6 +407,8 @@ def set_module_tensor_to_device(
                 if not is_buffer:
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
+            if device.type == "xpu" and not is_xpu_available():
+                raise ValueError(f'{device} is not available, you should use device="cpu" instead')
             new_value = value.to(device)
         else:
             new_value = torch.tensor(value, device=device)
