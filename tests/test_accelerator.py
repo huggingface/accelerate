@@ -66,7 +66,7 @@ class ModelForTest(torch.nn.Module):
 
 
 def get_signature(model):
-    return sum((param.abs().sum().item() for param in model.parameters()))
+    return sum(param.abs().sum().item() for param in model.parameters())
 
 
 def load_random_weights(model):
