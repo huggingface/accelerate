@@ -34,6 +34,7 @@ from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
     is_mlu_available,
     is_mps_available,
+    is_musa_available,
     is_npu_available,
     is_peft_available,
     is_torch_xla_available,
@@ -50,6 +51,9 @@ if is_npu_available(check_device=False):
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_musa_available(check_device=False):
+    import torch_musa  # noqa: F401
 
 from safetensors import safe_open
 from safetensors.torch import load_file as safe_load_file
@@ -390,6 +394,8 @@ def set_module_tensor_to_device(
                 device = f"npu:{device}"
             elif is_mlu_available():
                 device = f"mlu:{device}"
+            elif is_musa_available():
+                device = f"musa:{device}"
             elif is_xpu_available():
                 device = f"xpu:{device}"
         if value is None:
@@ -822,6 +828,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
+        elif is_musa_available():
+            for i in range(torch.musa.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device("musa", i))
+                    max_memory[i] = torch.musa.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         elif is_xpu_available():
             for i in range(torch.xpu.device_count()):
                 try:
@@ -858,6 +872,8 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.npu.device_count()
     elif is_mlu_available():
         num_devices = torch.mlu.device_count()
+    elif is_musa_available():
+        num_devices = torch.musa.device_count()
     elif is_xpu_available():
         num_devices = torch.xpu.device_count()
     else:
@@ -985,6 +1001,8 @@ def get_balanced_memory(
         expected_device_type = "npu"
     elif is_mlu_available():
         expected_device_type = "mlu"
+    elif is_musa_available():
+        expected_device_type = "musa"
     elif is_xpu_available():
         expected_device_type = "xpu"
     else:
@@ -1851,6 +1869,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.FSDP,

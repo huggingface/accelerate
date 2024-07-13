@@ -29,6 +29,7 @@ from .testing import (
     require_multi_device,
     require_multi_gpu,
     require_multi_xpu,
+    require_musa,
     require_non_cpu,
     require_non_torch_xla,
     require_non_xpu,

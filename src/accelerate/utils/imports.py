@@ -364,6 +364,24 @@ def is_mlu_available(check_device=False):
 
 
 @lru_cache
+def is_musa_available(check_device=False):
+    "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
+    if importlib.util.find_spec("torch_musa") is None:
+        return False
+
+    import torch_musa  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MUSA is found
+            _ = torch.musa.device_count()
+            return torch.musa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "musa") and torch.musa.is_available()
+
+
+@lru_cache
 def is_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if importlib.util.find_spec("torch_npu") is None:

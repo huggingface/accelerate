@@ -23,7 +23,7 @@ import inspect
 
 import torch
 
-from .imports import is_mlu_available, is_mps_available, is_npu_available, is_xpu_available
+from .imports import is_mlu_available, is_mps_available, is_musa_available, is_npu_available, is_xpu_available
 
 
 def clear_device_cache(garbage_collection=False):
@@ -38,6 +38,8 @@ def clear_device_cache(garbage_collection=False):
         torch.xpu.empty_cache()
     elif is_mlu_available():
         torch.mlu.empty_cache()
+    elif is_musa_available():
+        torch.musa.empty_cache()
     elif is_npu_available():
         torch.npu.empty_cache()
     elif is_mps_available(min_version="2.0"):
