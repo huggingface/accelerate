@@ -44,6 +44,7 @@ from ..utils import (
     is_import_timer_available,
     is_mlu_available,
     is_mps_available,
+    is_musa_available,
     is_npu_available,
     is_pandas_available,
     is_pippy_available,
@@ -72,6 +73,8 @@ def get_backend():
         return "mps", 1, lambda: 0
     elif is_mlu_available():
         return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
+    elif is_musa_available():
+        return "musa", torch.musa.device_count(), torch.musa.memory_allocated
     elif is_npu_available():
         return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
@@ -179,6 +182,13 @@ def require_mlu(test_case):
     Decorator marking a test that requires MLU. These tests are skipped when there are no MLU available.
     """
     return unittest.skipUnless(is_mlu_available(), "test require a MLU")(test_case)
+
+
+def require_musa(test_case):
+    """
+    Decorator marking a test that requires MUSA. These tests are skipped when there are no MUSA available.
+    """
+    return unittest.skipUnless(is_musa_available(), "test require a MUSA")(test_case)
 
 
 def require_npu(test_case):

@@ -26,7 +26,7 @@ import torch
 from accelerate import __version__ as version
 from accelerate.commands.config import default_config_file, load_config_from_file
 
-from ..utils import is_mlu_available, is_npu_available, is_xpu_available
+from ..utils import is_mlu_available, is_musa_available, is_npu_available, is_xpu_available
 
 
 def env_command_parser(subparsers=None):
@@ -49,6 +49,7 @@ def env_command(args):
     pt_cuda_available = torch.cuda.is_available()
     pt_xpu_available = is_xpu_available()
     pt_mlu_available = is_mlu_available()
+    pt_musa_available = is_musa_available()
     pt_npu_available = is_npu_available()
 
     accelerate_config = "Not found"
@@ -75,6 +76,7 @@ def env_command(args):
         "PyTorch XPU available": str(pt_xpu_available),
         "PyTorch NPU available": str(pt_npu_available),
         "PyTorch MLU available": str(pt_mlu_available),
+        "PyTorch MUSA available": str(pt_musa_available),
         "System RAM": f"{psutil.virtual_memory().total / 1024 ** 3:.2f} GB",
     }
     if pt_cuda_available:
