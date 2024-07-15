@@ -31,8 +31,8 @@ from accelerate.data_loader import (
     skip_first_batches,
 )
 from accelerate.test_utils.testing import require_torchdata_stateful_dataloader
-from accelerate.utils.dataclasses import DataLoaderConfiguration
 from accelerate.utils import is_torchdata_stateful_dataloader_available
+from accelerate.utils.dataclasses import DataLoaderConfiguration
 
 
 if is_torchdata_stateful_dataloader_available():

@@ -21,7 +21,6 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSa
 
 from accelerate.utils import is_torchdata_stateful_dataloader_available
 
-
 from .logging import get_logger
 from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
 from .utils import (
