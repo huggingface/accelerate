@@ -15,6 +15,7 @@ import json
 import os
 import pickle
 import tempfile
+import time
 from unittest.mock import patch
 
 import psutil
@@ -204,6 +205,10 @@ class AcceleratorTester(AccelerateTestCase):
         model, optimizer, scheduler, train_dl, valid_dl = accelerator.prepare(
             model, optimizer, scheduler, train_dl, valid_dl
         )
+
+        # Short sleep here makes this test more reliable
+        time.sleep(1e-3)
+
         model, optimizer, scheduler, train_dl, valid_dl = accelerator.free_memory(
             model, optimizer, scheduler, train_dl, valid_dl
         )
