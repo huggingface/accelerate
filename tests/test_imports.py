@@ -66,7 +66,7 @@ class ImportSpeedTester(TempDirTestCase):
         # Base import should never be more than 20% slower than raw torch import
         err_msg = f"Base import is more than 20% slower than raw torch import ({pct_more:.2f}%), please check the attached `tuna` profile:\n"
         sorted_data = sort_nodes_by_total_time(data)
-        paths_above_threshold = get_paths_above_threshold(sorted_data, 0.02, max_depth=7)
+        paths_above_threshold = get_paths_above_threshold(sorted_data, 0.05, max_depth=7)
         err_msg += f"\n{convert_list_to_string(paths_above_threshold)}"
         self.assertLess(pct_more, 20, err_msg)
 
@@ -78,6 +78,6 @@ class ImportSpeedTester(TempDirTestCase):
         # Base import should never be more than 20% slower than raw torch import
         err_msg = f"Base import is more than 20% slower than raw torch import ({pct_more:.2f}%), please check the attached `tuna` profile:\n"
         sorted_data = sort_nodes_by_total_time(data)
-        paths_above_threshold = get_paths_above_threshold(sorted_data, 0.1, max_depth=7)
+        paths_above_threshold = get_paths_above_threshold(sorted_data, 0.05, max_depth=7)
         err_msg += f"\n{convert_list_to_string(paths_above_threshold)}"
         self.assertLess(pct_more, 20, err_msg)
