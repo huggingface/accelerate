@@ -186,7 +186,7 @@ class ModelingUtilsTester(unittest.TestCase):
             set_module_tensor_to_device(model, "linear1.weight", "cpu", value=tensor)
         assert (
             str(cm.exception)
-            == 'Trying to set a tensor of shape torch.Size([2, 2]) in "weight" (which has shape torch.Size([4, 3])), this look incorrect.'
+            == 'Trying to set a tensor of shape torch.Size([2, 2]) in "weight" (which has shape torch.Size([4, 3])), this looks incorrect.'
         )
 
     def test_named_tensors(self):
