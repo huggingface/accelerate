@@ -5,8 +5,7 @@ from torch import distributed as dist
 """Model and data parallel groups."""
 
 """
-mpu: Optional: A model parallelism unit object that implements
-get_{model,data}_parallel_{rank,group,world_size}()
+mpu: Optional: A model parallelism unit object that implements get_{model,data}_parallel_{rank,group,world_size}()
 """
 
 
@@ -84,65 +83,50 @@ def initialize_model_parallel(
             The number of GPUs to split individual tensors across.
 
         pipeline_model_parallel_size (int, default = 1):
-            The number of tensor parallel GPU groups to split the
-            Transformer layers across. For example, if
-            tensor_model_parallel_size is 4 and
-            pipeline_model_parallel_size is 2, the model will be split
-            into 2 groups of 4 GPUs.
+            The number of tensor parallel GPU groups to split the Transformer layers across. For example, if
+            tensor_model_parallel_size is 4 and pipeline_model_parallel_size is 2, the model will be split into 2
+            groups of 4 GPUs.
 
         virtual_pipeline_model_parallel_size (int, optional):
-            The number of stages that each pipeline group will have,
-            interleaving as necessary. If None, no interleaving is
-            performed. For example, if tensor_model_parallel_size is 1,
-            pipeline_model_parallel_size is 4,
-            virtual_pipeline_model_parallel_size is 2, and there are
-            16 transformer layers in the model, the model will be
-            split into 8 stages with two layers each and each GPU
-            would get 2 stages as such (layer number starting with 1):
+            The number of stages that each pipeline group will have, interleaving as necessary. If None, no
+            interleaving is performed. For example, if tensor_model_parallel_size is 1, pipeline_model_parallel_size is
+            4, virtual_pipeline_model_parallel_size is 2, and there are 16 transformer layers in the model, the model
+            will be split into 8 stages with two layers each and each GPU would get 2 stages as such (layer number
+            starting with 1):
 
-            GPU 0: [1, 2] [9, 10]
-            GPU 1: [3, 4] [11, 12]
-            GPU 2: [5, 6] [13, 14]
-            GPU 3: [7, 8] [15, 16]
+            GPU 0: [1, 2] [9, 10] GPU 1: [3, 4] [11, 12] GPU 2: [5, 6] [13, 14] GPU 3: [7, 8] [15, 16]
 
         pipeline_model_parallel_split_rank (int, optional):
-            For models with both an encoder and decoder, the rank in
-            pipeline to switch between encoder and decoder (i.e. the
-            first rank of the decoder). This allows the user to set
-            the pipeline parallel size of the encoder and decoder
-            independently. For example, if
-            pipeline_model_parallel_size is 8 and
-            pipeline_model_parallel_split_rank is 3, then ranks 0-2
-            will be the encoder and ranks 3-7 will be the decoder.
+            For models with both an encoder and decoder, the rank in pipeline to switch between encoder and decoder
+            (i.e. the first rank of the decoder). This allows the user to set the pipeline parallel size of the encoder
+            and decoder independently. For example, if pipeline_model_parallel_size is 8 and
+            pipeline_model_parallel_split_rank is 3, then ranks 0-2 will be the encoder and ranks 3-7 will be the
+            decoder.
 
         use_fp8 (bool, default = False):
-            Construct GPU groups needed for FP8 training, namely for
-            amax reduction across the product of the data-parallel and
-            tensor-parallel groups.
+            Construct GPU groups needed for FP8 training, namely for amax reduction across the product of the
+            data-parallel and tensor-parallel groups.
 
-    Let's say we have a total of 16 GPUs denoted by g0 ... g15 and we
-    use 2 GPUs to parallelize the model tensor, and 4 GPUs to parallelize
-    the model pipeline. The present function will
-    create 8 tensor model-parallel groups, 4 pipeline model-parallel groups
-    and 8 data-parallel groups as:
+    Let's say we have a total of 16 GPUs denoted by g0 ... g15 and we use 2 GPUs to parallelize the model tensor, and 4
+    GPUs to parallelize the model pipeline. The present function will create 8 tensor model-parallel groups, 4 pipeline
+    model-parallel groups and 8 data-parallel groups as:
         8 data_parallel groups:
             [g0, g2], [g1, g3], [g4, g6], [g5, g7], [g8, g10], [g9, g11], [g12, g14], [g13, g15]
         8 tensor model-parallel groups:
             [g0, g1], [g2, g3], [g4, g5], [g6, g7], [g8, g9], [g10, g11], [g12, g13], [g14, g15]
         4 pipeline model-parallel groups:
             [g0, g4, g8, g12], [g1, g5, g9, g13], [g2, g6, g10, g14], [g3, g7, g11, g15]
-    Note that for efficiency, the caller should make sure adjacent ranks
-    are on the same DGX box. For example if we are using 2 DGX-1 boxes
-    with a total of 16 GPUs, rank 0 to 7 belong to the first box and
-    ranks 8 to 15 belong to the second box.
+    Note that for efficiency, the caller should make sure adjacent ranks are on the same DGX box. For example if we are
+    using 2 DGX-1 boxes with a total of 16 GPUs, rank 0 to 7 belong to the first box and ranks 8 to 15 belong to the
+    second box.
 
     """
     # Get world size and rank. Ensure some consistencies.
     assert dist.is_initialized()
     world_size: int = dist.get_world_size()
 
-    assert tensor_model_parallel_size == 1, 'tensor model parallel size should be 1'
-    assert pipeline_model_parallel_size == 1, 'pipeline model parallel size should be 1'
+    assert tensor_model_parallel_size == 1, "tensor model parallel size should be 1"
+    assert pipeline_model_parallel_size == 1, "pipeline model parallel size should be 1"
 
     if world_size % (tensor_model_parallel_size * pipeline_model_parallel_size) != 0:
         raise RuntimeError(
@@ -152,8 +136,9 @@ def initialize_model_parallel(
 
     enable_ds_sequence_parallel = sequence_parallel_size > 1
     if enable_ds_sequence_parallel:
-        assert tensor_model_parallel_size == 1 and pipeline_model_parallel_size == 1, \
-            'DeepSpeed\'s sequence parallel does not work with tensor parallel or pipeline parallel'
+        assert (
+            tensor_model_parallel_size == 1 and pipeline_model_parallel_size == 1
+        ), "DeepSpeed's sequence parallel does not work with tensor parallel or pipeline parallel"
 
         if world_size % sequence_parallel_size != 0:
             raise RuntimeError(
@@ -161,7 +146,8 @@ def initialize_model_parallel(
             )
 
     data_parallel_size: int = world_size // (
-        tensor_model_parallel_size * pipeline_model_parallel_size * sequence_parallel_size)
+        tensor_model_parallel_size * pipeline_model_parallel_size * sequence_parallel_size
+    )
     sequence_data_parallel_size: int = sequence_parallel_size * data_parallel_size
 
     num_tensor_model_parallel_groups: int = world_size // tensor_model_parallel_size
@@ -189,7 +175,7 @@ def initialize_model_parallel(
     global _DATA_PARALLEL_GROUP
     global _DATA_PARALLEL_GROUP_GLOO
     global _DATA_PARALLEL_GLOBAL_RANKS
-    assert _DATA_PARALLEL_GROUP is None, 'data parallel group is already initialized'
+    assert _DATA_PARALLEL_GROUP is None, "data parallel group is already initialized"
     all_data_parallel_group_ranks = []
     for i in range(pipeline_model_parallel_size):
         start_rank = i * num_pipeline_model_parallel_groups
@@ -218,25 +204,21 @@ def initialize_model_parallel(
 
     # Build the sequence parallel groups.
     global _SEQUENCE_PARALLEL_GROUP
-    assert _SEQUENCE_PARALLEL_GROUP is None, \
-        'sequence parallel group is already initialized'
+    assert _SEQUENCE_PARALLEL_GROUP is None, "sequence parallel group is already initialized"
     for i in range(num_sequence_parallel_groups):
-        ranks = range(i * sequence_parallel_size,
-                      (i + 1) * sequence_parallel_size)
+        ranks = range(i * sequence_parallel_size, (i + 1) * sequence_parallel_size)
         group = dist.new_group(ranks)
         if rank in ranks:
             _SEQUENCE_PARALLEL_GROUP = group
 
     # Build the sequence data parallel groups.
     global _SEQUENCE_DATA_PARALLEL_GROUP
-    assert _SEQUENCE_DATA_PARALLEL_GROUP is None, \
-        'sequence data parallel group is already initialized'
+    assert _SEQUENCE_DATA_PARALLEL_GROUP is None, "sequence data parallel group is already initialized"
     all_data_sequence_parallel_group_ranks = []
 
     if enable_ds_sequence_parallel:
         for i in range(num_sequence_data_parallel_groups):
-            ranks = range(i * sequence_data_parallel_size,
-                          (i + 1) * sequence_data_parallel_size)
+            ranks = range(i * sequence_data_parallel_size, (i + 1) * sequence_data_parallel_size)
             group = dist.new_group(ranks)
             all_data_sequence_parallel_group_ranks.append(list(ranks))
             if rank in ranks:
@@ -246,22 +228,22 @@ def initialize_model_parallel(
 
     # Build the model-parallel groups.
     global _MODEL_PARALLEL_GROUP
-    assert _MODEL_PARALLEL_GROUP is None, 'model parallel group is already initialized'
+    assert _MODEL_PARALLEL_GROUP is None, "model parallel group is already initialized"
     num_model_parallel_groups = sequence_data_parallel_size if enable_ds_sequence_parallel else data_parallel_size
-    model_parallel_group_ranks = all_data_sequence_parallel_group_ranks if enable_ds_sequence_parallel else all_data_parallel_group_ranks
+    model_parallel_group_ranks = (
+        all_data_sequence_parallel_group_ranks if enable_ds_sequence_parallel else all_data_parallel_group_ranks
+    )
     for i in range(num_model_parallel_groups):
-        ranks = [parallel_group_ranks[i]
-                 for parallel_group_ranks in model_parallel_group_ranks]
+        ranks = [parallel_group_ranks[i] for parallel_group_ranks in model_parallel_group_ranks]
         group = dist.new_group(ranks)
         if rank in ranks:
             _MODEL_PARALLEL_GROUP = group
 
     # Build the tensor model-parallel groups.
     global _TENSOR_MODEL_PARALLEL_GROUP
-    assert _TENSOR_MODEL_PARALLEL_GROUP is None, 'tensor model parallel group is already initialized'
+    assert _TENSOR_MODEL_PARALLEL_GROUP is None, "tensor model parallel group is already initialized"
     for i in range(num_tensor_model_parallel_groups):
-        ranks = range(i * tensor_model_parallel_size,
-                      (i + 1) * tensor_model_parallel_size)
+        ranks = range(i * tensor_model_parallel_size, (i + 1) * tensor_model_parallel_size)
         group = dist.new_group(ranks)
         if rank in ranks:
             _TENSOR_MODEL_PARALLEL_GROUP = group
@@ -270,13 +252,13 @@ def initialize_model_parallel(
     # (first and last rank in each pipeline model-parallel group).
     global _PIPELINE_MODEL_PARALLEL_GROUP
     global _PIPELINE_GLOBAL_RANKS
-    assert _PIPELINE_MODEL_PARALLEL_GROUP is None, 'pipeline model parallel group is already initialized'
+    assert _PIPELINE_MODEL_PARALLEL_GROUP is None, "pipeline model parallel group is already initialized"
     global _EMBEDDING_GROUP
     global _EMBEDDING_GLOBAL_RANKS
-    assert _EMBEDDING_GROUP is None, 'embedding group is already initialized'
+    assert _EMBEDDING_GROUP is None, "embedding group is already initialized"
     global _POSITION_EMBEDDING_GROUP
     global _POSITION_EMBEDDING_GLOBAL_RANKS
-    assert _POSITION_EMBEDDING_GROUP is None, 'position embedding group is already initialized'
+    assert _POSITION_EMBEDDING_GROUP is None, "position embedding group is already initialized"
     for i in range(num_pipeline_model_parallel_groups):
         ranks = range(i, world_size, num_pipeline_model_parallel_groups)
         group = dist.new_group(ranks)
@@ -313,8 +295,7 @@ def initialize_model_parallel(
 
     # Build the FP8 groups.
     global _AMAX_REDUCTION_GROUP
-    assert _AMAX_REDUCTION_GROUP is None, \
-        'FP8 amax reduction group is already initialized'
+    assert _AMAX_REDUCTION_GROUP is None, "FP8 amax reduction group is already initialized"
     # if use_fp8:
     #     amax_group_size: int = tensor_model_parallel_size * data_parallel_size
     #     num_amax_groups: int = world_size // amax_group_size
@@ -355,8 +336,7 @@ def get_sequence_parallel_world_size_or_one():
 
 def sequence_parallel_is_initialized():
     """Check if sequence and data parallel groups are initialized."""
-    if _SEQUENCE_PARALLEL_GROUP is None or \
-            _DATA_PARALLEL_GROUP is None:
+    if _SEQUENCE_PARALLEL_GROUP is None or _DATA_PARALLEL_GROUP is None:
         return False
     return True
 
@@ -370,66 +350,62 @@ def sequence_data_parallel_is_initialized():
 
 def get_model_parallel_group():
     """Get the model parallel group the caller rank belongs to."""
-    assert _MODEL_PARALLEL_GROUP is not None, 'model parallel group is not initialized'
+    assert _MODEL_PARALLEL_GROUP is not None, "model parallel group is not initialized"
     return _MODEL_PARALLEL_GROUP
 
 
 def get_tensor_model_parallel_group(check_initialized=True):
     """Get the tensor model parallel group the caller rank belongs to."""
     if check_initialized:
-        assert _TENSOR_MODEL_PARALLEL_GROUP is not None, 'tensor model parallel group is not initialized'
+        assert _TENSOR_MODEL_PARALLEL_GROUP is not None, "tensor model parallel group is not initialized"
     return _TENSOR_MODEL_PARALLEL_GROUP
 
 
 def get_pipeline_model_parallel_group():
     """Get the pipeline model parallel group the caller rank belongs to."""
-    assert _PIPELINE_MODEL_PARALLEL_GROUP is not None, 'pipeline_model parallel group is not initialized'
+    assert _PIPELINE_MODEL_PARALLEL_GROUP is not None, "pipeline_model parallel group is not initialized"
     return _PIPELINE_MODEL_PARALLEL_GROUP
 
 
 def get_sequence_parallel_group():
     """Get the sequence parallel group the caller rank belongs to."""
-    assert _SEQUENCE_PARALLEL_GROUP is not None, \
-        'sequence parallel group is not initialized'
+    assert _SEQUENCE_PARALLEL_GROUP is not None, "sequence parallel group is not initialized"
     return _SEQUENCE_PARALLEL_GROUP
 
 
 def get_sequence_data_parallel_group():
     """Get the sequence parallel group the caller rank belongs to."""
-    assert _SEQUENCE_DATA_PARALLEL_GROUP is not None, \
-        'sequence data parallel group is not initialized'
+    assert _SEQUENCE_DATA_PARALLEL_GROUP is not None, "sequence data parallel group is not initialized"
     return _SEQUENCE_DATA_PARALLEL_GROUP
 
 
 def get_data_parallel_group():
     """Get the data parallel group the caller rank belongs to."""
-    assert _DATA_PARALLEL_GROUP is not None, 'data parallel group is not initialized'
+    assert _DATA_PARALLEL_GROUP is not None, "data parallel group is not initialized"
     return _DATA_PARALLEL_GROUP
 
 
 def get_data_parallel_group_gloo():
     """Get the data parallel group-gloo the caller rank belongs to."""
-    assert _DATA_PARALLEL_GROUP_GLOO is not None, \
-        'data parallel group-gloo is not initialized'
+    assert _DATA_PARALLEL_GROUP_GLOO is not None, "data parallel group-gloo is not initialized"
     return _DATA_PARALLEL_GROUP_GLOO
 
 
 def get_embedding_group():
     """Get the embedding group the caller rank belongs to."""
-    assert _EMBEDDING_GROUP is not None, 'embedding group is not initialized'
+    assert _EMBEDDING_GROUP is not None, "embedding group is not initialized"
     return _EMBEDDING_GROUP
 
 
 def get_position_embedding_group():
     """Get the position embedding group the caller rank belongs to."""
-    assert _POSITION_EMBEDDING_GROUP is not None, 'position embedding group is not initialized'
+    assert _POSITION_EMBEDDING_GROUP is not None, "position embedding group is not initialized"
     return _POSITION_EMBEDDING_GROUP
 
 
 def get_amax_reduction_group():
     """Get the FP8 amax reduction group the caller rank belongs to."""
-    assert _AMAX_REDUCTION_GROUP is not None, \
-        'FP8 amax reduction group is not initialized'
+    assert _AMAX_REDUCTION_GROUP is not None, "FP8 amax reduction group is not initialized"
     return _AMAX_REDUCTION_GROUP
 
 
@@ -440,13 +416,13 @@ def set_tensor_model_parallel_world_size(world_size):
 
 
 def set_sequence_parallel_world_size(world_size):
-    """Set the sequence  parallel size"""
+    """Set the sequence parallel size"""
     global _SEQUENCE_PARALLEL_WORLD_SIZE
     _SEQUENCE_PARALLEL_WORLD_SIZE = world_size
 
 
 def set_sequence_data_parallel_world_size(world_size):
-    """Set the sequence  parallel size"""
+    """Set the sequence parallel size"""
     global _SEQUENCE_DATA_PARALLEL_WORLD_SIZE
     _SEQUENCE_DATA_PARALLEL_WORLD_SIZE = world_size
 
@@ -472,8 +448,9 @@ def get_tensor_model_parallel_world_size():
 
 
 def get_model_parallel_world_size():
-    assert get_pipeline_model_parallel_world_size(
-    ) == 1, "legacy get_model_parallel_world_size is only supported if PP is disabled"
+    assert (
+        get_pipeline_model_parallel_world_size() == 1
+    ), "legacy get_model_parallel_world_size is only supported if PP is disabled"
     return get_tensor_model_parallel_world_size()
 
 
@@ -514,8 +491,9 @@ def set_tensor_model_parallel_rank(rank):
 
 
 def get_model_parallel_rank():
-    assert get_pipeline_model_parallel_world_size(
-    ) == 1, "legacy get_model_parallel_rank is only supported if PP is disabled"
+    assert (
+        get_pipeline_model_parallel_world_size() == 1
+    ), "legacy get_model_parallel_rank is only supported if PP is disabled"
     return get_tensor_model_parallel_rank()
 
 
@@ -658,8 +636,7 @@ def is_pipeline_stage_after_split(rank=None):
 
 def is_pipeline_stage_at_split():
     """Return true if pipeline stage executes decoder block and next
-    stage executes encoder block for a model with both encoder and
-    decoder."""
+    stage executes encoder block for a model with both encoder and decoder."""
     rank = get_pipeline_model_parallel_rank()
     return is_pipeline_stage_before_split(rank) and is_pipeline_stage_after_split(rank + 1)
 
