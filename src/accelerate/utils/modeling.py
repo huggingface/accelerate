@@ -398,6 +398,8 @@ def set_module_tensor_to_device(
                 device = f"musa:{device}"
             elif is_xpu_available():
                 device = f"xpu:{device}"
+        if "xpu" in str(device) and not is_xpu_available():
+            raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
