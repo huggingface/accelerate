@@ -18,7 +18,7 @@ from typing import List
 
 import numpy as np
 import torch
-from safetensors.torch import load_file
+from safetensors.torch import load_model
 from torch.cuda.amp import GradScaler
 
 from .utils import (
@@ -205,12 +205,12 @@ def load_accelerator_state(
         ending = f"_{i}" if i > 0 else ""
         input_model_file = input_dir.joinpath(f"{SAFE_MODEL_NAME}{ending}.safetensors")
         if input_model_file.exists():
-            state_dict = load_file(input_model_file, device=str(map_location))
+            load_model(model, input_model_file, device=str(map_location), **load_model_func_kwargs)
         else:
             # Load with torch
             input_model_file = input_dir.joinpath(f"{MODEL_NAME}{ending}.bin")
             state_dict = torch.load(input_model_file, map_location=map_location)
-        models[i].load_state_dict(state_dict, **load_model_func_kwargs)
+            model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
     # Optimizer states

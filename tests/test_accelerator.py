@@ -32,8 +32,20 @@ from accelerate.utils import patch_environment
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
 
 
-def create_components():
-    model = torch.nn.Linear(2, 4)
+class ModelWithTiedWeights(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = torch.nn.Linear(2, 4)
+        self.linear2 = torch.nn.Linear(4, 2)
+        self.linear2.weight = self.linear1.weight
+        self.linear2.bias = self.linear1.bias
+
+    def forward(self, x):
+        return self.linear2(self.linear1(x))
+
+
+def create_components(tied_weights=False):
+    model = ModelWithTiedWeights() if tied_weights else torch.nn.Linear(2, 4)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1.0)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.01, steps_per_epoch=2, epochs=1)
     train_dl = DataLoader(TensorDataset(torch.tensor([1, 2, 3])))
@@ -54,11 +66,14 @@ class ModelForTest(torch.nn.Module):
 
 
 def get_signature(model):
-    return (model.weight.abs().sum() + model.bias.abs().sum()).item()
+    return sum(param.abs().sum().item() for param in model.parameters())
 
 
 def load_random_weights(model):
-    state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
+    if isinstance(model, torch.nn.Linear):
+        state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
+    elif isinstance(model, ModelWithTiedWeights):
+        state = ModelWithTiedWeights().state_dict()
     model.load_state_dict(state)
 
 
@@ -66,6 +81,7 @@ def parameterized_custom_name_func(func, param_num, param):
     # customize the test name generator function as we want both params to appear in the sub-test
     # name, as by default it shows only the first param
     param_based_name = "use_safetensors" if param.args[0] is True else "use_pytorch"
+    param_based_name += "_tied_weights" if (len(param.args) == 2 and param.args[1] is True) else ""
     return f"{func.__name__}_{param_based_name}"
 
 
@@ -230,10 +246,10 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator = Accelerator()
             assert str(accelerator.state.device) == "cuda:64"
 
-    @parameterized.expand((True, False), name_func=parameterized_custom_name_func)
-    def test_save_load_model(self, use_safetensors):
+    @parameterized.expand([(True, True), (True, False), (False, False)], name_func=parameterized_custom_name_func)
+    def test_save_load_model(self, use_safetensors, tied_weights):
         accelerator = Accelerator()
-        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        model, optimizer, scheduler, train_dl, valid_dl = create_components(tied_weights)
         accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
 
         model_signature = get_signature(model)
