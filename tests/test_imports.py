@@ -62,22 +62,22 @@ class ImportSpeedTester(TempDirTestCase):
         output = run_import_time("import accelerate")
         data = read_import_profile(output)
         total_time = calculate_total_time(data)
-        pct_more = total_time / self.pytorch_time
-        # Base import should never be more than 10% slower than raw torch import
-        err_msg = f"Base import is more than 20% slower than raw torch import ({pct_more * 100:.2f}%), please check the attached `tuna` profile:\n"
+        pct_more = (total_time - self.pytorch_time) / self.pytorch_time * 100
+        # Base import should never be more than 20% slower than raw torch import
+        err_msg = f"Base import is more than 20% slower than raw torch import ({pct_more:.2f}%), please check the attached `tuna` profile:\n"
         sorted_data = sort_nodes_by_total_time(data)
-        paths_above_threshold = get_paths_above_threshold(sorted_data, 0.1, max_depth=7)
+        paths_above_threshold = get_paths_above_threshold(sorted_data, 0.02, max_depth=7)
         err_msg += f"\n{convert_list_to_string(paths_above_threshold)}"
-        self.assertLess(pct_more, 1.2, err_msg)
+        self.assertLess(pct_more, 20, err_msg)
 
     def test_cli_import(self):
         output = run_import_time("from accelerate.commands.launch import launch_command_parser")
         data = read_import_profile(output)
         total_time = calculate_total_time(data)
-        pct_more = total_time / self.pytorch_time
-        # Base import should never be more than 10% slower than raw torch import
-        err_msg = f"Base import is more than 20% slower than raw torch import ({pct_more * 100:.2f}%), please check the attached `tuna` profile:\n"
+        pct_more = (total_time - self.pytorch_time) / self.pytorch_time * 100
+        # Base import should never be more than 20% slower than raw torch import
+        err_msg = f"Base import is more than 20% slower than raw torch import ({pct_more:.2f}%), please check the attached `tuna` profile:\n"
         sorted_data = sort_nodes_by_total_time(data)
         paths_above_threshold = get_paths_above_threshold(sorted_data, 0.1, max_depth=7)
         err_msg += f"\n{convert_list_to_string(paths_above_threshold)}"
-        self.assertLess(pct_more, 1.2, err_msg)
+        self.assertLess(pct_more, 20, err_msg)
