@@ -40,6 +40,7 @@ from .utils import (
     is_ipex_available,
     is_mlu_available,
     is_mps_available,
+    is_musa_available,
     is_npu_available,
     is_torch_xla_available,
     is_xpu_available,
@@ -55,6 +56,9 @@ if is_torch_xla_available():
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_musa_available(check_device=False):
+    import torch_musa  # noqa: F401
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
@@ -369,6 +373,7 @@ class PartialState:
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
@@ -688,6 +693,7 @@ class PartialState:
         - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
         - CUDA if `torch.cuda.is_available()`
         - MLU if `is_mlu_available()`
+        - MUSA if `is_musa_available()`
         - NPU if `is_npu_available()`
         - CPU otherwise
         """
@@ -696,6 +702,8 @@ class PartialState:
             return torch.device("mps")
         elif is_mlu_available():
             return torch.device("mlu")
+        elif is_musa_available():
+            return torch.device("musa")
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
@@ -722,6 +730,9 @@ class PartialState:
             if is_mlu_available():
                 backend = "cncl"
                 distributed_type = DistributedType.MULTI_MLU
+            elif is_musa_available():
+                backend = "mccl"
+                distributed_type = DistributedType.MULTI_MUSA
             elif torch.cuda.is_available():
                 if backend is None:
                     backend = "nccl"
@@ -769,7 +780,7 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "npu", "xpu", "xla"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
@@ -888,6 +899,7 @@ class AcceleratorState:
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
+                DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
             ]:
@@ -914,6 +926,12 @@ class AcceleratorState:
                 and self.device.type == "cuda"
             ):
                 torch.backends.cuda.matmul.allow_tf32 = True
+            if (
+                self.dynamo_plugin.backend != DynamoBackend.NO
+                and self._mixed_precision == "no"
+                and self.device.type == "musa"
+            ):
+                torch.backends.musa.matmul.allow_tf32 = True
             PartialState._shared_state["distributed_type"] = self.distributed_type
 
     @property

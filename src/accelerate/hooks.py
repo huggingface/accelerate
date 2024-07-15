@@ -30,7 +30,7 @@ from .utils.modeling import get_non_persistent_buffers
 from .utils.other import recursive_getattr
 
 
-_accelerate_added_attributes = ["to", "cuda", "npu", "xpu", "mlu"]
+_accelerate_added_attributes = ["to", "cuda", "npu", "xpu", "mlu", "musa"]
 
 
 class ModelHook:
