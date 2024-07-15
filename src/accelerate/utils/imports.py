@@ -86,7 +86,7 @@ def is_import_timer_available():
 
 
 def is_pynvml_available():
-    return _is_package_available("pynvml")
+    return _is_package_available("pynvml") or _is_package_available("pynvml", "nvidia-ml-py")
 
 
 def is_pytest_available():
