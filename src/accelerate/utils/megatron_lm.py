@@ -25,16 +25,8 @@ from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
-from .imports import is_megatron_lm_available, is_transformers_available
+from .imports import is_megatron_lm_available
 from .operations import recursively_apply, send_to_device
-
-
-if is_transformers_available():
-    from transformers.modeling_outputs import (
-        CausalLMOutputWithCrossAttentions,
-        Seq2SeqLMOutput,
-        SequenceClassifierOutput,
-    )
 
 
 if is_megatron_lm_available():
@@ -467,6 +459,8 @@ class BertTrainStep(AbstractTrainStep):
         if not args.model_return_dict:
             self.model_output_class = None
         else:
+            from transformers.modeling_outputs import SequenceClassifierOutput
+
             self.model_output_class = SequenceClassifierOutput
 
     def get_batch_func(self, accelerator, megatron_dataset_flag):
@@ -614,6 +608,8 @@ class GPTTrainStep(AbstractTrainStep):
         if not args.model_return_dict:
             self.model_output_class = None
         else:
+            from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+
             self.model_output_class = CausalLMOutputWithCrossAttentions
 
     def get_batch_func(self, accelerator, megatron_dataset_flag):
@@ -737,6 +733,8 @@ class T5TrainStep(AbstractTrainStep):
         if not args.model_return_dict:
             self.model_output_class = None
         else:
+            from transformers.modeling_outputs import Seq2SeqLMOutput
+
             self.model_output_class = Seq2SeqLMOutput
 
     @staticmethod
