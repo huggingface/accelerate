@@ -404,7 +404,7 @@ class DataLoaderAdapter:
         self.use_stateful_dataloader = use_stateful_dataloader
 
         if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
-            raise ValueError("StatefulDataLoader is not available. Please install torchdata to use it.")
+            raise ImportError("StatefulDataLoader is not available. Please install torchdata to use it.")
         if use_stateful_dataloader:
             self.base_dataloader = StatefulDataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
         else:
