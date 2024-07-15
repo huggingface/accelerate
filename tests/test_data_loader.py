@@ -32,7 +32,7 @@ from accelerate.data_loader import (
 )
 from accelerate.test_utils.testing import require_torchdata_stateful_dataloader
 from accelerate.utils.dataclasses import DataLoaderConfiguration
-from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
+from accelerate.utils import is_torchdata_stateful_dataloader_available
 
 
 if is_torchdata_stateful_dataloader_available():

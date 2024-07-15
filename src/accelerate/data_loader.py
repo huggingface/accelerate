@@ -19,11 +19,8 @@ from typing import Callable, List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
-from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
+from accelerate.utils import is_torchdata_stateful_dataloader_available
 
-
-if is_torchdata_stateful_dataloader_available():
-    from torchdata.stateful_dataloader import StatefulDataLoader
 
 from .logging import get_logger
 from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
@@ -402,6 +399,8 @@ class DataLoaderAdapter:
 
     def __init__(self, dataset, use_stateful_dataloader=False, batch_sampler=None, **kwargs):
         self.use_stateful_dataloader = use_stateful_dataloader
+        if is_torchdata_stateful_dataloader_available():
+            from torchdata.stateful_dataloader import StatefulDataLoader
 
         if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
             raise ImportError("StatefulDataLoader is not available. Please install torchdata to use it.")
@@ -1164,6 +1163,9 @@ def skip_first_batches(dataloader, num_batches=0):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
     """
+    if is_torchdata_stateful_dataloader_available():
+        from torchdata.stateful_dataloader import StatefulDataLoader
+
     dataset = dataloader.dataset
     sampler_is_batch_sampler = False
     if isinstance(dataset, IterableDataset):

@@ -29,7 +29,6 @@ from unittest import mock
 import torch
 
 import accelerate
-from accelerate.utils.imports import is_torchdata_stateful_dataloader_available
 
 from ..state import AcceleratorState, PartialState
 from ..utils import (
@@ -53,6 +52,7 @@ from ..utils import (
     is_timm_available,
     is_torch_version,
     is_torch_xla_available,
+    is_torchdata_stateful_dataloader_available,
     is_torchvision_available,
     is_transformers_available,
     is_triton_available,
