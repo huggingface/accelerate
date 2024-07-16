@@ -361,6 +361,8 @@ def set_module_tensor_to_device(
     param_cls = type(param)
 
     if value is not None:
+        # We can expect mismatches when using bnb 4bit since Params4bit will reshape and pack the weights.
+        # In other cases, we want to make sure we're not loading checkpoints that do not match the config.
         if old_value.shape != value.shape and param_cls.__name__ != "Params4bit":
             raise ValueError(
                 f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this looks incorrect.'
