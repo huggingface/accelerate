@@ -789,18 +789,10 @@ class PartialState:
         else:
             if device == "gpu":
                 device = "cuda"
-            self.device = torch.device(device, self.local_process_index)
-        if self.device is not None:
-            if device == "xpu":
-                torch.xpu.set_device(self.device)
-            elif device == "mlu":
-                torch.mlu.set_device(self.device)
-            elif device == "musa":
-                torch.musa.set_device(self.device)
-            elif device == "npu":
-                torch.npu.set_device(self.device)
-            elif device == "cuda":
-                torch.cuda.set_device(self.device)
+            device_module = getattr(torch, device)
+            device_index = self.local_process_index % device_module.device_count()
+            self.device = torch.device(device, device_index)
+            device_module.set_device(self.device)
 
     def __getattr__(self, name: str):
         # By this point we know that no attributes of `self` contain `name`,
