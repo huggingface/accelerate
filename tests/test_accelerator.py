@@ -116,9 +116,9 @@ def parameterized_custom_name_func(func, param_num, param):
     if len(param.args) > 1:
         param_based_name += "_tied_weights" if param.args[1] is True else ""
     if len(param.args) > 2:
-        param_based_name += f"_num_workers_{param.args[1]}"
+        param_based_name += f"_num_workers_{param.args[2]}"
     if len(param.args) > 3:
-        param_based_name += "_dispatch_batches" if param.args[2] is True else "_no_dispatch_batches"
+        param_based_name += "_dispatch_batches" if param.args[3] is True else "_no_dispatch_batches"
     return f"{func.__name__}_{param_based_name}"
 
 
