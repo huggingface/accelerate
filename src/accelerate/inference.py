@@ -84,7 +84,7 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
 
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
-    split_sec = {split_point: SplitPoint.BEGINNING for split_point in split_points}
+    split_spec = {split_point: SplitPoint.BEGINNING for split_point in split_points}
     found_batch_size = find_pippy_batch_size(args, kwargs)
     if found_batch_size != num_chunks:
         if args is not None:
@@ -95,7 +95,7 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
         model,
         mb_args=args,
         mb_kwargs=kwargs,
-        split_sec=split_sec,
+        split_spec=split_spec,
     )
     stage = pipe.build_stage(pipe, state.local_process_index, device=state.device)
     schedule = ScheduleGPipe(stage, args.chunks)
