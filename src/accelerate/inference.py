@@ -81,7 +81,8 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     # from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
     # from pippy.PipelineStage import PipelineStage
-    from torch.distributed.pipelining import pipeline, ScheduleGPipe, SplitPoint, annotate_split_points
+    from torch.distributed.pipelining import pipeline, ScheduleGPipe, SplitPoint
+    from torch.distributed.pipelining._IR import annotate_split_points
 
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
