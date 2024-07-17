@@ -154,11 +154,6 @@ def prepare_pippy(
         gather_output (`bool`, defaults to `False`):
             If `True`, the output from the last GPU (which holds the true outputs) is sent across to all GPUs.
     """
-    if not is_pippy_available():
-        raise ImportError(
-            "`pippy` was not found to be installed on your system. Please "
-            "install using `pip install torchpippy` or ensure you have at least version 0.2.0"
-        )
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
     example_kwargs = send_to_device(example_kwargs, "cpu")
