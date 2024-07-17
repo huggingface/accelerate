@@ -79,8 +79,9 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     `AcceleratorState.num_processes`
     """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
-    from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
-    from pippy.PipelineStage import PipelineStage
+    # from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
+    # from pippy.PipelineStage import PipelineStage
+    from torch.distributed.pipelining import pipeline, ScheduleGPipe, SplitPoint
 
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
@@ -91,10 +92,15 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
             args = pad_input_tensors(args, found_batch_size, num_chunks)
         if kwargs is not None:
             kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
-    pipe = Pipe.from_tracing(model, num_chunks=num_chunks, example_args=args, example_kwargs=kwargs)
-    stage = PipelineStage(pipe, state.local_process_index, device=state.device)
+    pipe = pipeline(
+        model,
+        mb_args=args,
+        mb_kwargs=kwargs,
+    )
+    stage = pipe.build_stage(pipe, state.local_process_index, device=state.device)
+    schedule = ScheduleGPipe(stage, args.chunks)
 
-    return stage
+    return schedule
 
 
 def pippy_forward(forward, num_chunks, gather_output, *args, **kwargs):
