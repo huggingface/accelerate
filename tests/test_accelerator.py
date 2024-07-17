@@ -114,8 +114,10 @@ def parameterized_custom_name_func(func, param_num, param):
     # name, as by default it shows only the first param
     param_based_name = "use_safetensors" if param.args[0] is True else "use_pytorch"
     if len(param.args) > 1:
-        param_based_name += f"_num_workers_{param.args[1]}"
+        param_based_name += "_tied_weights" if param.args[1] is True else ""
     if len(param.args) > 2:
+        param_based_name += f"_num_workers_{param.args[1]}"
+    if len(param.args) > 3:
         param_based_name += "_dispatch_batches" if param.args[2] is True else "_no_dispatch_batches"
     return f"{func.__name__}_{param_based_name}"
 
@@ -652,10 +654,10 @@ class AcceleratorTester(AccelerateTestCase):
         assert isinstance(prepared_valid_dl, StatefulDataLoader)
 
     @parameterized.expand(
-        itertools.product([True, False], [0, 2], [True, False]), name_func=parameterized_custom_name_func
+        itertools.product([True, False], [True, False], [0, 2], [True, False]), name_func=parameterized_custom_name_func
     )
     @require_torchdata_stateful_dataloader
-    def test_save_model_with_stateful_dataloader(self, use_safetensors, num_workers, dispatch_batches):
+    def test_save_model_with_stateful_dataloader(self, use_safetensors, tied_weights, num_workers, dispatch_batches):
         """
         Test that saving and loading a model with a stateful dataloader returns the same model,
         and that the dataloader's iterator is restored properly."""
@@ -664,7 +666,7 @@ class AcceleratorTester(AccelerateTestCase):
         dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=True)
         accelerator = Accelerator(dataloader_config=dataloader_config)
 
-        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        model, optimizer, scheduler, train_dl, valid_dl = create_components(tied_weights)
         train_dl, valid_dl = create_dataloaders_for_test(num_workers=num_workers)
         model = ModelForTest()
 
