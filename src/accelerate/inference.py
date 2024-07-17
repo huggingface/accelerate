@@ -22,7 +22,6 @@ from .utils import (
     copy_tensor_to_devices,
     ignorant_find_batch_size,
     infer_auto_device_map,
-    is_pippy_available,
     pad_input_tensors,
     send_to_device,
 )
@@ -81,12 +80,11 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     # from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
     # from pippy.PipelineStage import PipelineStage
-    from torch.distributed.pipelining import pipeline, ScheduleGPipe, SplitPoint
-    from torch.distributed.pipelining._IR import annotate_split_points
+    from torch.distributed.pipelining import ScheduleGPipe, SplitPoint, pipeline
 
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
-    annotate_split_points(model, {split_point: SplitPoint.BEGINNING for split_point in split_points})
+    split_sec = {split_point: SplitPoint.BEGINNING for split_point in split_points}
     found_batch_size = find_pippy_batch_size(args, kwargs)
     if found_batch_size != num_chunks:
         if args is not None:
@@ -97,6 +95,7 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
         model,
         mb_args=args,
         mb_kwargs=kwargs,
+        split_sec=split_sec,
     )
     stage = pipe.build_stage(pipe, state.local_process_index, device=state.device)
     schedule = ScheduleGPipe(stage, args.chunks)
