@@ -194,6 +194,7 @@ class PartialState:
                                 "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                             )
                         from deepspeed import comm as dist
+
                         if not dist.is_initialized():
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
