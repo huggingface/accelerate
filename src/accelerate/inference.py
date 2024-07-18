@@ -97,8 +97,8 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
         mb_kwargs=kwargs,
         split_spec=split_spec,
     )
-    stage = pipe.build_stage(pipe, state.local_process_index, device=state.device)
-    schedule = ScheduleGPipe(stage, args.chunks)
+    stage = pipe.build_stage(state.local_process_index, device=state.device)
+    schedule = ScheduleGPipe(stage, num_chunks)
 
     return schedule
 
@@ -178,7 +178,7 @@ def prepare_pippy(
     model.hf_split_points = split_points
 
     def forward(*args, **kwargs):
-        return pippy_forward(stage.forward, num_chunks, gather_output, *args, **kwargs)
+        return pippy_forward(stage.step, num_chunks, gather_output, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
     # Note: creates an infinite recursion loop with `generate`
