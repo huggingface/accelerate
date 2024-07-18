@@ -85,12 +85,6 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
     split_spec = {split_point: SplitPoint.BEGINNING for split_point in split_points}
-    found_batch_size = find_pippy_batch_size(args, kwargs)
-    if found_batch_size != num_chunks:
-        if args is not None:
-            args = pad_input_tensors(args, found_batch_size, num_chunks)
-        if kwargs is not None:
-            kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
     pipe = pipeline(
         model,
         mb_args=args,
