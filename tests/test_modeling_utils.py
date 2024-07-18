@@ -26,7 +26,13 @@ from parameterized import parameterized
 from safetensors.torch import save_file
 
 from accelerate import init_empty_weights
-from accelerate.test_utils import require_cuda, require_huggingface_suite, require_multi_gpu
+from accelerate.test_utils import (
+    require_cuda,
+    require_huggingface_suite,
+    require_multi_device,
+    require_non_cpu,
+    torch_device,
+)
 from accelerate.utils.modeling import (
     check_device_map,
     clean_device_map,
@@ -42,6 +48,9 @@ from accelerate.utils.modeling import (
     retie_parameters,
     set_module_tensor_to_device,
 )
+
+
+torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 
 
 class ModelForTest(nn.Module):
@@ -150,20 +159,20 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest()
         self.check_set_module_tensor_for_device(model, "cpu", "meta")
 
-    @require_cuda
+    @require_non_cpu
     def test_set_module_tensor_to_cpu_and_gpu(self):
         model = ModelForTest()
-        self.check_set_module_tensor_for_device(model, "cpu", 0)
+        self.check_set_module_tensor_for_device(model, "cpu", torch_device)
 
-    @require_cuda
+    @require_non_cpu
     def test_set_module_tensor_to_meta_and_gpu(self):
-        model = ModelForTest().to(0)
-        self.check_set_module_tensor_for_device(model, 0, "meta")
+        model = ModelForTest().to(torch_device)
+        self.check_set_module_tensor_for_device(model, torch_device, "meta")
 
-    @require_multi_gpu
+    @require_multi_device
     def test_set_module_tensor_between_gpus(self):
-        model = ModelForTest().to(0)
-        self.check_set_module_tensor_for_device(model, 0, 1)
+        model = ModelForTest().to(torch_device)
+        self.check_set_module_tensor_for_device(model, torch_device, torch_device.replace("0", "1"))
 
     def test_set_module_tensor_sets_dtype(self):
         model = ModelForTest()
@@ -361,7 +370,7 @@ class ModelingUtilsTester(unittest.TestCase):
             self.shard_test_model(model, tmp_dir)
             load_checkpoint_in_model(model, tmp_dir)
 
-    @require_cuda
+    @require_non_cpu
     def test_load_checkpoint_in_model_one_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
 
@@ -371,7 +380,7 @@ class ModelingUtilsTester(unittest.TestCase):
             fname = os.path.join(tmp_dir, "pt_model.bin")
             torch.save(model.state_dict(), fname)
             load_checkpoint_in_model(model, fname, device_map=device_map)
-        assert model.linear1.weight.device == torch.device(0)
+        assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device("cpu")
         assert model.linear2.weight.device == torch.device("cpu")
 
@@ -382,7 +391,7 @@ class ModelingUtilsTester(unittest.TestCase):
             index_file = os.path.join(tmp_dir, "weight_map.index.json")
             load_checkpoint_in_model(model, index_file, device_map=device_map)
 
-        assert model.linear1.weight.device == torch.device(0)
+        assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device("cpu")
         assert model.linear2.weight.device == torch.device("cpu")
 
@@ -392,11 +401,11 @@ class ModelingUtilsTester(unittest.TestCase):
             self.shard_test_model(model, tmp_dir)
             load_checkpoint_in_model(model, tmp_dir, device_map=device_map)
 
-        assert model.linear1.weight.device == torch.device(0)
+        assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device("cpu")
         assert model.linear2.weight.device == torch.device("cpu")
 
-    @require_cuda
+    @require_non_cpu
     def test_load_checkpoint_in_model_disk_offload(self):
         device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
 
@@ -421,7 +430,7 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.batchnorm.running_mean.device == torch.device("meta")
         assert model.linear2.weight.device == torch.device("cpu")
 
-    @require_multi_gpu
+    @require_multi_device
     def test_load_checkpoint_in_model_two_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
 
@@ -431,9 +440,9 @@ class ModelingUtilsTester(unittest.TestCase):
             fname = os.path.join(tmp_dir, "pt_model.bin")
             torch.save(model.state_dict(), fname)
             load_checkpoint_in_model(model, fname, device_map=device_map)
-        assert model.linear1.weight.device == torch.device(0)
+        assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device("cpu")
-        assert model.linear2.weight.device == torch.device(1)
+        assert model.linear2.weight.device == torch.device(torch_device.replace("0", "1"))
 
         # Check with sharded index
         model = ModelForTest()
@@ -442,9 +451,9 @@ class ModelingUtilsTester(unittest.TestCase):
             index_file = os.path.join(tmp_dir, "weight_map.index.json")
             load_checkpoint_in_model(model, index_file, device_map=device_map)
 
-        assert model.linear1.weight.device == torch.device(0)
+        assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device("cpu")
-        assert model.linear2.weight.device == torch.device(1)
+        assert model.linear2.weight.device == torch.device(torch_device.replace("0", "1"))
 
         # Check with sharded checkpoint
         model = ModelForTest()
@@ -452,9 +461,9 @@ class ModelingUtilsTester(unittest.TestCase):
             self.shard_test_model(model, tmp_dir)
             load_checkpoint_in_model(model, tmp_dir, device_map=device_map)
 
-        assert model.linear1.weight.device == torch.device(0)
+        assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device("cpu")
-        assert model.linear2.weight.device == torch.device(1)
+        assert model.linear2.weight.device == torch.device(torch_device.replace("0", "1"))
 
     def test_load_checkpoint_in_model_dtype(self):
         with tempfile.NamedTemporaryFile(suffix=".pt") as tmpfile:
@@ -725,7 +734,7 @@ class ModelingUtilsTester(unittest.TestCase):
         max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
         assert {0: 0, "cpu": 100} == max_memory
 
-    @require_cuda
+    @require_non_cpu
     def test_load_state_dict(self):
         state_dict = {k: torch.randn(4, 5) for k in ["a", "b", "c"]}
         device_maps = [{"a": "cpu", "b": 0, "c": "disk"}, {"a": 0, "b": 0, "c": "disk"}, {"a": 0, "b": 0, "c": 0}]

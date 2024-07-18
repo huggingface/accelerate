@@ -22,6 +22,7 @@ from ...utils import (
     is_deepspeed_available,
     is_mlu_available,
     is_mps_available,
+    is_musa_available,
     is_npu_available,
     is_transformers_available,
     is_xpu_available,
@@ -49,7 +50,16 @@ from .config_utils import (
 def get_cluster_input():
     distributed_type = _ask_options(
         "Which type of machine are you using?",
-        ["No distributed training", "multi-CPU", "multi-XPU", "multi-GPU", "multi-NPU", "multi-MLU", "TPU"],
+        [
+            "No distributed training",
+            "multi-CPU",
+            "multi-XPU",
+            "multi-GPU",
+            "multi-NPU",
+            "multi-MLU",
+            "multi-MUSA",
+            "TPU",
+        ],
         _convert_distributed_mode,
     )
 
@@ -66,6 +76,7 @@ def get_cluster_input():
     if distributed_type in [
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_CPU,
@@ -145,7 +156,13 @@ def get_cluster_input():
         not use_cpu
         and is_xpu_available()
         and distributed_type
-        not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_MLU, DistributedType.XLA]
+        not in [
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_MLU,
+            DistributedType.XLA,
+            DistributedType.MULTI_MUSA,
+        ]
     ):
         ipex_config["use_xpu"] = _ask_field(
             "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
@@ -205,6 +222,7 @@ def get_cluster_input():
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.NO,
         ]
         and not use_mps
@@ -358,6 +376,7 @@ def get_cluster_input():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_MUSA,
         DistributedType.MULTI_XPU,
     ]:
         use_fsdp = _ask_field(
@@ -529,6 +548,7 @@ def get_cluster_input():
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
         DistributedType.XLA,
     ]:
@@ -565,6 +585,7 @@ def get_cluster_input():
         in [
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.NO,
@@ -576,6 +597,8 @@ def get_cluster_input():
             machine_type = "NPU(s)"
         elif is_mlu_available():
             machine_type = "MLU(s)"
+        elif is_musa_available():
+            machine_type = "MUSA(s)"
         else:
             machine_type = "GPU(s)"
         gpu_ids = _ask_field(

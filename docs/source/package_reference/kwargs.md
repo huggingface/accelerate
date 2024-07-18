@@ -30,6 +30,10 @@ related to distributed training or mixed precision are created.
 
 [[autodoc]] utils.FP8RecipeKwargs
 
+## ProfileKwargs
+
+[[autodoc]] utils.ProfileKwargs
+
 ## GradScalerKwargs
 
 [[autodoc]] GradScalerKwargs

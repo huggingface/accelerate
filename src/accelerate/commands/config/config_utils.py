@@ -37,6 +37,8 @@ DYNAMO_BACKENDS = [
     "FX2TRT",
     "ONNXRT",
     "TENSORRT",
+    "AOT_TORCHXLA_TRACE_ONCE",
+    "TORHCHXLA_TRACE_ONCE",
     "IPEX",
     "TVM",
 ]
@@ -68,7 +70,9 @@ def _convert_compute_environment(value):
 
 def _convert_distributed_mode(value):
     value = int(value)
-    return DistributedType(["NO", "MULTI_CPU", "MULTI_XPU", "MULTI_GPU", "MULTI_NPU", "MULTI_MLU", "XLA"][value])
+    return DistributedType(
+        ["NO", "MULTI_CPU", "MULTI_XPU", "MULTI_GPU", "MULTI_NPU", "MULTI_MLU", "MULTI_MUSA", "XLA"][value]
+    )
 
 
 def _convert_dynamo_backend(value):
