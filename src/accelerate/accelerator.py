@@ -63,7 +63,6 @@ from .utils import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
-    parse_flag_from_env,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
@@ -2301,12 +2300,14 @@ class Accelerator:
                     xm.all_reduce("sum", gradients, scale=1.0 / self.num_processes)
                     # Set is_xla_gradients_synced to True to avoid all-reduce twice in the AcceleratedOptimizer step.
                     acc_opt.gradient_state.is_xla_gradients_synced = True
-            if parse_flag_from_env("ACCELERATE_USE_FSDP", default=False):
+            if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
                 self.unscale_gradients()
                 parameters = [p for p in parameters]
                 for model in self._models:
                     if parameters == [p for p in model.parameters()]:
                         return model.clip_grad_norm_(max_norm, norm_type)
+        self.unscale_gradients()
+        return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
         """
