@@ -199,11 +199,6 @@ class PartialState:
                             )
                         from deepspeed import comm as dist
 
-                        if is_xpu_available() and is_ccl_available():
-                            os.environ["CCL_PROCESS_LAUNCHER"] = "none"
-                            os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
-                            os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
-
                         if not dist.is_initialized():
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
@@ -221,10 +216,6 @@ class PartialState:
                 os.environ["WORLD_SIZE"] = str(dist_information.world_size)
                 os.environ["LOCAL_RANK"] = str(dist_information.local_rank)
                 os.environ["LOCAL_WORLD_SIZE"] = str(dist_information.local_world_size)
-                if self.backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
-                    os.environ["CCL_PROCESS_LAUNCHER"] = "none"
-                    os.environ["CCL_LOCAL_SIZE"] = os.environ["LOCAL_WORLD_SIZE"]
-                    os.environ["CCL_LOCAL_RANK"] = os.environ["LOCAL_RANK"]
                 if not os.environ.get("MASTER_PORT", None):
                     os.environ["MASTER_PORT"] = "29500"
                 if (
