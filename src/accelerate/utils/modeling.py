@@ -161,7 +161,7 @@ def dtype_byte_size(dtype: torch.dtype):
         return 1 / 4
     elif dtype == CustomDtype.INT4:
         return 1 / 2
-    elif dtype == CustomDtype.FP8:
+    elif dtype in [CustomDtype.FP8, torch.float8_e4m3fn]:
         return 1
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
