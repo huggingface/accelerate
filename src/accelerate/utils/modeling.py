@@ -43,7 +43,7 @@ from .imports import (
 from .memory import clear_device_cache
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
-from .versions import compare_versions
+from .versions import compare_versions, is_torch_version
 
 
 if is_npu_available(check_device=False):
@@ -162,6 +162,8 @@ def dtype_byte_size(dtype: torch.dtype):
     elif dtype == CustomDtype.INT4:
         return 1 / 2
     elif dtype == CustomDtype.FP8:
+        return 1
+    elif is_torch_version(">=", "2.1.0") and dtype == torch.float8_e4m3fn:
         return 1
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
