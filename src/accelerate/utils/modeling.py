@@ -43,7 +43,7 @@ from .imports import (
 from .memory import clear_device_cache
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
-from .versions import compare_versions
+from .versions import compare_versions, is_torch_version
 
 
 if is_npu_available(check_device=False):
@@ -162,6 +162,8 @@ def dtype_byte_size(dtype: torch.dtype):
     elif dtype == CustomDtype.INT4:
         return 1 / 2
     elif dtype == CustomDtype.FP8:
+        return 1
+    elif is_torch_version(">=", "2.1.0") and dtype == torch.float8_e4m3fn:
         return 1
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
@@ -361,10 +363,15 @@ def set_module_tensor_to_device(
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
+    param = module._parameters[tensor_name] if tensor_name in module._parameters else None
+    param_cls = type(param)
+
     if value is not None:
-        if old_value.shape != value.shape:
+        # We can expect mismatches when using bnb 4bit since Params4bit will reshape and pack the weights.
+        # In other cases, we want to make sure we're not loading checkpoints that do not match the config.
+        if old_value.shape != value.shape and param_cls.__name__ != "Params4bit":
             raise ValueError(
-                f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this look incorrect.'
+                f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this looks incorrect.'
             )
 
         if dtype is None:
@@ -372,9 +379,6 @@ def set_module_tensor_to_device(
             value = value.to(old_value.dtype)
         elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
             value = value.to(dtype)
-
-    param = module._parameters[tensor_name] if tensor_name in module._parameters else None
-    param_cls = type(param)
 
     device_quantization = None
     with torch.no_grad():
@@ -419,7 +423,7 @@ def set_module_tensor_to_device(
         elif value is not None or not check_device_same(torch.device(device), module._parameters[tensor_name].device):
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
-            if param_cls.__name__ in ["Int8Params", "FP4Params"]:
+            if param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]:
                 if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
                     # downcast to fp16 if any - needed for 8bit serialization
                     new_value = new_value.to(torch.float16)
