@@ -22,16 +22,16 @@ export GPUS_PER_NODE=4
 ######################
 head_node_ip=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
 ######################
+export ACCELERATE_DIR="${ACCELERATE_DIR:-/accelerate}"
 
 export LAUNCHER="accelerate launch \
-    --config fsdp_config.yaml \
+    --config ${ACCELERATE_DIR}/examples/slurm/fsdp_config.yaml \
     --num_processes $((SLURM_NNODES * GPUS_PER_NODE)) \
     --num_machines $SLURM_NNODES \
     --rdzv_backend c10d \
     --main_process_ip $head_node_ip \
     --main_process_port 29500 \
     "
-export ACCELERATE_DIR="${ACCELERATE_DIR:-/accelerate}"
 export SCRIPT="${ACCELERATE_DIR}/examples/complete_nlp_example.py"
 export SCRIPT_ARGS=" \
     --mixed_precision fp16 \
