@@ -173,7 +173,7 @@ class BaseConfig:
 
 @dataclass
 class ClusterConfig(BaseConfig):
-    num_processes: int
+    num_processes: int = -1  # For instance if we use SLURM and the user manually passes it in
     machine_rank: int = 0
     num_machines: int = 1
     gpu_ids: Optional[str] = None
@@ -183,6 +183,7 @@ class ClusterConfig(BaseConfig):
     same_network: Optional[bool] = False
     main_training_function: str = "main"
     enable_cpu_affinity: bool = False
+    use_slurm: bool = False
 
     # args for deepspeed_plugin
     deepspeed_config: dict = None

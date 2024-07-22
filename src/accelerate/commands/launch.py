@@ -1009,6 +1009,8 @@ def _validate_launch_command(args):
         # Silently set the default here
         if args.dynamo_backend is None:
             args.dynamo_backend = "no"
+        if args.num_processes == -1:
+            raise ValueError("You need to manually pass in `--num_processes` using this config yaml.")
     else:
         if args.num_processes is None:
             if args.use_xpu and is_xpu_available():
