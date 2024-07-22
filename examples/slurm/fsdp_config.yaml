@@ -1,8 +1,4 @@
-compute_environment: LOCAL_MACHINE
-debug: false
 distributed_type: FSDP
-downcast_bf16: 'no'
-enable_cpu_affinity: false
 fsdp_config:
   fsdp_activation_checkpointing: false
   fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
