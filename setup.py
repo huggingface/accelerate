@@ -76,7 +76,7 @@ setup(
         "pyyaml",
         "torch>=1.10.0",
         "huggingface_hub>=0.21.0",
-        "safetensors>=0.3.1",
+        "safetensors>=0.4.3",
     ],
     extras_require=extras,
     classifiers=[
