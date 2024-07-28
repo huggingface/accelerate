@@ -1585,7 +1585,10 @@ class Accelerator:
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if not is_torch_version(">=", "2.0"):
                 raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
-            model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+            example_inputs = dict(next(iter(self._dataloaders[0])))
+            with torch.no_grad():
+                model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+                model(**example_inputs)
         return model
 
     def _prepare_deepspeed(self, *args):
