@@ -19,8 +19,6 @@ from typing import Callable, List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
-from accelerate.utils import is_torchdata_stateful_dataloader_available
-
 from .logging import get_logger
 from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
 from .utils import (
@@ -32,6 +30,7 @@ from .utils import (
     get_data_structure,
     initialize_tensors,
     is_torch_version,
+    is_torchdata_stateful_dataloader_available,
     send_to_device,
     slice_tensors,
     synchronize_rng_states,

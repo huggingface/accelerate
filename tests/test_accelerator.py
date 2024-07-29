@@ -654,7 +654,8 @@ class AcceleratorTester(AccelerateTestCase):
         assert isinstance(prepared_valid_dl, StatefulDataLoader)
 
     @parameterized.expand(
-        itertools.product([True, False], [True, False], [0, 2], [True, False]), name_func=parameterized_custom_name_func
+        itertools.product([True, False], [True, False], [0, 2], [True, False]),
+        name_func=parameterized_custom_name_func,
     )
     @require_torchdata_stateful_dataloader
     def test_save_model_with_stateful_dataloader(self, use_safetensors, tied_weights, num_workers, dispatch_batches):
