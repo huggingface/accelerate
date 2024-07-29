@@ -539,6 +539,7 @@ if is_torch_xla_available():
             super().__init__(dataloader, device)
             self._rng_types = self._loader.rng_types
             self._loader.rng_types = None
+            self.device = device
 
         def __iter__(self):
             if self._rng_types is not None:
@@ -557,6 +558,10 @@ if is_torch_xla_available():
         @property
         def batch_sampler(self):
             return self._loader.batch_sampler
+
+        @property
+        def dataloader(self):
+            return self._loader
 
 
 class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
@@ -1083,6 +1088,12 @@ def skip_first_batches(dataloader, num_batches=0):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
     """
+    is_xla_dataloader = False
+    if is_torch_xla_available() and isinstance(dataloader, MpDeviceLoaderWrapper):
+        is_xla_dataloader = True
+        device = dataloader.device
+        dataloader = dataloader.dataloader
+
     dataset = dataloader.dataset
     sampler_is_batch_sampler = False
     if isinstance(dataset, IterableDataset):
@@ -1145,5 +1156,8 @@ def skip_first_batches(dataloader, num_batches=0):
             dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+
+    if is_xla_dataloader:
+        dataloader = MpDeviceLoaderWrapper(dataloader, device)
 
     return dataloader
