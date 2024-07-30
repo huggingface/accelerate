@@ -1088,9 +1088,8 @@ def skip_first_batches(dataloader, num_batches=0):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
     """
-    is_xla_dataloader = False
-    if is_torch_xla_available() and isinstance(dataloader, MpDeviceLoaderWrapper):
-        is_xla_dataloader = True
+    state = AcceleratorState()
+    if state.distributed_type == DistributedType.XLA:
         device = dataloader.device
         dataloader = dataloader.dataloader
 
@@ -1157,7 +1156,7 @@ def skip_first_batches(dataloader, num_batches=0):
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
 
-    if is_xla_dataloader:
+    if state.distributed_type == DistributedType.XLA:
         dataloader = MpDeviceLoaderWrapper(dataloader, device)
 
     return dataloader
