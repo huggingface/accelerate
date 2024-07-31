@@ -13,7 +13,8 @@ concurrency:
 jobs:
   latest-cpu:
     name: "Latest Accelerate CPU [dev]"
-    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -29,7 +30,7 @@ jobs:
       - name: Build and Push CPU
         uses: docker/build-push-action@v4
         with:
-          file: docker/accelerate-cpu/Dockerfile          
+          file: docker/accelerate-cpu/Dockerfile
           push: true
           tags: |
             huggingface/accelerate:cpu-nightly
@@ -37,7 +38,8 @@ jobs:
 
   latest-cuda:
     name: "Latest Accelerate GPU [dev]"
-    runs-on: [self-hosted, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-4xlarge-plus
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -53,7 +55,7 @@ jobs:
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
         with:
-          file: docker/accelerate-gpu/Dockerfile          
+          file: docker/accelerate-gpu/Dockerfile
           push: true
           tags: |
             huggingface/accelerate:gpu-nightly
@@ -61,7 +63,8 @@ jobs:
 
   latest-cuda-deepspeed:
     name: "Latest Accelerate GPU DeepSpeed [dev]"
-    runs-on: [self-hosted, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-4xlarge-plus
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -77,7 +80,7 @@ jobs:
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
         with:
-          file: docker/accelerate-gpu-deepspeed/Dockerfile          
+          file: docker/accelerate-gpu-deepspeed/Dockerfile
           push: true
           tags: |
             huggingface/accelerate:gpu-deepspeed-nightly
