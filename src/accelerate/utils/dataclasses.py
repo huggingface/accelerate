@@ -32,7 +32,7 @@ import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
-from .imports import is_cuda_available, is_npu_available, is_xpu_available
+from .imports import is_cuda_available, is_mlu_available, is_npu_available, is_xpu_available
 from .versions import compare_versions
 
 
@@ -1341,6 +1341,8 @@ class FullyShardedDataParallelPlugin:
         if self.sync_module_states:
             if is_npu_available():
                 device = torch.npu.current_device()
+            elif is_mlu_available():
+                device = torch.mlu.current_device()
             elif is_cuda_available():
                 device = torch.cuda.current_device()
             elif is_xpu_available():
