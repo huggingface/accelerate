@@ -1,7 +1,7 @@
 # CI for specifically ensuring integrations work fine (`transformers` mainly) on GPUs
 # Useful tips:
 #  - `working-directory` should be set to the root of the repo, which is cloned on the actual CI runner.
-#    It follows the directory structure of `actions-runner/_work/{repo_name}/{repo_name}/{cloned_repo} on 
+#    It follows the directory structure of `actions-runner/_work/{repo_name}/{repo_name}/{cloned_repo} on
 #    prem, but in Actions setting `working-directory` looks just in the `{repo_name}` level.
 #  - New integrations to test should have its own job, and follow a strategy method where we check both
 #    the pypi and github versions.
@@ -25,12 +25,13 @@ jobs:
     container:
       image: huggingface/accelerate:gpu-deepspeed-nightly
       options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-12xlarge-plus
     strategy:
       fail-fast: false
       matrix:
         cuda_visible_devices: [
-          "0", 
+          "0",
           "0,1"
         ]
     steps:
@@ -51,7 +52,7 @@ jobs:
           pip install -e .[testing];
           pip uninstall comet_ml wandb dvclive -y
           cd ..;
-      
+
       - name: Show installed libraries
         run: |
           source activate accelerate;
@@ -90,12 +91,13 @@ jobs:
     container:
       image: huggingface/accelerate:gpu-nightly
       options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-12xlarge-plus
     strategy:
       fail-fast: false
     steps:
       - name: Install accelerate
-        run: 
+        run:
           source activate accelerate;
           git clone https://github.com/huggingface/accelerate;
           cd accelerate;
