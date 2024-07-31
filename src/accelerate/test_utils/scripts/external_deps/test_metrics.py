@@ -13,13 +13,12 @@
 # limitations under the License.
 
 import logging
+import math
 import os
 from copy import deepcopy
 
 import datasets
-
-# TODO: put back for the next release of torchvision
-# import evaluate
+import evaluate
 import torch
 import transformers
 from datasets import load_dataset
@@ -121,39 +120,37 @@ def test_torch_metrics(
     ), f"Unexpected number of inputs:\n    Expected: {num_samples}\n    Actual: {len(logits)}"
 
 
-# TODO: put back for the next release of torchvision
+def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
+    metric = evaluate.load("glue", "mrpc")
+    setup, accelerator = get_mrpc_setup(dispatch_batches, split_batches)
+    # First do baseline
+    model, dataloader, device = setup["no"]
+    model.to(device)
+    model.eval()
+    for batch in dataloader:
+        batch.to(device)
+        with torch.inference_mode():
+            outputs = model(**batch)
+        preds = outputs.logits.argmax(dim=-1)
+        metric.add_batch(predictions=preds, references=batch["labels"])
+    baseline = metric.compute()
 
-# def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
-#     metric = evaluate.load("glue", "mrpc")
-#     setup, accelerator = get_mrpc_setup(dispatch_batches, split_batches)
-#     # First do baseline
-#     model, dataloader, device = setup["no"]
-#     model.to(device)
-#     model.eval()
-#     for batch in dataloader:
-#         batch.to(device)
-#         with torch.inference_mode():
-#             outputs = model(**batch)
-#         preds = outputs.logits.argmax(dim=-1)
-#         metric.add_batch(predictions=preds, references=batch["labels"])
-#     baseline = metric.compute()
+    # Then do distributed
+    model, dataloader, device = setup["ddp"]
+    model.eval()
+    for batch in dataloader:
+        with torch.inference_mode():
+            outputs = model(**batch)
+        preds = outputs.logits.argmax(dim=-1)
+        references = batch["labels"]
+        preds, references = accelerator.gather_for_metrics((preds, references))
+        metric.add_batch(predictions=preds, references=references)
+    distributed = metric.compute()
 
-#     # Then do distributed
-#     model, dataloader, device = setup["ddp"]
-#     model.eval()
-#     for batch in dataloader:
-#         with torch.inference_mode():
-#             outputs = model(**batch)
-#         preds = outputs.logits.argmax(dim=-1)
-#         references = batch["labels"]
-#         preds, references = accelerator.gather_for_metrics((preds, references))
-#         metric.add_batch(predictions=preds, references=references)
-#     distributed = metric.compute()
-
-#     for key in "accuracy f1".split():
-#         assert math.isclose(
-#             baseline[key], distributed[key]
-#         ), f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
+    for key in "accuracy f1".split():
+        assert math.isclose(
+            baseline[key], distributed[key]
+        ), f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
 
 
 def test_gather_for_metrics_with_non_tensor_objects_iterable_dataset():
@@ -266,8 +263,7 @@ def main():
             for dispatch_batches in dispatch_batches_options:
                 if accelerator.is_local_main_process:
                     print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
-                # TODO: put back for the next release of torchvision
-                # test_mrpc(dispatch_batches, split_batches)
+                test_mrpc(dispatch_batches, split_batches)
                 accelerator.state._reset_state()
         print("test_gather_for_metrics_with_iterable_dataset")
         test_gather_for_metrics_with_iterable_dataset()
