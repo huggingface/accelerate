@@ -28,11 +28,6 @@ from .utils import (
 )
 
 
-if is_pippy_available():
-    from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
-    from pippy.PipelineStage import PipelineStage
-
-
 def generate_device_map(model, num_processes: int = 1, no_split_module_classes=None, max_memory: dict = None):
     """
     Calculates the device map for `model` with an offset for PiPPy
@@ -83,6 +78,10 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     Users can pass in custom `num_chunks` as an optional hyper-parameter. By default will use
     `AcceleratorState.num_processes`
     """
+    # Note: We import here to reduce import time from general modules, and isolate outside dependencies
+    from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
+    from pippy.PipelineStage import PipelineStage
+
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
     annotate_split_points(model, {split_point: PipeSplitWrapper.SplitPoint.BEGINNING for split_point in split_points})

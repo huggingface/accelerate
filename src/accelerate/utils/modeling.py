@@ -14,7 +14,6 @@
 
 import contextlib
 import gc
-import importlib
 import inspect
 import json
 import logging
@@ -26,7 +25,6 @@ import warnings
 from collections import OrderedDict, defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
-import packaging
 import torch
 import torch.nn as nn
 
@@ -36,14 +34,16 @@ from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
     is_mlu_available,
     is_mps_available,
+    is_musa_available,
     is_npu_available,
     is_peft_available,
     is_torch_xla_available,
     is_xpu_available,
 )
+from .memory import clear_device_cache
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
-from .versions import compare_versions
+from .versions import compare_versions, is_torch_version
 
 
 if is_npu_available(check_device=False):
@@ -51,6 +51,9 @@ if is_npu_available(check_device=False):
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_musa_available(check_device=False):
+    import torch_musa  # noqa: F401
 
 from safetensors import safe_open
 from safetensors.torch import load_file as safe_load_file
@@ -159,6 +162,8 @@ def dtype_byte_size(dtype: torch.dtype):
     elif dtype == CustomDtype.INT4:
         return 1 / 2
     elif dtype == CustomDtype.FP8:
+        return 1
+    elif is_torch_version(">=", "2.1.0") and dtype == torch.float8_e4m3fn:
         return 1
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
@@ -358,10 +363,15 @@ def set_module_tensor_to_device(
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
+    param = module._parameters[tensor_name] if tensor_name in module._parameters else None
+    param_cls = type(param)
+
     if value is not None:
-        if old_value.shape != value.shape:
+        # We can expect mismatches when using bnb 4bit since Params4bit will reshape and pack the weights.
+        # In other cases, we want to make sure we're not loading checkpoints that do not match the config.
+        if old_value.shape != value.shape and param_cls.__name__ != "Params4bit":
             raise ValueError(
-                f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this look incorrect.'
+                f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this looks incorrect.'
             )
 
         if dtype is None:
@@ -369,9 +379,6 @@ def set_module_tensor_to_device(
             value = value.to(old_value.dtype)
         elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
             value = value.to(dtype)
-
-    param = module._parameters[tensor_name] if tensor_name in module._parameters else None
-    param_cls = type(param)
 
     device_quantization = None
     with torch.no_grad():
@@ -391,8 +398,12 @@ def set_module_tensor_to_device(
                 device = f"npu:{device}"
             elif is_mlu_available():
                 device = f"mlu:{device}"
+            elif is_musa_available():
+                device = f"musa:{device}"
             elif is_xpu_available():
                 device = f"xpu:{device}"
+        if "xpu" in str(device) and not is_xpu_available():
+            raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
@@ -412,7 +423,7 @@ def set_module_tensor_to_device(
         elif value is not None or not check_device_same(torch.device(device), module._parameters[tensor_name].device):
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
-            if param_cls.__name__ in ["Int8Params", "FP4Params"]:
+            if param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]:
                 if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
                     # downcast to fp16 if any - needed for 8bit serialization
                     new_value = new_value.to(torch.float16)
@@ -458,14 +469,7 @@ def set_module_tensor_to_device(
                     module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
     if device != "cpu":
-        if is_npu_available():
-            torch.npu.empty_cache()
-        elif is_mlu_available():
-            torch.mlu.empty_cache()
-        elif is_xpu_available():
-            torch.xpu.empty_cache()
-        else:
-            torch.cuda.empty_cache()
+        clear_device_cache()
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
     # order to avoid duplicating memory, see above.
@@ -830,6 +834,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
+        elif is_musa_available():
+            for i in range(torch.musa.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device("musa", i))
+                    max_memory[i] = torch.musa.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         elif is_xpu_available():
             for i in range(torch.xpu.device_count()):
                 try:
@@ -866,6 +878,8 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.npu.device_count()
     elif is_mlu_available():
         num_devices = torch.mlu.device_count()
+    elif is_musa_available():
+        num_devices = torch.musa.device_count()
     elif is_xpu_available():
         num_devices = torch.xpu.device_count()
     else:
@@ -993,6 +1007,8 @@ def get_balanced_memory(
         expected_device_type = "npu"
     elif is_mlu_available():
         expected_device_type = "mlu"
+    elif is_musa_available():
+        expected_device_type = "musa"
     elif is_xpu_available():
         expected_device_type = "xpu"
     else:
@@ -1456,7 +1472,15 @@ def load_state_dict(checkpoint_file, device_map=None):
         else:
             # if we only have one device we can load everything directly
             if len(set(device_map.values())) == 1:
-                return safe_load_file(checkpoint_file, device=list(device_map.values())[0])
+                device = list(device_map.values())[0]
+                target_device = device
+                if is_xpu_available():
+                    if compare_versions("safetensors", "<", "0.4.2"):
+                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
+                    if isinstance(device, int):
+                        target_device = f"xpu:{device}"
+
+                return safe_load_file(checkpoint_file, device=target_device)
 
             devices = list(set(device_map.values()) - {"disk"})
             # cpu device should always exist as fallback option
@@ -1486,15 +1510,9 @@ def load_state_dict(checkpoint_file, device_map=None):
                 progress_bar = None
             for device in devices:
                 target_device = device
-
                 if is_xpu_available():
-                    current_safetensors_version = packaging.version.parse(importlib.metadata.version("safetensors"))
-
-                    if compare_versions(current_safetensors_version, "<", "0.4.2"):
-                        raise ModuleNotFoundError(
-                            f"You need at least safetensors 0.4.2 for Intel GPU, while you have {current_safetensors_version}"
-                        )
-
+                    if compare_versions("safetensors", "<", "0.4.2"):
+                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
                     if isinstance(device, int):
                         target_device = f"xpu:{device}"
 
@@ -1857,6 +1875,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.FSDP,

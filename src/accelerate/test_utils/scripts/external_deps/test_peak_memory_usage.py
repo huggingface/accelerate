@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import is_mlu_available, is_npu_available, is_xpu_available
+from accelerate.utils import is_mlu_available, is_musa_available, is_npu_available, is_xpu_available
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
@@ -48,6 +48,10 @@ class TorchTracemalloc:
             torch.mlu.empty_cache()
             torch.mlu.reset_max_memory_allocated()  # reset the peak gauge to zero
             self.begin = torch.mlu.memory_allocated()
+        elif is_musa_available():
+            torch.musa.empty_cache()
+            torch.musa.reset_max_memory_allocated()  # reset the peak gauge to zero
+            self.begin = torch.musa.memory_allocated()
         elif is_npu_available():
             torch.npu.empty_cache()
             torch.npu.reset_max_memory_allocated()  # reset the peak gauge to zero
@@ -68,6 +72,10 @@ class TorchTracemalloc:
             torch.mlu.empty_cache()
             torch.mlu.memory_allocated()  # reset the peak gauge to zero
             self.begin = torch.mlu.max_memory_allocated()
+        elif is_musa_available():
+            torch.musa.empty_cache()
+            torch.musa.memory_allocated()  # reset the peak gauge to zero
+            self.begin = torch.musa.max_memory_allocated()
         elif is_npu_available():
             torch.npu.empty_cache()
             self.end = torch.npu.memory_allocated()

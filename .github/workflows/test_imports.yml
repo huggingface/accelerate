@@ -1,4 +1,4 @@
-name: Run Tests
+name: Run Import Tests
 
 on:
   pull_request:
@@ -25,18 +25,6 @@ jobs:
           latest,
           minimum,
         ]
-        test-kind: [
-          test_prod,
-          test_core,
-          test_cli,
-          test_big_modeling,
-          test_deepspeed,
-          test_fsdp,
-          test_example_differences,
-          test_checkpoint_step,
-          test_checkpoint_epoch,
-          test_rest
-        ]
     steps:
     - uses: actions/checkout@v3.1.0
     - name: Set up python 3.8
@@ -48,21 +36,18 @@ jobs:
     
     - name: Install the library
       run: |
-        if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
-        if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
-        if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
-        if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torch==2.3.1; fi
-        pip install pytest-reportlog tabulate setuptools
+        pip install -e .
+        pip install pytest-reportlog tabulate setuptools git+https://github.com/muellerzr/import-timer
 
     - name: Show installed libraries
       run: |
         pip freeze
     
-    - name: Run Tests
+    - name: Run Import Tests
       env: 
         PYTORCH_VERSION: ${{ matrix.pytorch-version }}
       run: |
-        make ${{ matrix.test-kind }}
+        pytest -sv tests/test_imports.py
 
     - name: Generate Report
       if: always()

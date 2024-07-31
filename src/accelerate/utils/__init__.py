@@ -14,6 +14,7 @@
 from .constants import (
     MODEL_NAME,
     OPTIMIZER_NAME,
+    PROFILE_PATTERN_NAME,
     RNG_STATE_NAME,
     SAFE_MODEL_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -48,6 +49,7 @@ from .dataclasses import (
     LoggerType,
     MegatronLMPlugin,
     PrecisionType,
+    ProfileKwargs,
     ProjectConfiguration,
     RNGType,
     SageMakerDistributedType,
@@ -84,6 +86,7 @@ from .imports import (
     is_deepspeed_available,
     is_dvclive_available,
     is_fp8_available,
+    is_import_timer_available,
     is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
@@ -91,6 +94,7 @@ from .imports import (
     is_mlu_available,
     is_mps_available,
     is_msamp_available,
+    is_musa_available,
     is_npu_available,
     is_pandas_available,
     is_peft_available,
@@ -106,6 +110,7 @@ from .imports import (
     is_torchvision_available,
     is_transformer_engine_available,
     is_transformers_available,
+    is_triton_available,
     is_wandb_available,
     is_xpu_available,
 )
@@ -193,24 +198,31 @@ from .launch import (
     prepare_simple_launcher_cmd_env,
     prepare_tpu,
 )
+
+# For docs
 from .megatron_lm import (
     AbstractTrainStep,
     BertTrainStep,
     GPTTrainStep,
-    MegatronEngine,
     MegatronLMDummyDataLoader,
     MegatronLMDummyScheduler,
-    MegatronLMOptimizerWrapper,
-    MegatronLMSchedulerWrapper,
     T5TrainStep,
     avg_losses_across_data_parallel_group,
-    gather_across_data_parallel_groups,
 )
-from .megatron_lm import initialize as megatron_lm_initialize
-from .megatron_lm import prepare_data_loader as megatron_lm_prepare_data_loader
-from .megatron_lm import prepare_model_optimizer_scheduler as megatron_lm_prepare_model_optimizer_scheduler
-from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
-from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
+
+
+if is_megatron_lm_available():
+    from .megatron_lm import (
+        MegatronEngine,
+        MegatronLMOptimizerWrapper,
+        MegatronLMSchedulerWrapper,
+        gather_across_data_parallel_groups,
+    )
+    from .megatron_lm import initialize as megatron_lm_initialize
+    from .megatron_lm import prepare_data_loader as megatron_lm_prepare_data_loader
+    from .megatron_lm import prepare_model_optimizer_scheduler as megatron_lm_prepare_model_optimizer_scheduler
+    from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
+    from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size, release_memory
 from .other import (
     check_os_kernel,

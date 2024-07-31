@@ -81,8 +81,12 @@ def get_ccl_version():
     return importlib.metadata.version("oneccl_bind_pt")
 
 
+def is_import_timer_available():
+    return _is_package_available("import_timer")
+
+
 def is_pynvml_available():
-    return _is_package_available("pynvml")
+    return _is_package_available("pynvml") or _is_package_available("pynvml", "nvidia-ml-py")
 
 
 def is_pytest_available():
@@ -244,6 +248,10 @@ def is_timm_available():
     return _is_package_available("timm")
 
 
+def is_triton_available():
+    return _is_package_available("triton")
+
+
 def is_aim_available():
     package_exists = _is_package_available("aim")
     if package_exists:
@@ -353,6 +361,24 @@ def is_mlu_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "mlu") and torch.mlu.is_available()
+
+
+@lru_cache
+def is_musa_available(check_device=False):
+    "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
+    if importlib.util.find_spec("torch_musa") is None:
+        return False
+
+    import torch_musa  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MUSA is found
+            _ = torch.musa.device_count()
+            return torch.musa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "musa") and torch.musa.is_available()
 
 
 @lru_cache

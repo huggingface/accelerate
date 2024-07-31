@@ -29,6 +29,7 @@ from ..utils import (
     PrecisionType,
     is_ipex_available,
     is_mlu_available,
+    is_musa_available,
     is_npu_available,
     is_torch_xla_available,
     is_xpu_available,
@@ -67,10 +68,10 @@ def _get_mpirun_args():
     mpirun_version = subprocess.check_output([mpi_app, "--version"])
 
     if b"Open MPI" in mpirun_version:
-        return mpi_app, "--hostfile", "-n", "--npernode"
+        return mpi_app, "--hostfile", "-n", "--npernode", "--bind-to"
     else:
         # Intel MPI and MVAPICH both use the same arg names
-        return mpi_app, "-f", "-n", "-ppn"
+        return mpi_app, "-f", "-n", "-ppn", ""
 
 
 def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
@@ -82,14 +83,23 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
         raise ValueError("--module and --no_python cannot be used together")
 
     if args.mpirun_hostfile is not None:
-        mpi_app_name, hostfile_arg, num_proc_arg, proc_per_node_arg = _get_mpirun_args()
+        mpi_app_name, hostfile_arg, num_proc_arg, proc_per_node_arg, bind_to_arg = _get_mpirun_args()
         mpirun_ccl = getattr(args, "mpirun_ccl", None)
+        bind_to = getattr(args, "bind-to", "socket")
         num_machines = args.num_machines
         num_processes = getattr(args, "num_processes", None)
         nproc_per_node = str(num_processes // num_machines) if num_processes and num_machines else "1"
-        cmd += [mpi_app_name, hostfile_arg, args.mpirun_hostfile, proc_per_node_arg, nproc_per_node]
+        cmd += [
+            mpi_app_name,
+            hostfile_arg,
+            args.mpirun_hostfile,
+            proc_per_node_arg,
+            nproc_per_node,
+        ]
         if num_processes:
             cmd += [num_proc_arg, str(num_processes)]
+        if bind_to_arg:
+            cmd += [bind_to_arg, bind_to]
     if not args.no_python:
         cmd.append(sys.executable)
         if args.module:
@@ -106,6 +116,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
             current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = args.gpu_ids
+        elif is_musa_available():
+            current_env["MUSA_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
         else:
@@ -115,7 +127,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
         current_env["MASTER_PORT"] = str(args.main_process_port)
 
         if args.mpirun_hostfile is not None:
-            current_env["CCL_WORKER_COUNT"] = mpirun_ccl
+            current_env["CCL_WORKER_COUNT"] = str(mpirun_ccl)
     elif args.num_processes > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
         current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
@@ -200,6 +212,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
+        elif is_musa_available():
+            current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         else:
@@ -361,6 +375,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
+        elif is_musa_available():
+            current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         else:
@@ -613,6 +629,7 @@ class PrepareForLaunch:
         elif self.distributed_type in (
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,

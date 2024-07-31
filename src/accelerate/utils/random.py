@@ -21,7 +21,7 @@ import torch
 from ..state import AcceleratorState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, RNGType
-from .imports import is_mlu_available, is_npu_available, is_torch_xla_available, is_xpu_available
+from .imports import is_mlu_available, is_musa_available, is_npu_available, is_torch_xla_available, is_xpu_available
 
 
 if is_torch_xla_available():
@@ -51,6 +51,8 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
         torch.npu.manual_seed_all(seed)
     elif is_mlu_available():
         torch.mlu.manual_seed_all(seed)
+    elif is_musa_available():
+        torch.musa.manual_seed_all(seed)
     else:
         torch.cuda.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
@@ -76,6 +78,9 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     elif rng_type == RNGType.MLU:
         assert is_mlu_available(), "Can't synchronize MLU seeds on an environment without MLUs."
         rng_state = torch.mlu.get_rng_state()
+    elif rng_type == RNGType.MUSA:
+        assert is_musa_available(), "Can't synchronize MUSA seeds on an environment without MUSAs."
+        rng_state = torch.musa.get_rng_state()
     elif rng_type == RNGType.XPU:
         assert is_xpu_available(), "Can't synchronize XPU seeds on an environment without XPUs."
         rng_state = torch.xpu.get_rng_state()
@@ -93,6 +98,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     elif (
         state.distributed_type in CUDA_DISTRIBUTED_TYPES
         or state.distributed_type == DistributedType.MULTI_MLU
+        or state.distributed_type == DistributedType.MULTI_MUSA
         or state.distributed_type == DistributedType.MULTI_NPU
         or state.distributed_type == DistributedType.MULTI_XPU
     ):
@@ -111,6 +117,8 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         torch.npu.set_rng_state(rng_state)
     elif rng_type == RNGType.MLU:
         torch.mlu.set_rng_state(rng_state)
+    elif rng_type == RNGType.MUSA:
+        torch.musa.set_rng_state(rng_state)
     elif rng_type == RNGType.XPU:
         torch.xpu.set_rng_state(rng_state)
     elif rng_type == RNGType.XLA:
