@@ -403,7 +403,9 @@ class Accelerator:
                 raise ValueError(
                     "Training with FSDP in `fp8` mode should result in `bf16` or `fp16` autocast being applied but was not found to be true. Please open an issue on GitHub: https://github.com/huggingface/accelerate/issues"
                 )
-            elif self.state.mixed_precision != "fp8" and self.distributed_type != DistributedType.FSDP:
+            elif self.state.mixed_precision != "fp8" and (
+                self.distributed_type not in (DistributedType.FSDP, DistributedType.DEEPSPEED)
+            ):
                 raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
             # We already check if FP8 is available during `self.state`
             self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
@@ -1308,18 +1310,17 @@ class Accelerator:
                 args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex_or_xpu(*args)
+        if self.fp8_recipe_handler is not None and self.fp8_recipe_handler.backend == "TE":
+            args = self._prepare_te(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
         else:
-            if self.mixed_precision == "fp8":
-                if self.fp8_recipe_handler.backend == "MSAMP":
-                    args = self._prepare_msamp(*args)
-                    # MS-AMP will handle the device placement
-                    device_placement = [False for _ in args]
-                elif self.fp8_recipe_handler.backend == "TE":
-                    args = self._prepare_te(*args)
+            if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP":
+                args = self._prepare_msamp(*args)
+                # MS-AMP will handle the device placement
+                device_placement = [False for _ in args]
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )

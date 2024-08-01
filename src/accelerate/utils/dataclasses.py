@@ -1087,7 +1087,7 @@ class DeepSpeedPlugin:
             if "bf16" not in ds_config:
                 ds_config["bf16"] = {"enabled": True}
 
-        if mixed_precision != "no":
+        if mixed_precision not in ("no", "fp8"):
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
             if str(ds_config.get(diff_dtype, {}).get("enabled", "False")).lower() == "true":
                 raise ValueError(
