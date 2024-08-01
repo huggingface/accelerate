@@ -397,7 +397,9 @@ class Accelerator:
         self.delayed_fp8_autocast = False
         if self.fp8_recipe_handler is not None:
             if self.state.mixed_precision not in ["fp16", "bf16"] and self.distributed_type == DistributedType.FSDP:
-                raise ValueError("Training with FSDP in `fp8` mode should result in `bf16` or `fp16` autocast being applied but was not found to be true. Please open an issue on GitHub: https://github.com/huggingface/accelerate/issues")
+                raise ValueError(
+                    "Training with FSDP in `fp8` mode should result in `bf16` or `fp16` autocast being applied but was not found to be true. Please open an issue on GitHub: https://github.com/huggingface/accelerate/issues"
+                )
             elif self.state.mixed_precision != "fp8" and self.distributed_type != DistributedType.FSDP:
                 raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
             # We already check if FP8 is available during `self.state`
@@ -1394,6 +1396,7 @@ class Accelerator:
             # Import here to keep base imports fast
             import transformer_engine.common.recipe as te_recipe
             from transformer_engine.pytorch import fp8_autocast
+
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
                     convert_model(model)
@@ -1572,6 +1575,7 @@ class Accelerator:
 
                 if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
                     from transformer_engine.pytorch.distributed import prepare_te_modules_for_fsdp
+
                     prepare_te_modules_for_fsdp(model)
 
                 # if the previous and current models are same, delete the previous one
@@ -1625,7 +1629,7 @@ class Accelerator:
 
         mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
         for param_group in optimizer.param_groups:
-            param_group['params'] = [mapping.get(p, p) for p in param_group['params']]
+            param_group["params"] = [mapping.get(p, p) for p in param_group["params"]]
 
         return result
 
