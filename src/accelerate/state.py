@@ -873,8 +873,12 @@ class AcceleratorState:
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
                     "before using any functionality from the `accelerate` library."
                 )
-            # deepspeed handles mixed_precision using deepspeed_config
-            self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
+            # deepspeed handles mixed_precision using deepspeed_config *except* for FP8
+            if self.distributed_type != DistributedType.DEEPSPEED:
+                self._mixed_precision = mixed_precision
+            else:
+                self._mixed_precision = "no" if mixed_precision != "fp8" else "fp8"
+
             if self.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_tpu=True):
                 if mixed_precision == "bf16":
                     if os.environ.get("ACCELERATE_DOWNCAST_BF16"):

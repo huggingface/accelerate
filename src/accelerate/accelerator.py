@@ -396,7 +396,10 @@ class Accelerator:
 
         self.delayed_fp8_autocast = False
         if self.fp8_recipe_handler is not None:
-            if self.state.mixed_precision not in ["fp16", "bf16"] and self.distributed_type == DistributedType.FSDP:
+            if self.state.mixed_precision not in ["fp16", "bf16"] and self.distributed_type in (
+                DistributedType.DEEPSPEED,
+                DistributedType.FSDP,
+            ):
                 raise ValueError(
                     "Training with FSDP in `fp8` mode should result in `bf16` or `fp16` autocast being applied but was not found to be true. Please open an issue on GitHub: https://github.com/huggingface/accelerate/issues"
                 )
