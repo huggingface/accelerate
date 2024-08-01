@@ -733,6 +733,6 @@ have any problems or questions with regards to DeepSpeed usage, please, file an 
 
 <Tip>
 
-    For those interested in the similarities and differences between FSDP and DeepSpeed, please check out the [concept guide here](../concept_guides/fsdp_and_deepspeed.md)!
+    For those interested in the similarities and differences between FSDP and DeepSpeed, please check out the [concept guide here](../concept_guides/fsdp_and_deepspeed)!
     
 </Tip>
