@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
-from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
+from .state import AcceleratorState, DistributedType, GradientState, PartialState, is_torch_xla_available
 from .utils import (
     RNGType,
     broadcast,
@@ -1088,7 +1088,7 @@ def skip_first_batches(dataloader, num_batches=0):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
     """
-    state = AcceleratorState()
+    state = PartialState()
     if state.distributed_type == DistributedType.XLA:
         device = dataloader.device
         dataloader = dataloader.dataloader
