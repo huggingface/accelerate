@@ -379,6 +379,9 @@ class Accelerator:
                     else:
                         self.profile_handler = handler
 
+        if mixed_precision == "fp8" and self.fp8_recipe_handler is None:
+            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
+
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
@@ -393,12 +396,13 @@ class Accelerator:
 
         self.delayed_fp8_autocast = False
         if self.fp8_recipe_handler is not None:
-            # We already check if FP8 is available during `self.state`
-            if self.state.mixed_precision != "fp8":
+            if self.state.mixed_precision != "fp8" and (
+                self.distributed_type not in (DistributedType.FSDP, DistributedType.DEEPSPEED)
+            ):
                 raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
+            # We already check if FP8 is available during `self.state`
             self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
                 DistributedType.MULTI_GPU,
-                DistributedType.FSDP,
             )
 
         trackers = filter_trackers(log_with, self.logging_dir)
@@ -1290,7 +1294,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
+        if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
@@ -1299,6 +1303,8 @@ class Accelerator:
                 args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex_or_xpu(*args)
+        if self.fp8_recipe_handler is not None and self.fp8_recipe_handler.backend == "TE":
+            args = self._prepare_te(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1312,8 +1318,7 @@ class Accelerator:
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
-
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
+        if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
@@ -1393,7 +1398,6 @@ class Accelerator:
                 with torch.no_grad():
                     convert_model(model)
                 model._converted_to_transformer_engine = True
-
             kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
             if "fp8_format" in kwargs:
                 kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
@@ -1455,6 +1459,7 @@ class Accelerator:
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.FSDP:
+                # We need to fix the optimizer *before* sharding the model
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
@@ -1565,6 +1570,11 @@ class Accelerator:
                                 "FSDP upcast of low precision parameters may affect the precision of model checkpoints."
                             )
 
+                if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
+                    from transformer_engine.pytorch.distributed import prepare_te_modules_for_fsdp
+
+                    prepare_te_modules_for_fsdp(model)
+
                 # if the previous and current models are same, delete the previous one
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
@@ -1587,6 +1597,38 @@ class Accelerator:
                 raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
+
+    def _prepare_te(self, *args):
+        model, optimizer = None, None
+        num_models, num_optimizers = 0, 0
+        result = [obj for obj in args]
+        for obj in result:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+                num_models += 1
+            elif isinstance(obj, (torch.optim.Optimizer)):
+                optimizer = obj
+                num_optimizers += 1
+        if optimizer is None or model is None:
+            raise ValueError(
+                "You must pass a model and an optimizer together to `accelerate.prepare()` when using TransformerEngine."
+            )
+        elif num_models > 1 or num_optimizers > 1:
+            raise ValueError(
+                f"You can't use multiple models ({num_models}) or optimizers {num_optimizers} with TransformerEngine."
+            )
+        # We need to handle the param switching at this stage
+        old_named_params = self._get_named_parameters(model)
+        with torch.no_grad():
+            convert_model(model)
+
+        new_named_params = self._get_named_parameters(model)
+
+        mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+        for param_group in optimizer.param_groups:
+            param_group["params"] = [mapping.get(p, p) for p in param_group["params"]]
+
+        return result
 
     def _prepare_deepspeed(self, *args):
         import deepspeed
@@ -1755,6 +1797,7 @@ class Accelerator:
                         if not self.split_batches
                         else scheduler.total_num_steps
                     )
+
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
             kwargs = dict(model=model, config_params=self.deepspeed_config)
