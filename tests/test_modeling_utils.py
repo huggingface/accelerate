@@ -262,6 +262,10 @@ class ModelingUtilsTester(unittest.TestCase):
         model.block1.linear1.weight = model.block2.linear1.weight
         assert find_tied_parameters(model) == [["block1.linear1.weight", "block2.linear1.weight"]]
 
+        layer = nn.Linear(10, 10)
+        model = nn.Sequential(layer, layer)
+        assert find_tied_parameters(model) == [["0.weight", "1.weight"], ["0.bias", "1.bias"]]
+
     def test_retie_parameters(self):
         model = sequential_model(2)
         retie_parameters(model, [["linear1.weight", "linear2.weight"]])
