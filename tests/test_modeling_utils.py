@@ -264,7 +264,8 @@ class ModelingUtilsTester(unittest.TestCase):
 
         layer = nn.Linear(10, 10)
         model = nn.Sequential(layer, layer)
-        assert find_tied_parameters(model) == [["0.weight", "1.weight"], ["0.bias", "1.bias"]]
+        tied_params = find_tied_parameters(model)
+        assert sorted(tied_params) == [["0.bias", "1.bias"], ["0.weight", "1.weight"]]
 
     def test_retie_parameters(self):
         model = sequential_model(2)
