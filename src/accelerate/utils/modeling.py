@@ -23,7 +23,7 @@ import shutil
 import tempfile
 import warnings
 from collections import OrderedDict, defaultdict
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -616,7 +616,73 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
             )
 
 
-def find_tied_parameters(model: nn.Module, **kwargs):
+def _get_named_modules(
+    module: torch.nn.Module,
+    memo: Optional[Set[torch.nn.Module]] = None,
+    prefix: str = "",
+    remove_duplicate: bool = True,
+):
+    """
+    Return an iterator over all modules in the network, yielding both the name of the module as well as the module
+    itself. Copied from PyTorch `torch.nn.Module.named_modules` for compatability with torch < 2.0 versions with
+    `remove_duplicate` option added.
+
+    Args:
+        memo: a memo to store the set of modules already added to the result
+        prefix: a prefix that will be added to the name of the module
+        remove_duplicate: whether to remove the duplicated module instances in the result
+            or not
+
+    Yields:
+        (str, Module): Tuple of name and module
+
+    Note:
+        Duplicate modules are returned only once. In the following example, ``l`` will be returned only once.
+
+    Example::
+
+        >>> l = nn.Linear(2, 2) >>> net = nn.Sequential(l, l) >>> for idx, m in enumerate(net.named_modules()): ...
+        print(idx, '->', m)
+
+        0 -> ('', Sequential(
+            (0): Linear(in_features=2, out_features=2, bias=True) (1): Linear(in_features=2, out_features=2, bias=True)
+        )) 1 -> ('0', Linear(in_features=2, out_features=2, bias=True))
+
+    """
+    if memo is None:
+        memo = set()
+    if module not in memo:
+        if remove_duplicate:
+            memo.add(module)
+        yield prefix, module
+        for name, sub_module in module._modules.items():
+            if module is None:
+                continue
+            submodule_prefix = prefix + ("." if prefix else "") + name
+            yield from _get_named_modules(sub_module, memo, submodule_prefix, remove_duplicate)
+
+
+def _get_named_parameters(module: torch.nn.Module, prefix="", recurse=True, remove_duplicate: bool = True):
+    """
+    Help yield various names + members of modules. Copied from PyTorch `torch.nn.Module.named_modules` for
+    compatability with torch < 2.0 versions with `remove_duplicate` option added.
+    """
+    memo = set()
+    modules = (
+        _get_named_modules(module, prefix=prefix, remove_duplicate=remove_duplicate) if recurse else [(prefix, module)]
+    )
+    for module_prefix, module in modules:
+        members = module._parameters.items()
+        for k, v in members:
+            if v is None or v in memo:
+                continue
+            if remove_duplicate:
+                memo.add(v)
+            name = module_prefix + ("." if module_prefix else "") + k
+            yield name, v
+
+
+def find_tied_parameters(model: torch.nn.Module, **kwargs):
     """
     Find the tied parameters in a given model.
 
@@ -645,31 +711,20 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     [['linear1.weight', 'linear2.weight']]
     ```
     """
-    # Initialize result and named_parameters before recursing.
-    named_parameters = kwargs.get("named_parameters", None)
-    prefix = kwargs.get("prefix", "")
-    result = kwargs.get("result", {})
 
-    if named_parameters is None:
-        named_parameters = {n: p for n, p in model.named_parameters()}
-    else:
-        # A tied parameter will not be in the full `named_parameters` seen above but will be in the `named_parameters`
-        # of the submodule it belongs to. So while recursing we track the names that are not in the initial
-        # `named_parameters`.
-        for name, parameter in model.named_parameters():
-            full_name = name if prefix == "" else f"{prefix}.{name}"
-            if full_name not in named_parameters:
-                # When we find one, it has to be one of the existing parameters.
-                for new_name, new_param in named_parameters.items():
-                    if new_param is parameter:
-                        if new_name not in result:
-                            result[new_name] = []
-                        result[new_name].append(full_name)
+    all_named_parameters = {name: param for name, param in _get_named_parameters(model, remove_duplicate=False)}
+    no_duplicate_named_parameters = {
+        name: param for name, param in _get_named_parameters(model, remove_duplicate=True)
+    }
+    diff_keys = set(all_named_parameters.keys()) - set(no_duplicate_named_parameters.keys())
 
-    # Once we have treated direct parameters, we move to the child modules.
-    for name, child in model.named_children():
-        child_name = name if prefix == "" else f"{prefix}.{name}"
-        find_tied_parameters(child, named_parameters=named_parameters, prefix=child_name, result=result)
+    result = {}
+    for key in diff_keys:
+        for name, param in no_duplicate_named_parameters.items():
+            if param is all_named_parameters[key]:
+                if name not in result:
+                    result[name] = []
+                result[name].append(key)
 
     return FindTiedParametersResult([sorted([weight] + list(set(tied))) for weight, tied in result.items()])
 
