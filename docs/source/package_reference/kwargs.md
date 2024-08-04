@@ -42,6 +42,14 @@ related to distributed training or mixed precision are created.
 
 [[autodoc]] InitProcessGroupKwargs
 
+## ‎TorchDynamoPlugin
+
+[[autodoc]] ‎TorchDynamoPlugin
+
+## ‎GradientAccumulationPlugin
+
+[[autodoc]] ‎GradientAccumulationPlugin
+
 ## KwargsHandler
 
 [[autodoc]] utils.KwargsHandler
