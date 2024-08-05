@@ -466,6 +466,9 @@ class DataLoaderShard(DataLoaderStateMixin):
         # Delegate attribute access to the internal instance
         return getattr(self._dataloader, name)
 
+    def __len__(self):
+        return len(self._dataloader)
+
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
