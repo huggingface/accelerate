@@ -52,6 +52,7 @@ from ..utils import (
     is_timm_available,
     is_torch_version,
     is_torch_xla_available,
+    is_torchdata_available,
     is_torchvision_available,
     is_transformers_available,
     is_triton_available,
@@ -402,6 +403,13 @@ def require_import_timer(test_case):
     installed
     """
     return unittest.skipUnless(is_import_timer_available(), "test requires tuna interpreter")(test_case)
+
+
+def require_torchdata(test_case):
+    """
+    Decorator marking a test that requires torchdata installed. These tests are skipped when tuna isn't installed
+    """
+    return unittest.skipUnless(is_torchdata_available(), "test requires torchdata")(test_case)
 
 
 _atleast_one_tracker_available = (

@@ -15,6 +15,7 @@
 import random
 import unittest
 
+import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
 from accelerate import Accelerator
@@ -27,6 +28,12 @@ from accelerate.data_loader import (
     SkipDataLoader,
     skip_first_batches,
 )
+from accelerate.test_utils import require_torchdata
+from accelerate.utils import is_torchdata_available
+
+
+if is_torchdata_available():
+    from torchdata.stateful_dataloader import StatefulDataLoader
 
 
 class RandomIterableDataset(IterableDataset):
@@ -396,3 +403,39 @@ class DataLoaderTester(unittest.TestCase):
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
+
+
+@require_torchdata
+class StatefulDataLoaderTester(unittest.TestCase):
+    def test_init(self):
+        Accelerator()
+
+        dataloader = DataLoaderShard(range(16), batch_size=4, stateful=True)
+        assert isinstance(dataloader._dataloader, StatefulDataLoader)
+
+        dataloader = DataLoaderDispatcher(range(16), batch_size=4, stateful=True)
+        assert isinstance(dataloader._dataloader, StatefulDataLoader)
+
+    def test_grab_state(self):
+        Accelerator()
+        for dl_type in [DataLoaderDispatcher, DataLoaderShard]:
+            dataloader = dl_type(range(16), batch_size=4, stateful=True)
+            assert hasattr(dataloader, "state_dict")
+            state_dict = dataloader.state_dict()
+            assert isinstance(state_dict, dict)
+
+            dataloader = dl_type(range(16), batch_size=4, stateful=False)
+            assert not hasattr(dataloader, "state_dict")
+
+    def test_load_state(self):
+        Accelerator()
+        for dl_type in [DataLoaderDispatcher, DataLoaderShard]:
+            dataloader = dl_type(range(16), batch_size=4, shuffle=True, stateful=True)
+            initial_state = dataloader.state_dict()
+            first_batch = next(iter(dataloader))
+            second_batch = next(iter(dataloader))
+            assert not torch.allclose(first_batch, second_batch)
+
+            dataloader.load_state_dict(initial_state)
+            loaded_batch = next(iter(dataloader))
+            assert torch.allclose(first_batch, loaded_batch)
