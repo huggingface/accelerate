@@ -195,6 +195,6 @@ For more information on these options, please refer to the PyTorch [FullySharded
 
 <Tip>
 
-    For those interested in the similarities and differences between FSDP and DeepSpeed, please check out the [concept guide here](../concept_guides/fsdp_and_deepspeed.md)!
+    For those interested in the similarities and differences between FSDP and DeepSpeed, please check out the [concept guide here](../concept_guides/fsdp_and_deepspeed)!
     
 </Tip>

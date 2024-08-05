@@ -21,7 +21,8 @@ jobs:
 
   version-cpu:
     name: "Latest Accelerate CPU [version]"
-    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     needs: get-version
     steps:
       - name: Set up Docker Buildx
@@ -41,7 +42,8 @@ jobs:
 
   version-cuda:
     name: "Latest Accelerate GPU [version]"
-    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-4xlarge-plus
     needs: get-version
     steps:
       - name: Set up Docker Buildx
@@ -61,7 +63,8 @@ jobs:
 
   version-cuda-deepspeed:
     name: "Latest Accelerate GPU DeepSpeed [version]"
-    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-4xlarge-plus
     needs: get-version
     steps:
       - name: Set up Docker Buildx

@@ -32,6 +32,7 @@ from .utils import (
     SCHEDULER_NAME,
     WEIGHTS_NAME,
     get_pretty_name,
+    is_mlu_available,
     is_torch_xla_available,
     is_xpu_available,
     save,
@@ -143,6 +144,8 @@ def save_accelerator_state(
     states["torch_manual_seed"] = torch.get_rng_state()
     if is_xpu_available():
         states["torch_xpu_manual_seed"] = torch.xpu.get_rng_state_all()
+    if is_mlu_available():
+        states["torch_mlu_manual_seed"] = torch.mlu.get_rng_state_all()
     else:
         states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
     if is_torch_xla_available():
@@ -255,6 +258,8 @@ def load_accelerator_state(
         torch.set_rng_state(states["torch_manual_seed"])
         if is_xpu_available():
             torch.xpu.set_rng_state_all(states["torch_xpu_manual_seed"])
+        if is_mlu_available():
+            torch.mlu.set_rng_state_all(states["torch_mlu_manual_seed"])
         else:
             torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
         if is_torch_xla_available():

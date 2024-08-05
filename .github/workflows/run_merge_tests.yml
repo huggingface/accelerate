@@ -10,7 +10,8 @@ env:
 
 jobs:
   run_core_tests_single_gpu:
-    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-4xlarge-plus
     env:
       CUDA_VISIBLE_DEVICES: "0"
     container:
@@ -39,7 +40,7 @@ jobs:
         run: |
           source activate accelerate;
           make test_cli
-          
+
       - name: Run test on GPUs
         working-directory: accelerate
         if: always()
@@ -62,7 +63,8 @@ jobs:
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_deepspeed_tests_single_gpu:
-    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-4xlarge-plus
     env:
       CUDA_VISIBLE_DEVICES: "0"
     container:
@@ -85,7 +87,7 @@ jobs:
         run: |
           source activate accelerate;
           pip freeze
-          
+
       - name: Run test on GPUs
         working-directory: accelerate
         if: always()
@@ -101,7 +103,8 @@ jobs:
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_core_tests_multi_gpu:
-    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-12xlarge-plus
     env:
       CUDA_VISIBLE_DEVICES: 0,1
     container:
@@ -147,7 +150,8 @@ jobs:
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_deepspeed_tests_multi_gpu:
-    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
+    runs-on:
+      group: aws-g6-12xlarge-plus
     container:
       image: huggingface/accelerate:gpu-deepspeed-nightly
       options: --gpus all --shm-size "16gb"
