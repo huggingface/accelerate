@@ -30,6 +30,7 @@ from .utils import (
     get_data_structure,
     initialize_tensors,
     is_torch_version,
+    is_torchdata_available,
     send_to_device,
     slice_tensors,
     synchronize_rng_states,
@@ -388,7 +389,7 @@ class DataLoaderStateMixin:
         self.gradient_state._remove_dataloader(self)
 
 
-class DataLoaderShard(DataLoader, DataLoaderStateMixin):
+class DataLoaderShard(DataLoaderStateMixin):
     """
     Subclass of a PyTorch `DataLoader` that will deal with device placement and current distributed setup.
 
@@ -428,11 +429,25 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         rng_types=None,
         synchronized_generator=None,
         skip_batches=0,
+        stateful=False,
         _drop_last: bool = False,
         _non_blocking: bool = False,
         **kwargs,
     ):
-        super().__init__(dataset, **kwargs)
+        # Choose the appropriate `DataLoader` class
+        if not stateful:
+            dl_init = DataLoader
+        elif not is_torchdata_available():
+            raise ImportError(
+                "Using `stateful=True` requires `torchdata>=0.8.0`; Please do `pip install torchdata -U`"
+            )
+        else:
+            from torchdata.stateful_dataloader import StatefulDataLoader
+
+            dl_init = StatefulDataLoader
+
+        self._dataloader = dl_init(dataset, **kwargs)
+
         self.device = device
         self.rng_types = rng_types
         self.synchronized_generator = synchronized_generator
@@ -442,13 +457,17 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         self._non_blocking = _non_blocking
         self.iteration = 0
 
+    def __getattr__(self, name):
+        # Delegate attribute access to the internal instance
+        return getattr(self._dataloader, name)
+
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
         self.begin()
 
         self.set_epoch(self.iteration)
-        dataloader_iter = super().__iter__()
+        dataloader_iter = iter(self._dataloader)
         # We iterate one batch ahead to check when we are at the end
         try:
             current_batch = next(dataloader_iter)
