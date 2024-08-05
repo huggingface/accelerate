@@ -712,21 +712,31 @@ def find_tied_parameters(model: torch.nn.Module, **kwargs):
     ```
     """
 
+    # get ALL model parameters and thier names
     all_named_parameters = {name: param for name, param in _get_named_parameters(model, remove_duplicate=False)}
+
+    # get ONLY unique named parameters,
+    # if parameter is tied and have multiple names, it will be included only once
     no_duplicate_named_parameters = {
         name: param for name, param in _get_named_parameters(model, remove_duplicate=True)
     }
-    diff_keys = set(all_named_parameters.keys()) - set(no_duplicate_named_parameters.keys())
 
-    result = {}
-    for key in diff_keys:
-        for name, param in no_duplicate_named_parameters.items():
-            if param is all_named_parameters[key]:
-                if name not in result:
-                    result[name] = []
-                result[name].append(key)
+    # the difference of the two sets will give us the tied parameters
+    tied_param_names = set(all_named_parameters.keys()) - set(no_duplicate_named_parameters.keys())
 
-    return FindTiedParametersResult([sorted([weight] + list(set(tied))) for weight, tied in result.items()])
+    # 'tied_param_names' contains the names of parameters that are tied in the model, but we do not know
+    # which names refer to the same parameter. To identify this, we need to group them together.
+    tied_param_groups = {}
+    for tied_param_name in tied_param_names:
+        tied_param = all_named_parameters[tied_param_name]
+        for param_name, param in no_duplicate_named_parameters.items():
+            # compare if parameters are the same, if so, group thier names together
+            if param is tied_param:
+                if param_name not in tied_param_groups:
+                    tied_param_groups[param_name] = []
+                tied_param_groups[param_name].append(tied_param_name)
+
+    return FindTiedParametersResult([sorted([weight] + list(set(tied))) for weight, tied in tied_param_groups.items()])
 
 
 def retie_parameters(model, tied_params):
