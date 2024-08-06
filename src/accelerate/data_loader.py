@@ -779,7 +779,7 @@ class DataLoaderDispatcher(DataLoaderStateMixin):
             self.dataset.set_epoch(epoch)
 
     def __len__(self):
-        whole_length = super().__len__()
+        whole_length = self._dataloader.__len__()
         if self.split_batches:
             return whole_length
         elif self._drop_last:
