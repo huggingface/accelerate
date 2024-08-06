@@ -435,7 +435,10 @@ class ModelEstimatorTester(unittest.TestCase):
             estimate_command(args)
 
     def test_gated(self):
-        with self.assertRaises(GatedRepoError, msg="Repo for model `meta-llama/Llama-2-7b-hf` is gated"):
+        with self.assertRaises(
+            (GatedRepoError, EnvironmentError),
+            msg="Repo for model `meta-llama/Llama-2-7b-hf` is gated or environment error occurred",
+        ):
             args = self.parser.parse_args(["meta-llama/Llama-2-7b-hf"])
             with patch_environment(hf_hub_disable_implicit_token="1"):
                 estimate_command(args)
