@@ -3159,7 +3159,8 @@ class Accelerator:
             map_location,
             **load_model_func_kwargs,
         )
-        self.step = override_attributes["step"]
+        if "step" in override_attributes:
+            self.step = override_attributes["step"]
         custom_checkpoints = [
             f for f in os.listdir(input_dir) if re.search(r"^custom_checkpoint_\d+\.pkl$", f) is not None
         ]
