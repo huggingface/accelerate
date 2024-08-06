@@ -38,7 +38,7 @@ def verify_on_hub(repo: str, token: str = None):
     "Verifies that the model is on the hub and returns the model info."
     try:
         return model_info(repo, token=token)
-    except GatedRepoError:
+    except (GatedRepoError, EnvironmentError):
         return "gated"
     except RepositoryNotFoundError:
         return "repo"
