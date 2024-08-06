@@ -21,12 +21,12 @@ import torch.nn as nn
 from .state import PartialState
 from .utils import (
     PrefixedDataset,
-    clear_device_cache,
     find_device,
     named_module_tensors,
     send_to_device,
     set_module_tensor_to_device,
 )
+from .utils.memory import clear_device_cache
 from .utils.modeling import get_non_persistent_buffers
 from .utils.other import recursive_getattr
 
