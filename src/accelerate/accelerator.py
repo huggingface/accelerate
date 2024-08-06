@@ -2038,6 +2038,7 @@ class Accelerator:
             slice_fn_for_dispatch=slice_fn_for_dispatch,
             use_seedable_sampler=self.use_seedable_sampler,
             non_blocking=self.non_blocking,
+            stateful=self.dataloader_config.stateful,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
@@ -3481,7 +3482,7 @@ class Accelerator:
         ...     ...
         ```
         """
-        return skip_first_batches(dataloader, num_batches=num_batches)
+        return skip_first_batches(dataloader, num_batches=num_batches, stateful=self.dataloader_config.stateful)
 
     def __deepcopy__(self, memo):
         logger.info("Deep copying the `Accelerator` object, note that this will point to the same original object.")

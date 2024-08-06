@@ -720,6 +720,10 @@ class DataLoaderConfiguration:
             " prepared dataloader has `pin_memory` set to `True` to work properly."
         },
     )
+    stateful: bool = field(
+        default=False,
+        metadata={"help": "If set to `True`, the dataloader prepared by the Accelerator will be stateful."},
+    )
 
 
 @dataclass

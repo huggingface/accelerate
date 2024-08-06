@@ -410,11 +410,10 @@ class StatefulDataLoaderTester(unittest.TestCase):
     def test_init(self):
         Accelerator()
 
-        dataloader = DataLoaderShard(range(16), batch_size=4, stateful=True)
-        assert isinstance(dataloader._dataloader, StatefulDataLoader)
-
-        dataloader = DataLoaderDispatcher(range(16), batch_size=4, stateful=True)
-        assert isinstance(dataloader._dataloader, StatefulDataLoader)
+        for dl_type in [DataLoaderShard, DataLoaderDispatcher]:
+            for dl_type in [DataLoaderShard, DataLoaderDispatcher]:
+                dataloader = dl_type(range(16), batch_size=4, stateful=True)
+                assert isinstance(dataloader._dataloader, StatefulDataLoader)
 
     def test_grab_state(self):
         Accelerator()
