@@ -407,34 +407,57 @@ class DataLoaderTester(unittest.TestCase):
 
 @require_torchdata
 class StatefulDataLoaderTester(unittest.TestCase):
-    def test_init(self):
-        Accelerator()
-
-        for dl_type in [DataLoaderShard, DataLoaderDispatcher]:
-            for dl_type in [DataLoaderShard, DataLoaderDispatcher]:
-                dataloader = dl_type(range(16), batch_size=4, stateful=True)
-                assert isinstance(dataloader._dataloader, StatefulDataLoader)
-
     def test_grab_state(self):
         Accelerator()
         for dl_type in [DataLoaderDispatcher, DataLoaderShard]:
             dataloader = dl_type(range(16), batch_size=4, stateful=True)
-            assert hasattr(dataloader, "state_dict")
             state_dict = dataloader.state_dict()
             assert isinstance(state_dict, dict)
 
             dataloader = dl_type(range(16), batch_size=4, stateful=False)
-            assert not hasattr(dataloader, "state_dict")
+            with self.assertRaises(ValueError):
+                dataloader.state_dict()
 
     def test_load_state(self):
         Accelerator()
-        for dl_type in [DataLoaderDispatcher, DataLoaderShard]:
-            dataloader = dl_type(range(16), batch_size=4, shuffle=True, stateful=True)
-            initial_state = dataloader.state_dict()
-            first_batch = next(iter(dataloader))
-            second_batch = next(iter(dataloader))
-            assert not torch.allclose(first_batch, second_batch)
 
-            dataloader.load_state_dict(initial_state)
-            loaded_batch = next(iter(dataloader))
-            assert torch.allclose(first_batch, loaded_batch)
+        dl = DataLoader(range(16), batch_size=4, shuffle=True)
+        
+        from accelerate.data_loader import prepare_data_loader
+
+        dataloader = prepare_data_loader(dl, stateful=True)
+
+
+        for i, batch in enumerate(dataloader):
+            if i == 1:
+                initial_state = dataloader.state_dict()
+            elif i == 2:
+                second_batch = batch
+        resumed_batch = next(iter(dataloader))
+        assert not torch.allclose(resumed_batch, second_batch)
+
+        # initial_state["_sampler_iter_yielded"] -= 1
+        # initial_state["_num_yielded"] -= 1
+        print(initial_state)
+        dataloader.load_state_dict(initial_state)
+
+        batch = next(iter(dataloader))
+        assert torch.allclose(batch, second_batch)
+        # from torchdata.stateful_dataloader import StatefulDataLoader
+
+        # dataloader = StatefulDataLoader(range(16), batch_size=4, shuffle=True)
+        # for i, batch in enumerate(dataloader):
+        #     if i == 1:
+        #         initial_state = dataloader.state_dict()
+        # print(initial_state)
+        #     elif i == 2:
+        #         second_batch = batch
+        # resumed_batch = next(iter(dataloader))
+        # assert not torch.allclose(resumed_batch, second_batch)
+
+        # dataloader.load_state_dict(initial_state)
+
+        # print(dataloader.state_dict())
+        # batch = next(iter(dataloader))
+        # assert torch.allclose(batch, second_batch)
+            
