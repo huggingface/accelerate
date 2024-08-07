@@ -578,6 +578,10 @@ class Accelerator:
         return self.dataloader_config.non_blocking
 
     @property
+    def use_stateful_dataloader(self):
+        return self.dataloader_config.use_stateful_dataloader
+
+    @property
     def project_dir(self):
         return self.project_configuration.project_dir
 
@@ -1593,9 +1597,9 @@ class Accelerator:
 
         deepspeed_plugin = self.state.deepspeed_plugin
 
-        is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        is_dataloader_present = any((isinstance(obj, torch.utils.data.DataLoader)) for obj in args)
         result = [
-            self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
+            self._prepare_one(obj, first_pass=True) if (isinstance(obj, torch.utils.data.DataLoader)) else obj
             for obj in args
         ]
 
@@ -2038,6 +2042,7 @@ class Accelerator:
             slice_fn_for_dispatch=slice_fn_for_dispatch,
             use_seedable_sampler=self.use_seedable_sampler,
             non_blocking=self.non_blocking,
+            use_stateful_dataloader=self.use_stateful_dataloader,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
