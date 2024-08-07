@@ -434,7 +434,7 @@ def dispatch_model(
         )
         if len(offloaded_devices_str) > 0:
             logger.warning(
-                f"Some parameters are on the meta device device because they were offloaded to the {offloaded_devices_str}."
+                f"Some parameters are on the meta device because they were offloaded to the {offloaded_devices_str}."
             )
 
         # Attaching the hook may break tied weights, so we retie them
