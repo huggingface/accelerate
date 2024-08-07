@@ -1202,6 +1202,25 @@ class FullyShardedDataParallelPlugin:
             "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`."
         },
     )
+    backward_prefetch: Union[str, "torch.distributed.fsdp.BackwardPrefetch"] = field(
+        default=None,
+        metadata={
+            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`."
+        },
+    )
+    mixed_precision_policy: Optional[Union[dict, "torch.distributed.fsdp.MixedPrecision"]] = field(
+        default=None,
+        metadata={
+            "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
+            "If passing in a `dict`, it should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`."
+        },
+    )
+    auto_wrap_policy: Optional[Union[str, Callable]] = field(
+        default=None,
+        metadata={
+            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`."
+        },
+    )
     cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload"] = field(
         default=None,
         metadata={
@@ -1212,12 +1231,7 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={"help": "A list of modules to ignore when wrapping with FSDP."},
     )
-    backward_prefetch: Union[str, "torch.distributed.fsdp.BackwardPrefetch"] = field(
-        default=None,
-        metadata={
-            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`."
-        },
-    )
+
     state_dict_type: Union[str, "torch.distributed.fsdp.StateDictType"] = field(
         default=None,
         metadata={
@@ -1226,7 +1240,6 @@ class FullyShardedDataParallelPlugin:
     )
     state_dict_config: Optional[
         Union[
-            "torch.distributed.fsdp.StateDictConfig",
             "torch.distributed.fsdp.FullStateDictConfig",
             "torch.distributed.fsdp.ShardedStateDictConfig",
         ]
@@ -1242,16 +1255,24 @@ class FullyShardedDataParallelPlugin:
             "help": "Optim state dict config to use. Is determined based on the `state_dict_type` if not passed in."
         },
     )
-    use_orig_params: bool = field(
-        default=None,
-        metadata={"help": "Whether to use the original parameters for the optimizer. Should be a `bool`."},
-    )
     limit_all_gathers: bool = field(
         default=True,
         metadata={
             "help": "Whether to have FSDP explicitly synchronizes the CPU thread to prevent "
             "too many in-flight all-gathers. This bool only affects the sharded strategies that schedule all-gathers. "
             "Enabling this can help lower the number of CUDA malloc retries."
+        },
+    )
+    use_orig_params: bool = field(
+        default=None,
+        metadata={"help": "Whether to use the original parameters for the optimizer. Should be a `bool`."},
+    )
+    param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
+        default=None,
+        metadata={
+            "help": "A Callable[torch.nn.Module] -> None that specifies how modules "
+            "that are currently on the meta device should be initialized onto an actual device. "
+            "Only applicable when `sync_module_states` is `True`. By default is a `lambda` which calls `to_empty` on the module."
         },
     )
     sync_module_states: bool = field(
@@ -1283,41 +1304,16 @@ class FullyShardedDataParallelPlugin:
             "Only applicable for 🤗 Transformers. When using this, `sync_module_states` needs to be `True`"
         },
     )
-    param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
-        default=None,
-        metadata={
-            "help": "A Callable[torch.nn.Module] -> None that specifies how modules "
-            "that are currently on the meta device should be initialized onto an actual device. "
-            "Only applicable when `sync_module_states` is `True`. By default is a `lambda` which calls `to_empty` on the module."
-        },
-    )
-
-    auto_wrap_policy: Optional[Union[str, Callable]] = field(
-        default=None,
-        metadata={
-            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`."
-        },
-    )
-
     transformer_cls_names_to_wrap: Optional[List[str]] = field(
         default=None,
         metadata={
             "help": "A list of transformer layer class names to wrap. Only applicable when `auto_wrap_policy` is `transformer_based_wrap`."
         },
     )
-
     min_num_params: Optional[int] = field(
         default=None,
         metadata={
             "help": "The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy` is `size_based_wrap`."
-        },
-    )
-
-    mixed_precision_policy: Optional[Union[dict, "torch.distributed.fsdp.MixedPrecision"]] = field(
-        default=None,
-        metadata={
-            "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
-            "If passing in a `dict`, it should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`."
         },
     )
 
