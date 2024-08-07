@@ -23,7 +23,14 @@ import inspect
 
 import torch
 
-from .imports import is_mlu_available, is_mps_available, is_musa_available, is_npu_available, is_xpu_available
+from .imports import (
+    is_cuda_available,
+    is_mlu_available,
+    is_mps_available,
+    is_musa_available,
+    is_npu_available,
+    is_xpu_available,
+)
 
 
 def clear_device_cache(garbage_collection=False):
@@ -44,7 +51,7 @@ def clear_device_cache(garbage_collection=False):
         torch.npu.empty_cache()
     elif is_mps_available(min_version="2.0"):
         torch.mps.empty_cache()
-    else:
+    elif is_cuda_available():
         torch.cuda.empty_cache()
 
 
