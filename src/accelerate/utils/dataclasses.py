@@ -29,6 +29,7 @@ from datetime import timedelta
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, get_args
 
 import torch
+from torch.distributed.fsdp.api import ShardingStrategy, BackwardPrefetch, CPUOffload, StateDictType
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
@@ -1196,217 +1197,94 @@ class FullyShardedDataParallelPlugin:
     """
     This plugin is used to enable fully sharded data parallelism.
     """
-
-    sharding_strategy: "typing.Any" = field(
+    sharding_strategy: Union[str, ShardingStrategy] = field(
         default=None,
-        metadata={
-            "help": "FSDP Sharding Strategy of type `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
-        },
+        metadata={"help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.api.ShardingStrategy`."},
     )
-    backward_prefetch: "typing.Any" = field(
+    cpu_offload: Union[bool, CPUOffload] = field(
         default=None,
-        metadata={
-            "help": "FSDP Backward Prefetch of type `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`"
-        },
+        metadata={"help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.api.CPUOffload`."},
     )
-    mixed_precision_policy: "typing.Any" = field(
+    backward_prefetch: Union[str, BackwardPrefetch] = field(
         default=None,
-        metadata={
-            "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
-            "The 3 flags that are set are `param_dtype`, `reduce_dtype`, `buffer_dtype`. "
-            "Each flag expects `torch.dtype` as the value. "
-            "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.MixedPrecision`."
-        },
+        metadata={"help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.api.BackwardPrefetch`."},
     )
-    auto_wrap_policy: Optional[Callable] = field(
+    state_dict_type: Union[str, StateDictType] = field(
         default=None,
-        metadata={"help": "A callable specifying a policy to recursively wrap layers with FSDP"},
+        metadata={"help": "State dict type to use. Should be either a `str` or an instance of `torch.distributed.fsdp.api.StateDictType`."},
     )
-    cpu_offload: "typing.Any" = field(
+    state_dict_config: Optional[Union[StateDictConfig, FullStateDictConfig, ShardedStateDictConfig]] = field(
         default=None,
-        metadata={
-            "help": "Decides Whether to offload parameters and gradients to CPU. "
-            "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`."
-        },
+        metadata={"help": "State dict config to use. Is determined based on the `state_dict_type`. Generally of type `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictConfig`"},
     )
-    ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
+    optim_state_dict_config: Optional[Union[StateDictConfig, FullOptimStateDictConfig, ShardedOptimStateDictConfig]] = field(
         default=None,
-        metadata={"help": "A list of modules to ignore for FSDP."},
-    )
-    state_dict_type: "typing.Any" = field(
-        default=None,
-        metadata={
-            "help": "FSDP State Dict Type of type `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictType`"
-        },
-    )
-    state_dict_config: "typing.Any" = field(
-        default=None,
-        metadata={
-            "help": "FSDP State Dict Config of type `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictConfig`"
-        },
-    )
-    optim_state_dict_config: "typing.Any" = field(
-        default=None,
-        metadata={
-            "help": "FSDP Optimizer State Dict Config of type `torch.distributed.fsdp.fully_sharded_data_parallel.OptimStateDictConfig`"
-        },
-    )
-    limit_all_gathers: bool = field(
-        default=True,
-        metadata={
-            "help": "If False, then FSDP allows the CPU thread to schedule all-gathers "
-            "without any extra synchronization. If True, then FSDP explicitly synchronizes the CPU thread to prevent "
-            "too many in-flight all-gathers. This bool only affects the sharded strategies that schedule all-gathers. "
-            "Enabling this can help lower the number of CUDA malloc retries."
-        },
+        metadata={"help": "Optim state dict config to use. Is determined based on the `state_dict_type`. Generally of type `torch.distributed.fsdp.fully_sharded_data_parallel.OptimStateDictConfig`"},
     )
     use_orig_params: bool = field(
-        default=True,
-        metadata={
-            "help": "If `True`, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable parameters. "
-            "Useful in cases such as parameter-efficient fine-tuning. "
-            "Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019). "
-            "This also enables multiple optimizer param groups. This should be `True` when creating an optimizer object before preparing/wrapping the model with FSDP."
-        },
-    )
-    param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
         default=None,
-        metadata={
-            "help": "A Callable[torch.nn.Module] -> None that specifies how modules "
-            "that are currently on the meta device should be initialized onto an actual device."
-        },
+        metadata={"help": "Whether to use the original parameters for the optimizer. Should be a `bool`."},
     )
     sync_module_states: bool = field(
-        default=True,
+        default=None,
         metadata={
-            "help": "If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0 "
-            "to ensure they are the same across all ranks after initialization"
+            "help": "Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 "
+            "to ensure they are the same across all ranks after initialization. Defaults to `True`"
         },
     )
     forward_prefetch: bool = field(
-        default=False,
+        default=None,
         metadata={
-            "help": "If True, then FSDP explicitly prefetches the next upcoming "
-            "all-gather while executing in the forward pass. only use with Static graphs."
-        },
-    )
-    activation_checkpointing: bool = field(
-        default=False,
-        metadata={
-            "help": "If True, activation checkpointing is a technique to reduce memory usage by clearing activations of "
-            "certain layers and recomputing them during a backward pass. Effectively, this trades extra computation time "
-            "for reduced memory usage."
+            "help": "Whether to have FSDP explicitly prefetches the next upcoming "
+            "all-gather while executing in the forward pass. only use with Static graphs. Defaults to `False`"
         },
     )
 
     def __post_init__(self):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, CPUOffload, ShardingStrategy
-
-        prefix = "FSDP_"
+        env_prefix = "FSDP_"
         if self.sharding_strategy is None:
-            sharding_strategy = os.environ.get(prefix + "SHARDING_STRATEGY", "FULL_SHARD")
-            sharding_strategy = (
-                FSDP_SHARDING_STRATEGY.index(sharding_strategy) + 1
-                if not sharding_strategy.isdigit()
-                else int(sharding_strategy)
-            )
-            self.sharding_strategy = ShardingStrategy(sharding_strategy)
-
-        if self.cpu_offload is None:
-            if str_to_bool(os.environ.get(prefix + "OFFLOAD_PARAMS", "False")) == 1:
-                self.cpu_offload = CPUOffload(offload_params=True)
+            self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
+        if isinstance(self.sharding_strategy, str):
+            if self.sharding_strategy.isdigit():
+                self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
             else:
-                self.cpu_offload = CPUOffload(offload_params=False)
-
+                self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
+        
+        if self.cpu_offload is None:
+            self.cpu_offload = str_to_bool(os.environ.get(env_prefix + "CPU_OFFLOAD", "False")) == 1
+        if isinstance(self.cpu_offload, bool):
+            self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
+        
         if self.backward_prefetch is None:
-            prefetch_policy = os.environ.get(prefix + "BACKWARD_PREFETCH", "NO_PREFETCH")
-            if prefetch_policy != FSDP_BACKWARD_PREFETCH[-1]:
-                self.backward_prefetch = BackwardPrefetch(FSDP_BACKWARD_PREFETCH.index(prefetch_policy) + 1)
+            self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", "NO_PREFETCH")
+        if isinstance(self.backward_prefetch, str):
+            if self.backward_prefetch.isdigit():
+                self.backward_prefetch = BackwardPrefetch(int(self.backward_prefetch))
+            else:
+                self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
 
         if self.state_dict_type is None:
-            state_dict_type_policy = os.environ.get(prefix + "STATE_DICT_TYPE", "FULL_STATE_DICT")
-            self.set_state_dict_type(state_dict_type_policy)
-        self.use_orig_params = str_to_bool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
-        self.sync_module_states = str_to_bool(os.environ.get(prefix + "SYNC_MODULE_STATES", "True")) == 1
-        self.forward_prefetch = str_to_bool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
-        self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
-
-        if str_to_bool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1 and not self.sync_module_states:
-            warnings.warn(
-                "sync_module_states cannot be False since efficient cpu ram loading enabled. "
-                "Setting sync_module_states to True."
-            )
-            self.sync_module_states = True
-
-        if self.sync_module_states:
-            if is_npu_available():
-                device = torch.npu.current_device()
-            elif is_mlu_available():
-                device = torch.mlu.current_device()
-            elif is_cuda_available():
-                device = torch.cuda.current_device()
-            elif is_xpu_available():
-                device = torch.xpu.current_device()
+            self.state_dict_type = os.environ.get(env_prefix + "STATE_DICT_TYPE", "FULL_STATE_DICT")
+        if isinstance(self.state_dict_type, str):
+            if self.state_dict_type.isdigit():
+                self.state_dict_type = StateDictType(int(self.state_dict_type))
             else:
-                raise RuntimeError(
-                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', or 'NPU'."
-                )
-            self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
+                self.state_dict_type = StateDictType[self.state_dict_type.upper()]
+            self.set_state_dict_type()
 
-    def set_auto_wrap_policy(self, model):
-        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+        if self.use_orig_params is None:
+            self.use_orig_params = str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False")) == 1
+        
+        if self.sync_module_states is None:
+            self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
 
-        default_transformer_cls_names_to_wrap = (
-            ",".join(model._no_split_modules) if getattr(model, "_no_split_modules", None) is not None else ""
-        )
-        if self.auto_wrap_policy is None:
-            auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", "NO_WRAP")
-            if auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[0]:
-                transformer_cls_names_to_wrap = os.environ.get(
-                    "FSDP_TRANSFORMER_CLS_TO_WRAP", default_transformer_cls_names_to_wrap
-                ).split(",")
-                transformer_cls_to_wrap = set()
-                for layer_class in transformer_cls_names_to_wrap:
-                    transformer_cls = get_module_class_from_name(model, layer_class)
-                    if transformer_cls is None:
-                        raise Exception("Could not find the transformer layer class to wrap in the model.")
-                    else:
-                        transformer_cls_to_wrap.add(transformer_cls)
-
-                self.auto_wrap_policy = functools.partial(
-                    transformer_auto_wrap_policy,
-                    # Transformer layer class to wrap
-                    transformer_layer_cls=transformer_cls_to_wrap,
-                )
-            elif auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[1]:
-                min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))
-                if min_num_params > 0:
-                    self.auto_wrap_policy = functools.partial(
-                        size_based_auto_wrap_policy, min_num_params=min_num_params
-                    )
-
-    def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
-        if isinstance(mixed_precision, str):
-            if mixed_precision == "fp16":
-                dtype = torch.float16
-            elif mixed_precision == "bf16":
-                dtype = torch.bfloat16
-            elif mixed_precision == "fp32":
-                dtype = torch.float32
-            else:
-                raise ValueError(f"Unknown mixed precision value: {mixed_precision}")
-        else:
-            dtype = mixed_precision
-
-        buffer_dtype = torch.float32 if buffer_autocast else dtype
-        from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
-
-        if self.mixed_precision_policy is None or override:
-            self.mixed_precision_policy = MixedPrecision(
-                param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_dtype
-            )
-
-    def set_state_dict_type(self, state_dict_type_policy):
+        if self.forward_prefetch is None:
+            self.forward_prefetch = str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False")) == 1
+    
+    def set_state_dict_config(self):
+        """
+        Set the state dict config based on the `StateDictType.
+        """
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             FullOptimStateDictConfig,
             FullStateDictConfig,
@@ -1414,9 +1292,6 @@ class FullyShardedDataParallelPlugin:
             ShardedStateDictConfig,
             StateDictType,
         )
-
-        self.state_dict_type = StateDictType(FSDP_STATE_DICT_TYPE.index(state_dict_type_policy) + 1)
-
         if self.state_dict_type == StateDictType.FULL_STATE_DICT:
             if self.state_dict_config is None:
                 self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
@@ -1427,6 +1302,12 @@ class FullyShardedDataParallelPlugin:
                 self.state_dict_config = ShardedStateDictConfig(offload_to_cpu=True)
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
+
+        
+    
+        
+
+    
 
 
 @dataclass
