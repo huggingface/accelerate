@@ -28,7 +28,6 @@ from datetime import timedelta
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args
 
 import torch
-from torch.distributed.fsdp.api import BackwardPrefetch, CPUOffload, ShardingStrategy, StateDictType
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY
 from .environment import str_to_bool
@@ -1197,13 +1196,13 @@ class FullyShardedDataParallelPlugin:
     This plugin is used to enable fully sharded data parallelism.
     """
 
-    sharding_strategy: Union[str, "ShardingStrategy"] = field(
+    sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
         default=None,
         metadata={
             "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`."
         },
     )
-    cpu_offload: Union[bool, "CPUOffload"] = field(
+    cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload"] = field(
         default=None,
         metadata={
             "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`."
@@ -1213,13 +1212,13 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={"help": "A list of modules to ignore when wrapping with FSDP."},
     )
-    backward_prefetch: Union[str, "BackwardPrefetch"] = field(
+    backward_prefetch: Union[str, "torch.distributed.fsdp.BackwardPrefetch"] = field(
         default=None,
         metadata={
             "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`."
         },
     )
-    state_dict_type: Union[str, "StateDictType"] = field(
+    state_dict_type: Union[str, "torch.distributed.fsdp.StateDictType"] = field(
         default=None,
         metadata={
             "help": "State dict type to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictType`."
@@ -1323,6 +1322,13 @@ class FullyShardedDataParallelPlugin:
     )
 
     def __post_init__(self):
+        from torch.distributed.fsdp import (
+            BackwardPrefetch,
+            CPUOffload,
+            ShardingStrategy,
+            StateDictType,
+        )
+
         env_prefix = "FSDP_"
         # Strategy: By default we should always assume that values are passed in, else we check the environment variables
         if self.sharding_strategy is None:
