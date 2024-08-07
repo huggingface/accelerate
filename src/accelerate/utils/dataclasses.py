@@ -1313,7 +1313,7 @@ class FullyShardedDataParallelPlugin:
         },
     )
 
-    mixed_precision_policy: Optional[Union[dict[str, torch.dtype], "torch.distributed.fsdp.MixedPrecision"]] = field(
+    mixed_precision_policy: Optional[Union[dict, "torch.distributed.fsdp.MixedPrecision"]] = field(
         default=None,
         metadata={
             "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
