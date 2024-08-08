@@ -20,7 +20,7 @@ from unittest.mock import patch
 import torch
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
-from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig
+from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command_parser
 from accelerate.test_utils import execute_subprocess_async
@@ -73,8 +73,9 @@ class AccelerateLauncherTester(unittest.TestCase):
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_config_compatibility(self):
+        invalid_configs = ["invalid", "mpi", "sagemaker"]
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
-            if "invalid" in str(config) or "mpi" in str(config):
+            if any(invalid_config in str(config) for invalid_config in invalid_configs):
                 continue
             with self.subTest(config_file=config):
                 cmd = get_launch_command(config_file=config) + [self.test_file_path]
@@ -196,6 +197,8 @@ class ClusterConfigTester(unittest.TestCase):
     Test case for verifying the config dataclasses work
     """
 
+    test_config_path = Path("tests/test_configs")
+
     def test_base_config(self):
         # Tests that all the dataclasses can be initialized
         config = BaseConfig(
@@ -256,6 +259,8 @@ class ClusterConfigTester(unittest.TestCase):
         assert config.compute_environment == "AMAZON_SAGEMAKER"
         assert config.ec2_instance_type == "MY_TYPE"
         assert config.iam_role_name == "MY_ROLE"
+
+        config = load_config_from_file(str(self.test_config_path / "0_30_0_sagemaker.yaml"))
 
 
 class TpuConfigTester(unittest.TestCase):
@@ -430,7 +435,10 @@ class ModelEstimatorTester(unittest.TestCase):
             estimate_command(args)
 
     def test_gated(self):
-        with self.assertRaises(GatedRepoError, msg="Repo for model `meta-llama/Llama-2-7b-hf` is gated"):
+        with self.assertRaises(
+            (GatedRepoError, EnvironmentError),
+            msg="Repo for model `meta-llama/Llama-2-7b-hf` is gated or environment error occurred",
+        ):
             args = self.parser.parse_args(["meta-llama/Llama-2-7b-hf"])
             with patch_environment(hf_hub_disable_implicit_token="1"):
                 estimate_command(args)
@@ -451,7 +459,7 @@ class ModelEstimatorTester(unittest.TestCase):
         args = self.parser.parse_args(["bert-base-cased", "--dtypes", "float32", "float16"])
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
-        largest_layer, total_size = 89075712, 433249280
+        largest_layer, total_size = 90669056, 433249280
         # Check that full precision -> int4 is calculating correctly
         assert len(output) == 2, f"Output was missing a precision, expected 2 but received {len(output)}"
 
@@ -479,7 +487,7 @@ class ModelEstimatorTester(unittest.TestCase):
         args = self.parser.parse_args(["bert-base-cased", "--dtypes", "float32"])
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
-        largest_layer, total_size = 89075712, 433249280
+        largest_layer, total_size = 90669056, 433249280
         assert (
             largest_layer == output[0][1]
         ), f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"

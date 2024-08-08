@@ -27,12 +27,12 @@ from torch import nn
 
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
-    require_cuda,
     require_huggingface_suite,
     require_non_cpu,
     require_non_torch_xla,
     require_torch_min_version,
     require_tpu,
+    require_triton,
     torch_device,
 )
 from accelerate.test_utils.training import RegressionModel
@@ -190,15 +190,16 @@ class UtilsTester(unittest.TestCase):
         model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
 
-    @require_cuda
+    @require_triton
+    @require_non_cpu
     @require_torch_min_version(version="2.0")
     def test_dynamo(self):
         model = RegressionModel()
         model._original_forward = model.forward
-        model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
+        model.forward = torch.autocast(device_type=torch_device, dtype=torch.float16)(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
         model.forward = torch.compile(model.forward, backend="inductor")
-        inputs = torch.randn(4, 10).cuda()
+        inputs = torch.randn(4, 10).to(torch_device)
         _ = model(inputs)
 
     def test_extract_model(self):
@@ -430,14 +431,8 @@ class UtilsTester(unittest.TestCase):
             valid_env_items = convert_dict_to_env_variables(env)
         assert valid_env_items == ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
 
-
-class TqdmTester(unittest.TestCase):
-    def test_tqdm(self):
-        expected = [0, 1, 2]
-        assert list(tqdm(range(3), main_process_only=True)) == expected
-        assert list(tqdm(main_process_only=True, iterable=range(3))) == expected
-
-        assert list(tqdm(range(3), main_process_only=False)) == expected
-        assert list(tqdm(main_process_only=False, iterable=range(3))) == expected
-
-        assert list(tqdm(range(3))) == expected
+    def test_tqdm_deprecation(self):
+        with pytest.warns(FutureWarning) as cm:
+            tqdm(True, range(3), disable=True)
+        assert "Passing `True` as the first argument to" in cm.pop().message.args[0]
+        tqdm(range(3), main_process_only=True, disable=True)

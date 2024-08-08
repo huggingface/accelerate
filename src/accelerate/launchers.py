@@ -26,8 +26,10 @@ from .utils import (
     check_cuda_p2p_ib_support,
     get_gpu_info,
     is_mps_available,
+    is_torch_version,
     patch_environment,
 )
+from .utils.constants import ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION
 
 
 def test_launch():
@@ -44,6 +46,13 @@ def notebook_launcher(
     master_addr="127.0.0.1",
     node_rank=0,
     num_nodes=1,
+    rdzv_backend="static",
+    rdzv_endpoint="",
+    rdzv_conf=None,
+    rdzv_id="none",
+    max_restarts=0,
+    monitor_interval=0.1,
+    log_line_prefix_template=None,
 ):
     """
     Launches a training function, using several processes or multiple nodes if it's possible in the current environment
@@ -78,6 +87,20 @@ def notebook_launcher(
             The rank of the current node.
         num_nodes (`int`, *optional*, defaults to 1):
             The number of nodes to use for training.
+        rdzv_backend (`str`, *optional*, defaults to `"static"`):
+            The rendezvous method to use, such as 'static' (the default) or 'c10d'
+        rdzv_endpoint (`str`, *optional*, defaults to `""`):
+            The endpoint of the rdzv sync. storage.
+        rdzv_conf (`Dict`, *optional*, defaults to `None`):
+            Additional rendezvous configuration.
+        rdzv_id (`str`, *optional*, defaults to `"none"`):
+            The unique run id of the job.
+        max_restarts (`int`, *optional*, defaults to 0):
+            The maximum amount of restarts that elastic agent will conduct on workers before failure.
+        monitor_interval (`float`, *optional*, defaults to 0.1):
+            The interval in seconds that is used by the elastic_agent as a period of monitoring workers.
+        log_line_prefix_template (`str`, *optional*, defaults to `None`):
+            The prefix template for elastic launch logging. Available from PyTorch 2.2.0.
 
     Example:
 
@@ -141,6 +164,7 @@ def notebook_launcher(
             raise ValueError("The node_rank must be less than the number of nodes.")
         if num_processes > 1:
             # Multi-GPU launch
+            from torch.distributed.launcher.api import LaunchConfig, elastic_launch
             from torch.multiprocessing import start_processes
             from torch.multiprocessing.spawn import ProcessRaisedException
 
@@ -198,7 +222,27 @@ def notebook_launcher(
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
                 print(f"Launching training on {num_processes} GPUs.")
                 try:
-                    start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
+                    if rdzv_conf is None:
+                        rdzv_conf = {}
+                    if rdzv_backend == "static":
+                        rdzv_conf["rank"] = node_rank
+                        if not rdzv_endpoint:
+                            rdzv_endpoint = f"{master_addr}:{use_port}"
+                    launch_config_kwargs = dict(
+                        min_nodes=num_nodes,
+                        max_nodes=num_nodes,
+                        nproc_per_node=num_processes,
+                        run_id=rdzv_id,
+                        rdzv_endpoint=rdzv_endpoint,
+                        rdzv_backend=rdzv_backend,
+                        rdzv_configs=rdzv_conf,
+                        max_restarts=max_restarts,
+                        monitor_interval=monitor_interval,
+                        start_method="fork",
+                    )
+                    if is_torch_version(">=", ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION):
+                        launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template
+                    elastic_launch(config=LaunchConfig(**launch_config_kwargs), entrypoint=function)(*args)
                 except ProcessRaisedException as e:
                     if "Cannot re-initialize CUDA in forked subprocess" in e.args[0]:
                         raise RuntimeError(

@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import os
 import threading
 import warnings
@@ -41,6 +40,7 @@ from .utils import (
     is_ipex_available,
     is_mlu_available,
     is_mps_available,
+    is_musa_available,
     is_npu_available,
     is_torch_xla_available,
     is_xpu_available,
@@ -56,6 +56,9 @@ if is_torch_xla_available():
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_musa_available(check_device=False):
+    import torch_musa  # noqa: F401
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
@@ -179,7 +182,10 @@ class PartialState:
                 )
 
             # Sets up self.backend + imports
-            backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, kwargs.pop("backend", None))
+            original_backend = kwargs.pop("backend", None)
+            backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, original_backend)
+            if original_backend is not None and backend != original_backend:
+                raise ValueError(f"Your assigned backend {original_backend} is not avaliable, please use {backend}")
             self.backend = backend
             self.distributed_type = distributed_type
             use_deepspeed = False
@@ -192,11 +198,6 @@ class PartialState:
                                 "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                             )
                         from deepspeed import comm as dist
-
-                        if is_xpu_available() and is_ccl_available():
-                            os.environ["CCL_PROCESS_LAUNCHER"] = "none"
-                            os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
-                            os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
 
                         if not dist.is_initialized():
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
@@ -215,10 +216,6 @@ class PartialState:
                 os.environ["WORLD_SIZE"] = str(dist_information.world_size)
                 os.environ["LOCAL_RANK"] = str(dist_information.local_rank)
                 os.environ["LOCAL_WORLD_SIZE"] = str(dist_information.local_world_size)
-                if self.backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
-                    os.environ["CCL_PROCESS_LAUNCHER"] = "none"
-                    os.environ["CCL_LOCAL_SIZE"] = os.environ["LOCAL_WORLD_SIZE"]
-                    os.environ["CCL_LOCAL_RANK"] = os.environ["LOCAL_RANK"]
                 if not os.environ.get("MASTER_PORT", None):
                     os.environ["MASTER_PORT"] = "29500"
                 if (
@@ -235,7 +232,7 @@ class PartialState:
 
                 if (
                     self.distributed_type == DistributedType.MULTI_CPU
-                    and get_int_from_env(["OMP_NUM_THREADS", "OMP_NUM_THREADS"], 0) > 0
+                    and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0
                 ):
                     import psutil
 
@@ -367,6 +364,7 @@ class PartialState:
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
@@ -434,11 +432,9 @@ class PartialState:
             length = len(inputs[list(inputs.keys())[0]])
             if not all(len(v) == length for v in inputs.values()):
                 raise ValueError("All values in the dictionary must have the same length")
-        num_samples_per_process = math.ceil(length / self.num_processes)
-        start_index = self.process_index * num_samples_per_process
-        end_index = start_index + num_samples_per_process
-        if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
-            end_index = length
+        num_samples_per_process, num_extras = divmod(length, self.num_processes)
+        start_index = self.process_index * num_samples_per_process + min(self.process_index, num_extras)
+        end_index = start_index + num_samples_per_process + (1 if self.process_index < num_extras else 0)
 
         def _split_values(inputs, start_index, end_index):
             if isinstance(inputs, (list, tuple, torch.Tensor)):
@@ -454,7 +450,7 @@ class PartialState:
                         tensorized_result = send_to_device(result, self.device)
                         result = pad_across_processes(tensorized_result, pad_index=inputs[-1])
                     else:
-                        result += [result[-1]] * (num_samples_per_process - len(result))
+                        result += [result[-1]] * (num_samples_per_process + 1 - len(result))
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
@@ -471,7 +467,7 @@ class PartialState:
                             end_index = len(inputs)
                         result_idcs = list(range(start_index, end_index))
                         if apply_padding:
-                            result_idcs += [end_index - 1] * (num_samples_per_process - len(result_idcs))
+                            result_idcs += [end_index - 1] * (num_samples_per_process + 1 - len(result_idcs))
                         return inputs.select(result_idcs)
                 return inputs
 
@@ -688,6 +684,7 @@ class PartialState:
         - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
         - CUDA if `torch.cuda.is_available()`
         - MLU if `is_mlu_available()`
+        - MUSA if `is_musa_available()`
         - NPU if `is_npu_available()`
         - CPU otherwise
         """
@@ -696,6 +693,8 @@ class PartialState:
             return torch.device("mps")
         elif is_mlu_available():
             return torch.device("mlu")
+        elif is_musa_available():
+            return torch.device("musa")
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
@@ -718,19 +717,22 @@ class PartialState:
         elif is_torch_xla_available():
             backend = "xla"
             distributed_type = DistributedType.XLA
-        elif int(os.environ.get("LOCAL_RANK", -1)) != -1:
-            if not cpu:
-                if is_mlu_available():
-                    backend = "cncl"
-                    distributed_type = DistributedType.MULTI_MLU
-                elif torch.cuda.is_available():
-                    if backend is None:
-                        backend = "nccl"
-                    distributed_type = DistributedType.MULTI_GPU
-                elif is_npu_available():
-                    backend = "hccl"
-                    distributed_type = DistributedType.MULTI_NPU
-        if backend is None and (
+        elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
+            if is_mlu_available():
+                backend = "cncl"
+                distributed_type = DistributedType.MULTI_MLU
+            elif is_musa_available():
+                backend = "mccl"
+                distributed_type = DistributedType.MULTI_MUSA
+            elif torch.cuda.is_available():
+                if backend is None:
+                    backend = "nccl"
+                distributed_type = DistributedType.MULTI_GPU
+            elif is_npu_available():
+                backend = "hccl"
+                distributed_type = DistributedType.MULTI_NPU
+
+        if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
             or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
         ):
@@ -738,8 +740,11 @@ class PartialState:
                 distributed_type = DistributedType.MULTI_XPU
             else:
                 distributed_type = DistributedType.MULTI_CPU
-            if is_ccl_available() and (
-                get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU
+
+            if (
+                backend in (None, "ccl")
+                and is_ccl_available()
+                and (get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU)
             ):
                 if get_ccl_version() >= "1.12":
                     import oneccl_bindings_for_pytorch  # noqa: F401
@@ -747,12 +752,13 @@ class PartialState:
                     import torch_ccl  # noqa: F401
 
                 backend = "ccl"
-            elif torch.distributed.is_mpi_available():
+            elif backend in (None, "mpi") and torch.distributed.is_mpi_available():
                 backend = "mpi"
             else:
                 backend = "gloo"
         if distributed_type is None:
             distributed_type = DistributedType.NO
+
         return backend, distributed_type
 
     def set_device(self):
@@ -765,7 +771,7 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "npu", "xpu", "xla"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
@@ -774,16 +780,10 @@ class PartialState:
         else:
             if device == "gpu":
                 device = "cuda"
-            self.device = torch.device(device, self.local_process_index)
-        if self.device is not None:
-            if device == "xpu":
-                torch.xpu.set_device(self.device)
-            elif device == "mlu":
-                torch.mlu.set_device(self.device)
-            elif device == "npu":
-                torch.npu.set_device(self.device)
-            elif device == "cuda":
-                torch.cuda.set_device(self.device)
+            device_module = getattr(torch, device)
+            device_index = self.local_process_index % device_module.device_count()
+            self.device = torch.device(device, device_index)
+            device_module.set_device(self.device)
 
     def __getattr__(self, name: str):
         # By this point we know that no attributes of `self` contain `name`,
@@ -890,6 +890,7 @@ class AcceleratorState:
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
+                DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
             ]:
@@ -916,6 +917,12 @@ class AcceleratorState:
                 and self.device.type == "cuda"
             ):
                 torch.backends.cuda.matmul.allow_tf32 = True
+            if (
+                self.dynamo_plugin.backend != DynamoBackend.NO
+                and self._mixed_precision == "no"
+                and self.device.type == "musa"
+            ):
+                torch.backends.musa.matmul.allow_tf32 = True
             PartialState._shared_state["distributed_type"] = self.distributed_type
 
     @property

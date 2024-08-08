@@ -32,7 +32,7 @@ import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
-from .imports import is_cuda_available, is_npu_available, is_xpu_available
+from .imports import is_cuda_available, is_mlu_available, is_npu_available, is_xpu_available
 from .versions import compare_versions
 
 
@@ -57,6 +57,29 @@ class KwargsHandler:
         return {k: v for k, v in this_dict.items() if default_dict[k] != v}
 
 
+class EnumWithContains(enum.EnumMeta):
+    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
+
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class BaseEnum(enum.Enum, metaclass=EnumWithContains):
+    "An enum class that can get the value of an item with `str(Enum.key)`"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        "Method to list all the possible items in `cls`"
+        return list(map(str, cls))
+
+
 @dataclass
 class AutocastKwargs(KwargsHandler):
     """
@@ -77,6 +100,26 @@ class AutocastKwargs(KwargsHandler):
 
     enabled: bool = True
     cache_enabled: bool = None
+
+
+class DDPCommunicationHookType(BaseEnum):
+    """
+    Represents a type of communication hook used in DDP.
+
+    Values:
+
+        - **NO** -- no communication hook
+        - **FP16** -- DDP communication hook to compress the gradients in FP16
+        - **BF16** -- DDP communication hook to compress the gradients in BF16
+        - **POWER_SGD** -- DDP communication hook to use PowerSGD
+        - **BATCHED_POWER_SGD** -- DDP communication hook to use batched PowerSGD
+    """
+
+    NO = "no"
+    FP16 = "fp16"
+    BF16 = "bf16"
+    POWER_SGD = "power_sgd"
+    BATCHED_POWER_SGD = "batched_power_sgd"
 
 
 @dataclass
@@ -113,6 +156,47 @@ class DistributedDataParallelKwargs(KwargsHandler):
     check_reduction: bool = False
     gradient_as_bucket_view: bool = False
     static_graph: bool = False
+
+    comm_hook: DDPCommunicationHookType = DDPCommunicationHookType.NO
+    comm_wrapper: Literal[
+        DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16
+    ] = DDPCommunicationHookType.NO
+    comm_state_option: dict = field(default_factory=dict)
+
+    def to_dict(self, ignore_keys=("comm_hook", "comm_wrapper", "comm_state_option")):
+        return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
+
+    def register_comm_hook(self, model):
+        from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
+
+        hook_map: Dict[DDPCommunicationHookType, Callable] = {
+            DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
+            DDPCommunicationHookType.BF16: default_hooks.bf16_compress_hook,
+            DDPCommunicationHookType.POWER_SGD: powerSGD_hook.powerSGD_hook,
+            DDPCommunicationHookType.BATCHED_POWER_SGD: powerSGD_hook.batched_powerSGD_hook,
+        }
+
+        wrapper_map: Dict[DDPCommunicationHookType, Callable] = {
+            DDPCommunicationHookType.FP16: default_hooks.fp16_compress_wrapper,
+            DDPCommunicationHookType.BF16: default_hooks.bf16_compress_wrapper,
+        }
+
+        hook: Optional[Callable] = hook_map.get(self.comm_hook)
+        wrapper: Optional[Callable] = wrapper_map.get(self.comm_wrapper)
+
+        if hook and wrapper:
+            hook = wrapper(hook)
+
+        if hook:
+            state = (
+                powerSGD_hook.PowerSGDState(None, **self.comm_state_option)
+                if self.comm_hook in (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD)
+                else None
+            )
+            model.register_comm_hook(
+                state=state,
+                hook=hook,
+            )
 
 
 @dataclass
@@ -154,6 +238,8 @@ class InitProcessGroupKwargs(KwargsHandler):
     [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
     information on each argument.
 
+    Note: If `timeout` is set to `None`, the default will be based upon how `backend` is set.
+
     ```python
     from datetime import timedelta
     from accelerate import Accelerator
@@ -166,7 +252,12 @@ class InitProcessGroupKwargs(KwargsHandler):
 
     backend: Optional[str] = "nccl"
     init_method: Optional[str] = None
-    timeout: timedelta = timedelta(seconds=1800)
+    timeout: Optional[timedelta] = None
+
+    def __post_init__(self):
+        if self.timeout is None:
+            seconds = 1800 if self.backend != "nccl" else 600
+            self.timeout = timedelta(seconds=seconds)
 
 
 # Literals
@@ -259,27 +350,115 @@ class FP8RecipeKwargs(KwargsHandler):
                 raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
 
 
-class EnumWithContains(enum.EnumMeta):
-    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
-
-    def __contains__(cls, item):
-        try:
-            cls(item)
-        except ValueError:
-            return False
-        return True
+# Literal
+ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda"]
 
 
-class BaseEnum(enum.Enum, metaclass=EnumWithContains):
-    "An enum class that can get the value of an item with `str(Enum.key)`"
+@dataclass
+class ProfileKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the profiler. Please refer to the
+    documentation of this [context manager](https://pytorch.org/docs/stable/profiler.html#torch.profiler.profile) for
+    more information on each argument.
 
-    def __str__(self):
-        return self.value
+    <Tip warning={true}>
 
-    @classmethod
-    def list(cls):
-        "Method to list all the possible items in `cls`"
-        return list(map(str, cls))
+    `torch.profiler` is only available in PyTorch 1.8.1 and later versions.
+
+    </Tip>
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import ProfileKwargs
+
+    kwargs = ProfileKwargs(activities=["cpu", "cuda"])
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
+
+    Args:
+        activities (`List[str]`, *optional*, default to `None`):
+            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, or `"cuda"`.
+        schedule_option (`Dict[str, int]`, *optional*, default to `None`):
+            The schedule option to use for the profiler. Available keys are `wait`, `warmup`, `active`, `repeat` and
+            `skip_first`. The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the
+            warmup for the next `warmup` steps, then do the active recording for the next `active` steps and then
+            repeat the cycle starting with `wait` steps. The optional number of cycles is specified with the `repeat`
+            parameter, the zero value means that the cycles will continue until the profiling is finished.
+        on_trace_ready (`Callable`, *optional*, default to `None`):
+            Callable that is called at each step when schedule returns `ProfilerAction.RECORD_AND_SAVE` during the
+            profiling.
+        record_shapes (`bool`, *optional*, default to `False`):
+            Save information about operator’s input shapes.
+        profile_memory (`bool`, *optional*, default to `False`):
+            Track tensor memory allocation/deallocation
+        with_stack (`bool`, *optional*, default to `False`):
+            Record source information (file and line number) for the ops.
+        with_flops (`bool`, *optional*, default to `False`):
+            Use formula to estimate the FLOPS of specific operators
+        with_modules (`bool`, *optional*, default to `False`):
+            Record module hierarchy (including function names) corresponding to the callstack of the op.
+        output_trace_dir (`str`, *optional*, default to `None`):
+            Exports the collected trace in Chrome JSON format. Chrome use 'chrome://tracing' view json file. Defaults
+            to None, which means profiling does not store json files.
+    """
+
+    activities: Optional[List[ProfilerActivity]] = None
+    schedule_option: Optional[Dict[str, int]] = None
+    on_trace_ready: Optional[Callable] = None
+    record_shapes: bool = False
+    profile_memory: bool = False
+    with_stack: bool = False
+    with_flops: bool = False
+    with_modules: bool = False
+    output_trace_dir: Optional[str] = None
+
+    def _get_profiler_activity(self, activity: ProfilerActivity) -> torch.profiler.ProfilerActivity:
+        """Get the profiler activity from the string.
+
+        Args:
+            activity (str): The profiler activity name.
+
+        Returns:
+            torch.profiler.ProfilerActivity: The profiler activity.
+        """
+
+        profiler_activity_map: dict[str, torch.profiler.ProfilerActivity] = {
+            "cpu": torch.profiler.ProfilerActivity.CPU,
+            "xpu": torch.profiler.ProfilerActivity.XPU,
+            "mita": torch.profiler.ProfilerActivity.MTIA,
+            "cuda": torch.profiler.ProfilerActivity.CUDA,
+        }
+
+        if activity not in profiler_activity_map:
+            raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
+        return profiler_activity_map[activity]
+
+    def build(self) -> torch.profiler.profile:
+        """
+        Build a profiler object with the current configuration.
+
+        Returns:
+            torch.profiler.profile: The profiler object.
+        """
+        activities: Optional[List[ProfilerActivity]] = None
+        if self.activities is not None:
+            activities = [self._get_profiler_activity(activity) for activity in self.activities]
+        schedule: Optional[torch.profiler.schedule] = None
+        if self.schedule_option is not None:
+            schedule = torch.profiler.schedule(**self.schedule_option)
+
+        return torch.profiler.profile(
+            activities=activities,
+            schedule=schedule,
+            on_trace_ready=self.on_trace_ready,
+            record_shapes=self.record_shapes,
+            profile_memory=self.profile_memory,
+            with_stack=self.with_stack,
+            with_flops=self.with_flops,
+            with_modules=self.with_modules,
+        )
 
 
 class DeprecatedFieldDescriptor:
@@ -316,6 +495,7 @@ class DistributedType(str, enum.Enum):
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
         - **MULTI_MLU** -- Distributed on multiple MLUs.
+        - **MULTI_MUSA** -- Distributed on multiple MUSAs.
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
@@ -329,6 +509,7 @@ class DistributedType(str, enum.Enum):
     MULTI_GPU = "MULTI_GPU"
     MULTI_NPU = "MULTI_NPU"
     MULTI_MLU = "MULTI_MLU"
+    MULTI_MUSA = "MULTI_MUSA"
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
@@ -395,6 +576,10 @@ class DynamoBackend(str, BaseEnum):
         - **ONNXRT** -- Uses ONNXRT for inference on CPU/GPU. Inference only. [Read more](https://onnxruntime.ai/)
         - **TENSORRT** -- Uses ONNXRT to run TensorRT for inference optimizations. [Read
           more](https://github.com/onnx/onnx-tensorrt)
+        - **AOT_TORCHXLA_TRACE_ONCE** -- Uses Pytorch/XLA with TorchDynamo optimization, for training. [Read
+          more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
+        - **TORCHXLA_TRACE_ONCE** -- Uses Pytorch/XLA with TorchDynamo optimization, for inference. [Read
+          more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
         - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
           more](https://github.com/intel/intel-extension-for-pytorch).
         - **TVM** -- Uses Apach TVM for inference optimizations. [Read more](https://tvm.apache.org/)
@@ -413,6 +598,8 @@ class DynamoBackend(str, BaseEnum):
     FX2TRT = "FX2TRT"
     ONNXRT = "ONNXRT"
     TENSORRT = "TENSORRT"
+    AOT_TORCHXLA_TRACE_ONCE = "AOT_TORCHXLA_TRACE_ONCE"
+    TORCHXLA_TRACE_ONCE = "TORCHXLA_TRACE_ONCE"
     IPEX = "IPEX"
     TVM = "TVM"
 
@@ -459,6 +646,7 @@ class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
     MLU = "mlu"
+    MUSA = "musa"
     NPU = "npu"
     XLA = "xla"
     XPU = "xpu"
@@ -522,6 +710,14 @@ class DataLoaderConfiguration:
             "Ensures training results are fully reproducable using a different sampling technique. "
             "While seed-to-seed results may differ, on average the differences are neglible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
+        },
+    )
+    non_blocking: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator will utilize non-blocking host-to-device"
+            " transfers, allowing for better overlap between dataloader communication and computation.  Recommended that the"
+            " prepared dataloader has `pin_memory` set to `True` to work properly."
         },
     )
 
@@ -686,11 +882,11 @@ class DeepSpeedPlugin:
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
-    offload_optimizer_device: bool = field(
+    offload_optimizer_device: str = field(
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3."},
     )
-    offload_param_device: bool = field(
+    offload_param_device: str = field(
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."},
     )
@@ -975,11 +1171,13 @@ class DeepSpeedPlugin:
             )
 
     def set_moe_leaf_modules(self, model):
-        from deepspeed.utils import set_z3_leaf_modules
-
         if self.transformer_moe_cls_names is None:
             self.transformer_moe_cls_names = os.environ.get("ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES", None)
         if self.transformer_moe_cls_names is not None:
+            if compare_versions("deepspeed", "<", "0.14.0"):
+                raise ImportError("DeepSpeed version must be >= 0.14.0 to use MOE support. Please update DeepSpeed.")
+            from deepspeed.utils import set_z3_leaf_modules
+
             class_names = self.transformer_moe_cls_names.split(",")
             transformer_moe_cls = []
             for layer_class in class_names:
@@ -1133,9 +1331,18 @@ class FullyShardedDataParallelPlugin:
         self.forward_prefetch = str_to_bool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
         self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
+        if str_to_bool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1 and not self.sync_module_states:
+            warnings.warn(
+                "sync_module_states cannot be False since efficient cpu ram loading enabled. "
+                "Setting sync_module_states to True."
+            )
+            self.sync_module_states = True
+
         if self.sync_module_states:
             if is_npu_available():
                 device = torch.npu.current_device()
+            elif is_mlu_available():
+                device = torch.mlu.current_device()
             elif is_cuda_available():
                 device = torch.cuda.current_device()
             elif is_xpu_available():
@@ -1203,6 +1410,8 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             FullOptimStateDictConfig,
             FullStateDictConfig,
+            ShardedOptimStateDictConfig,
+            ShardedStateDictConfig,
             StateDictType,
         )
 
@@ -1213,6 +1422,11 @@ class FullyShardedDataParallelPlugin:
                 self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        elif self.state_dict_type == StateDictType.SHARDED_STATE_DICT:
+            if self.state_dict_config is None:
+                self.state_dict_config = ShardedStateDictConfig(offload_to_cpu=True)
+            if self.optim_state_dict_config is None:
+                self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
 
 
 @dataclass
@@ -1367,6 +1581,18 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom prepare model function."},
     )
+    custom_megatron_datasets_provider_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom megatron train_valid_test datasets provider function."},
+    )
+    custom_get_batch_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom get batch function."},
+    )
+    custom_loss_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom loss function."},
+    )
 
     # remaining args such as enabling Alibi/ROPE positional embeddings,
     # wandb logging, Multi-Query Attention, etc.
@@ -1433,87 +1659,15 @@ class MegatronLMPlugin:
             self.megatron_lm_default_args.update(self.other_megatron_args)
 
     def set_network_size_args(self, model, batch_data=None):
-        # Check if the model is either BERT, GPT or T5 else raise error
-        # set 'num_layers', 'hidden_size', 'num_attention_heads', 'max_position_embeddings'
-        if "megatron-bert" in model.config.model_type.lower():
-            model_type_name = "bert"
-            num_layers = model.config.num_hidden_layers
-            hidden_size = model.config.hidden_size
-            num_attention_heads = model.config.num_attention_heads
-            max_position_embeddings = model.config.max_position_embeddings
-            num_labels = model.config.num_labels
-            orig_vocab_size = model.config.vocab_size
-            if "maskedlm" in model.__class__.__name__.lower():
-                pretraining_flag = True
-            if self.seq_length is not None:
-                if self.encoder_seq_length is not None:
-                    warnings.warn("Both `seq_length` and `encoder_seq_length` are set. Using `encoder_seq_length`.")
-                self.seq_length = self.encoder_seq_length
-            elif self.encoder_seq_length is not None:
-                self.seq_length = self.encoder_seq_length
-            elif batch_data is not None:
-                self.seq_length = batch_data["input_ids"].shape[1]
-            else:
-                self.seq_length = max_position_embeddings
-            self.megatron_lm_default_args["seq_length"] = self.seq_length
-        elif "gpt2" in model.config.model_type.lower():
-            model_type_name = "gpt"
-            num_layers = model.config.n_layer
-            hidden_size = model.config.n_embd
-            num_attention_heads = model.config.n_head
-            max_position_embeddings = model.config.n_positions
-            orig_vocab_size = model.config.vocab_size
-            pretraining_flag = True
-            if self.seq_length is not None:
-                if self.decoder_seq_length is not None:
-                    warnings.warn("Both `seq_length` and `decoder_seq_length` are set. Using `decoder_seq_length`.")
-                self.seq_length = self.decoder_seq_length
-            elif self.decoder_seq_length is not None:
-                self.seq_length = self.decoder_seq_length
-            elif batch_data is not None:
-                self.seq_length = batch_data["input_ids"].shape[1]
-            else:
-                self.seq_length = max_position_embeddings
-            self.megatron_lm_default_args["seq_length"] = self.seq_length
-            self.megatron_lm_default_args["return_logits"] = self.return_logits
-            self.megatron_lm_default_args["tokenizer_type"] = "GPT2BPETokenizer"
-        elif "t5" in model.config.model_type.lower():
-            model_type_name = "t5"
-            num_layers = model.config.num_layers
-            hidden_size = model.config.d_model
-            num_attention_heads = model.config.num_heads
-            max_position_embeddings = model.config.n_positions if hasattr(model.config, "n_positions") else 1024
-            orig_vocab_size = model.config.vocab_size
-            pretraining_flag = True
-            if self.encoder_seq_length is None:
-                if batch_data is not None:
-                    self.encoder_seq_length = batch_data["input_ids"].shape[1]
-                else:
-                    self.encoder_seq_length = max_position_embeddings
-            if self.decoder_seq_length is None:
-                if batch_data is not None:
-                    self.decoder_seq_length = batch_data["labels"].shape[1]
-                else:
-                    self.decoder_seq_length = max_position_embeddings
-
-            self.megatron_lm_default_args["encoder_seq_length"] = self.encoder_seq_length
-            self.megatron_lm_default_args["decoder_seq_length"] = self.decoder_seq_length
-        else:
-            raise ValueError(
-                "🤗 Accelerate Megatron-LM integration supports only BERT, GPT and T5 model. "
-                "Please check the model you are using is one of those."
-            )
-
-        self.megatron_lm_default_args["model_type_name"] = model_type_name
-        self.megatron_lm_default_args["num_layers"] = num_layers
-        self.megatron_lm_default_args["hidden_size"] = hidden_size
-        self.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
-        self.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
-        self.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
-        self.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
-        self.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
-        if model_type_name == "bert":
-            self.megatron_lm_default_args["num_labels"] = num_labels
+        model_config_type = model.config.model_type.lower()
+        for model_type in MODEL_CONFIGS_TO_MEGATRON_PARSERS.keys():
+            if model_type in model_config_type:
+                MODEL_CONFIGS_TO_MEGATRON_PARSERS[model_type](self, model, batch_data)
+                return
+        raise ValueError(
+            f"Accelerate Megatron-LM integration not supports {model_config_type} model. "
+            "You can add your own model config parser."
+        )
 
     def set_mixed_precision(self, mixed_precision):
         if mixed_precision == "fp16":
@@ -1588,6 +1742,152 @@ class MegatronLMPlugin:
                 self.megatron_lm_default_args[key] = True
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
+
+
+MODEL_CONFIGS_TO_MEGATRON_PARSERS = {}
+
+
+def add_model_config_to_megatron_parser(model_type: str):
+    def add_model_config_parser_helper(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        MODEL_CONFIGS_TO_MEGATRON_PARSERS[model_type] = func
+        return wrapper
+
+    return add_model_config_parser_helper
+
+
+@add_model_config_to_megatron_parser("megatron-bert")
+def parse_bert_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "bert"
+    num_layers = model.config.num_hidden_layers
+    hidden_size = model.config.hidden_size
+    num_attention_heads = model.config.num_attention_heads
+    max_position_embeddings = model.config.max_position_embeddings
+    num_labels = model.config.num_labels
+    orig_vocab_size = model.config.vocab_size
+    pretraining_flag = False
+    if "maskedlm" in model.__class__.__name__.lower():
+        pretraining_flag = True
+    if megatron_lm_plugin.seq_length is not None:
+        if megatron_lm_plugin.encoder_seq_length is not None:
+            warnings.warn("Both `seq_length` and `encoder_seq_length` are set. Using `encoder_seq_length`.")
+        megatron_lm_plugin.seq_length = megatron_lm_plugin.encoder_seq_length
+    elif megatron_lm_plugin.encoder_seq_length is not None:
+        megatron_lm_plugin.seq_length = megatron_lm_plugin.encoder_seq_length
+    elif batch_data is not None:
+        megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+    else:
+        megatron_lm_plugin.seq_length = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["num_labels"] = num_labels
+
+
+@add_model_config_to_megatron_parser("gpt2")
+def parse_gpt2_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "gpt"
+    num_layers = model.config.n_layer
+    hidden_size = model.config.n_embd
+    num_attention_heads = model.config.n_head
+    max_position_embeddings = model.config.n_positions
+    orig_vocab_size = model.config.vocab_size
+    pretraining_flag = True
+    if megatron_lm_plugin.seq_length is not None:
+        if megatron_lm_plugin.decoder_seq_length is not None:
+            warnings.warn("Both `seq_length` and `decoder_seq_length` are set. Using `decoder_seq_length`.")
+        megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+    elif megatron_lm_plugin.decoder_seq_length is not None:
+        megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+    elif batch_data is not None:
+        megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+    else:
+        megatron_lm_plugin.seq_length = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "GPT2BPETokenizer"
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+
+
+@add_model_config_to_megatron_parser("t5")
+def parse_t5_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "t5"
+    num_layers = model.config.num_layers
+    hidden_size = model.config.d_model
+    num_attention_heads = model.config.num_heads
+    max_position_embeddings = model.config.n_positions if hasattr(model.config, "n_positions") else 1024
+    orig_vocab_size = model.config.vocab_size
+    pretraining_flag = True
+    if megatron_lm_plugin.encoder_seq_length is None:
+        if batch_data is not None:
+            megatron_lm_plugin.encoder_seq_length = batch_data["input_ids"].shape[1]
+        else:
+            megatron_lm_plugin.encoder_seq_length = max_position_embeddings
+    if megatron_lm_plugin.decoder_seq_length is None:
+        if batch_data is not None:
+            megatron_lm_plugin.decoder_seq_length = batch_data["labels"].shape[1]
+        else:
+            megatron_lm_plugin.decoder_seq_length = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["encoder_seq_length"] = megatron_lm_plugin.encoder_seq_length
+    megatron_lm_plugin.megatron_lm_default_args["decoder_seq_length"] = megatron_lm_plugin.decoder_seq_length
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+
+
+@add_model_config_to_megatron_parser("llama")
+def parse_llama_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "gpt"
+    num_layers = model.config.num_hidden_layers
+    pretraining_flag = True
+    hidden_size = model.config.hidden_size
+    num_attention_heads = model.config.num_attention_heads
+    orig_vocab_size = model.config.vocab_size
+
+    max_position_embeddings = model.config.max_position_embeddings
+    seq_length = getattr(model.config, "max_sequence_length", None)
+    if megatron_lm_plugin.seq_length is None:
+        if seq_length is not None:
+            megatron_lm_plugin.seq_length = seq_length
+        elif megatron_lm_plugin.decoder_seq_length is not None:
+            megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+        elif batch_data is not None:
+            megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+        else:
+            megatron_lm_plugin.seq_length = max_position_embeddings
+
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "Llama2Tokenizer"
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
 
 
 @dataclass

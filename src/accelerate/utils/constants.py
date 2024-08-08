@@ -22,9 +22,12 @@ RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
 SCHEDULER_NAME = "scheduler"
 SAMPLER_NAME = "sampler"
+PROFILE_PATTERN_NAME = "profile_{suffix}.json"
 WEIGHTS_NAME = f"{MODEL_NAME}.bin"
+WEIGHTS_PATTERN_NAME = "pytorch_model{suffix}.bin"
 WEIGHTS_INDEX_NAME = f"{WEIGHTS_NAME}.index.json"
 SAFE_WEIGHTS_NAME = f"{SAFE_MODEL_NAME}.safetensors"
+SAFE_WEIGHTS_PATTERN_NAME = "model{suffix}.safetensors"
 SAFE_WEIGHTS_INDEX_NAME = f"{SAFE_WEIGHTS_NAME}.index.json"
 SAGEMAKER_PYTORCH_VERSION = "1.10.2"
 SAGEMAKER_PYTHON_VERSION = "py38"
@@ -38,6 +41,7 @@ FSDP_PYTORCH_VERSION = "2.1.0"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich", "mpich"]
 TORCH_DYNAMO_MODES = ["default", "reduce-overhead", "max-autotune"]
+ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION = "2.2.0"
 
 STR_OPERATION_TO_FUNC = {">": op.gt, ">=": op.ge, "==": op.eq, "!=": op.ne, "<=": op.le, "<": op.lt}
 
@@ -69,4 +73,10 @@ TORCH_LAUNCH_PARAMS = [
 ]
 
 CUDA_DISTRIBUTED_TYPES = ["DEEPSPEED", "MULTI_GPU", "FSDP", "MEGATRON_LM"]
-TORCH_DISTRIBUTED_OPERATION_TYPES = CUDA_DISTRIBUTED_TYPES + ["MULTI_NPU", "MULTI_MLU", "MULTI_XPU", "MULTI_CPU"]
+TORCH_DISTRIBUTED_OPERATION_TYPES = CUDA_DISTRIBUTED_TYPES + [
+    "MULTI_NPU",
+    "MULTI_MLU",
+    "MULTI_MUSA",
+    "MULTI_XPU",
+    "MULTI_CPU",
+]

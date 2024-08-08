@@ -224,6 +224,8 @@ class CometMLTest(unittest.TestCase):
             if "metric" in j.keys():
                 if j["metric"]["metricName"] == key:
                     return j["metric"]["metricValue"]
+            if j.get("key", None) == key:
+                return j["value"]
 
     def test_init_trackers(self):
         with tempfile.TemporaryDirectory() as d:
@@ -268,7 +270,7 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
     def setUp(self):
         super().setUp()
         # ClearML offline session location is stored in CLEARML_CACHE_DIR
-        self.add_mocks(mock.patch.dict(os.environ, {"CLEARML_CACHE_DIR": self.tmpdir}))
+        self.add_mocks(mock.patch.dict(os.environ, {"CLEARML_CACHE_DIR": str(self.tmpdir)}))
 
     @staticmethod
     def _get_offline_dir(accelerator):

@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
-from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
+from .state import AcceleratorState, DistributedType, GradientState, PartialState, is_torch_xla_available
 from .utils import (
     RNGType,
     broadcast,
@@ -429,6 +429,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         synchronized_generator=None,
         skip_batches=0,
         _drop_last: bool = False,
+        _non_blocking: bool = False,
         **kwargs,
     ):
         super().__init__(dataset, **kwargs)
@@ -438,6 +439,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         self.skip_batches = skip_batches
         self.gradient_state = GradientState()
         self._drop_last = _drop_last
+        self._non_blocking = _non_blocking
         self.iteration = 0
 
     def __iter__(self):
@@ -458,7 +460,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             try:
                 # But we still move it to the device so it is done before `StopIteration` is reached
                 if self.device is not None:
-                    current_batch = send_to_device(current_batch, self.device)
+                    current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
                 next_batch = next(dataloader_iter)
                 if batch_index >= self.skip_batches:
                     yield current_batch
@@ -500,6 +502,18 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         else:
             return len(self.dataset)
 
+    def get_sampler(self):
+        return get_sampler(self)
+
+    def set_sampler(self, sampler):
+        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
+        if sampler_is_batch_sampler:
+            self.sampler.sampler = sampler
+        else:
+            self.batch_sampler.sampler = sampler
+            if hasattr(self.batch_sampler, "batch_sampler"):
+                self.batch_sampler.batch_sampler.sampler = sampler
+
 
 if is_torch_xla_available():
     import torch_xla.distributed.parallel_loader as xpl
@@ -525,6 +539,7 @@ if is_torch_xla_available():
             super().__init__(dataloader, device)
             self._rng_types = self._loader.rng_types
             self._loader.rng_types = None
+            self.device = device
 
         def __iter__(self):
             if self._rng_types is not None:
@@ -543,6 +558,10 @@ if is_torch_xla_available():
         @property
         def batch_sampler(self):
             return self._loader.batch_sampler
+
+        @property
+        def dataloader(self):
+            return self._loader
 
 
 class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
@@ -571,7 +590,14 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     """
 
     def __init__(
-        self, dataset, split_batches: bool = False, skip_batches=0, _drop_last: bool = False, slice_fn=None, **kwargs
+        self,
+        dataset,
+        split_batches: bool = False,
+        skip_batches=0,
+        _drop_last: bool = False,
+        _non_blocking: bool = False,
+        slice_fn=None,
+        **kwargs,
     ):
         shuffle = False
         if is_torch_version(">=", "1.11.0"):
@@ -588,6 +614,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
         self._drop_last = _drop_last
+        self._non_blocking = _non_blocking
         self.skip_batches = skip_batches
 
         self.slice_fn = slice_tensors if slice_fn is None else slice_fn
@@ -660,7 +687,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             if self.state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
                 batch = initialize_tensors(batch_info[0])
-            batch = send_to_device(batch, self.state.device)
+            batch = send_to_device(batch, self.state.device, non_blocking=self._non_blocking)
             # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
 
@@ -741,6 +768,36 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     def total_dataset_length(self):
         return len(self.dataset)
 
+    def get_sampler(self):
+        return get_sampler(self)
+
+    def set_sampler(self, sampler):
+        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
+        if sampler_is_batch_sampler:
+            self.sampler.sampler = sampler
+        else:
+            self.batch_sampler.sampler = sampler
+            if hasattr(self.batch_sampler, "batch_sampler"):
+                self.batch_sampler.batch_sampler.sampler = sampler
+
+
+def get_sampler(dataloader):
+    """
+    Get the sampler associated to the dataloader
+
+    Args:
+        dataloader (`torch.utils.data.dataloader.DataLoader`):
+            The data loader to split across several devices.
+    Returns:
+        `torch.utils.data.Sampler`: The sampler associated to the dataloader
+    """
+    sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+    if sampler_is_batch_sampler:
+        sampler = getattr(dataloader.sampler, "sampler", None)
+    else:
+        sampler = getattr(dataloader.batch_sampler, "sampler", None)
+    return sampler
+
 
 def prepare_data_loader(
     dataloader: DataLoader,
@@ -754,6 +811,7 @@ def prepare_data_loader(
     even_batches: bool = True,
     slice_fn_for_dispatch: Optional[Callable] = None,
     use_seedable_sampler: bool = False,
+    non_blocking: bool = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -812,6 +870,10 @@ def prepare_data_loader(
             reproducability. Comes at a cost of potentially different performances due to different shuffling
             algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
             `self.set_epoch`
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            If set to `True`, dataloader will utilize non-blocking host-to-device transfers. If the dataloader has
+            `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
+
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -863,13 +925,10 @@ def prepare_data_loader(
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
-    sampler_is_batch_sampler = False
-    synchronized_generator = None
     sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
-    if sampler_is_batch_sampler:
-        sampler = getattr(dataloader.sampler, "sampler", None)
-    else:
-        sampler = getattr(dataloader.batch_sampler, "sampler", None)
+    synchronized_generator = None
+
+    sampler = get_sampler(dataloader)
     if isinstance(sampler, RandomSampler) and use_seedable_sampler:
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
@@ -901,6 +960,10 @@ def prepare_data_loader(
                 split_batches=split_batches,
             )
         else:
+            if not use_seedable_sampler and hasattr(sampler, "generator"):
+                if sampler.generator is None:
+                    sampler.generator = torch.Generator()
+                synchronized_generator = sampler.generator
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
                 batch_sampler,
@@ -941,6 +1004,7 @@ def prepare_data_loader(
             split_batches=split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader.drop_last,
+            _non_blocking=non_blocking,
             slice_fn=slice_fn_for_dispatch,
             **kwargs,
         )
@@ -952,6 +1016,7 @@ def prepare_data_loader(
             batch_size=dataloader.batch_size,
             rng_types=rng_types,
             _drop_last=dataloader.drop_last,
+            _non_blocking=non_blocking,
             synchronized_generator=synchronized_generator,
             **kwargs,
         )
@@ -963,16 +1028,12 @@ def prepare_data_loader(
             rng_types=rng_types,
             synchronized_generator=synchronized_generator,
             _drop_last=dataloader.drop_last,
+            _non_blocking=non_blocking,
             **kwargs,
         )
 
     if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
-        if sampler_is_batch_sampler:
-            dataloader.sampler.sampler = sampler
-        else:
-            dataloader.batch_sampler.sampler = sampler
-            if hasattr(dataloader.batch_sampler, "batch_sampler"):
-                dataloader.batch_sampler.batch_sampler.sampler = sampler
+        dataloader.set_sampler(sampler)
     if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
@@ -1027,6 +1088,11 @@ def skip_first_batches(dataloader, num_batches=0):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
     """
+    state = PartialState()
+    if state.distributed_type == DistributedType.XLA:
+        device = dataloader.device
+        dataloader = dataloader.dataloader
+
     dataset = dataloader.dataset
     sampler_is_batch_sampler = False
     if isinstance(dataset, IterableDataset):
@@ -1089,5 +1155,8 @@ def skip_first_batches(dataloader, num_batches=0):
             dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+
+    if state.distributed_type == DistributedType.XLA:
+        dataloader = MpDeviceLoaderWrapper(dataloader, device)
 
     return dataloader

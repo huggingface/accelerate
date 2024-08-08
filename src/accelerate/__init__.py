@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-__version__ = "0.30.0.dev0"
+__version__ = "0.33.0.dev0"
 
 from .accelerator import Accelerator
 from .big_modeling import (
@@ -30,12 +30,14 @@ from .state import PartialState
 from .utils import (
     AutocastKwargs,
     DataLoaderConfiguration,
+    DDPCommunicationHookType,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
+    ProfileKwargs,
     find_executable_batch_size,
     infer_auto_device_map,
     is_rich_available,

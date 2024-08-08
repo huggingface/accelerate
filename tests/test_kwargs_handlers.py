@@ -24,11 +24,13 @@ from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
     require_non_xpu,
 )
-from accelerate.utils import AutocastKwargs, KwargsHandler, TorchDynamoPlugin, clear_environment
+from accelerate.test_utils.testing import slow
+from accelerate.utils import AutocastKwargs, KwargsHandler, ProfileKwargs, TorchDynamoPlugin, clear_environment
 from accelerate.utils.dataclasses import DistributedType
 
 
@@ -95,6 +97,52 @@ class KwargsHandlerTester(unittest.TestCase):
             # We should be back in fp16
             assert g_float16.dtype == torch.float16
 
+    @slow
+    def test_profile_kwargs(self):
+        # Arrange
+        schedule_options = [
+            dict(wait=1, warmup=1, active=2, repeat=1),
+            dict(wait=2, warmup=2, active=2, repeat=2),
+            dict(wait=0, warmup=1, active=3, repeat=3, skip_first=1),
+            dict(wait=3, warmup=2, active=1, repeat=1, skip_first=2),
+            dict(wait=1, warmup=0, active=1, repeat=5),
+        ]
+
+        total_steps = 100
+
+        for option in schedule_options:
+            count = 0
+            table_outputs = []
+            steps_per_cycle = option["wait"] + option["warmup"] + option["active"]
+            effective_steps = max(0, total_steps - option.get("skip_first", 0))
+            cycles = effective_steps // steps_per_cycle
+            if option["repeat"] > 0:
+                expected_count = min(cycles, option["repeat"])
+            else:
+                expected_count = cycles
+
+            def on_trace_ready(prof):
+                nonlocal count
+                nonlocal table_outputs
+
+                count += 1
+                table_outputs.append(prof.key_averages().table(sort_by="cpu_time_total", row_limit=-1))
+
+            kwargs = ProfileKwargs(activities=["cpu"], on_trace_ready=on_trace_ready, schedule_option=option)
+            accelerator = Accelerator(kwargs_handlers=[kwargs])
+
+            # Act
+            with accelerator.profile() as prof:
+                for _ in range(total_steps):
+                    prof.step()
+                    torch.tensor([1, 2, 3, 4, 5], device=accelerator.device)
+
+            # Assert
+            assert isinstance(prof, torch.profiler.profile)
+            assert count == expected_count, f"Option: {option}, Expected count: {expected_count}, but got {count}"
+            for output in table_outputs:
+                self.assertIn("CPU time total:", output)
+
     def test_torch_dynamo_plugin(self):
         with clear_environment():
             prefix = "ACCELERATE_DYNAMO_"
@@ -106,6 +154,11 @@ class KwargsHandlerTester(unittest.TestCase):
             dynamo_plugin_kwargs = TorchDynamoPlugin().to_kwargs()
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
+
+    @require_multi_device
+    def test_ddp_comm_hook(self):
+        cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]
+        execute_subprocess_async(cmd)
 
 
 def main():

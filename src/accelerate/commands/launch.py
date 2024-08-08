@@ -40,6 +40,7 @@ from accelerate.utils import (
     is_bf16_available,
     is_deepspeed_available,
     is_mlu_available,
+    is_musa_available,
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
@@ -304,6 +305,15 @@ def launch_command_parser(subparsers=None):
         help="Tee std streams into a log file and also to console.",
     )
     distributed_args.add_argument(
+        "--log_dir",
+        type=str,
+        default=None,
+        help=(
+            "Base directory to use for log files when using torchrun/torch.distributed.run as launcher. "
+            "Use with --tee to redirect std streams info log files."
+        ),
+    )
+    distributed_args.add_argument(
         "--role",
         type=str,
         default="default",
@@ -331,7 +341,7 @@ def launch_command_parser(subparsers=None):
     distributed_args.add_argument(
         "--monitor_interval",
         type=float,
-        default=5,
+        default=0.1,
         help="Interval, in seconds, to monitor the state of workers.",
     )
     parser.add_argument(
@@ -574,6 +584,12 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0."
         " (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_activation_checkpointing",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
     )
 
     # megatron_lm args
@@ -919,6 +935,7 @@ def _validate_launch_command(args):
                     DistributedType.MULTI_GPU,
                     DistributedType.MULTI_NPU,
                     DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_MUSA,
                     DistributedType.MULTI_XPU,
                 )
                 else False
@@ -998,6 +1015,8 @@ def _validate_launch_command(args):
                 args.num_processes = torch.xpu.device_count()
             elif is_mlu_available():
                 args.num_processes = torch.mlu.device_count()
+            elif is_musa_available():
+                args.num_processes = torch.musa.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
             else:
@@ -1005,11 +1024,16 @@ def _validate_launch_command(args):
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
         if args.debug is None:
             args.debug = False
-        if not args.multi_gpu and (
-            (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
-            or (is_mlu_available() and torch.mlu.device_count() > 1)
-            or (is_npu_available() and torch.npu.device_count() > 1)
-            or (torch.cuda.device_count() > 1)
+        if (
+            not args.multi_gpu
+            and args.num_processes > 1
+            and (
+                (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
+                or (is_mlu_available() and torch.mlu.device_count() > 1)
+                or (is_musa_available() and torch.musa.device_count() > 1)
+                or (is_npu_available() and torch.npu.device_count() > 1)
+                or (torch.cuda.device_count() > 1)
+            )
         ):
             warned.append(
                 "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
@@ -1034,8 +1058,8 @@ def _validate_launch_command(args):
         defaults is not None and defaults.compute_environment != ComputeEnvironment.AMAZON_SAGEMAKER
     )
     if is_aws_env_disabled and args.num_cpu_threads_per_process is None:
-        args.num_cpu_threads_per_process = 1
-        if args.use_cpu and args.num_processes >= 1:
+        args.num_cpu_threads_per_process = get_int_from_env(["OMP_NUM_THREADS"], 1)
+        if args.use_cpu and args.num_processes >= 1 and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0:
             local_size = get_int_from_env(
                 ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
             )

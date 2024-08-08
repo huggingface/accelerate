@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## What training on FP8 means
 
-To explore more of the nitty-gritty in training in FP8 with PyTorch and 🤗 Accelerate, check out the [concept_guide](../concept_guides/low_precision_training.md) on why this can be difficult. But essentially rather than training in BF16, some (or all) aspects of training a model can be performed using 8 bits instead of 16. The challenge is doing so without degrading final performance. 
+To explore more of the nitty-gritty in training in FP8 with PyTorch and 🤗 Accelerate, check out the [concept_guide](../concept_guides/low_precision_training) on why this can be difficult. But essentially rather than training in BF16, some (or all) aspects of training a model can be performed using 8 bits instead of 16. The challenge is doing so without degrading final performance. 
 
 This is only enabled on specific NVIDIA hardware, namely:
 
@@ -87,6 +87,6 @@ accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 
 To learn more about training in FP8 please check out the following resources:
 
-* [Our concept guide](../concept_guides/low_precision_training.md) detailing into more about both TransformersEngine and MS-AMP
+* [Our concept guide](../concept_guides/low_precision_training) detailing into more about both TransformersEngine and MS-AMP
 * [The `transformers-engine` documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html)
 * [The `MS-AMP` documentation](https://azure.github.io/MS-AMP/docs/)

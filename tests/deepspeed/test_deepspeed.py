@@ -51,6 +51,7 @@ from accelerate.utils.deepspeed import (
     DummyScheduler,
 )
 from accelerate.utils.other import patch_environment
+from accelerate.utils.versions import compare_versions
 
 
 set_seed(42)
@@ -637,7 +638,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
             assert config["gradient_clipping"] == 1.0
             assert config["zero_optimization"]["reduce_bucket_size"] == (hidden_size * hidden_size)
-            assert config["zero_optimization"]["stage3_prefetch_bucket_size"] == ((0.9 * hidden_size) * hidden_size)
+            assert config["zero_optimization"]["stage3_prefetch_bucket_size"] == int((0.9 * hidden_size) * hidden_size)
             assert config["zero_optimization"]["stage3_param_persistence_threshold"] == (10 * hidden_size)
             assert not config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
 
@@ -694,7 +695,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 )
                 zero_opt = accelerator.deepspeed_config["zero_optimization"]
                 assert zero_opt["reduce_bucket_size"] == (hidden_size * hidden_size)
-                assert zero_opt["stage3_prefetch_bucket_size"] == (0.9 * hidden_size) * hidden_size
+                assert zero_opt["stage3_prefetch_bucket_size"] == int((0.9 * hidden_size) * hidden_size)
                 assert zero_opt["stage3_param_persistence_threshold"] == (10 * hidden_size)
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
@@ -812,7 +813,9 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
-    def test_prepare_deepspeed_preapre_moe(self):
+    def test_prepare_deepspeed_prepare_moe(self):
+        if compare_versions("transformers", "<", "4.40") and compare_versions("deepspeed", "<", "0.14"):
+            return
         deepspeed_plugin = DeepSpeedPlugin(
             zero3_init_flag=True,
             gradient_accumulation_steps=1,
@@ -989,6 +992,11 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage)
 
     def test_peak_memory_usage(self):
+        if compare_versions("deepspeed", ">", "0.12.6"):
+            self.skipTest(
+                "The test fails when deepspeed>0.12.6. This is something that needs to be fixed on deepspeed library"
+            )
+
         self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
         cmd = [
             "accelerate",

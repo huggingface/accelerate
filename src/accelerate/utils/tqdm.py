@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
+
 from .imports import is_tqdm_available
 
 
@@ -31,7 +33,15 @@ def tqdm(*args, main_process_only: bool = True, **kwargs):
     """
     if not is_tqdm_available():
         raise ImportError("Accelerate's `tqdm` module requires `tqdm` to be installed. Please run `pip install tqdm`.")
-    disable = False
-    if main_process_only:
+    if len(args) > 0 and isinstance(args[0], bool):
+        warnings.warn(
+            f"Passing `{args[0]}` as the first argument to Accelerate's `tqdm` wrapper is deprecated "
+            "and will be removed in v0.33.0. Please use the `main_process_only` keyword argument instead.",
+            FutureWarning,
+        )
+        main_process_only = args[0]
+        args = args[1:]
+    disable = kwargs.pop("disable", False)
+    if main_process_only and not disable:
         disable = PartialState().local_process_index != 0
     return _tqdm(*args, **kwargs, disable=disable)

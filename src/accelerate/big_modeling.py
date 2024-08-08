@@ -38,6 +38,7 @@ from .utils import (
     get_balanced_memory,
     infer_auto_device_map,
     is_mlu_available,
+    is_musa_available,
     is_npu_available,
     is_torch_version,
     is_xpu_available,
@@ -432,8 +433,8 @@ def dispatch_model(
             [device for device in set(device_map.values()) if device in ("cpu", "disk")]
         )
         if len(offloaded_devices_str) > 0:
-            logging.warning(
-                f"Some parameters are on the meta device device because they were offloaded to the {offloaded_devices_str}."
+            logger.warning(
+                f"Some parameters are on the meta device because they were offloaded to the {offloaded_devices_str}."
             )
 
         # Attaching the hook may break tied weights, so we retie them
@@ -457,11 +458,14 @@ def dispatch_model(
 
             return wrapper
 
+        # Make sure to update _accelerate_added_attributes in hooks.py if you add any hook
         model.to = add_warning(model.to, model)
         if is_npu_available():
             model.npu = add_warning(model.npu, model)
         elif is_mlu_available():
             model.mlu = add_warning(model.mlu, model)
+        elif is_musa_available():
+            model.musa = add_warning(model.musa, model)
         elif is_xpu_available():
             model.xpu = add_warning(model.xpu, model)
         else:
@@ -482,6 +486,8 @@ def dispatch_model(
             device = f"npu:{device}"
         elif is_mlu_available() and isinstance(device, int):
             device = f"mlu:{device}"
+        elif is_musa_available() and isinstance(device, int):
+            device = f"musa:{device}"
         elif is_xpu_available() and isinstance(device, int):
             device = f"xpu:{device}"
         if device != "disk":

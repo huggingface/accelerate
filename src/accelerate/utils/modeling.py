@@ -14,7 +14,6 @@
 
 import contextlib
 import gc
-import importlib
 import inspect
 import json
 import logging
@@ -26,7 +25,6 @@ import warnings
 from collections import OrderedDict, defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
-import packaging
 import torch
 import torch.nn as nn
 
@@ -36,14 +34,16 @@ from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
     is_mlu_available,
     is_mps_available,
+    is_musa_available,
     is_npu_available,
     is_peft_available,
     is_torch_xla_available,
     is_xpu_available,
 )
+from .memory import clear_device_cache
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
-from .versions import compare_versions
+from .versions import compare_versions, is_torch_version
 
 
 if is_npu_available(check_device=False):
@@ -51,6 +51,9 @@ if is_npu_available(check_device=False):
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_musa_available(check_device=False):
+    import torch_musa  # noqa: F401
 
 from safetensors import safe_open
 from safetensors.torch import load_file as safe_load_file
@@ -160,6 +163,8 @@ def dtype_byte_size(dtype: torch.dtype):
         return 1 / 2
     elif dtype == CustomDtype.FP8:
         return 1
+    elif is_torch_version(">=", "2.1.0") and dtype == torch.float8_e4m3fn:
+        return 1
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
@@ -230,6 +235,11 @@ def shard_checkpoint(
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
     """
+    logger.warning(
+        "Note that `shard_checkpoint` is deprecated and will be removed in  0.33.0. We recommend you using "
+        "split_torch_state_dict_into_shards from huggingface_hub library"
+    )
+
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
     sharded_state_dicts = [{}]
@@ -353,10 +363,15 @@ def set_module_tensor_to_device(
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
+    param = module._parameters[tensor_name] if tensor_name in module._parameters else None
+    param_cls = type(param)
+
     if value is not None:
-        if old_value.shape != value.shape:
+        # We can expect mismatches when using bnb 4bit since Params4bit will reshape and pack the weights.
+        # In other cases, we want to make sure we're not loading checkpoints that do not match the config.
+        if old_value.shape != value.shape and param_cls.__name__ != "Params4bit":
             raise ValueError(
-                f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this look incorrect.'
+                f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this looks incorrect.'
             )
 
         if dtype is None:
@@ -364,9 +379,6 @@ def set_module_tensor_to_device(
             value = value.to(old_value.dtype)
         elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
             value = value.to(dtype)
-
-    param = module._parameters[tensor_name] if tensor_name in module._parameters else None
-    param_cls = type(param)
 
     device_quantization = None
     with torch.no_grad():
@@ -386,8 +398,12 @@ def set_module_tensor_to_device(
                 device = f"npu:{device}"
             elif is_mlu_available():
                 device = f"mlu:{device}"
+            elif is_musa_available():
+                device = f"musa:{device}"
             elif is_xpu_available():
                 device = f"xpu:{device}"
+        if "xpu" in str(device) and not is_xpu_available():
+            raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
@@ -407,7 +423,7 @@ def set_module_tensor_to_device(
         elif value is not None or not check_device_same(torch.device(device), module._parameters[tensor_name].device):
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
-            if param_cls.__name__ in ["Int8Params", "FP4Params"]:
+            if param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]:
                 if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
                     # downcast to fp16 if any - needed for 8bit serialization
                     new_value = new_value.to(torch.float16)
@@ -442,21 +458,18 @@ def set_module_tensor_to_device(
                     elif module.bias is None:
                         # if no bias exists, we can quantize right away
                         module = module.cuda(device_index)
-            elif module.__class__.__name__ == "Linear4bit" and getattr(module.weight, "quant_state", None) is None:
+            elif (
+                module.__class__.__name__ == "Linear4bit"
+                and getattr(module.weight, "quant_state", None) is None
+                and str(module.weight.device) != "meta"
+            ):
                 # quantize only if necessary
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
                     module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
     if device != "cpu":
-        if is_npu_available():
-            torch.npu.empty_cache()
-        elif is_mlu_available():
-            torch.mlu.empty_cache()
-        elif is_xpu_available():
-            torch.xpu.empty_cache()
-        else:
-            torch.cuda.empty_cache()
+        clear_device_cache()
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
     # order to avoid duplicating memory, see above.
@@ -803,27 +816,48 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not (torch.cuda.is_available() or is_npu_available() or is_mlu_available() or is_xpu_available()):
-            max_memory = {}
-
-        else:
-            # Make sure CUDA is initialized on each GPU to have the right memory info.
-            if is_npu_available():
-                for i in range(torch.npu.device_count()):
+        max_memory = {}
+        # Make sure CUDA is initialized on each GPU to have the right memory info.
+        if is_npu_available():
+            for i in range(torch.npu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("npu", i))
-                max_memory = {i: torch.npu.mem_get_info(i)[0] for i in range(torch.npu.device_count())}
-            elif is_mlu_available():
-                for i in range(torch.mlu.device_count()):
+                    max_memory[i] = torch.npu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_mlu_available():
+            for i in range(torch.mlu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("mlu", i))
-                max_memory = {i: torch.mlu.mem_get_info(i)[0] for i in range(torch.mlu.device_count())}
-            elif is_xpu_available():
-                for i in range(torch.xpu.device_count()):
+                    max_memory[i] = torch.mlu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_musa_available():
+            for i in range(torch.musa.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device("musa", i))
+                    max_memory[i] = torch.musa.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_xpu_available():
+            for i in range(torch.xpu.device_count()):
+                try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
-                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
-            else:
-                for i in range(torch.cuda.device_count()):
+                    max_memory[i] = torch.xpu.max_memory_allocated(i)
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        else:
+            for i in range(torch.cuda.device_count()):
+                try:
                     _ = torch.tensor([0], device=i)
-                max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+                    max_memory[i] = torch.cuda.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         # allocate everything in the mps device as the RAM is shared
         if is_mps_available():
             max_memory["mps"] = psutil.virtual_memory().available
@@ -844,6 +878,8 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.npu.device_count()
     elif is_mlu_available():
         num_devices = torch.mlu.device_count()
+    elif is_musa_available():
+        num_devices = torch.musa.device_count()
     elif is_xpu_available():
         num_devices = torch.xpu.device_count()
     else:
@@ -916,6 +952,17 @@ def load_offloaded_weights(model, index, offload_folder):
         set_module_tensor_to_device(model, param_name, "cpu", value=weight, fp16_statistics=fp16_statistics)
 
 
+def get_module_leaves(module_sizes):
+    module_children = {}
+    for module in module_sizes:
+        if module == "" or "." not in module:
+            continue
+        parent = module.rsplit(".", 1)[0]
+        module_children[parent] = module_children.get(parent, 0) + 1
+    leaves = [module for module in module_sizes if module_children.get(module, 0) == 0 and module != ""]
+    return leaves
+
+
 def get_balanced_memory(
     model: nn.Module,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
@@ -957,23 +1004,16 @@ def get_balanced_memory(
     max_memory = get_max_memory(max_memory)
 
     if is_npu_available():
-        num_devices = len([d for d in max_memory if torch.device(d).type == "npu" and max_memory[d] > 0])
+        expected_device_type = "npu"
     elif is_mlu_available():
-        num_devices = len([d for d in max_memory if torch.device(d).type == "mlu" and max_memory[d] > 0])
+        expected_device_type = "mlu"
+    elif is_musa_available():
+        expected_device_type = "musa"
     elif is_xpu_available():
-        num_devices = len(
-            [
-                d
-                for d in max_memory
-                if (
-                    d != "cpu"
-                    and (torch.device(d).type == "xpu" or torch.xpu.get_device_properties(d).dev_type == "gpu")
-                )
-                and max_memory[d] > 0
-            ]
-        )
+        expected_device_type = "xpu"
     else:
-        num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+        expected_device_type = "cuda"
+    num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
 
     if num_devices == 0:
         return max_memory
@@ -1025,10 +1065,10 @@ def get_balanced_memory(
         buffer = 0
 
     # Compute mean of final modules. In the first dict of module sizes, leaves are the parameters
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
+    leaves = get_module_leaves(module_sizes)
     module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
     # Once removed, leaves are the final modules.
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
+    leaves = get_module_leaves(module_sizes)
     mean_leaves = int(sum([module_sizes[n] for n in leaves]) / max(len(leaves), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
@@ -1432,7 +1472,15 @@ def load_state_dict(checkpoint_file, device_map=None):
         else:
             # if we only have one device we can load everything directly
             if len(set(device_map.values())) == 1:
-                return safe_load_file(checkpoint_file, device=list(device_map.values())[0])
+                device = list(device_map.values())[0]
+                target_device = device
+                if is_xpu_available():
+                    if compare_versions("safetensors", "<", "0.4.2"):
+                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
+                    if isinstance(device, int):
+                        target_device = f"xpu:{device}"
+
+                return safe_load_file(checkpoint_file, device=target_device)
 
             devices = list(set(device_map.values()) - {"disk"})
             # cpu device should always exist as fallback option
@@ -1462,15 +1510,9 @@ def load_state_dict(checkpoint_file, device_map=None):
                 progress_bar = None
             for device in devices:
                 target_device = device
-
                 if is_xpu_available():
-                    current_safetensors_version = packaging.version.parse(importlib.metadata.version("safetensors"))
-
-                    if compare_versions(current_safetensors_version, "<", "0.4.2"):
-                        raise ModuleNotFoundError(
-                            f"You need at least safetensors 0.4.2 for Intel GPU, while you have {current_safetensors_version}"
-                        )
-
+                    if compare_versions("safetensors", "<", "0.4.2"):
+                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
                     if isinstance(device, int):
                         target_device = f"xpu:{device}"
 
@@ -1534,6 +1576,49 @@ def get_state_dict_offloaded_model(model: nn.Module):
             placeholders.remove(key)
     if placeholders:
         logger.warning(f"The following tensors were not saved because they were still on meta device: {placeholders}")
+
+    return state_dict
+
+
+def get_state_dict_from_offload(
+    module: nn.Module,
+    module_name: str,
+    state_dict: Dict[str, Union[str, torch.tensor]],
+    device_to_put_offload: Union[int, str, torch.device] = "cpu",
+):
+    """
+    Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defualts
+    to cpu).
+
+    Args:
+        module: (`torch.nn.Module`):
+            The module we want to retrieve a state dictionary from
+        module_name: (`str`):
+            The name of the module of interest
+        state_dict (`Dict[str, Union[int, str, torch.device]]`):
+            Dictionary of {module names: parameters}
+        device_to_put_offload (`Union[int, str, torch.device]`):
+            Device to load offloaded parameters into, defaults to the cpu.
+    """
+    from ..hooks import AlignDevicesHook
+
+    root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
+    preforward = False
+    if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+        # assign the device to which the offloaded parameters will be sent
+        original_device = module._hf_hook.execution_device
+        module._hf_hook.execution_device = device_to_put_offload
+        module._hf_hook.pre_forward(module)
+        preforward = True
+
+    for m_key in module.state_dict():
+        params = module.state_dict()[m_key]
+        if (root + f".{m_key}") in state_dict:
+            state_dict[root + f".{m_key}"] = params
+
+    if preforward:
+        module._hf_hook.post_forward(module, torch.tensor([]))
+        module._hf_hook.execution_device = original_device
 
     return state_dict
 
@@ -1785,11 +1870,12 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
         )
         if state.mixed_precision == "fp16":
             return torch.autocast(device_type=device_type, dtype=torch.float16, **autocast_kwargs)
-        elif state.mixed_precision == "bf16" and state.distributed_type in [
+        elif state.mixed_precision in ["bf16", "fp8"] and state.distributed_type in [
             DistributedType.NO,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.FSDP,

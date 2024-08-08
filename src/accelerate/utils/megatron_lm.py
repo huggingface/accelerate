@@ -14,6 +14,7 @@
 
 import argparse
 import math
+import os
 from abc import ABC
 from functools import partial
 
@@ -24,16 +25,8 @@ from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
-from .imports import is_megatron_lm_available, is_transformers_available
+from .imports import is_megatron_lm_available
 from .operations import recursively_apply, send_to_device
-
-
-if is_transformers_available():
-    from transformers.modeling_outputs import (
-        CausalLMOutputWithCrossAttentions,
-        Seq2SeqLMOutput,
-        SequenceClassifierOutput,
-    )
 
 
 if is_megatron_lm_available():
@@ -41,35 +34,51 @@ if is_megatron_lm_available():
         get_args,
         get_num_microbatches,
         get_tensorboard_writer,
-        get_timers,
         get_tokenizer,
-        mpu,
-        print_rank_0,
         print_rank_last,
     )
-    from megatron.arguments import _add_data_args, _add_validation_args, parse_args, validate_args
+    from megatron.arguments import (
+        _add_data_args,
+        _add_validation_args,
+        core_transformer_config_from_args,
+        parse_args,
+        validate_args,
+    )
     from megatron.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
-    from megatron.data.data_samplers import MegatronPretrainingRandomSampler, MegatronPretrainingSampler
+    from megatron.core import mpu, tensor_parallel
+    from megatron.core.distributed import DistributedDataParallel as LocalDDP
+    from megatron.core.distributed import finalize_model_grads
+    from megatron.core.enums import ModelType
+    from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_model_parallel_src_rank
+    from megatron.core.pipeline_parallel import get_forward_backward_func
+    from megatron.core.utils import get_model_config
+    from megatron.data.dataset_utils import build_train_valid_test_datasets
     from megatron.global_vars import set_global_variables
     from megatron.initialize import (
         _compile_dependencies,
         _init_autoresume,
+        _initialize_distributed,
         _set_random_seed,
         set_jit_fusion_options,
         write_args_to_tensorboard,
     )
-    from megatron.model import BertModel, Float16Module, GPTModel, ModelType, T5Model
-    from megatron.model import DistributedDataParallel as LocalDDP
+    from megatron.model import BertModel, Float16Module, GPTModel, T5Model
     from megatron.model.classification import Classification
     from megatron.optimizer import get_megatron_optimizer
-    from megatron.schedules import get_forward_backward_func
     from megatron.text_generation.communication import broadcast_int_list, broadcast_tensor
     from megatron.text_generation.generation import (
         beam_search_and_return_on_first_stage,
         generate_tokens_probs_and_return_on_first_stage,
     )
     from megatron.tokenizer.tokenizer import _vocab_size_with_padding
-    from megatron.training import get_model, get_optimizer_param_scheduler, training_log
+    from megatron.training import (
+        build_train_valid_test_data_iterators,
+        get_optimizer_param_scheduler,
+        num_floating_point_operations,
+        setup_model_and_optimizer,
+        train_step,
+        training_log,
+    )
     from megatron.utils import (
         average_losses_across_data_parallel_group,
         calc_params_l2_norm,
@@ -89,10 +98,12 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             "The Megatron LM model weights are initialized at random in `accelerator.prepare`. "
             "Please use `accelerator.load_checkpoint` to load a pre-trained checkpoint matching the distributed setup."
         )
+    config = core_transformer_config_from_args(args)
     if args.model_type_name == "bert":
         if args.pretraining_flag:
             num_tokentypes = 2 if args.bert_binary_head else 0
             model = BertModel(
+                config=config,
                 num_tokentypes=num_tokentypes,
                 add_binary_head=args.bert_binary_head,
                 parallel_output=True,
@@ -101,12 +112,23 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             )
         else:
             model = Classification(
-                num_classes=args.num_labels, num_tokentypes=2, pre_process=pre_process, post_process=post_process
+                config=config,
+                num_classes=args.num_labels,
+                num_tokentypes=2,
+                pre_process=pre_process,
+                post_process=post_process,
             )
     elif args.model_type_name == "gpt":
-        model = GPTModel(num_tokentypes=0, parallel_output=True, pre_process=pre_process, post_process=post_process)
+        model = GPTModel(
+            config=config,
+            num_tokentypes=0,
+            parallel_output=True,
+            pre_process=pre_process,
+            post_process=post_process,
+        )
     elif args.model_type_name == "t5":
         model = T5Model(
+            config=config,
             num_tokentypes=0,
             parallel_output=True,
             pre_process=pre_process,
@@ -119,8 +141,8 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
     return model
 
 
-def prepare_model(accelerator):
-    accelerator.print("Preparing model")
+def prepare_model_optimizer_scheduler(accelerator):
+    accelerator.print("Preparing model optimizer scheduler")
     args = get_args()
     if accelerator.state.megatron_lm_plugin.custom_prepare_model_function is not None:
         if accelerator.state.megatron_lm_plugin.custom_model_provider_function is None:
@@ -129,15 +151,24 @@ def prepare_model(accelerator):
             )
         custom_model_provider_func = accelerator.state.megatron_lm_plugin.custom_model_provider_function
         model = accelerator.state.megatron_lm_plugin.custom_prepare_model_function(custom_model_provider_func)
+        optimizer = prepare_optimizer(accelerator, model)
+        scheduler = prepare_scheduler(accelerator, optimizer, scheduler=None)
     else:
-        if args.model_type_name in ("bert", "gpt"):
-            model_type = ModelType.encoder_or_decoder
-        elif args.model_type_name == "t5":
+        model_type = ModelType.encoder_or_decoder
+        if args.model_type_name == "t5":
             model_type = ModelType.encoder_and_decoder
-            if args.pipeline_model_parallel_split_rank is None and args.pipeline_model_parallel_size > 1:
-                args.pipeline_model_parallel_split_rank = args.pipeline_model_parallel_size // 2
-        model = get_model(model_provider_func, model_type)
-    return model
+        model_provider_func_ = model_provider_func
+        if accelerator.state.megatron_lm_plugin.custom_model_provider_function is not None:
+            model_provider_func_ = accelerator.state.megatron_lm_plugin.custom_model_provider_function
+        (model, optimizer, scheduler) = setup_model_and_optimizer(
+            model_provider_func_,
+            model_type,
+            no_wd_decay_cond=args.no_wd_decay_cond,
+            scale_lr_cond=args.scale_lr_cond,
+            lr_mult=args.lr_mult,
+        )
+    args.model_len = len(model)
+    return model, optimizer, scheduler
 
 
 # dataloader utilities
@@ -161,33 +192,35 @@ class MegatronLMDummyDataLoader:
     def set_megatron_data_args(self):
         args = get_args()
         for key, value in self.dataset_args.items():
+            old_value = getattr(args, key, "")
+            if old_value != value:
+                print(
+                    f"WARNING: MegatronLMDummyDataLoader overriding arguments for "
+                    f"{key}:{old_value} with {key}:{value}"
+                )
             setattr(args, key, value)
 
-    def get_train_valid_test_datasets_provider(self):
+    def get_train_valid_test_datasets_provider(self, accelerator):
         def train_valid_test_datasets_provider(train_val_test_num_samples):
             """Build train, valid, and test datasets."""
             args = get_args()
             dataset_args = {
-                "data_prefix": args.data_path,
-                "data_impl": args.data_impl,
+                "data_prefix": args.data_path if isinstance(args.data_path, (list, tuple)) else [args.data_path],
                 "splits_string": args.split,
                 "train_valid_test_num_samples": train_val_test_num_samples,
-                "skip_warmup": (not args.mmap_warmup),
                 "seed": args.seed,
             }
             if args.model_type_name == "bert":
                 dataset_args.update(
                     {
                         "max_seq_length": args.seq_length,
-                        "masked_lm_prob": args.mask_prob,
-                        "short_seq_prob": args.short_seq_prob,
                         "binary_head": args.bert_binary_head,
                     }
                 )
             elif args.model_type_name == "gpt":
                 dataset_args.update(
                     {
-                        "seq_length": args.seq_length,
+                        "max_seq_length": args.seq_length,
                     }
                 )
             elif args.model_type_name == "t5":
@@ -195,145 +228,76 @@ class MegatronLMDummyDataLoader:
                     {
                         "max_seq_length": args.encoder_seq_length,
                         "max_seq_length_dec": args.decoder_seq_length,
-                        "masked_lm_prob": args.mask_prob,
-                        "short_seq_prob": args.short_seq_prob,
                         "dataset_type": "t5",
                     }
                 )
             else:
                 raise ValueError(f"Unsupported model type: {args.model_type_name}")
-            if args.model_type_name == "gpt":
-                from megatron.data.gpt_dataset import build_train_valid_test_datasets
-            else:
-                from megatron.data.dataset_utils import build_train_valid_test_datasets
             train_ds, valid_ds, test_ds = build_train_valid_test_datasets(**dataset_args)
             return train_ds, valid_ds, test_ds
 
+        if accelerator.state.megatron_lm_plugin.custom_megatron_datasets_provider_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_megatron_datasets_provider_function
+        try:
+            args = get_args()
+            # Use '--no-use-pep517 -e' to pip install nvidia's megatron from source
+            if args.model_type_name == "bert":
+                from pretrain_bert import train_valid_test_datasets_provider
+
+                train_valid_test_datasets_provider.is_distributed = True
+                return train_valid_test_datasets_provider
+            elif args.model_type_name == "gpt":
+                from pretrain_gpt import train_valid_test_datasets_provider
+
+                train_valid_test_datasets_provider.is_distributed = True
+                return train_valid_test_datasets_provider
+            elif args.model_type_name == "t5":
+                from pretrain_t5 import train_valid_test_datasets_provider
+
+                train_valid_test_datasets_provider.is_distributed = True
+                return train_valid_test_datasets_provider
+        except ImportError:
+            pass
         return train_valid_test_datasets_provider
 
-    def build_pretraining_data_loader(self, dataset, consumed_samples):
-        if dataset is None:
-            return None
-        args = get_args()
-        micro_batch_size = args.micro_batch_size * args.num_micro_batches
-
-        # Megatron sampler
-        if args.dataloader_type == "single":
-            batch_sampler = MegatronPretrainingSampler(
-                total_samples=len(dataset),
-                consumed_samples=consumed_samples,
-                micro_batch_size=micro_batch_size,
-                data_parallel_rank=mpu.get_data_parallel_rank(),
-                data_parallel_size=mpu.get_data_parallel_world_size(),
-            )
-        elif args.dataloader_type == "cyclic":
-            batch_sampler = MegatronPretrainingRandomSampler(
-                dataset,
-                total_samples=len(dataset),
-                consumed_samples=consumed_samples,
-                micro_batch_size=micro_batch_size,
-                data_parallel_rank=mpu.get_data_parallel_rank(),
-                data_parallel_size=mpu.get_data_parallel_world_size(),
-                data_sharding=args.data_sharding,
-            )
-        else:
-            raise Exception(f"{args.dataloader_type} dataloader type is not supported.")
-
-        # Torch dataloader.
-        return torch.utils.data.DataLoader(
-            dataset, batch_sampler=batch_sampler, num_workers=args.num_workers, pin_memory=True
-        )
-
-    def build_train_valid_test_data_iterators(self):
-        def cyclic_iter(iter):
-            while True:
-                yield from iter
-
+    def build_train_valid_test_data_iterators(self, accelerator):
         args = get_args()
 
-        (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
-
-        print_rank_0("> building train, validation, and test datasets ...")
-
-        # Backward compatibility, assume fixed batch size.
-        if args.iteration > 0 and args.consumed_train_samples == 0:
-            assert args.train_samples is None, "only backward compatiblity support for iteration-based training"
-            args.consumed_train_samples = args.iteration * args.global_batch_size
-        if args.iteration > 0 and args.consumed_valid_samples == 0:
-            if args.train_samples is None:
-                args.consumed_valid_samples = (
-                    (args.iteration // args.eval_interval) * args.eval_iters * args.global_batch_size
-                )
-
-        # Data loader only on rank 0 of each model parallel group.
-        if mpu.get_tensor_model_parallel_rank() == 0:
-            # Number of train/valid/test samples.
-            if args.train_samples:
-                train_samples = args.train_samples
-            else:
-                train_samples = args.train_iters * args.global_batch_size
-            eval_iters = (args.train_iters // args.eval_interval + 1) * args.eval_iters
-            test_iters = args.eval_iters
-            train_val_test_num_samples = [
-                train_samples,
-                eval_iters * args.global_batch_size,
-                test_iters * args.global_batch_size,
-            ]
-            print_rank_0(" > datasets target sizes (minimum size):")
-            print_rank_0(f"    train:      {train_val_test_num_samples[0]}")
-            print_rank_0(f"    validation: {train_val_test_num_samples[1]}")
-            print_rank_0(f"    test:       {train_val_test_num_samples[2]}")
-
-            # Build the datasets.
-            train_valid_test_datasets_provider = self.get_train_valid_test_datasets_provider()
-            train_ds, valid_ds, test_ds = train_valid_test_datasets_provider(train_val_test_num_samples)
-
-            # Build dataloders.
-            train_dataloader = self.build_pretraining_data_loader(train_ds, args.consumed_train_samples)
-            valid_dataloader = self.build_pretraining_data_loader(valid_ds, args.consumed_valid_samples)
-            test_dataloader = self.build_pretraining_data_loader(test_ds, 0)
-
-            # Flags to know if we need to do training/validation/testing.
-            do_train = train_dataloader is not None and args.train_iters > 0
-            do_valid = valid_dataloader is not None and args.eval_iters > 0
-            do_test = test_dataloader is not None and args.eval_iters > 0
-            # Need to broadcast num_tokens and num_type_tokens.
-            flags = torch.cuda.LongTensor([int(do_train), int(do_valid), int(do_test)])
+        train_valid_test_dataset_provider = self.get_train_valid_test_datasets_provider(accelerator)
+        if args.virtual_pipeline_model_parallel_size is not None:
+            train_data_iterator = []
+            valid_data_iterator = []
+            test_data_iterator = []
+            for i in range(getattr(args, "model_len", 0)):
+                mpu.set_virtual_pipeline_model_parallel_rank(i)
+                iterators = build_train_valid_test_data_iterators(train_valid_test_dataset_provider)
+                train_data_iterator.append(iterators[0])
+                valid_data_iterator.append(iterators[1])
+                test_data_iterator.append(iterators[2])
         else:
-            flags = torch.cuda.LongTensor([0, 0, 0])
-
-        # Broadcast num tokens.
-        torch.distributed.broadcast(
-            flags, mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group()
-        )
-        args.do_train = flags[0].item()
-        args.do_valid = flags[1].item()
-        args.do_test = flags[2].item()
-
-        # Build iterators.
-        dl_type = args.dataloader_type
-        assert dl_type in ["single", "cyclic"]
-
-        if train_dataloader is not None:
-            train_data_iterator = (
-                iter(train_dataloader) if dl_type == "single" else iter(cyclic_iter(train_dataloader))
+            train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
+                train_valid_test_dataset_provider
             )
-        else:
-            train_data_iterator = None
-
-        if valid_dataloader is not None:
-            valid_data_iterator = (
-                iter(valid_dataloader) if dl_type == "single" else iter(cyclic_iter(valid_dataloader))
-            )
-        else:
-            valid_data_iterator = None
-
-        if test_dataloader is not None:
-            test_data_iterator = iter(test_dataloader) if dl_type == "single" else iter(cyclic_iter(test_dataloader))
-        else:
-            test_data_iterator = None
 
         return train_data_iterator, valid_data_iterator, test_data_iterator
+
+
+def _handle_megatron_data_iterator(accelerator, data_iterator):
+    class DummyMegatronDataloader:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return {}
+
+    is_data_iterator_empty = data_iterator is None
+    is_src_data_iterator_empty = torch.tensor(is_data_iterator_empty, dtype=torch.bool, device=accelerator.device)
+    torch.distributed.broadcast(
+        is_src_data_iterator_empty, get_tensor_model_parallel_src_rank(), group=get_tensor_model_parallel_group()
+    )
+    if not is_src_data_iterator_empty and is_data_iterator_empty:
+        return DummyMegatronDataloader()
+    return data_iterator
 
 
 def prepare_data_loader(accelerator, dataloader):
@@ -342,7 +306,6 @@ def prepare_data_loader(accelerator, dataloader):
     if not args.megatron_dataset_flag:
         from ..data_loader import _PYTORCH_DATALOADER_KWARGS, prepare_data_loader
 
-        args = get_args()
         micro_batch_size = args.micro_batch_size * args.num_micro_batches
         kwargs = {k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k]) for k in _PYTORCH_DATALOADER_KWARGS}
         if kwargs["batch_size"] is None:
@@ -358,12 +321,15 @@ def prepare_data_loader(accelerator, dataloader):
             kwargs["batch_size"] = micro_batch_size
 
         dataloader = torch.utils.data.DataLoader(dataloader.dataset, **kwargs)
+        # split_batches:
+        # Megatron only needs to fetch different data between different dp groups,
+        # and does not need to split the data within the dp group.
         return prepare_data_loader(
             dataloader,
             accelerator.device,
             num_processes=mpu.get_data_parallel_world_size(),
             process_index=mpu.get_data_parallel_rank(),
-            split_batches=accelerator.split_batches,
+            split_batches=False,
             put_on_device=True,
             rng_types=accelerator.rng_types.copy(),
             dispatch_batches=accelerator.dispatch_batches,
@@ -377,11 +343,25 @@ def prepare_data_loader(accelerator, dataloader):
             ) = args.consumed_samples
         else:
             args.consumed_train_samples, args.consumed_valid_samples, args.consumed_test_samples = 0, 0, 0
+        args.micro_batch_size = args.micro_batch_size * args.num_micro_batches
+        # In order to be compatible with data in transform format,
+        # it needs to increase the size of mbs first,
+        # and then split the large batch data into some mbs.
         (
             train_data_iterator,
             valid_data_iterator,
             test_data_iterator,
-        ) = dataloader.build_train_valid_test_data_iterators()
+        ) = dataloader.build_train_valid_test_data_iterators(accelerator)
+        args.micro_batch_size = args.micro_batch_size // args.num_micro_batches
+
+        train_data_iterator = _handle_megatron_data_iterator(
+            accelerator=accelerator, data_iterator=train_data_iterator
+        )
+        valid_data_iterator = _handle_megatron_data_iterator(
+            accelerator=accelerator, data_iterator=valid_data_iterator
+        )
+        test_data_iterator = _handle_megatron_data_iterator(accelerator=accelerator, data_iterator=test_data_iterator)
+
         return train_data_iterator, valid_data_iterator, test_data_iterator
 
 
@@ -405,8 +385,7 @@ class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
 def prepare_optimizer(accelerator, model):
     accelerator.print("Preparing optimizer")
     args = get_args()
-    optimizer = get_megatron_optimizer(model, args.no_wd_decay_cond, args.scale_lr_cond, args.lr_mult)
-    return optimizer
+    return get_megatron_optimizer(model, args.no_wd_decay_cond, args.scale_lr_cond, args.lr_mult)
 
 
 # scheduler utilities
@@ -454,13 +433,13 @@ class AbstractTrainStep(ABC):
         super().__init__()
         self.name = name
 
-    def get_batch_func(self):
+    def get_batch_func(self, accelerator, megatron_dataset_flag):
         pass
 
     def get_forward_step_func(self):
         pass
 
-    def get_loss_func(self):
+    def get_loss_func(self, accelerator):
         pass
 
 
@@ -472,17 +451,19 @@ class BertTrainStep(AbstractTrainStep):
         args (`argparse.Namespace`): Megatron-LM arguments.
     """
 
-    def __init__(self, args):
+    def __init__(self, accelerator, args):
         super().__init__("BertTrainStep")
-        self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
-        self.loss_func = self.get_loss_func(args.pretraining_flag, args.num_labels)
+        self.get_batch = self.get_batch_func(accelerator, args.megatron_dataset_flag)
+        self.loss_func = self.get_loss_func(accelerator, args.pretraining_flag, args.num_labels)
         self.forward_step = self.get_forward_step_func(args.pretraining_flag, args.bert_binary_head)
         if not args.model_return_dict:
             self.model_output_class = None
         else:
+            from transformers.modeling_outputs import SequenceClassifierOutput
+
             self.model_output_class = SequenceClassifierOutput
 
-    def get_batch_func(self, megatron_dataset_flag):
+    def get_batch_func(self, accelerator, megatron_dataset_flag):
         def get_batch_megatron(data_iterator):
             """Build the batch."""
 
@@ -495,7 +476,7 @@ class BertTrainStep(AbstractTrainStep):
                 data = next(data_iterator)
             else:
                 data = None
-            data_b = mpu.broadcast_data(keys, data, datatype)
+            data_b = tensor_parallel.broadcast_data(keys, data, datatype)
 
             # Unpack.
             tokens = data_b["text"].long()
@@ -532,12 +513,21 @@ class BertTrainStep(AbstractTrainStep):
 
             return tokens, types, sentence_order, loss_mask, lm_labels, padding_mask
 
+        if accelerator.state.megatron_lm_plugin.custom_get_batch_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_get_batch_function
         if megatron_dataset_flag:
+            try:
+                # Use '--no-use-pep517 -e' to pip install nvidia's megatron from source
+                from pretrain_bert import get_batch
+
+                return get_batch
+            except ImportError:
+                pass
             return get_batch_megatron
         else:
             return get_batch_transformer
 
-    def get_loss_func(self, pretraining_flag, num_labels):
+    def get_loss_func(self, accelerator, pretraining_flag, num_labels):
         def loss_func_pretrain(loss_mask, sentence_order, output_tensor):
             lm_loss_, sop_logits = output_tensor
 
@@ -571,6 +561,8 @@ class BertTrainStep(AbstractTrainStep):
             averaged_losses = average_losses_across_data_parallel_group([loss])
             return loss, {"loss": averaged_losses[0]}
 
+        if accelerator.state.megatron_lm_plugin.custom_loss_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_loss_function
         if pretraining_flag:
             return loss_func_pretrain
         else:
@@ -601,10 +593,10 @@ class GPTTrainStep(AbstractTrainStep):
         args (`argparse.Namespace`): Megatron-LM arguments.
     """
 
-    def __init__(self, args):
+    def __init__(self, accelerator, args):
         super().__init__("GPTTrainStep")
-        self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
-        self.loss_func = self.get_loss_func()
+        self.get_batch = self.get_batch_func(accelerator, args.megatron_dataset_flag)
+        self.loss_func = self.get_loss_func(accelerator)
         self.forward_step = self.get_forward_step_func()
         self.eod_token = args.padded_vocab_size - 1
         if args.vocab_file is not None:
@@ -616,9 +608,11 @@ class GPTTrainStep(AbstractTrainStep):
         if not args.model_return_dict:
             self.model_output_class = None
         else:
+            from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+
             self.model_output_class = CausalLMOutputWithCrossAttentions
 
-    def get_batch_func(self, megatron_dataset_flag):
+    def get_batch_func(self, accelerator, megatron_dataset_flag):
         def get_batch_megatron(data_iterator):
             """Generate a batch"""
             # Items and their type.
@@ -630,7 +624,7 @@ class GPTTrainStep(AbstractTrainStep):
                 data = next(data_iterator)
             else:
                 data = None
-            data_b = mpu.broadcast_data(keys, data, datatype)
+            data_b = tensor_parallel.broadcast_data(keys, data, datatype)
 
             # Unpack.
             tokens_ = data_b["text"].long()
@@ -660,12 +654,21 @@ class GPTTrainStep(AbstractTrainStep):
             )
             return tokens, labels, loss_mask, attention_mask, position_ids
 
+        if accelerator.state.megatron_lm_plugin.custom_get_batch_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_get_batch_function
         if megatron_dataset_flag:
+            try:
+                # Use '--no-use-pep517 -e' to pip install nvidia's megatron from source
+                from pretrain_gpt import get_batch
+
+                return get_batch
+            except ImportError:
+                pass
             return get_batch_megatron
         else:
             return get_batch_transformer
 
-    def get_loss_func(self):
+    def get_loss_func(self, accelerator):
         args = get_args()
 
         def loss_func(loss_mask, output_tensor):
@@ -675,7 +678,20 @@ class GPTTrainStep(AbstractTrainStep):
                 losses = output_tensor
             losses = losses.float()
             loss_mask = loss_mask.view(-1).float()
-            loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+            if args.context_parallel_size > 1:
+                loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
+                torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
+                loss = loss[0] / loss[1]
+            else:
+                loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+
+            # Check individual rank losses are not NaN prior to DP all-reduce.
+            if args.check_for_nan_in_loss_and_grad:
+                global_rank = torch.distributed.get_rank()
+                assert not loss.isnan(), (
+                    f"Rank {global_rank}: found NaN in local forward loss calculation. "
+                    f"Device: {torch.cuda.current_device()}, node: {os.uname()[1]}"
+                )
 
             # Reduce loss for logging.
             averaged_loss = average_losses_across_data_parallel_group([loss])
@@ -685,6 +701,8 @@ class GPTTrainStep(AbstractTrainStep):
                 output_dict.update({"logits": logits})
             return loss, output_dict
 
+        if accelerator.state.megatron_lm_plugin.custom_loss_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_loss_function
         return loss_func
 
     def get_forward_step_func(self):
@@ -707,14 +725,16 @@ class T5TrainStep(AbstractTrainStep):
         args (`argparse.Namespace`): Megatron-LM arguments.
     """
 
-    def __init__(self, args):
+    def __init__(self, accelerator, args):
         super().__init__("T5TrainStep")
-        self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
-        self.loss_func = self.get_loss_func()
+        self.get_batch = self.get_batch_func(accelerator, args.megatron_dataset_flag)
+        self.loss_func = self.get_loss_func(accelerator)
         self.forward_step = self.get_forward_step_func()
         if not args.model_return_dict:
             self.model_output_class = None
         else:
+            from transformers.modeling_outputs import Seq2SeqLMOutput
+
             self.model_output_class = Seq2SeqLMOutput
 
     @staticmethod
@@ -748,7 +768,7 @@ class T5TrainStep(AbstractTrainStep):
         extended_attention_mask = attention_mask_bss < 0.5
         return extended_attention_mask
 
-    def get_batch_func(self, megatron_dataset_flag):
+    def get_batch_func(self, accelerator, megatron_dataset_flag):
         def get_batch_megatron(data_iterator):
             """Build the batch."""
 
@@ -760,7 +780,7 @@ class T5TrainStep(AbstractTrainStep):
                 data = next(data_iterator)
             else:
                 data = None
-            data_b = mpu.broadcast_data(keys, data, datatype)
+            data_b = tensor_parallel.broadcast_data(keys, data, datatype)
 
             # Unpack.
             tokens_enc = data_b["text_enc"].long()
@@ -797,12 +817,21 @@ class T5TrainStep(AbstractTrainStep):
 
             return tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, enc_dec_mask
 
+        if accelerator.state.megatron_lm_plugin.custom_get_batch_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_get_batch_function
         if megatron_dataset_flag:
+            try:
+                # Use '--no-use-pep517 -e' to pip install nvidia's megatron from source
+                from pretrain_t5 import get_batch
+
+                return get_batch
+            except ImportError:
+                pass
             return get_batch_megatron
         else:
             return get_batch_transformer
 
-    def get_loss_func(self):
+    def get_loss_func(self, accelerator):
         def loss_func(loss_mask, output_tensor):
             lm_loss_ = output_tensor.float()
             lm_loss = torch.sum(lm_loss_.view(-1) * loss_mask.reshape(-1)) / loss_mask.sum()
@@ -812,6 +841,8 @@ class T5TrainStep(AbstractTrainStep):
 
             return loss, {"lm loss": averaged_losses[0]}
 
+        if accelerator.state.megatron_lm_plugin.custom_loss_function is not None:
+            return accelerator.state.megatron_lm_plugin.custom_loss_function
         return loss_func
 
     def get_forward_step_func(self):
@@ -829,6 +860,18 @@ class T5TrainStep(AbstractTrainStep):
             return output_tensor, partial(self.loss_func, loss_mask)
 
         return forward_step
+
+
+def finish_mpu_init():
+    # torch.distributed initialization
+    args = get_args()
+    # Pytorch distributed.
+    _initialize_distributed()
+
+    # Random seeds for reproducibility.
+    if args.rank == 0:
+        print(f"> setting random seeds to {args.seed} ...")
+    _set_random_seed(args.seed, args.data_parallel_random_init)
 
 
 # intialize megatron setup
@@ -859,39 +902,6 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     # tensorboard-writer, and timers.
     set_global_variables(args)
 
-    # torch.distributed initialization
-    def finish_mpu_init():
-        args = get_args()
-        # Pytorch distributed.
-        device_count = torch.cuda.device_count()
-        args.rank = torch.distributed.get_rank()
-        args.world_size = torch.distributed.get_world_size()
-        if device_count > 0:
-            device = args.rank % device_count
-            if args.local_rank is not None:
-                assert args.local_rank == device, "expected local-rank to be the same as rank % device-count."
-            else:
-                args.local_rank = device
-
-            # Set the tensor model-parallel, pipeline model-parallel, and
-            # data-parallel communicators.
-            if mpu.model_parallel_is_initialized():
-                print("model parallel is already initialized")
-            else:
-                mpu.initialize_model_parallel(
-                    args.tensor_model_parallel_size,
-                    args.pipeline_model_parallel_size,
-                    args.virtual_pipeline_model_parallel_size,
-                    args.pipeline_model_parallel_split_rank,
-                )
-
-        # Random seeds for reproducibility.
-        if args.rank == 0:
-            print(f"> setting random seeds to {args.seed} ...")
-        _set_random_seed(args.seed, args.data_parallel_random_init)
-
-    args = get_args()
-
     # Megatron's MPU is the master. Complete initialization right away.
     finish_mpu_init()
 
@@ -904,7 +914,8 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     # Set pytorch JIT layer fusion options and warmup JIT functions.
     set_jit_fusion_options()
     args = get_args()
-    args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
+    if getattr(args, "padded_vocab_size", None) is None:
+        args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
     if args.model_type_name == "bert" and args.pretraining_flag and args.num_labels == 2:
         args.bert_binary_head = True
     else:
@@ -935,11 +946,11 @@ class MegatronEngine(torch.nn.Module):
                 args, **accelerator.state.megatron_lm_plugin.custom_train_step_kwargs
             )
         elif args.model_type_name == "bert":
-            self.train_step_handler = BertTrainStep(args)
+            self.train_step_handler = BertTrainStep(accelerator, args)
         elif args.model_type_name == "gpt":
-            self.train_step_handler = GPTTrainStep(args)
+            self.train_step_handler = GPTTrainStep(accelerator, args)
         elif args.model_type_name == "t5":
-            self.train_step_handler = T5TrainStep(args)
+            self.train_step_handler = T5TrainStep(accelerator, args)
         else:
             raise ValueError(f"Unsupported model type: {args.model_type_name}")
         self.optimizer.skipped_iter = False
@@ -949,31 +960,57 @@ class MegatronEngine(torch.nn.Module):
         self.eval_total_loss_dict = {}
         self.iteration = 0
         self.report_memory_flag = True
+        self.num_floating_point_operations_so_far = 0
+        self.module_config = None
         if args.tensorboard_dir is not None:
             write_args_to_tensorboard()
+
+    def get_module_config(self):
+        args = get_args()
+        config = get_model_config(self.module[0])
+        # Setup some training config params
+        config.grad_scale_func = self.optimizer.scale_loss
+        if isinstance(self.module[0], LocalDDP) and args.overlap_grad_reduce:
+            assert config.no_sync_func is None, (
+                "When overlap_grad_reduce is True, config.no_sync_func must be None; "
+                "a custom no_sync_func is not supported when overlapping grad-reduce"
+            )
+            config.no_sync_func = [model_chunk.no_sync for model_chunk in self.module]
+            if len(self.module) == 1:
+                config.no_sync_func = config.no_sync_func[0]
+            if args.delay_grad_reduce:
+                config.grad_sync_func = [model_chunk.start_grad_sync for model_chunk in self.module]
+                if len(self.module) == 1:
+                    config.grad_sync_func = config.grad_sync_func[0]
+        if args.overlap_param_gather and args.delay_param_gather:
+            config.param_sync_func = [
+                lambda x: self.optimizer.finish_param_sync(model_index, x) for model_index in range(len(self.module))
+            ]
+            if len(self.module) == 1:
+                config.param_sync_func = config.param_sync_func[0]
+        config.finalize_model_grads_func = finalize_model_grads
+        return config
 
     def train(self):
         for model_module in self.module:
             model_module.train()
+
+        if self.module_config is None:
+            self.module_config = self.get_module_config()
+
         self.log_eval_results()
 
     def eval(self):
         for model_module in self.module:
             model_module.eval()
 
-    def train_step(self, **batch_data):
-        """
-        Training step for Megatron-LM
+        if self.module_config is None:
+            self.module_config = self.get_module_config()
 
-        Args:
-            batch_data (:obj:`dict`): The batch data to train on.
-        """
-
+    def get_batch_data_iterator(self, batch_data):
         args = get_args()
-        timers = get_timers()
-
+        data_chunks = []
         if len(batch_data) > 0:
-            data_chunks = []
             if args.num_micro_batches > 1:
                 for i in range(0, args.num_micro_batches):
                     data_chunks.append(
@@ -993,74 +1030,30 @@ class MegatronEngine(torch.nn.Module):
             )
         else:
             batch_data_iterator = iter(data_chunks) if len(batch_data) > 0 else None
+        return batch_data_iterator
 
-        # Set grad to zero.
-        if args.DDP_impl == "local" and args.use_contiguous_buffers_in_local_ddp:
-            for partition in self.module:
-                partition.zero_grad_buffer()
-        self.optimizer.zero_grad()
+    def train_step(self, **batch_data):
+        """
+        Training step for Megatron-LM
 
-        # Forward pass.
-        forward_backward_func = get_forward_backward_func()
-        losses_reduced = forward_backward_func(
-            self.train_step_handler.forward_step,
-            batch_data_iterator,
-            self.module,
-            self.optimizer,
-            None,
-            forward_only=False,
+        Args:
+            batch_data (:obj:`dict`): The batch data to train on.
+        """
+
+        batch_data_iterator = self.get_batch_data_iterator(batch_data)
+
+        loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad = train_step(
+            forward_step_func=self.train_step_handler.forward_step,
+            data_iterator=batch_data_iterator,
+            model=self.module,
+            optimizer=self.optimizer,
+            opt_param_scheduler=self.scheduler,
+            config=self.module_config,
         )
 
-        # Empty unused memory.
-        if args.empty_unused_memory_level >= 1:
-            torch.cuda.empty_cache()
+        self.optimizer.skipped_iter = skipped_iter == 1
 
-        # Reduce gradients.
-        timers("backward-reduce-model-grads").start()
-        self.optimizer.reduce_model_grads(args, timers)
-        timers("backward-reduce-model-grads").stop()
-
-        # Update parameters.
-        timers("optimizer").start()
-        update_successful, grad_norm, num_zeros_in_grad = self.optimizer.step(args, timers)
-        timers("optimizer").stop()
-
-        # Gather params.
-        if update_successful:
-            timers("backward-gather-model-params").start()
-            self.optimizer.gather_model_params(args, timers)
-            timers("backward-gather-model-params").stop()
-
-        # Update learning rate.
-        if update_successful:
-            if self.scheduler is not None:
-                increment = get_num_microbatches() * args.micro_batch_size * args.data_parallel_size
-                self.scheduler.step(increment=increment)
-            skipped_iter = 0
-        else:
-            skipped_iter = 1
-
-        self.optimizer.skipped_iter = not update_successful
-
-        # Empty unused memory.
-        if args.empty_unused_memory_level >= 2:
-            torch.cuda.empty_cache()
-
-        args.consumed_train_samples += (
-            mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
-        )
-
-        if mpu.is_pipeline_last_stage(ignore_virtual=True):
-            # Average loss across microbatches.
-            loss_reduced = {}
-            for key in losses_reduced[0]:
-                losses_reduced_for_key = [x[key] for x in losses_reduced]
-                if len(losses_reduced_for_key[0].shape) == 0:
-                    loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
-                else:
-                    loss_reduced[key] = torch.concat(losses_reduced_for_key)
-            return loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad
-        return {}, skipped_iter, grad_norm, num_zeros_in_grad
+        return loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad
 
     def eval_step(self, **batch_data):
         """
@@ -1071,26 +1064,15 @@ class MegatronEngine(torch.nn.Module):
         """
 
         args = get_args()
-        data_chunks = []
-        if args.num_micro_batches > 1:
-            for i in range(0, args.num_micro_batches):
-                data_chunks.append(
-                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
-                )
-        else:
-            data_chunks = [batch_data]
-
-        if len(self.module) > 1:
-            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
-        else:
-            batch_data_iterator = iter(data_chunks)
+        batch_data_iterator = self.get_batch_data_iterator(batch_data)
         forward_backward_func = get_forward_backward_func()
         loss_dicts = forward_backward_func(
-            self.train_step_handler.forward_step,
-            batch_data_iterator,
-            self.module,
-            optimizer=None,
-            timers=None,
+            forward_step_func=self.train_step_handler.forward_step,
+            data_iterator=batch_data_iterator,
+            model=self.module,
+            num_microbatches=get_num_microbatches(),
+            seq_length=args.seq_length,
+            micro_batch_size=args.micro_batch_size,
             forward_only=True,
         )
         # Empty unused memory
@@ -1111,8 +1093,7 @@ class MegatronEngine(torch.nn.Module):
                 else:
                     loss_reduced[key] = torch.concat(losses_reduced_for_key)
             return loss_reduced
-        else:
-            return {}
+        return {}
 
     def forward(self, **batch_data):
         # During training, we use train_step()
@@ -1133,6 +1114,9 @@ class MegatronEngine(torch.nn.Module):
         if self.module[0].training:
             loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = self.train_step(**batch_data)
             self.iteration += 1
+            batch_size = mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
+            args.consumed_train_samples += batch_size
+            self.num_floating_point_operations_so_far += num_floating_point_operations(args, batch_size)
             if args.tensorboard_dir is not None:
                 # Logging.
                 loss_scale = self.optimizer.get_loss_scale().item()
@@ -1162,7 +1146,7 @@ class MegatronEngine(torch.nn.Module):
                         key + "_num_iters", torch.cuda.FloatTensor([0.0])
                     ) + torch.cuda.FloatTensor([1.0])
 
-        loss = torch.tensor(0.0, device=args.local_rank)
+        loss = torch.tensor(0.0, device=torch.cuda.current_device())
         for key in loss_dict:
             if len(loss_dict[key].shape) == 0:
                 loss += loss_dict[key]
@@ -1170,7 +1154,6 @@ class MegatronEngine(torch.nn.Module):
         logits = None
         if "logits" in loss_dict:
             logits = loss_dict["logits"]
-        # loss = reduce(loss)
         if self.train_step_handler.model_output_class is not None:
             return self.train_step_handler.model_output_class(loss=loss, logits=logits)
         return loss
@@ -1206,7 +1189,13 @@ class MegatronEngine(torch.nn.Module):
         args = get_args()
         args.save = output_dir
         torch.distributed.barrier()
-        save_checkpoint(self.iteration, self.module, self.optimizer, self.scheduler)
+        save_checkpoint(
+            self.iteration,
+            self.module,
+            self.optimizer,
+            self.scheduler,
+            num_floating_point_operations_so_far=self.num_floating_point_operations_so_far,
+        )
         torch.distributed.barrier()
 
     def load_checkpoint(self, input_dir):
@@ -1215,9 +1204,10 @@ class MegatronEngine(torch.nn.Module):
         args.consumed_train_samples = 0
         args.consumed_valid_samples = 0
         torch.distributed.barrier()
-        iteration = load_checkpoint(self.module, self.optimizer, self.scheduler)
+        iteration, num_floating_point_operations_so_far = load_checkpoint(self.module, self.optimizer, self.scheduler)
         torch.distributed.barrier()
         self.iteration = iteration
+        self.num_floating_point_operations_so_far = num_floating_point_operations_so_far
         if args.fp16 and self.iteration == 0:
             self.optimizer.reload_model_params()
 
