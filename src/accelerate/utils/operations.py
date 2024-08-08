@@ -75,10 +75,10 @@ def honor_type(obj, generator):
     Cast a generator to the same type as obj (list, tuple, or namedtuple)
     """
     # Some objects may not be able to instantiate from a generator directly
-    # if is_namedtuple(obj):
-    #     return type(obj)(*list(generator))
-    # else:
-    return type(obj)(generator)
+    if is_namedtuple(obj):
+        return type(obj)(*list(generator))
+    else:
+        return type(obj)(generator)
 
 
 def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_other_type=False, **kwargs):
