@@ -628,10 +628,12 @@ def _get_named_modules(
     `remove_duplicate` option added.
 
     Args:
-        memo: a memo to store the set of modules already added to the result
-        prefix: a prefix that will be added to the name of the module
-        remove_duplicate: whether to remove the duplicated module instances in the result
-            or not
+        memo (set of `torch.nn.Module`, *optional*):
+            A memo to store the set of modules already added to the result
+        prefix (`str`, *optional*): 
+            A prefix that will be added to the name of the module
+        remove_duplicate (`bool`, *optional*): 
+            Whether to remove the duplicated module instances in the result or not
 
     Yields:
         (str, Module): Tuple of name and module
@@ -639,14 +641,17 @@ def _get_named_modules(
     Note:
         Duplicate modules are returned only once. In the following example, ``l`` will be returned only once.
 
-    Example::
-
-        >>> l = nn.Linear(2, 2) >>> net = nn.Sequential(l, l) >>> for idx, m in enumerate(net.named_modules()): ...
-        print(idx, '->', m)
-
-        0 -> ('', Sequential(
+    Example:
+    ```python
+    >>> from torch import nn
+    >>> l = nn.Linear(2, 2)
+    >>> net = nn.Sequential(l, l)
+    >>> for idx, m in enumerate(net.named_modules()):
+    ...   print(idx, '->', m)
+    0 -> ('', Sequential(
             (0): Linear(in_features=2, out_features=2, bias=True) (1): Linear(in_features=2, out_features=2, bias=True)
-        )) 1 -> ('0', Linear(in_features=2, out_features=2, bias=True))
+        )) 
+    1 -> ('0', Linear(in_features=2, out_features=2, bias=True))
 
     """
     if memo is None:
