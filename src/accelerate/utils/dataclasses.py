@@ -1325,7 +1325,6 @@ class FullyShardedDataParallelPlugin:
             BackwardPrefetch,
             CPUOffload,
             ShardingStrategy,
-            StateDictType,
         )
 
         env_prefix = "FSDP_"
@@ -1359,13 +1358,6 @@ class FullyShardedDataParallelPlugin:
                 else:
                     self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
 
-        if self.state_dict_type is None:
-            self.state_dict_type = os.environ.get(env_prefix + "STATE_DICT_TYPE", "FULL_STATE_DICT")
-        if isinstance(self.state_dict_type, str):
-            if self.state_dict_type.isdigit():
-                self.state_dict_type = StateDictType(int(self.state_dict_type))
-            else:
-                self.state_dict_type = StateDictType[self.state_dict_type.upper()]
         self.set_state_dict_type()
 
         if self.auto_wrap_policy is None:
@@ -1421,7 +1413,7 @@ class FullyShardedDataParallelPlugin:
             self.sync_module_states = True
 
         if isinstance(self.mixed_precision_policy, dict):
-            self.set_mixed_precision()
+            self.set_mixed_precision(**self.mixed_precision_policy)
 
         if self.sync_module_states:
             if is_npu_available():
@@ -1451,6 +1443,14 @@ class FullyShardedDataParallelPlugin:
             ShardedStateDictConfig,
             StateDictType,
         )
+
+        if self.state_dict_type is None:
+            self.state_dict_type = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
+        if isinstance(self.state_dict_type, str):
+            if self.state_dict_type.isdigit():
+                self.state_dict_type = StateDictType(int(self.state_dict_type))
+            else:
+                self.state_dict_type = StateDictType[self.state_dict_type.upper()]
 
         if self.state_dict_type == StateDictType.FULL_STATE_DICT:
             if self.state_dict_config is None:
@@ -1482,7 +1482,7 @@ class FullyShardedDataParallelPlugin:
             for layer_class in self.transformer_cls_names_to_wrap:
                 transformer_cls = get_module_class_from_name(model, layer_class)
                 if transformer_cls is None:
-                    raise Exception(f"Could not find the transformer layer class {layer_class} in the model.")
+                    raise ValueError(f"Could not find the transformer layer class {layer_class} in the model.")
                 transformer_cls_to_wrap.add(transformer_cls)
             # Finally we set the auto_wrap_policy to a callable
             self.auto_wrap_policy = functools.partial(
@@ -1496,10 +1496,8 @@ class FullyShardedDataParallelPlugin:
             else:
                 self.auto_wrap_policy = None
 
-    def set_mixed_precision(self, mixed_precision=None, buffer_autocast=False, override=False):
+    def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
         "Sets the mixed precision policy for FSDP"
-        if mixed_precision is None and self.mixed_precision_policy is None:
-            raise ValueError("Either `mixed_precision` or `mixed_precision_policy` must be provided.")
         mixed_precision_mapping = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}
         dtype = mixed_precision
         if isinstance(mixed_precision, str):
