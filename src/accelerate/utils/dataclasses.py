@@ -1199,13 +1199,13 @@ class FullyShardedDataParallelPlugin:
     sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
         default=None,
         metadata={
-            "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`."
+            "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'"
         },
     )
     backward_prefetch: Union[str, "torch.distributed.fsdp.BackwardPrefetch"] = field(
         default=None,
         metadata={
-            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`."
+            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'"
         },
     )
     mixed_precision_policy: Optional[Union[dict, "torch.distributed.fsdp.MixedPrecision"]] = field(
@@ -1218,13 +1218,13 @@ class FullyShardedDataParallelPlugin:
     auto_wrap_policy: Optional[Union[str, Callable]] = field(
         default=None,
         metadata={
-            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`."
+            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. Defaults to `NO_WRAP`"
         },
     )
     cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload"] = field(
         default=None,
         metadata={
-            "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`."
+            "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`. Defaults to `False`"
         },
     )
     ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
@@ -1235,7 +1235,7 @@ class FullyShardedDataParallelPlugin:
     state_dict_type: Union[str, "torch.distributed.fsdp.StateDictType"] = field(
         default=None,
         metadata={
-            "help": "State dict type to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictType`."
+            "help": "State dict type to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictType`. Defaults to `FULL_STATE_DICT`"
         },
     )
     state_dict_config: Optional[
@@ -1265,7 +1265,7 @@ class FullyShardedDataParallelPlugin:
     )
     use_orig_params: bool = field(
         default=None,
-        metadata={"help": "Whether to use the original parameters for the optimizer. Should be a `bool`."},
+        metadata={"help": "Whether to use the original parameters for the optimizer. Defaults to `False`"},
     )
     param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
         default=None,
@@ -1276,7 +1276,7 @@ class FullyShardedDataParallelPlugin:
         },
     )
     sync_module_states: bool = field(
-        default=None,
+        default=False,
         metadata={
             "help": "Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 "
             "to ensure they are the same across all ranks after initialization. Defaults to `True`"
@@ -1294,14 +1294,14 @@ class FullyShardedDataParallelPlugin:
         metadata={
             "help": "A technique to reduce memory usage by clearing activations of "
             "certain layers and recomputing them during a backward pass. Effectively, this trades extra computation time "
-            "for reduced memory usage. (`False` by default)"
+            "for reduced memory usage. Defaults to `False`"
         },
     )
     ram_efficient_loading: bool = field(
         default=None,
         metadata={
             "help": "If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. "
-            "Only applicable for 🤗 Transformers. When using this, `sync_module_states` needs to be `True`"
+            "Only applicable for 🤗 Transformers. When using this, `sync_module_states` needs to be `True`. Defaults to `False`."
         },
     )
     transformer_cls_names_to_wrap: Optional[List[str]] = field(
