@@ -894,7 +894,7 @@ class AcceleratorState:
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
             ]:
-                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
+                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or fsdp_plugin is not None:
                     self.distributed_type = DistributedType.FSDP
                     if self._mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
