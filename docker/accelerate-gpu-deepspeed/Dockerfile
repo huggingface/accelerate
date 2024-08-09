@@ -24,7 +24,7 @@ SHELL ["/bin/bash", "-c"]
 RUN source activate accelerate && conda install -c conda-forge mpi4py
 RUN source activate accelerate && \
     python3 -m pip install --no-cache-dir \
-    git+https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers,deepspeed] \
+    git+https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers,deepspeed]@fix-deepspeed-tests \
     --extra-index-url https://download.pytorch.org/whl/cu117
 
 RUN python3 -m pip install --no-cache-dir bitsandbytes

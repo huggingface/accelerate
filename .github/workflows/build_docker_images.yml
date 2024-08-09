@@ -11,55 +11,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  latest-cpu:
-    name: "Latest Accelerate CPU [dev]"
-    runs-on:
-      group: aws-general-8-plus
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Get current date
-        id: date
-        run: |
-          echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
-      - name: Build and Push CPU
-        uses: docker/build-push-action@v4
-        with:
-          file: docker/accelerate-cpu/Dockerfile
-          push: true
-          tags: |
-            huggingface/accelerate:cpu-nightly
-            huggingface/accelerate:cpu-nightly-${{ env.date }}
+  # latest-cpu:
+  #   name: "Latest Accelerate CPU [dev]"
+  #   runs-on:
+  #     group: aws-general-8-plus
+  #   steps:
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v2
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_PASSWORD }}
+  #     - name: Get current date
+  #       id: date
+  #       run: |
+  #         echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
+  #     - name: Build and Push CPU
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         file: docker/accelerate-cpu/Dockerfile
+  #         push: true
+  #         tags: |
+  #           huggingface/accelerate:cpu-nightly
+  #           huggingface/accelerate:cpu-nightly-${{ env.date }}
 
-  latest-cuda:
-    name: "Latest Accelerate GPU [dev]"
-    runs-on:
-      group: aws-g6-4xlarge-plus
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Get current date
-        id: date
-        run: |
-          echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
-      - name: Build and Push GPU
-        uses: docker/build-push-action@v4
-        with:
-          file: docker/accelerate-gpu/Dockerfile
-          push: true
-          tags: |
-            huggingface/accelerate:gpu-nightly
-            huggingface/accelerate:gpu-nightly-${{ env.date }}
+  # latest-cuda:
+  #   name: "Latest Accelerate GPU [dev]"
+  #   runs-on:
+  #     group: aws-g6-4xlarge-plus
+  #   steps:
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v2
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_PASSWORD }}
+  #     - name: Get current date
+  #       id: date
+  #       run: |
+  #         echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
+  #     - name: Build and Push GPU
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         file: docker/accelerate-gpu/Dockerfile
+  #         push: true
+  #         tags: |
+  #           huggingface/accelerate:gpu-nightly
+  #           huggingface/accelerate:gpu-nightly-${{ env.date }}
 
   latest-cuda-deepspeed:
     name: "Latest Accelerate GPU DeepSpeed [dev]"
