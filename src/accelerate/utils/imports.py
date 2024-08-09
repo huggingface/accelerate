@@ -177,6 +177,15 @@ def is_deepspeed_available():
     return _is_package_available("deepspeed")
 
 
+def is_torchdata_available():
+    package_exists = _is_package_available("torchdata")
+    if not package_exists:
+        return False
+    import torchdata
+
+    return hasattr(torchdata, "stateful_dataloader") and hasattr(torchdata.stateful_dataloader, "StatefulDataLoader")
+
+
 def is_pippy_available():
     package_exists = _is_package_available("pippy", "torchpippy")
     if package_exists:

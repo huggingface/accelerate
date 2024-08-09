@@ -30,6 +30,7 @@ from .utils import (
     get_data_structure,
     initialize_tensors,
     is_torch_version,
+    is_torchdata_available,
     send_to_device,
     slice_tensors,
     synchronize_rng_states,
@@ -62,6 +63,21 @@ _PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {}
 for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
     if is_torch_version(">=", v):
         _PYTORCH_DATALOADER_KWARGS.update(additional_kwargs)
+
+
+def get_dataloader_init_class(stateful=False):
+    """
+    Internal use only, grabs the correct class to create a dataloader from, either `torch.utils.data.DataLoader` or
+    `torchdata.stateful_dataloader.StatefulDataLoader`
+    """
+    if not stateful:
+        return DataLoader
+    elif not is_torchdata_available():
+        raise ImportError("Using `stateful=True` requires `torchdata>=0.8.0`; Please do `pip install torchdata -U`")
+    else:
+        from torchdata.stateful_dataloader import StatefulDataLoader
+
+        return StatefulDataLoader
 
 
 class SeedableRandomSampler(RandomSampler):
@@ -351,6 +367,73 @@ class IterableDatasetShard(IterableDataset):
             for i in process_slice:
                 yield current_batch[i]
 
+class ResumableMixin:
+    """
+    Mixin class that adds helper methods to resume the dataloader from a checkpoint.
+    """
+    def __init__(self, *args, **kwargs):
+        stateful = kwargs.pop("stateful", False)
+        snapshot_every_n_steps = kwargs.pop("snapshot_every_n_steps", 1)
+
+        super().__init__(*args, **kwargs)
+        self.stateful = stateful
+        self.snapshot_every_n_steps = snapshot_every_n_steps
+        self.next_iter_state = None
+        # When a state dict is requested before __iter__ is called, 
+        # we create the __iter__ so we can get a copy of the initial state
+        # from its workers. In these cases, we can avoid using a new multiprocessing
+        # iterator on the next __iter__ call. This flag is for this case
+        self._initial_iter_for_state_dict = False
+
+
+    def _get_iterator(self):
+        if not self.stateful:
+            return super()._get_iterator()
+        from torchdata.stateful_dataloader.stateful_dataloader import _StatefulSingleProcessDataLoaderIter, _StatefulMultiProcessingDataLoaderIter
+        if self.num_workers == 0:
+            it = _StatefulSingleProcessDataLoaderIter(self, self.next_iter_state)
+        else:
+            self.check_worker_number_rationality()
+            it = _StatefulMultiProcessingDataLoaderIter(self, self.next_iter_state)
+        self.next_iter_state = None
+        return it
+
+    def __iter__(self):
+        if not self.stateful:
+            return super().__iter__()
+        if self._initial_iter_for_state_dict:
+            self._initial_iter_for_state_dict = False
+        elif self.persistent_workers and self.num_workers > 0:
+            if self._iterator is None:
+                self._iterator = self._get_iterator()
+            else:
+                self._iterator._reset(self)
+        else:
+            self._iterator = self._get_iterator()
+        if self._iterator._finished:
+            if self.persistent_workers:
+                self._iterator._reset(self)
+            else:
+                self._iterator = self._get_iterator()
+
+        return self._iterator
+
+    def state_dict(self):
+        if not self.stateful:
+            raise ValueError("To get the state_dict, please set `stateful=True` in the `DataLoaderConfiguration`")
+        if self._iterator is None:
+            self._iterator = self._get_iterator()
+            self._initial_iter_for_state_dict = True
+        return self._iterator.state_dict()
+    
+    def load_state_dict(self, state_dict):
+        if not self.stateful:
+            raise ValueError("To load the state_dict, please set `stateful=True` in the `DataLoaderConfiguration`")
+        self._iterator = None
+        self._initial_iter_for_state_dict = False
+        if state_dict == {}:
+            return
+        self.next_iter_state = state_dict
 
 class DataLoaderStateMixin:
     """
@@ -388,7 +471,7 @@ class DataLoaderStateMixin:
         self.gradient_state._remove_dataloader(self)
 
 
-class DataLoaderShard(DataLoader, DataLoaderStateMixin):
+class DataLoaderShard(DataLoaderStateMixin, ResumableMixin, DataLoader):
     """
     Subclass of a PyTorch `DataLoader` that will deal with device placement and current distributed setup.
 
@@ -428,11 +511,13 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         rng_types=None,
         synchronized_generator=None,
         skip_batches=0,
+        stateful=False,
         _drop_last: bool = False,
         _non_blocking: bool = False,
         **kwargs,
     ):
-        super().__init__(dataset, **kwargs)
+        super().__init__(dataset, stateful=stateful, **kwargs)
+
         self.device = device
         self.rng_types = rng_types
         self.synchronized_generator = synchronized_generator
@@ -564,7 +649,7 @@ if is_torch_xla_available():
             return self._loader
 
 
-class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
+class DataLoaderDispatcher(DataLoaderStateMixin, ResumableMixin, DataLoader):
     """
     Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
@@ -594,10 +679,11 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         dataset,
         split_batches: bool = False,
         skip_batches=0,
+        stateful=False,
         _drop_last: bool = False,
         _non_blocking: bool = False,
         slice_fn=None,
-        **kwargs,
+        **kwargs
     ):
         shuffle = False
         if is_torch_version(">=", "1.11.0"):
@@ -606,7 +692,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             # We need to save the shuffling state of the DataPipe
             if isinstance(dataset, ShufflerIterDataPipe):
                 shuffle = dataset._shuffle_enabled
-        super().__init__(dataset, **kwargs)
+        super().__init__(dataset, stateful=stateful, **kwargs)
         self.split_batches = split_batches
         if shuffle:
             torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
@@ -812,6 +898,7 @@ def prepare_data_loader(
     slice_fn_for_dispatch: Optional[Callable] = None,
     use_seedable_sampler: bool = False,
     non_blocking: bool = False,
+    stateful: bool = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -873,6 +960,10 @@ def prepare_data_loader(
         non_blocking (`bool`, *optional*, defaults to `False`):
             If set to `True`, dataloader will utilize non-blocking host-to-device transfers. If the dataloader has
             `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
+        stateful (`bool`, *optional*, defaults to `False`):
+            If set to `True`, will use `torchdata.stateful_dataloader.StatefulDataLoader` when creating the wrapped
+            `DataLoader` rather than `torch.utils.DataLoader`. This has the added benefit of giving the created
+            dataloader a `state_dict()` it can be loaded/unloaded from. Requires `torchdata>=0.8.0`.
 
 
     Returns:
@@ -885,6 +976,7 @@ def prepare_data_loader(
 
     </Tip>
     """
+    should_replace_sampler = use_seedable_sampler or stateful
     if dispatch_batches is None:
         if not put_on_device:
             dispatch_batches = False
@@ -929,17 +1021,26 @@ def prepare_data_loader(
     synchronized_generator = None
 
     sampler = get_sampler(dataloader)
-    if isinstance(sampler, RandomSampler) and use_seedable_sampler:
-        # When iterating through the dataloader during distributed processes
-        # we want to ensure that on each process we are iterating through the same
-        # samples in the same order if a seed is set. This requires a tweak
-        # to the `torch.utils.data.RandomSampler` class (if used).
-        sampler = SeedableRandomSampler(
-            data_source=sampler.data_source,
-            replacement=sampler.replacement,
-            num_samples=sampler._num_samples,
-            generator=getattr(sampler, "generator", torch.Generator()),
-        )
+    if isinstance(sampler, RandomSampler):
+        if use_seedable_sampler:
+            # When iterating through the dataloader during distributed processes
+            # we want to ensure that on each process we are iterating through the same
+            # samples in the same order if a seed is set. This requires a tweak
+            # to the `torch.utils.data.RandomSampler` class (if used).
+            sampler = SeedableRandomSampler(
+                data_source=sampler.data_source,
+                replacement=sampler.replacement,
+                num_samples=sampler._num_samples,
+                generator=getattr(sampler, "generator", torch.Generator()),
+            )
+        elif stateful:
+            from torchdata.stateful_dataloader.sampler import RandomSampler as StatefulRandomSampler
+            sampler = StatefulRandomSampler(
+                data_source=sampler.data_source,
+                replacement=sampler.replacement,
+                num_samples=sampler._num_samples,
+                generator=getattr(sampler, "generator", torch.Generator()),
+            )
 
     if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
         # isinstance(dataloader.sampler, RandomSampler) indicates the original dataloader has `shuffle` enabled.
@@ -1006,6 +1107,7 @@ def prepare_data_loader(
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
             slice_fn=slice_fn_for_dispatch,
+            stateful=stateful,
             **kwargs,
         )
     elif sampler_is_batch_sampler:
@@ -1018,6 +1120,7 @@ def prepare_data_loader(
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
             synchronized_generator=synchronized_generator,
+            stateful=stateful,
             **kwargs,
         )
     else:
@@ -1029,10 +1132,11 @@ def prepare_data_loader(
             synchronized_generator=synchronized_generator,
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
+            stateful=stateful,
             **kwargs,
         )
 
-    if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
+    if isinstance(sampler, (SeedableRandomSampler, StatefulRandomSampler)) and should_replace_sampler:
         dataloader.set_sampler(sampler)
     if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
@@ -1061,7 +1165,7 @@ class SkipBatchSampler(BatchSampler):
         return len(self.batch_sampler) - self.skip_batches
 
 
-class SkipDataLoader(DataLoader):
+class SkipDataLoader:
     """
     Subclass of a PyTorch `DataLoader` that will skip the first batches.
 
@@ -1070,13 +1174,19 @@ class SkipDataLoader(DataLoader):
             The dataset to use to build this datalaoder.
         skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
+        stateful (`bool`, *optional*, defaults to `False`):
+            If set to `True`, will use `torchdata.stateful_dataloader.StatefulDataLoader` when creating the wrapped
+            `DataLoader` rather than `torch.utils.DataLoader`. This has the added benefit of giving the created
+            dataloader a `state_dict()` it can be loaded/unloaded from. Requires `torchdata>=0.8.0`.
         kwargs:
             All other keyword arguments to pass to the regular `DataLoader` initialization.
     """
 
-    def __init__(self, dataset, skip_batches=0, **kwargs):
+    def __init__(self, dataset, skip_batches=0, stateful=False, **kwargs):
         super().__init__(dataset, **kwargs)
+
         self.skip_batches = skip_batches
+
 
     def __iter__(self):
         for index, batch in enumerate(super().__iter__()):
@@ -1084,7 +1194,7 @@ class SkipDataLoader(DataLoader):
                 yield batch
 
 
-def skip_first_batches(dataloader, num_batches=0):
+def skip_first_batches(dataloader, num_batches=0, stateful=False):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
     """
@@ -1132,6 +1242,7 @@ def skip_first_batches(dataloader, num_batches=0):
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader._drop_last,
             **kwargs,
+            stateful=stateful,
         )
     elif isinstance(dataloader, DataLoaderShard):
         if new_batch_sampler is None:
@@ -1147,14 +1258,17 @@ def skip_first_batches(dataloader, num_batches=0):
             device=dataloader.device,
             rng_types=dataloader.rng_types,
             synchronized_generator=dataloader.synchronized_generator,
+            stateful=stateful,
             **kwargs,
         )
     else:
         if new_batch_sampler is None:
             # Need to manually skip batches in the dataloader
-            dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
+            dataloader = SkipDataLoader(dataset, skip_batches=num_batches, stateful=stateful, **kwargs)
         else:
-            dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+            # Choose the appropriate `DataLoader` class
+            dl_init = get_dataloader_init_class(stateful=stateful)
+            dataloader = dl_init(dataset, batch_sampler=new_batch_sampler, **kwargs)
 
     if state.distributed_type == DistributedType.XLA:
         dataloader = MpDeviceLoaderWrapper(dataloader, device)
