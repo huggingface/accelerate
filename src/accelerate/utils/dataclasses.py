@@ -1215,10 +1215,13 @@ class FullyShardedDataParallelPlugin:
             "If passing in a `dict`, it should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`."
         },
     )
-    auto_wrap_policy: Optional[Union[str, Callable]] = field(
+    auto_wrap_policy: Optional[
+        Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]
+    ] = field(
         default=None,
         metadata={
-            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. Defaults to `NO_WRAP`"
+            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
+            "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
         },
     )
     cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload"] = field(
@@ -1235,7 +1238,7 @@ class FullyShardedDataParallelPlugin:
     state_dict_type: Union[str, "torch.distributed.fsdp.StateDictType"] = field(
         default=None,
         metadata={
-            "help": "State dict type to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictType`. Defaults to `FULL_STATE_DICT`"
+            "help": "State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or `sharded_state_dict`. Defaults to `FULL_STATE_DICT`"
         },
     )
     state_dict_config: Optional[
