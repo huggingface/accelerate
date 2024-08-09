@@ -22,7 +22,6 @@ from .utils import (
     copy_tensor_to_devices,
     ignorant_find_batch_size,
     infer_auto_device_map,
-    is_pippy_available,
     pad_input_tensors,
     send_to_device,
 )
@@ -79,22 +78,23 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     `AcceleratorState.num_processes`
     """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
-    from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
-    from pippy.PipelineStage import PipelineStage
+    # from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
+    # from pippy.PipelineStage import PipelineStage
+    from torch.distributed.pipelining import ScheduleGPipe, SplitPoint, pipeline
 
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
-    annotate_split_points(model, {split_point: PipeSplitWrapper.SplitPoint.BEGINNING for split_point in split_points})
-    found_batch_size = find_pippy_batch_size(args, kwargs)
-    if found_batch_size != num_chunks:
-        if args is not None:
-            args = pad_input_tensors(args, found_batch_size, num_chunks)
-        if kwargs is not None:
-            kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
-    pipe = Pipe.from_tracing(model, num_chunks=num_chunks, example_args=args, example_kwargs=kwargs)
-    stage = PipelineStage(pipe, state.local_process_index, device=state.device)
+    split_spec = {split_point: SplitPoint.BEGINNING for split_point in split_points}
+    pipe = pipeline(
+        model,
+        mb_args=args,
+        mb_kwargs=kwargs,
+        split_spec=split_spec,
+    )
+    stage = pipe.build_stage(state.local_process_index, device=state.device)
+    schedule = ScheduleGPipe(stage, num_chunks)
 
-    return stage
+    return schedule
 
 
 def pippy_forward(forward, num_chunks, gather_output, *args, **kwargs):
@@ -154,11 +154,6 @@ def prepare_pippy(
         gather_output (`bool`, defaults to `False`):
             If `True`, the output from the last GPU (which holds the true outputs) is sent across to all GPUs.
     """
-    if not is_pippy_available():
-        raise ImportError(
-            "`pippy` was not found to be installed on your system. Please "
-            "install using `pip install torchpippy` or ensure you have at least version 0.2.0"
-        )
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
     example_kwargs = send_to_device(example_kwargs, "cpu")
@@ -177,7 +172,7 @@ def prepare_pippy(
     model.hf_split_points = split_points
 
     def forward(*args, **kwargs):
-        return pippy_forward(stage.forward, num_chunks, gather_output, *args, **kwargs)
+        return pippy_forward(stage.step, num_chunks, gather_output, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
     # Note: creates an infinite recursion loop with `generate`
