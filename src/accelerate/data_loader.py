@@ -564,6 +564,25 @@ if is_torch_xla_available():
             return self._loader
 
 
+class CustomTypesDataLoader(DataLoader, DataLoaderStateMixin):
+    """
+    Subclass of a PyTorch `DataLoader` that can handle custom iterable types as long as they yield
+    things that can be converted to PyTorch tensors.
+    """
+    def __init__(self, data, **kwargs):
+        super().__init__(self._build_iterable_dataset(data), **kwargs)
+
+    def _build_iterable_dataset(self, iter_type):
+        # If it's already an iterable dataset, we can don't need to do anything
+        if isinstance(iter_type, IterableDataset):
+            return iter_type
+        # If it isn't, we create a thin wrapper to make it into one
+        class WrappedIterable(IterableDataset):
+            def __iter__(self):
+                return iter(iter_type)
+        return WrappedIterable()
+
+
 class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     """
     Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each

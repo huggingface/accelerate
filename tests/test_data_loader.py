@@ -20,6 +20,7 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 from accelerate import Accelerator
 from accelerate.data_loader import (
     BatchSamplerShard,
+    CustomTypesDataLoader,
     DataLoaderDispatcher,
     DataLoaderShard,
     IterableDatasetShard,
@@ -396,3 +397,15 @@ class DataLoaderTester(unittest.TestCase):
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
+
+    def test_custom_types_dataloader(self):
+        class MyCustomType:
+            def __init__(self, data):
+                self.data = data
+            def __iter__(self):
+                return iter(self.data)
+
+        dataloader = CustomTypesDataLoader(MyCustomType(data=list(range(8))), batch_size=4)
+        # Ensure that we can iterate over the custom type without any problems
+        assert [t.tolist() for t in dataloader] == [[0, 1, 2, 3], [4, 5, 6, 7]]
+        # TODO: device placement
