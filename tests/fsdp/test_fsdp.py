@@ -43,7 +43,7 @@ from accelerate.utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
-from accelerate.utils.fsdp_utils import enable_fsdp_ram_efficient_loading
+from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enable_fsdp_ram_efficient_loading
 from accelerate.utils.other import patch_environment
 
 
@@ -273,6 +273,10 @@ class FSDPPluginIntegration(AccelerateTestCase):
         fsdp_plugin = FullyShardedDataParallelPlugin()
         assert fsdp_plugin.cpu_ram_efficient_loading is True
         assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "True"
+        disable_fsdp_ram_efficient_loading()
+        fsdp_plugin = FullyShardedDataParallelPlugin()
+        assert fsdp_plugin.cpu_ram_efficient_loading is False
+        assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
 
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
