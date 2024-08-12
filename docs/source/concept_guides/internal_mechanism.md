@@ -28,7 +28,7 @@ Then, when calling [`~Accelerator.prepare`], the library:
 - wraps your model(s) in the container adapted for the distributed setup,
 - wraps your optimizer(s) in an [`~optimizer.AcceleratedOptimizer`],
 - wraps your scheduler(s) in an [`~scheduler.AcceleratedScheduler`]
-- creates a new version of your dataloader(s) in a [`~data_loader.DataLoaderShard`] or [`~data_loader.DataLoaderDispatcher`]
+- creates a new version of your dataloader(s) in a [`~data_loader.DataLoaderShard`], [`~data_loader.DataLoaderDispatcher`], or [`~data_loader.CustomTypesDataLoader`]
 
 While the model(s), optimizer(s), and scheduler(s) are just put in simple wrappers, the dataloader(s) are re-created. This is mostly
 because PyTorch does not let the user change the `batch_sampler` of a dataloader once it's been created and the
@@ -42,7 +42,9 @@ The [`~data_loader.DataLoaderShard`] subclasses `DataLoader` to add the followin
 - it puts the batches on the proper device before yielding them (unless you have opted out of
   `device_placement=True`).
   
-The [`~data_loader.DataLoaderDispatcher`] subclasses differs from the [`~data_loader.DataLoaderShard`] in that when iterating through the `DataLoader`, the data is all starting from process 0 and *then* split and sent off to each process rather than it happening at the dataset level.
+The [`~data_loader.DataLoaderDispatcher`] subclass differs from the [`~data_loader.DataLoaderShard`] in that when iterating through the `DataLoader`, the data is all starting from process 0 and *then* split and sent off to each process rather than it happening at the dataset level.
+
+The [`~data_loader.CustomTypesDataLoader`] subclass differs from the [`~data_loader.DataLoaderShard`] and [`~data_loader.DataLoaderDispatcher`] in that it can be used to wrap iterables with custom logic to give users more control over how the dataloader should manipulate the data; the dataloader itself only invokes `__iter__()` and moves the data to the appropriate device.
 
 The random number generator synchronization will by default synchronize:
 

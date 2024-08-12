@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from collections.abc import Iterable
 from contextlib import suppress
 from typing import Callable, List, Optional, Union
 
@@ -566,21 +567,44 @@ if is_torch_xla_available():
 
 class CustomTypesDataLoader(DataLoader, DataLoaderStateMixin):
     """
-    Subclass of a PyTorch `DataLoader` that can handle custom iterable types as long as they yield things that can be
+    Subclass of a PyTorch `DataLoader` that can handle custom iterable types as long as they yield objects that can be
     converted to PyTorch tensors.
+
+    Args:
+        data_or_loader (`Union[torch.utils.data.dataloader.DataLoader, Iterable]`):
+            The data or `DataLoader` wrapping an arbitrary iterable to be moved to the provided device.
+        batch_size (`int`, *optional*, defaults to `None`):
+            Batch size to be used in the created `DataLoader`. Note that if the object provided is already a
+            `DataLoader`, the `batch_size` attribute of that loader will be used.
+        device (`torch.device`):
+            The target device for the returned `DataLoader`.
+        _non_blocking (`bool`, *optional*, defaults to `False`):
+            If set to `True`, `DataLoader` will utilize non-blocking host-to-device transfers. If the `DataLoader` has
+            `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
+
+    Returns:
+        `torch.utils.data.dataloader.DataLoader`: A new data loader that will invoke `__iter__()` on the encapsulated
+        iterable and move yielded data to the provided device.
     """
 
-    def __init__(self, data_or_loader, batch_size=None, device=None, _non_blocking: bool = False, **kwargs):
+    def __init__(
+        self,
+        data_or_loader: Union[DataLoader, Iterable],
+        batch_size: Optional[int] = None,
+        device: Optional[torch.device] = None,
+        _non_blocking: bool = False,
+        **kwargs,
+    ):
         if isinstance(data_or_loader, DataLoader):
             data = data_or_loader.dataset
             if batch_size is not None and batch_size != data_or_loader.batch_size:
                 raise ValueError(
-                    "provided custom types batch size conflicts with the batch size of wrapped dataloader"
+                    "Provided custom types batch size conflicts with the batch size of wrapped DataLoader"
                 )
             batch_size = data_or_loader.batch_size
         else:
             if batch_size is None:
-                raise ValueError("custom_types enabled, but `custom_type_batch_size` is None")
+                raise ValueError("`custom_types` enabled, but `custom_type_batch_size` is None")
             data = data_or_loader
         self.device = device
         self._non_blocking = _non_blocking

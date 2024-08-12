@@ -27,6 +27,7 @@ when calling [`~Accelerator.prepare`].
 [[autodoc]] data_loader.IterableDatasetShard
 [[autodoc]] data_loader.DataLoaderShard
 [[autodoc]] data_loader.DataLoaderDispatcher
+[[autodoc]] data_loader.CustomTypesDataLoader
 
 ## Optimizers 
 
