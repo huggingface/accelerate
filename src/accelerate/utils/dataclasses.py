@@ -720,6 +720,20 @@ class DataLoaderConfiguration:
             " prepared dataloader has `pin_memory` set to `True` to work properly."
         },
     )
+    custom_types: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, the data prepared by the Accelerator may wrap custom iterables, as long as it"
+            " yields types that can be converted into torch tensors. If `True`, the values of `split_batches` and" 
+            " `dispatch_batches` will not be used."
+        }
+    )
+    custom_type_batch_size: int = field(
+        default=None,
+        metadata={
+            "help": "Value to be used for the batch size of custom_types. Only used if `custom_types` is `True`."
+        }
+    )
 
 
 @dataclass

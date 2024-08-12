@@ -24,6 +24,7 @@ import shutil
 import sys
 import warnings
 from collections import OrderedDict
+from collections.abc import Iterable
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
@@ -1182,13 +1183,18 @@ class Accelerator:
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer
         if first_pass:
-            if isinstance(obj, torch.utils.data.DataLoader):
-                return self.prepare_data_loader(obj, device_placement=device_placement)
-            elif isinstance(obj, torch.nn.Module):
+            if isinstance(obj, torch.nn.Module):
                 return self.prepare_model(obj, device_placement=device_placement)
             elif isinstance(obj, torch.optim.Optimizer):
                 optimizer = self.prepare_optimizer(obj, device_placement=device_placement)
                 return optimizer
+            elif isinstance(obj, torch.utils.data.DataLoader) or (self.dataloader_config.custom_types and isinstance(obj, Iterable)):
+                return self.prepare_data_loader(
+                    obj,
+                    device_placement=device_placement,
+                    custom_types=self.dataloader_config.custom_types,
+                    custom_type_batch_size=self.dataloader_config.custom_type_batch_size,
+                )
         # Second pass of preparation: LR scheduler (which need the full list of optimizers)
         elif isinstance(obj, LRScheduler):
             scheduler = self.prepare_scheduler(obj)
@@ -1990,7 +1996,7 @@ class Accelerator:
         return tuple(result)
 
     def prepare_data_loader(
-        self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
+        self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None, custom_types: bool = False, custom_type_batch_size=None,
     ):
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
@@ -2038,6 +2044,8 @@ class Accelerator:
             slice_fn_for_dispatch=slice_fn_for_dispatch,
             use_seedable_sampler=self.use_seedable_sampler,
             non_blocking=self.non_blocking,
+            custom_types=custom_types,
+            custom_type_batch_size=custom_type_batch_size,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
