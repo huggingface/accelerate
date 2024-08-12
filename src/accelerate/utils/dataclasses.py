@@ -1347,12 +1347,11 @@ class FullyShardedDataParallelPlugin:
 
         if self.backward_prefetch is None:
             self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
+        if isinstance(self.backward_prefetch, str) and self.backward_prefetch.upper() == "NO_PREFETCH":
+            self.backward_prefetch = None
         if self.backward_prefetch is not None and not isinstance(self.backward_prefetch, BackwardPrefetch):
-            if isinstance(self.backward_prefetch, str):
-                if self.backward_prefetch.upper() == "NO_PREFETCH":
-                    self.backward_prefetch = None
-                elif self.backward_prefetch.upper() in FSDP_BACKWARD_PREFETCH:
-                    self.backward_prefetch = FSDP_BACKWARD_PREFETCH.index(self.backward_prefetch.upper()) + 1
+            if isinstance(self.backward_prefetch, str) and self.backward_prefetch.upper() in FSDP_BACKWARD_PREFETCH:
+                self.backward_prefetch = FSDP_BACKWARD_PREFETCH.index(self.backward_prefetch.upper()) + 1
             if isinstance(self.backward_prefetch, int) or self.backward_prefetch.isdigit():
                 self.backward_prefetch = BackwardPrefetch(int(self.backward_prefetch))
             else:
@@ -1413,7 +1412,7 @@ class FullyShardedDataParallelPlugin:
             self.sync_module_states = True
 
         if isinstance(self.mixed_precision_policy, dict):
-            self.set_mixed_precision(**self.mixed_precision_policy)
+            self.set_mixed_precision(self.mixed_precision_policy)
 
         if self.sync_module_states:
             if is_npu_available():
