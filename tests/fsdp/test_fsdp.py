@@ -30,6 +30,7 @@ from accelerate.test_utils.testing import (
     get_launch_command,
     path_in_accelerate_package,
     require_fsdp,
+    require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
@@ -42,6 +43,7 @@ from accelerate.utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
+from accelerate.utils.fsdp_utils import enable_fsdp_ram_efficient_loading
 from accelerate.utils.other import patch_environment
 
 
@@ -98,16 +100,18 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
         for i, prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
             expected_value = None if prefetch_policy == "NO_PREFETCH" else BackwardPrefetch(i + 1)
-            # env = self.fsdp_env.copy()
-            # env["FSDP_BACKWARD_PREFETCH"] = prefetch_policy
-            # with mockenv_context(**env):
-            #     fsdp_plugin = FullyShardedDataParallelPlugin()
-            #     assert fsdp_plugin.backward_prefetch == expected_value, f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
+            env = self.fsdp_env.copy()
+            env["FSDP_BACKWARD_PREFETCH"] = prefetch_policy
+            with mockenv_context(**env):
+                fsdp_plugin = FullyShardedDataParallelPlugin()
+                assert (
+                    fsdp_plugin.backward_prefetch == expected_value
+                ), f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
 
-            # # Check if torch enum works
-            # if prefetch_policy != "NO_PREFETCH":
-            #     fsdp_plugin = FullyShardedDataParallelPlugin(backward_prefetch=BackwardPrefetch(i + 1))
-            #     assert fsdp_plugin.backward_prefetch == expected_value
+            # Check if torch enum works
+            if prefetch_policy != "NO_PREFETCH":
+                fsdp_plugin = FullyShardedDataParallelPlugin(backward_prefetch=BackwardPrefetch(i + 1))
+                assert fsdp_plugin.backward_prefetch == expected_value
 
             # Check if name works
             fsdp_plugin = FullyShardedDataParallelPlugin(backward_prefetch=prefetch_policy)
@@ -262,6 +266,13 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
             fsdp_plugin = FullyShardedDataParallelPlugin(cpu_offload=flag)
             assert fsdp_plugin.cpu_offload == CPUOffload(offload_params=flag)
+
+    @require_huggingface_suite
+    def test_cpu_ram_efficient_loading(self):
+        enable_fsdp_ram_efficient_loading()
+        fsdp_plugin = FullyShardedDataParallelPlugin()
+        assert fsdp_plugin.cpu_ram_efficient_loading is True
+        assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "True"
 
 
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.

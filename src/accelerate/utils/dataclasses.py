@@ -1300,7 +1300,7 @@ class FullyShardedDataParallelPlugin:
             "for reduced memory usage. Defaults to `False`"
         },
     )
-    ram_efficient_loading: bool = field(
+    cpu_ram_efficient_loading: bool = field(
         default=None,
         metadata={
             "help": "If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. "
@@ -1399,12 +1399,12 @@ class FullyShardedDataParallelPlugin:
                 str_to_bool(os.environ.get(env_prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
             )
 
-        if self.ram_efficient_loading is None:
-            self.ram_efficient_loading = (
-                str_to_bool(os.environ.get(env_prefix + "RAM_EFFICIENT_LOADING", "False")) == 1
+        if self.cpu_ram_efficient_loading is None:
+            self.cpu_ram_efficient_loading = (
+                str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")) == 1
             )
 
-        if self.ram_efficient_loading and not self.sync_module_states:
+        if self.cpu_ram_efficient_loading and not self.sync_module_states:
             warnings.warn(
                 "sync_module_states cannot be False since efficient cpu ram loading enabled. "
                 "Setting sync_module_states to True."
