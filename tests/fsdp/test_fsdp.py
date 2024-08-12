@@ -30,7 +30,6 @@ from accelerate.test_utils.testing import (
     get_launch_command,
     path_in_accelerate_package,
     require_fsdp,
-    require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
