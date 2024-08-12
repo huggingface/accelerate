@@ -405,7 +405,13 @@ class DataLoaderTester(unittest.TestCase):
             def __iter__(self):
                 return iter(self.data)
 
-        dataloader = CustomTypesDataLoader(MyCustomType(data=list(range(8))), batch_size=4)
-        # Ensure that we can iterate over the custom type without any problems
-        assert [t.tolist() for t in dataloader] == [[0, 1, 2, 3], [4, 5, 6, 7]]
-        # TODO: device placement
+        device = "cuda"
+        dataloader = CustomTypesDataLoader(MyCustomType(data=list(range(8))), device=device, batch_size=4)
+        expected_batches = [[0,1,2,3], [4,5,6,7]]
+        # Ensure that we have 2 batches and can iterate over the custom type multiple times
+        assert len(expected_batches) == len(list(dataloader))
+        for _ in range(2):
+            for batch, expected_batch in zip(dataloader, expected_batches):
+                # And that each time we get the expected tensor on the device we specified
+                assert batch.tolist() == expected_batch
+                assert batch.device.type == device

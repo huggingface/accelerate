@@ -569,7 +569,9 @@ class CustomTypesDataLoader(DataLoader, DataLoaderStateMixin):
     Subclass of a PyTorch `DataLoader` that can handle custom iterable types as long as they yield
     things that can be converted to PyTorch tensors.
     """
-    def __init__(self, data, **kwargs):
+    def __init__(self, data, device=None, _non_blocking: bool = False, **kwargs):
+        self.device = device
+        self._non_blocking = _non_blocking
         super().__init__(self._build_iterable_dataset(data), **kwargs)
 
     def _build_iterable_dataset(self, iter_type):
@@ -582,6 +584,10 @@ class CustomTypesDataLoader(DataLoader, DataLoaderStateMixin):
                 return iter(iter_type)
         return WrappedIterable()
 
+    def __iter__(self):
+        # Iterate through the data; if the device is configured, move the data to it
+        for batch in super().__iter__():
+            yield(send_to_device(batch, self.device, non_blocking=self._non_blocking))
 
 class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     """
