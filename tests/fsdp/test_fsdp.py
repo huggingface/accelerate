@@ -267,7 +267,6 @@ class FSDPPluginIntegration(AccelerateTestCase):
             fsdp_plugin = FullyShardedDataParallelPlugin(cpu_offload=flag)
             assert fsdp_plugin.cpu_offload == CPUOffload(offload_params=flag)
 
-    @require_huggingface_suite
     def test_cpu_ram_efficient_loading(self):
         enable_fsdp_ram_efficient_loading()
         fsdp_plugin = FullyShardedDataParallelPlugin()
