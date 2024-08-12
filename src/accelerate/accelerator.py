@@ -1188,7 +1188,9 @@ class Accelerator:
             elif isinstance(obj, torch.optim.Optimizer):
                 optimizer = self.prepare_optimizer(obj, device_placement=device_placement)
                 return optimizer
-            elif isinstance(obj, torch.utils.data.DataLoader) or (self.dataloader_config.custom_types and isinstance(obj, Iterable)):
+            elif isinstance(obj, torch.utils.data.DataLoader) or (
+                self.dataloader_config.custom_types and isinstance(obj, Iterable)
+            ):
                 return self.prepare_data_loader(
                     obj,
                     device_placement=device_placement,
@@ -1996,15 +1998,21 @@ class Accelerator:
         return tuple(result)
 
     def prepare_data_loader(
-        self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None, custom_types: bool = False, custom_type_batch_size=None,
+        self,
+        data_loader: Union[torch.utils.data.DataLoader, Iterable],
+        device_placement=None,
+        slice_fn_for_dispatch=None,
+        custom_types: bool = False,
+        custom_type_batch_size: int = None,
     ):
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
 
         Args:
-            data_loader (`torch.utils.data.DataLoader`):
-                A vanilla PyTorch DataLoader to prepare
+            data_loader (`Union[torch.utils.data.DataLoader, Iterable]`):
+                A vanilla PyTorch DataLoader to prepare, or a custom Iterable to be wrapped in a dataloader if
+                `custom_types`=True.
             device_placement (`bool`, *optional*):
                 Whether or not to place the batches on the proper device in the prepared dataloader. Will default to
                 `self.device_placement`.
@@ -2012,6 +2020,11 @@ class Accelerator:
                 If passed, this function will be used to slice tensors across `num_processes`. Will default to
                 [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will
                 be ignored otherwise.
+            custom_types (`bool`, , *optional*`,  defaults to `False`):
+                Whether or not the data_loader arg is a custom type, or a vanilla dataloader wrapped around an instance
+                of a custom iterable type.
+            custom_type_batch_size (`int`, *optional*):
+                Batch size to be used if custom_types=`True`.
 
         Example:
 

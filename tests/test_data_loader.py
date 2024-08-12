@@ -32,6 +32,7 @@ from accelerate.data_loader import (
 )
 from accelerate.utils import DataLoaderConfiguration
 
+
 class RandomIterableDataset(IterableDataset):
     # For testing, an iterable dataset of random length
     def __init__(self, p_stop=0.01, max_length=1000):
@@ -405,8 +406,10 @@ class DataLoaderTester(unittest.TestCase):
         class MyCustomType:
             def __init__(self):
                 self.data = data
+
             def __iter__(self):
                 return iter(self.data)
+
         return MyCustomType()
 
     @staticmethod
@@ -419,10 +422,12 @@ class DataLoaderTester(unittest.TestCase):
                 assert batch.tolist() == expected_batch
                 assert batch.device.type == device
 
-    @parameterized.expand([
-        ("nested under dataloader wrapper", True),
-        ("without nested dataloader wrapper", False),
-    ])
+    @parameterized.expand(
+        [
+            ("nested under dataloader wrapper", True),
+            ("without nested dataloader wrapper", False),
+        ]
+    )
     def test_custom_types_dataloader(self, _, wrap_with_dataloader):
         device = "cuda"
         custom_iterable = self._get_custom_iterable(data=list(range(8)))
@@ -432,13 +437,15 @@ class DataLoaderTester(unittest.TestCase):
         else:
             kwargs = {"batch_size": 4}
         dataloader = CustomTypesDataLoader(custom_iterable, device=device, **kwargs)
-        expected_batches = [[0,1,2,3], [4,5,6,7]]
+        expected_batches = [[0, 1, 2, 3], [4, 5, 6, 7]]
         self.check_custom_types_iterable(dataloader, expected_batches, device)
 
-    @parameterized.expand([
-        ("nested under dataloader wrapper", True),
-        ("without nested dataloader wrapper", False),
-    ])
+    @parameterized.expand(
+        [
+            ("nested under dataloader wrapper", True),
+            ("without nested dataloader wrapper", False),
+        ]
+    )
     def test_custom_types_via_prepare(self, _, wrap_with_dataloader):
         device = "cuda"
         batch_size = 4
@@ -449,10 +456,10 @@ class DataLoaderTester(unittest.TestCase):
             custom_iterable = DataLoader(custom_iterable, batch_size=batch_size)
         else:
             # Otherwise we need to specify it through the dataloader config
-            dataloader_config.custom_type_batch_size=batch_size
+            dataloader_config.custom_type_batch_size = batch_size
         accelerator = Accelerator(dataloader_config=dataloader_config)
         dataloader = accelerator.prepare(custom_iterable)
-        expected_batches = [[0,1,2,3], [4,5,6,7]]
+        expected_batches = [[0, 1, 2, 3], [4, 5, 6, 7]]
         self.check_custom_types_iterable(dataloader, expected_batches, device)
 
     def test_prepare_custom_types_dataloader_is_idempotent(self):
@@ -466,7 +473,9 @@ class DataLoaderTester(unittest.TestCase):
     def test_prepare_custom_types_dataloader_conflicting_batch_sizes(self):
         # Ensure we can't pass a batch size for custom types and a wrapped
         # dataloader unless the batch sizes are the same value
-        accelerator = Accelerator(dataloader_config=DataLoaderConfiguration(custom_types=True, custom_type_batch_size=2))
+        accelerator = Accelerator(
+            dataloader_config=DataLoaderConfiguration(custom_types=True, custom_type_batch_size=2)
+        )
         dataloader = DataLoader(self._get_custom_iterable(data=list(range(8))), batch_size=4)
         with pytest.raises(ValueError):
             accelerator.prepare(dataloader)

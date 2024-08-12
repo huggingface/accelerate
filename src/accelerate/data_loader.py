@@ -566,14 +566,17 @@ if is_torch_xla_available():
 
 class CustomTypesDataLoader(DataLoader, DataLoaderStateMixin):
     """
-    Subclass of a PyTorch `DataLoader` that can handle custom iterable types as long as they yield
-    things that can be converted to PyTorch tensors.
+    Subclass of a PyTorch `DataLoader` that can handle custom iterable types as long as they yield things that can be
+    converted to PyTorch tensors.
     """
+
     def __init__(self, data_or_loader, batch_size=None, device=None, _non_blocking: bool = False, **kwargs):
         if isinstance(data_or_loader, DataLoader):
             data = data_or_loader.dataset
             if batch_size is not None and batch_size != data_or_loader.batch_size:
-                raise ValueError("provided custom types batch size conflicts with the batch size of wrapped dataloader")
+                raise ValueError(
+                    "provided custom types batch size conflicts with the batch size of wrapped dataloader"
+                )
             batch_size = data_or_loader.batch_size
         else:
             if batch_size is None:
@@ -588,15 +591,18 @@ class CustomTypesDataLoader(DataLoader, DataLoaderStateMixin):
         if isinstance(iter_type, IterableDataset):
             return iter_type
         # If it isn't, we create a thin wrapper to make it into one
+
         class WrappedIterable(IterableDataset):
             def __iter__(self):
                 return iter(iter_type)
+
         return WrappedIterable()
 
     def __iter__(self):
         # Iterate through the data; if the device is configured, move the data to it
         for batch in super().__iter__():
-            yield(send_to_device(batch, self.device, non_blocking=self._non_blocking))
+            yield (send_to_device(batch, self.device, non_blocking=self._non_blocking))
+
 
 class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     """
@@ -910,9 +916,10 @@ def prepare_data_loader(
             If set to `True`, dataloader will utilize non-blocking host-to-device transfers. If the dataloader has
             `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
         custom_types (`bool`, *optional*, defaults to `False`):
-            If set to True, dataloader will accept custom_types that yield values that can be
-            converted to Torch tensors. If True, the value of `dispatch_batches` and `split_batches`
-            will be ignored.
+            If set to `True`, dataloader will accept custom_types that yield values that can be converted to Torch
+            tensors. If `True`, the value of `dispatch_batches` and `split_batches` will be ignored.
+        custom_type_batch_size (`int`, *optional*):
+            Batch size to be used if custom_types=`True` for custom iterables not already wrapped by a dataloader.
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -925,7 +932,9 @@ def prepare_data_loader(
     </Tip>
     """
     if custom_types:
-        return CustomTypesDataLoader(dataloader, batch_size=custom_type_batch_size, non_blocking=non_blocking, device=device)
+        return CustomTypesDataLoader(
+            dataloader, batch_size=custom_type_batch_size, non_blocking=non_blocking, device=device
+        )
 
     if dispatch_batches is None:
         if not put_on_device:
