@@ -1346,17 +1346,17 @@ class FullyShardedDataParallelPlugin:
             self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
 
         if self.backward_prefetch is None:
-            self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", "NO_PREFETCH")
-        if isinstance(self.backward_prefetch, str):
-            if self.backward_prefetch.upper() == "NO_PREFETCH":
-                self.backward_prefetch = None
-            else:
-                if self.backward_prefetch in FSDP_BACKWARD_PREFETCH:
+            self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
+        if self.backward_prefetch is not None and not isinstance(self.backward_prefetch, BackwardPrefetch):
+            if isinstance(self.backward_prefetch, str):
+                if self.backward_prefetch.upper() == "NO_PREFETCH":
+                    self.backward_prefetch = None
+                elif self.backward_prefetch.upper() in FSDP_BACKWARD_PREFETCH:
                     self.backward_prefetch = FSDP_BACKWARD_PREFETCH.index(self.backward_prefetch.upper()) + 1
-                if isinstance(self.backward_prefetch, int) or self.backward_prefetch.isdigit():
-                    self.backward_prefetch = BackwardPrefetch(int(self.backward_prefetch))
-                else:
-                    self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
+            if isinstance(self.backward_prefetch, int) or self.backward_prefetch.isdigit():
+                self.backward_prefetch = BackwardPrefetch(int(self.backward_prefetch))
+            else:
+                self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
 
         self.set_state_dict_type()
 
