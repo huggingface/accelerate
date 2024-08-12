@@ -30,6 +30,7 @@ from accelerate.data_loader import (
     SkipDataLoader,
     skip_first_batches,
 )
+from accelerate.test_utils.testing import require_cuda
 from accelerate.utils import DataLoaderConfiguration
 
 
@@ -413,14 +414,15 @@ class DataLoaderTester(unittest.TestCase):
         return MyCustomType()
 
     @staticmethod
-    def check_custom_types_iterable(dataloader, expected_batches, device):
+    def check_custom_types_iterable(dataloader, expected_batches, device=None):
         assert isinstance(dataloader, CustomTypesDataLoader)
         assert len(expected_batches) == len(list(dataloader))
         for _ in range(2):
             for batch, expected_batch in zip(dataloader, expected_batches):
                 # And that each time we get the expected tensor on the device we specified
                 assert batch.tolist() == expected_batch
-                assert batch.device.type == device
+                if device is not None:
+                    assert batch.device.type == device
 
     @parameterized.expand(
         [
@@ -428,6 +430,7 @@ class DataLoaderTester(unittest.TestCase):
             ("without nested dataloader wrapper", False),
         ]
     )
+    @require_cuda
     def test_custom_types_dataloader(self, _, wrap_with_dataloader):
         device = "cuda"
         custom_iterable = self._get_custom_iterable(data=list(range(8)))
@@ -447,7 +450,6 @@ class DataLoaderTester(unittest.TestCase):
         ]
     )
     def test_custom_types_via_prepare(self, _, wrap_with_dataloader):
-        device = "cuda"
         batch_size = 4
         dataloader_config = DataLoaderConfiguration(custom_types=True)
         custom_iterable = self._get_custom_iterable(data=list(range(8)))
@@ -460,7 +462,7 @@ class DataLoaderTester(unittest.TestCase):
         accelerator = Accelerator(dataloader_config=dataloader_config)
         dataloader = accelerator.prepare(custom_iterable)
         expected_batches = [[0, 1, 2, 3], [4, 5, 6, 7]]
-        self.check_custom_types_iterable(dataloader, expected_batches, device)
+        self.check_custom_types_iterable(dataloader, expected_batches)
 
     def test_prepare_custom_types_dataloader_is_idempotent(self):
         accelerator = Accelerator(dataloader_config=DataLoaderConfiguration(custom_types=True))
