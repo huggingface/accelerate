@@ -1447,10 +1447,6 @@ class Accelerator:
                         self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
-                # TE has their own FSDP implementation
-                # if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
-                #     from transformer_engine.pytorch.distributed import FullyShardedDataParallel as FSDP
-                # else    :
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
