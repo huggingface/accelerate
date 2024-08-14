@@ -2678,11 +2678,10 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
 
-    @on_main_process
     def end_training(self):
         """
-        Runs any special end training behaviors, such as stopping trackers on the main process only. Should always be
-        called at the end of your script if using experiment tracking.
+        Runs any special end training behaviors, such as stopping trackers on the main process only or destoying all process.
+        Should always be called at the end of your script if using experiment tracking.
 
         Example:
 
@@ -2695,8 +2694,12 @@ class Accelerator:
         >>> accelerator.end_training()
         ```
         """
-        for tracker in self.trackers:
-            tracker.finish()
+        with self.on_main_process():
+            for tracker in self.trackers:
+                tracker.finish()
+        if torch.distributed.is_initialized():
+            # needed when using torch.distributed.init_process_group
+            torch.distributed.destroy_process_group()
 
     def save(self, obj, f, safe_serialization=False):
         """
