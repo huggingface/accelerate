@@ -82,3 +82,18 @@ def has_transformer_engine_layers(model):
         if isinstance(m, (te.LayerNorm, te.Linear, te.TransformerLayer)):
             return True
     return False
+
+
+def apply_fp8_autowrap(model, fp8_recipe_handler):
+    """
+    Applies FP8 context manager to the model's forward method
+    """
+    # Import here to keep base imports fast
+    import transformer_engine.common.recipe as te_recipe
+    from transformer_engine.pytorch import fp8_autocast
+    kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
+    if "fp8_format" in kwargs:
+        kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
+    fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+    model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
+    return model

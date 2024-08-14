@@ -68,6 +68,7 @@ from .utils import (
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
+    apply_fp8_autowrap,
     check_os_kernel,
     clean_state_dict_for_safetensors,
     compare_versions,
@@ -78,7 +79,6 @@ from .utils import (
     gather_object,
     get_mixed_precision_context_manager,
     get_pretty_name,
-    has_transformer_engine_layers,
     is_bf16_available,
     is_deepspeed_available,
     is_ipex_available,
@@ -320,7 +320,6 @@ class Accelerator:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
-
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
                 MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" else None
@@ -379,6 +378,9 @@ class Accelerator:
                     else:
                         self.profile_handler = handler
 
+        if mixed_precision == "fp8" and self.fp8_recipe_handler is None:
+            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
+
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
@@ -393,12 +395,13 @@ class Accelerator:
 
         self.delayed_fp8_autocast = False
         if self.fp8_recipe_handler is not None:
-            # We already check if FP8 is available during `self.state`
-            if self.state.mixed_precision != "fp8":
+            if self.state.mixed_precision != "fp8" and (
+                self.distributed_type not in (DistributedType.FSDP, DistributedType.DEEPSPEED)
+            ):
                 raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
+            # We already check if FP8 is available during `self.state`
             self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
-                DistributedType.MULTI_GPU,
-                DistributedType.FSDP,
+                DistributedType.MULTI_GPU, DistributedType.FSDP
             )
 
         trackers = filter_trackers(log_with, self.logging_dir)
@@ -1290,7 +1293,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
+        if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
@@ -1299,6 +1302,8 @@ class Accelerator:
                 args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex_or_xpu(*args)
+        if self.fp8_recipe_handler is not None and self.fp8_recipe_handler.backend == "TE":
+            args = self._prepare_te(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1312,8 +1317,7 @@ class Accelerator:
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
-
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
+        if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
@@ -1371,7 +1375,6 @@ class Accelerator:
                 "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
-
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
@@ -1384,24 +1387,8 @@ class Accelerator:
                 model.forward = convert_outputs_to_fp32(new_forward)
 
         # We prepare fp8 after, allowing for bf16 autocast to happen first
-        if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
-            # Import here to keep base imports fast
-            import transformer_engine.common.recipe as te_recipe
-            from transformer_engine.pytorch import fp8_autocast
-
-            if not has_transformer_engine_layers(model):
-                with torch.no_grad():
-                    convert_model(model)
-                model._converted_to_transformer_engine = True
-
-            kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
-            if "fp8_format" in kwargs:
-                kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
-            fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-            # If we are in DDP or FSDP, we delay `autocast` until after FSDP/DDP has been initialized
-            # to make use of the process group
-            if not self.delayed_fp8_autocast:
-                model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
+        if getattr(self.fp8_recipe_handler, "backend", None) == "TE" and not self.delayed_fp8_autocast:
+            model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
@@ -1455,7 +1442,12 @@ class Accelerator:
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.FSDP:
-                from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+                # We need to fix the optimizer *before* sharding the model
+                # TE has their own FSDP implementation
+                if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
+                    from transformer_engine.pytorch.distributed import FullyShardedDataParallel as FSDP
+                else:
+                    from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
                 # don't wrap it again
@@ -1468,21 +1460,9 @@ class Accelerator:
                 if not is_type_fsdp:
                     self.state.fsdp_plugin.set_auto_wrap_policy(model)
                     fsdp_plugin = self.state.fsdp_plugin
-                    kwargs = {
-                        "sharding_strategy": fsdp_plugin.sharding_strategy,
-                        "cpu_offload": fsdp_plugin.cpu_offload,
-                        "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
-                        "mixed_precision": fsdp_plugin.mixed_precision_policy,
-                        "sync_module_states": fsdp_plugin.sync_module_states,
-                        "backward_prefetch": fsdp_plugin.backward_prefetch,
-                        "forward_prefetch": fsdp_plugin.forward_prefetch,
-                        "use_orig_params": fsdp_plugin.use_orig_params,
-                        "param_init_fn": fsdp_plugin.param_init_fn,
-                        "ignored_modules": fsdp_plugin.ignored_modules,
-                        "limit_all_gathers": fsdp_plugin.limit_all_gathers,
-                        "device_id": self.device,
-                    }
-                    model = FSDP(model, **kwargs)
+                    init_kwargs = fsdp_plugin.to_init_kwargs()
+                    init_kwargs["device_id"] = self.device
+                    model = FSDP(model, **init_kwargs)
                     if fsdp_plugin.activation_checkpointing:
                         from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
                             CheckpointImpl,
@@ -1577,16 +1557,46 @@ class Accelerator:
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
-        if self.delayed_fp8_autocast:
-            model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe, fp8_group=model.process_group)(
-                model.forward
-            )
+        model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if not is_torch_version(">=", "2.0"):
                 raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
+
+    # TODO: Figure out how to make this be disabled during eval!
+    def _prepare_te(self, *args):
+        model, optimizer = None, None
+        num_models, num_optimizers = 0, 0
+        result = [obj for obj in args]
+        for obj in result:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+                num_models += 1
+            elif isinstance(obj, (torch.optim.Optimizer)):
+                optimizer = obj
+                num_optimizers += 1
+        if optimizer is None and model is None:
+            return result
+        elif optimizer is None or model is None:
+            raise ValueError(
+                "You must pass a model and an optimizer together to `accelerate.prepare()` when using TransformerEngine."
+            )
+        elif num_models > 1 or num_optimizers > 1:
+            raise ValueError(
+                f"You can't use multiple models ({num_models}) or optimizers {num_optimizers} with TransformerEngine."
+            )
+        old_named_params = self._get_named_parameters(model)
+        with torch.no_grad():
+            convert_model(model)
+        new_named_params = self._get_named_parameters(model)
+        mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+        # We need to switch the optimizer params to the new params *after* the model is wrapped in FSDP
+        for param_group in optimizer.param_groups:
+            param_group["params"] = [mapping[p] for p in param_group["params"]]
+
+        return result
 
     def _prepare_deepspeed(self, *args):
         import deepspeed
@@ -1696,6 +1706,9 @@ class Accelerator:
                 )
 
         if model is not None:
+            # If we are using FP8, we need to apply the autowrap now
+            if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
+                model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
             # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
             deepspeed_plugin.set_moe_leaf_modules(model)
             # deal with config keys that use `auto` value and rely on model's hidden_size
@@ -1755,6 +1768,7 @@ class Accelerator:
                         if not self.split_batches
                         else scheduler.total_num_steps
                     )
+
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
             kwargs = dict(model=model, config_params=self.deepspeed_config)

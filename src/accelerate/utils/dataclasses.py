@@ -1077,12 +1077,12 @@ class DeepSpeedPlugin:
         ds_config = self.deepspeed_config
         kwargs = {
             "fp16.enabled": mixed_precision == "fp16",
-            "bf16.enabled": mixed_precision == "bf16",
+            "bf16.enabled": mixed_precision in ("bf16", "fp8"),
         }
         if mixed_precision == "fp16":
             if "fp16" not in ds_config:
                 ds_config["fp16"] = {"enabled": True, "auto_cast": True}
-        elif mixed_precision == "bf16":
+        elif mixed_precision in ("bf16", "fp8"):
             if "bf16" not in ds_config:
                 ds_config["bf16"] = {"enabled": True}
 
