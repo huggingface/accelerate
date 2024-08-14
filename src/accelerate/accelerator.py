@@ -2694,9 +2694,9 @@ class Accelerator:
         >>> accelerator.end_training()
         ```
         """
-        with self.on_main_process():
-            for tracker in self.trackers:
-                tracker.finish()
+        for tracker in self.trackers:
+            tracker.finish()
+
         if torch.distributed.is_initialized():
             # needed when using torch.distributed.init_process_group
             torch.distributed.destroy_process_group()
