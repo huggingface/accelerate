@@ -84,17 +84,39 @@ def has_transformer_engine_layers(model):
     return False
 
 
+def contextual_fp8_autocast(fn, fp8_recipe, use_during_eval=False):
+    """
+    Disables FP8 autocast when switching to eval mode. Generally better for accuracy.
+    """
+    from transformer_engine.pytorch import fp8_autocast
+
+    def inner(self, *args, **kwargs):
+        enabled = use_during_eval or self.training
+        with fp8_autocast(enabled=enabled, fp8_recipe=fp8_recipe):
+            return fn(*args, **kwargs)
+
+    return inner
+
+
 def apply_fp8_autowrap(model, fp8_recipe_handler):
     """
     Applies FP8 context manager to the model's forward method
     """
     # Import here to keep base imports fast
     import transformer_engine.common.recipe as te_recipe
-    from transformer_engine.pytorch import fp8_autocast
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
     if "fp8_format" in kwargs:
         kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
+    use_during_eval = kwargs.pop("use_during_eval", False)
     fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-    model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
+    new_forward = contextual_fp8_autocast(model.forward, fp8_recipe, use_during_eval)
+
+    from types import MethodType
+
+    if hasattr(model.forward, "__func__"):
+        model.forward = MethodType(new_forward, model)
+    else:
+        model.forward = new_forward
+
     return model
