@@ -62,7 +62,6 @@ def train_baseline(zero_stage: int = 1):
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(
         MODEL_NAME, accelerator=accelerator
     )
-    # model.to(device)
 
     # Convert the model to TE
     old_named_params = get_named_parameters(model)
