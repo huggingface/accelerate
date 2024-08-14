@@ -37,8 +37,8 @@ METRIC = evaluate.load("glue", "mrpc")
 
 def get_named_parameters(model):
     """
-    Same thing as `Accelerator.get_named_parameters`
-    Returns a list of the named parameters of the model (extracted from parallel)
+    Same thing as `Accelerator.get_named_parameters` Returns a list of the named parameters of the model (extracted
+    from parallel)
     """
     model = extract_model_from_parallel(model)
     return {n: p for n, p in model.named_parameters()}
@@ -59,7 +59,9 @@ def evaluate_model(model, dataloader, fp8_recipe=None, accelerator=None):
 def train_baseline(zero_stage: int = 1):
     set_seed(42)
     accelerator = Accelerator()
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME, accelerator=accelerator)
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(
+        MODEL_NAME, accelerator=accelerator
+    )
     # model.to(device)
 
     # Convert the model to TE
@@ -79,26 +81,30 @@ def train_baseline(zero_stage: int = 1):
     model.forward = te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
 
     import numpy as np
+
     config = {
-        'train_batch_size': 32,
-        'train_micro_batch_size_per_gpu': 16,
-        'gradient_accumulation_steps': 1,
-        'zero_optimization': {
-            'stage': 1,
-            'offload_optimizer': {
-                'device': 'none', 'nvme_path': None
-            },
-            'offload_param': {'device': 'none', 'nvme_path': None},
-            'stage3_gather_16bit_weights_on_model_save': False
+        "train_batch_size": 32,
+        "train_micro_batch_size_per_gpu": 16,
+        "gradient_accumulation_steps": 1,
+        "zero_optimization": {
+            "stage": 1,
+            "offload_optimizer": {"device": "none", "nvme_path": None},
+            "offload_param": {"device": "none", "nvme_path": None},
+            "stage3_gather_16bit_weights_on_model_save": False,
         },
-        'gradient_clipping': 1.0,
-        'steps_per_print': np.inf,
-        'bf16': {'enabled': True},
-        'fp16': {'enabled': False},
-        'zero_allow_untested_optimizer': True
+        "gradient_clipping": 1.0,
+        "steps_per_print": np.inf,
+        "bf16": {"enabled": True},
+        "fp16": {"enabled": False},
+        "zero_allow_untested_optimizer": True,
     }
 
-    model, optimizer, _, _, = deepspeed.initialize(
+    (
+        model,
+        optimizer,
+        _,
+        _,
+    ) = deepspeed.initialize(
         model=model,
         optimizer=optimizer,
         config_params=config,
@@ -113,8 +119,8 @@ def train_baseline(zero_stage: int = 1):
     for _ in range(2):
         for batch in train_dataloader:
             outputs = model(**batch)
-            data.append(batch.to('cpu'))
-            model_outputs.append(outputs.logits.to('cpu'))
+            data.append(batch.to("cpu"))
+            model_outputs.append(outputs.logits.to("cpu"))
             loss = outputs.loss
             model.backward(loss)
             model.step()
@@ -124,8 +130,12 @@ def train_baseline(zero_stage: int = 1):
 
     trained_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
     model.destroy()
-    assert trained_model_results["accuracy"] > base_model_results["accuracy"], f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
-    assert trained_model_results["f1"] > base_model_results["f1"], f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    assert (
+        trained_model_results["accuracy"] > base_model_results["accuracy"]
+    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
+    assert (
+        trained_model_results["f1"] > base_model_results["f1"]
+    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
 
     return base_model_results, trained_model_results, model_outputs, data
 
@@ -138,10 +148,14 @@ def train_integration(zero_stage: int = 1):
     deepspeed_plugin = DeepSpeedPlugin(
         zero_stage=zero_stage,
     )
-    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=kwargs_handlers, deepspeed_plugin=deepspeed_plugin)
+    accelerator = Accelerator(
+        mixed_precision="fp8", kwargs_handlers=kwargs_handlers, deepspeed_plugin=deepspeed_plugin
+    )
     accelerator.state.deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = 16
 
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME, accelerator=accelerator)
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(
+        MODEL_NAME, accelerator=accelerator
+    )
 
     model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
     base_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
@@ -151,8 +165,8 @@ def train_integration(zero_stage: int = 1):
     for _ in range(2):
         for batch in train_dataloader:
             outputs = model(**batch)
-            data.append(batch.to('cpu'))
-            model_outputs.append(outputs.logits.to('cpu'))
+            data.append(batch.to("cpu"))
+            model_outputs.append(outputs.logits.to("cpu"))
             loss = outputs.loss
             accelerator.backward(loss)
             optimizer.step()
@@ -161,8 +175,12 @@ def train_integration(zero_stage: int = 1):
 
     trained_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
     model.destroy()
-    assert trained_model_results["accuracy"] > base_model_results["accuracy"], f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
-    assert trained_model_results["f1"] > base_model_results["f1"], f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    assert (
+        trained_model_results["accuracy"] > base_model_results["accuracy"]
+    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
+    assert (
+        trained_model_results["f1"] > base_model_results["f1"]
+    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
 
     return base_model_results, trained_model_results, model_outputs, data
 
@@ -170,10 +188,20 @@ def train_integration(zero_stage: int = 1):
 if __name__ == "__main__":
     for zero_stage in [1, 2]:
         baseline_not_trained, baseline_trained, baseline_outputs, baseline_data = train_baseline(zero_stage)
-        accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(zero_stage)
-        assert baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"], f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
-        assert baseline_not_trained["f1"] == accelerator_not_trained["f1"], f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
-        assert baseline_trained["accuracy"] == accelerator_trained["accuracy"], f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
-        assert baseline_trained["f1"] == accelerator_trained["f1"], f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
+        accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(
+            zero_stage
+        )
+        assert (
+            baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
+        ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
+        assert (
+            baseline_not_trained["f1"] == accelerator_not_trained["f1"]
+        ), f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
+        assert (
+            baseline_trained["accuracy"] == accelerator_trained["accuracy"]
+        ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
+        assert (
+            baseline_trained["f1"] == accelerator_trained["f1"]
+        ), f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
 
     torch.distributed.destroy_process_group()

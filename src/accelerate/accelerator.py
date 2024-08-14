@@ -401,7 +401,8 @@ class Accelerator:
                 raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
             # We already check if FP8 is available during `self.state`
             self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
-                DistributedType.MULTI_GPU, DistributedType.FSDP
+                DistributedType.MULTI_GPU,
+                DistributedType.FSDP,
             )
 
         trackers = filter_trackers(log_with, self.logging_dir)

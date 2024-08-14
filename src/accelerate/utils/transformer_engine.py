@@ -91,6 +91,7 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
     # Import here to keep base imports fast
     import transformer_engine.common.recipe as te_recipe
     from transformer_engine.pytorch import fp8_autocast
+
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
     if "fp8_format" in kwargs:
         kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])

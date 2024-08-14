@@ -45,8 +45,8 @@ FSDP_WRAP_POLICY = partial(transformer_auto_wrap_policy, transformer_layer_cls={
 
 def get_named_parameters(model):
     """
-    Same thing as `Accelerator.get_named_parameters`
-    Returns a list of the named parameters of the model (extracted from parallel)
+    Same thing as `Accelerator.get_named_parameters` Returns a list of the named parameters of the model (extracted
+    from parallel)
     """
     model = extract_model_from_parallel(model)
     return {n: p for n, p in model.named_parameters()}
@@ -94,11 +94,8 @@ def train_baseline():
     model = FSDP(
         model,
         use_orig_params=True,
-        mixed_precision=MixedPrecision(
-            param_dtype=torch.bfloat16,
-            reduce_dtype=torch.float32
-        ),
-        auto_wrap_policy=FSDP_WRAP_POLICY
+        mixed_precision=MixedPrecision(param_dtype=torch.bfloat16, reduce_dtype=torch.float32),
+        auto_wrap_policy=FSDP_WRAP_POLICY,
     )
 
     mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
@@ -120,8 +117,12 @@ def train_baseline():
 
     trained_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
 
-    assert trained_model_results["accuracy"] > base_model_results["accuracy"], f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
-    assert trained_model_results["f1"] > base_model_results["f1"], f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    assert (
+        trained_model_results["accuracy"] > base_model_results["accuracy"]
+    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
+    assert (
+        trained_model_results["f1"] > base_model_results["f1"]
+    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
 
     return base_model_results, trained_model_results
 
@@ -133,14 +134,13 @@ def train_integration():
     fsdp_plugin = FSDPPlugin(
         auto_wrap_policy=FSDP_WRAP_POLICY,
         use_orig_params=True,
-        mixed_precision_policy=MixedPrecision(
-            param_dtype=torch.bfloat16,
-            reduce_dtype=torch.float32
-        )
+        mixed_precision_policy=MixedPrecision(param_dtype=torch.bfloat16, reduce_dtype=torch.float32),
     )
     accelerator = Accelerator(mixed_precision="fp8", fsdp_plugin=fsdp_plugin, kwargs_handlers=kwargs_handlers)
     set_seed(42)
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME, accelerator=accelerator)
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(
+        MODEL_NAME, accelerator=accelerator
+    )
 
     model, optimizer = accelerator.prepare(model, optimizer)
     base_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
@@ -157,8 +157,12 @@ def train_integration():
 
     trained_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
 
-    assert trained_model_results["accuracy"] > base_model_results["accuracy"], f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
-    assert trained_model_results["f1"] > base_model_results["f1"], f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    assert (
+        trained_model_results["accuracy"] > base_model_results["accuracy"]
+    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
+    assert (
+        trained_model_results["f1"] > base_model_results["f1"]
+    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
 
     return base_model_results, trained_model_results
 
@@ -167,9 +171,17 @@ if __name__ == "__main__":
     baseline_not_trained, baseline_trained = train_baseline()
     accelerator_not_trained, accelerator_trained = train_integration()
 
-    assert baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"], f'Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
-    assert baseline_not_trained["f1"] == accelerator_not_trained["f1"], f'F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
-    assert baseline_trained["accuracy"] == accelerator_trained["accuracy"], f'Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
-    assert baseline_trained["f1"] == accelerator_trained["f1"], f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
+    assert (
+        baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
+    ), f'Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
+    assert (
+        baseline_not_trained["f1"] == accelerator_not_trained["f1"]
+    ), f'F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
+    assert (
+        baseline_trained["accuracy"] == accelerator_trained["accuracy"]
+    ), f'Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
+    assert (
+        baseline_trained["f1"] == accelerator_trained["f1"]
+    ), f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
 
     torch.distributed.destroy_process_group()
