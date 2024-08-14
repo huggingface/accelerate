@@ -1062,7 +1062,7 @@ def _validate_launch_command(args):
         if args.use_cpu and args.num_processes >= 1 and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0:
             local_size = get_int_from_env(
                 ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"],
-                max(int(args.num_processes / args.num_machines), 1)
+                max(int(args.num_processes / args.num_machines), 1),
             )
             threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
             if threads_per_process > 1:
