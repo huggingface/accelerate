@@ -74,6 +74,19 @@ def _get_mpirun_args():
         return mpi_app, "-f", "-n", "-ppn", ""
 
 
+def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
+    """
+    Setup the FP8 environment variables.
+    """
+    prefix = "ACCELERATE_"
+    for arg in vars(args):
+        if arg.startswith("fp8_"):
+            value = getattr(args, arg)
+            if value is not None:
+                current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
+    return current_env
+
+
 def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
     """
     Prepares and returns the command list and an environment with the correct simple launcher environment variables.
@@ -140,6 +153,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
         )
 
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
+    if args.mixed_precision.lower() == "fp8":
+        current_env = setup_fp8_env(args, current_env)
 
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
@@ -225,6 +240,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
 
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
+    if args.mixed_precision.lower() == "fp8":
+        current_env = setup_fp8_env(args, current_env)
 
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
@@ -390,6 +407,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
 
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
+    if args.mixed_precision.lower() == "fp8":
+        current_env = setup_fp8_env(args, current_env)
     current_env["ACCELERATE_CONFIG_DS_FIELDS"] = str(args.deepspeed_fields_from_accelerate_config).lower()
     current_env["ACCELERATE_USE_DEEPSPEED"] = "true"
     if args.zero_stage is not None:
@@ -528,6 +547,8 @@ def prepare_sagemager_args_inputs(
         "ACCELERATE_DYNAMO_USE_DYNAMIC": str(args.dynamo_use_dynamic),
         "ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
+    if args.mixed_precision.lower() == "fp8":
+        environment = setup_fp8_env(args, environment)
     # configure distribution set up
     distribution = None
     if sagemaker_config.distributed_type == SageMakerDistributedType.DATA_PARALLEL:

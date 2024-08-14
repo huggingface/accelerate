@@ -379,9 +379,6 @@ class Accelerator:
                     else:
                         self.profile_handler = handler
 
-        if mixed_precision == "fp8" and self.fp8_recipe_handler is None:
-            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
-
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
@@ -393,6 +390,9 @@ class Accelerator:
             _from_accelerator=True,
             **kwargs,
         )
+
+        if self.state.mixed_precision == "fp8" and self.fp8_recipe_handler is None:
+            self.fp8_recipe_handler = FP8RecipeKwargs()
 
         self.delayed_fp8_autocast = False
         if self.fp8_recipe_handler is not None:
