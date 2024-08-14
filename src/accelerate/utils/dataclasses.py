@@ -1497,7 +1497,12 @@ class FullyShardedDataParallelPlugin:
 
     def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
         "Sets the mixed precision policy for FSDP"
-        mixed_precision_mapping = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}
+        mixed_precision_mapping = {
+            "fp8": torch.bfloat16,
+            "fp16": torch.float16,
+            "bf16": torch.bfloat16,
+            "fp32": torch.float32,
+        }
         dtype = mixed_precision
         if isinstance(mixed_precision, str):
             dtype = mixed_precision_mapping.get(mixed_precision, None)

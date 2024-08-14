@@ -320,6 +320,7 @@ class Accelerator:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
+
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
                 MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" else None
@@ -395,11 +396,11 @@ class Accelerator:
 
         self.delayed_fp8_autocast = False
         if self.fp8_recipe_handler is not None:
+            # We already check if FP8 is available during `self.state`
             if self.state.mixed_precision != "fp8" and (
                 self.distributed_type not in (DistributedType.FSDP, DistributedType.DEEPSPEED)
             ):
                 raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
-            # We already check if FP8 is available during `self.state`
             self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.FSDP,
@@ -1294,6 +1295,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
+
         if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
@@ -1376,6 +1378,7 @@ class Accelerator:
                 "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
+
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
@@ -1445,10 +1448,10 @@ class Accelerator:
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
                 # TE has their own FSDP implementation
-                if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
-                    from transformer_engine.pytorch.distributed import FullyShardedDataParallel as FSDP
-                else:
-                    from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+                # if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
+                #     from transformer_engine.pytorch.distributed import FullyShardedDataParallel as FSDP
+                # else    :
+                from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
                 # don't wrap it again

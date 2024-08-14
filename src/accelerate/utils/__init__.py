@@ -250,4 +250,4 @@ from .other import (
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
 from .torch_xla import install_xla
 from .tqdm import tqdm
-from .transformer_engine import convert_model, has_transformer_engine_layers
+from .transformer_engine import apply_fp8_autowrap, convert_model, has_transformer_engine_layers
