@@ -107,7 +107,7 @@ def train_baseline(zero_stage: int = 1):
             loss = outputs.loss
             model.backward(loss)
             model.step()
-            for _ in range(2):
+            for _ in range(accelerator.num_processes):
                 lr_scheduler.step()
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
