@@ -2680,7 +2680,7 @@ class Accelerator:
 
     def end_training(self):
         """
-        Runs any special end training behaviors, such as stopping trackers on the main process only or destoying all process.
+        Runs any special end training behaviors, such as stopping trackers on the main process only or destoying process group.
         Should always be called at the end of your script if using experiment tracking.
 
         Example:
