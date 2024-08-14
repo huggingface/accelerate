@@ -1579,6 +1579,10 @@ class Accelerator:
         return model
 
     def _prepare_te(self, *args):
+        if not is_msamp_available():
+            raise ImportError(
+                "`transformer_engine` was not found on your system. Please ensure that `transformer_engine` is installed"
+            )
         model, optimizer = None, None
         num_models, num_optimizers = 0, 0
         result = [obj for obj in args]
