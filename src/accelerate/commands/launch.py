@@ -703,6 +703,7 @@ def launch_command_parser(subparsers=None):
         "--fp8_opt_level",
         type=str,
         default="O2",
+        choices=["O1", "O2"],
         help="What level of 8-bit collective communication should be used with MS-AMP (useful only when `--fp8_backend=msamp` is passed).",
     )
 
