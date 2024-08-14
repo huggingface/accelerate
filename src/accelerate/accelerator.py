@@ -1392,7 +1392,6 @@ class Accelerator:
 
         # We prepare fp8 after, allowing for bf16 autocast to happen first
         if getattr(self.fp8_recipe_handler, "backend", None) == "TE" and not self.delayed_fp8_autocast:
-            # TODO: Figure out how to make this be disabled during eval!
             model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
@@ -1574,7 +1573,6 @@ class Accelerator:
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
-        # TODO: Figure out how to make this be disabled during eval!
         if self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled.
@@ -1726,7 +1724,6 @@ class Accelerator:
         if model is not None:
             # If we are using FP8, we need to apply the autowrap now
             if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
-                # TODO: Figure out how to make this be disabled during eval!
                 model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
             # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
             deepspeed_plugin.set_moe_leaf_modules(model)
