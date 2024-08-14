@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY
-from .environment import str_to_bool
+from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
     is_cuda_available,
     is_mlu_available,
@@ -358,9 +358,7 @@ class FP8RecipeKwargs(KwargsHandler):
                     "TransformerEngine is not available. Please either install it, or use the 'MSAMP' backend (if installed)."
                 )
             if self.use_autocast_during_eval is None:
-                self.use_autocast_during_eval = str_to_bool(
-                    os.environ.get(env_prefix + "USE_AUTOCAST_DURING_EVAL", "False")
-                )
+                self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
             if self.margin is None:
                 self.margin = int(os.environ.get(env_prefix + "MARGIN", 0))
             if self.interval is None:
@@ -378,9 +376,9 @@ class FP8RecipeKwargs(KwargsHandler):
             if self.amax_history_len is None:
                 self.amax_history_len = int(os.environ.get(env_prefix + "AMAX_HISTORY_LEN", 1024))
             if self.override_linear_precision is None:
-                fprop = str_to_bool(os.environ.get(env_prefix + "OVERRIDE_FPROP", "False"))
-                dgrad = str_to_bool(os.environ.get(env_prefix + "OVERRIDE_DGRAD", "False"))
-                wgrad = str_to_bool(os.environ.get(env_prefix + "OVERRIDE_WGRAD", "False"))
+                fprop = parse_flag_from_env(env_prefix + "OVERRIDE_FPROP")
+                dgrad = parse_flag_from_env(env_prefix + "OVERRIDE_DGRAD")
+                wgrad = parse_flag_from_env(env_prefix + "OVERRIDE_WGRAD")
                 self.override_linear_precision = (fprop, dgrad, wgrad)
         elif self.backend == "MSAMP":
             if not is_msamp_available():
