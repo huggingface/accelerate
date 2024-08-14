@@ -1575,7 +1575,8 @@ class Accelerator:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
         # TODO: Figure out how to make this be disabled during eval!
-        model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
+        if self.delayed_fp8_autocast:
+            model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if not is_torch_version(">=", "2.0"):
