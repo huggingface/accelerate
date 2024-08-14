@@ -15,6 +15,7 @@
 import torch.nn as nn
 
 from .imports import is_fp8_available
+from .operations import GatheredParameters
 
 
 if is_fp8_available():
@@ -29,22 +30,28 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
         raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
     for name, module in model.named_children():
         if isinstance(module, nn.Linear) and to_transformer_engine and _convert_linear:
-            # Return early if the linear layer weights are not multiples of 16
-            if any(p % 16 != 0 for p in module.weight.shape):
-                return
             has_bias = module.bias is not None
-            te_module = te.Linear(
-                module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
-            )
-            te_module.weight.copy_(module.weight)
+            params_to_gather = [module.weight]
             if has_bias:
-                te_module.bias.copy_(module.bias)
+                params_to_gather.append(module.bias)
 
-            setattr(model, name, te_module)
+            with GatheredParameters(params_to_gather, modifier_rank=0):
+                if any(p % 16 != 0 for p in module.weight.shape):
+                    return
+                te_module = te.Linear(
+                    module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
+                )
+                te_module.weight.copy_(module.weight)
+                if has_bias:
+                    te_module.bias.copy_(module.bias)
+
+                setattr(model, name, te_module)
+        # Note: @xrsrke (Phuc) found that te.LayerNorm doesn't have any real memory savings or speedups over nn.LayerNorm
         elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
-            te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
-            te_module.weight.copy_(module.weight)
-            te_module.bias.copy_(module.bias)
+            with GatheredParameters([module.weight, module.bias], modifier_rank=0):
+                te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
+                te_module.weight.copy_(module.weight)
+                te_module.bias.copy_(module.bias)
 
             setattr(model, name, te_module)
         elif isinstance(module, te.Linear) and not to_transformer_engine and _convert_linear:

@@ -149,6 +149,7 @@ from .offload import (
 )
 from .operations import (
     CannotPadNestedTensorWarning,
+    GatheredParameters,
     broadcast,
     broadcast_object_list,
     concatenate,
