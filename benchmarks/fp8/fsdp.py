@@ -15,45 +15,32 @@
 """
 This script tests to ensure that `accelerate` performs at the same level as raw `TransformersEngine`.
 
-This particular script verifies this for DDP training.
+This particular script verifies this for FSDP training.
 """
+from functools import partial
+
 import evaluate
 import torch
 import transformer_engine.common.recipe as te_recipe
 import transformer_engine.pytorch as te
-from experiment_setup import get_training_utilities
-from torch.nn.parallel import DistributedDataParallel as DDP
+from fp8_utils import evaluate_model, get_named_parameters, get_training_utilities
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import MixedPrecision
+from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from transformer_engine.common.recipe import DelayedScaling
+from transformers.models.bert import BertLayer
 
 from accelerate import Accelerator
+from accelerate import FullyShardedDataParallelPlugin as FSDPPlugin
 from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, extract_model_from_parallel, set_seed
+from accelerate.utils import FP8RecipeKwargs, set_seed
 from accelerate.utils.transformer_engine import convert_model
 
 
 MODEL_NAME = "bert-base-cased"
 METRIC = evaluate.load("glue", "mrpc")
 
-
-def get_named_parameters(model):
-    """
-    Same thing as `Accelerator.get_named_parameters` Returns a list of the named parameters of the model (extracted
-    from parallel)
-    """
-    model = extract_model_from_parallel(model)
-    return {n: p for n, p in model.named_parameters()}
-
-
-def evaluate_model(model, dataloader, fp8_recipe=None, accelerator=None):
-    "Turns model to .eval(), runs dataloader, calculates metric, then turns eval back on"
-    model.eval()
-    for step, batch in enumerate(dataloader):
-        with torch.no_grad():
-            outputs = model(**batch)
-        predictions = outputs.logits.argmax(dim=-1)
-        predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
-        METRIC.add_batch(predictions=predictions, references=references)
-    return METRIC.compute()
+FSDP_WRAP_POLICY = partial(transformer_auto_wrap_policy, transformer_layer_cls={BertLayer})
 
 
 def train_baseline():
@@ -74,15 +61,19 @@ def train_baseline():
 
     new_named_params = get_named_parameters(model)
 
-    # Convert the model to DDP
-    device_ids, output_device = [accelerator.local_process_index], accelerator.local_process_index
-    model = DDP(model, device_ids=device_ids, output_device=output_device)
+    # Convert the model to FSDP
+    model = FSDP(
+        model,
+        use_orig_params=True,
+        mixed_precision=MixedPrecision(param_dtype=torch.bfloat16, reduce_dtype=torch.float32),
+        auto_wrap_policy=FSDP_WRAP_POLICY,
+    )
 
     mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
     for param_group in optimizer.param_groups:
         param_group["params"] = [mapping[p] for p in param_group["params"]]
 
-    base_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
+    base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
 
     for _ in range(2):
@@ -97,7 +88,7 @@ def train_baseline():
             optimizer.zero_grad()
             lr_scheduler.step()
 
-    trained_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
+    trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
@@ -113,14 +104,19 @@ def train_integration():
     FP8_RECIPE_KWARGS = {"fp8_format": "HYBRID", "amax_history_len": 32, "amax_compute_algo": "max"}
     kwargs_handlers = [FP8RecipeKwargs(backend="TE", **FP8_RECIPE_KWARGS)]
     AcceleratorState()._reset_state(True)
-    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=kwargs_handlers)
+    fsdp_plugin = FSDPPlugin(
+        auto_wrap_policy=FSDP_WRAP_POLICY,
+        use_orig_params=True,
+        mixed_precision_policy=MixedPrecision(param_dtype=torch.bfloat16, reduce_dtype=torch.float32),
+    )
+    accelerator = Accelerator(mixed_precision="fp8", fsdp_plugin=fsdp_plugin, kwargs_handlers=kwargs_handlers)
     set_seed(42)
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(
         MODEL_NAME, accelerator=accelerator
     )
 
     model, optimizer = accelerator.prepare(model, optimizer)
-    base_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
+    base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
 
     for _ in range(2):
@@ -132,7 +128,7 @@ def train_integration():
             optimizer.zero_grad()
             lr_scheduler.step()
 
-    trained_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
+    trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]

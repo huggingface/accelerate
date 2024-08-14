@@ -24,38 +24,17 @@ import evaluate
 import torch
 import transformer_engine.common.recipe as te_recipe
 import transformer_engine.pytorch as te
-from experiment_setup import get_training_utilities
+from fp8_utils import evaluate_model, get_named_parameters, get_training_utilities
 from transformer_engine.common.recipe import DelayedScaling
 
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, extract_model_from_parallel, set_seed
+from accelerate.utils import FP8RecipeKwargs, set_seed
 from accelerate.utils.transformer_engine import convert_model
 
 
 MODEL_NAME = "bert-base-cased"
 METRIC = evaluate.load("glue", "mrpc")
-
-
-def get_named_parameters(model):
-    """
-    Same thing as `Accelerator.get_named_parameters` Returns a list of the named parameters of the model (extracted
-    from parallel)
-    """
-    model = extract_model_from_parallel(model)
-    return {n: p for n, p in model.named_parameters()}
-
-
-def evaluate_model(model, dataloader, fp8_recipe=None, accelerator=None):
-    "Turns model to .eval(), runs dataloader, calculates metric, then turns eval back on"
-    model.eval()
-    for step, batch in enumerate(dataloader):
-        with torch.no_grad():
-            outputs = model(**batch)
-        predictions = outputs.logits.argmax(dim=-1)
-        predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
-        METRIC.add_batch(predictions=predictions, references=references)
-    return METRIC.compute()
 
 
 def train_baseline(zero_stage: int = 1):
@@ -113,7 +92,7 @@ def train_baseline(zero_stage: int = 1):
         config_params=config,
     )
 
-    base_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
+    base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
 
     model_outputs = []
@@ -131,7 +110,7 @@ def train_baseline(zero_stage: int = 1):
             for _ in range(2):
                 lr_scheduler.step()
 
-    trained_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
+    trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.destroy()
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
@@ -162,7 +141,7 @@ def train_integration(zero_stage: int = 1):
     )
 
     model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
-    base_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
+    base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
     model_outputs = []
     data = []
@@ -177,7 +156,7 @@ def train_integration(zero_stage: int = 1):
             lr_scheduler.step()
             optimizer.zero_grad()
 
-    trained_model_results = evaluate_model(model, eval_dataloader, accelerator=accelerator)
+    trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.destroy()
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]

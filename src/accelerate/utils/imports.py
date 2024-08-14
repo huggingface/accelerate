@@ -102,7 +102,7 @@ def is_schedulefree_available():
 
 
 def is_transformer_engine_available():
-    return _is_package_available("transformer_engine")
+    return _is_package_available("transformer_engine", "transformer-engine")
 
 
 def is_lomo_available():

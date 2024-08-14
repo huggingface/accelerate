@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import torch
 
 
 def get_dataloaders(model_name: str, batch_size: int = 16):
@@ -88,3 +89,27 @@ def get_training_utilities(model_name: str, batch_size: int = 16, accelerator=No
     )
     train_dataloader, eval_dataloader = accelerator.prepare(train_dataloader, eval_dataloader)
     return model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+
+
+def get_named_parameters(model):
+    """
+    Same thing as `Accelerator.get_named_parameters` Returns a list of the named parameters of the model (extracted
+    from parallel)
+    """
+    from accelerate.utils import extract_model_from_parallel
+
+    model = extract_model_from_parallel(model)
+    return {n: p for n, p in model.named_parameters()}
+
+
+def evaluate_model(model, dataloader, metric, accelerator=None):
+    "Turns model to .eval(), runs dataloader, calculates metric, then turns eval back on"
+    model.eval()
+    for step, batch in enumerate(dataloader):
+        with torch.no_grad():
+            outputs = model(**batch)
+        predictions = outputs.logits.argmax(dim=-1)
+        if accelerator is not None and accelerator.num_processes > 1:
+            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
+        metric.add_batch(predictions=predictions, references=references)
+    return metric.compute()

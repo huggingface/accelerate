@@ -15,18 +15,19 @@
 """
 This script tests to ensure that `accelerate` performs at the same level as raw `TransformersEngine`.
 
-This particular script verifies this for single GPU training.
+This particular script verifies this for DDP training.
 """
 import evaluate
 import torch
 import transformer_engine.common.recipe as te_recipe
 import transformer_engine.pytorch as te
-from experiment_setup import get_training_utilities
+from fp8_utils import evaluate_model, get_named_parameters, get_training_utilities
+from torch.nn.parallel import DistributedDataParallel as DDP
 from transformer_engine.common.recipe import DelayedScaling
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, extract_model_from_parallel, set_seed
+from accelerate.utils import FP8RecipeKwargs, set_seed
 from accelerate.utils.transformer_engine import convert_model
 
 
@@ -34,29 +35,12 @@ MODEL_NAME = "bert-base-cased"
 METRIC = evaluate.load("glue", "mrpc")
 
 
-def get_named_parameters(model):
-    """
-    Same thing as `Accelerator.get_named_parameters` Returns a list of the named parameters of the model (extracted
-    from parallel)
-    """
-    model = extract_model_from_parallel(model)
-    return {n: p for n, p in model.named_parameters()}
-
-
-def evaluate_model(model, dataloader, fp8_recipe=None):
-    "Turns model to .eval(), runs dataloader, calculates metric, then turns eval back on"
-    model.eval()
-    for step, batch in enumerate(dataloader):
-        with torch.no_grad():
-            outputs = model(**batch)
-        predictions = outputs.logits.argmax(dim=-1)
-        METRIC.add_batch(predictions=predictions, references=batch["labels"])
-    return METRIC.compute()
-
-
 def train_baseline():
     set_seed(42)
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME)
+    accelerator = Accelerator()
+    device = accelerator.device
+    model.to(device)
 
     # Convert the model to TE
     old_named_params = get_named_parameters(model)
@@ -64,30 +48,35 @@ def train_baseline():
     with torch.no_grad():
         convert_model(model)
 
+    FP8_RECIPE_KWARGS = {"fp8_format": te_recipe.Format.HYBRID, "amax_history_len": 32, "amax_compute_algo": "max"}
+    fp8_recipe = DelayedScaling(**FP8_RECIPE_KWARGS)
+
     new_named_params = get_named_parameters(model)
+
+    # Convert the model to DDP
+    device_ids, output_device = [accelerator.local_process_index], accelerator.local_process_index
+    model = DDP(model, device_ids=device_ids, output_device=output_device)
+
     mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
     for param_group in optimizer.param_groups:
         param_group["params"] = [mapping[p] for p in param_group["params"]]
 
-    FP8_RECIPE_KWARGS = {"fp8_format": te_recipe.Format.HYBRID, "amax_history_len": 32, "amax_compute_algo": "max"}
-    fp8_recipe = DelayedScaling(**FP8_RECIPE_KWARGS)
-
-    model.to("cuda")
-    base_model_results = evaluate_model(model, eval_dataloader, fp8_recipe)
+    base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
 
-    for batch in train_dataloader:
-        with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                batch = batch.to("cuda")
-                outputs = model(**batch)
-        loss = outputs.loss
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        lr_scheduler.step()
+    for _ in range(2):
+        for batch in train_dataloader:
+            with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    batch = batch.to(device)
+                    outputs = model(**batch)
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            lr_scheduler.step()
 
-    trained_model_results = evaluate_model(model, eval_dataloader, fp8_recipe)
+    trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
@@ -109,19 +98,20 @@ def train_integration():
         MODEL_NAME, accelerator=accelerator
     )
 
-    model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
-    base_model_results = evaluate_model(model, eval_dataloader)
+    model, optimizer = accelerator.prepare(model, optimizer)
+    base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
 
-    for batch in train_dataloader:
-        outputs = model(**batch)
-        loss = outputs.loss
-        accelerator.backward(loss)
-        optimizer.step()
-        optimizer.zero_grad()
-        lr_scheduler.step()
+    for _ in range(2):
+        for batch in train_dataloader:
+            outputs = model(**batch)
+            loss = outputs.loss
+            accelerator.backward(loss)
+            optimizer.step()
+            optimizer.zero_grad()
+            lr_scheduler.step()
 
-    trained_model_results = evaluate_model(model, eval_dataloader)
+    trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
@@ -149,3 +139,5 @@ if __name__ == "__main__":
     assert (
         baseline_trained["f1"] == accelerator_trained["f1"]
     ), f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
+
+    torch.distributed.destroy_process_group()
