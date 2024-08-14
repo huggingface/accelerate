@@ -20,10 +20,13 @@ from ...utils import (
     ComputeEnvironment,
     DistributedType,
     is_deepspeed_available,
+    is_fp8_available,
     is_mlu_available,
     is_mps_available,
+    is_msamp_available,
     is_musa_available,
     is_npu_available,
+    is_transformer_engine_available,
     is_transformers_available,
     is_xpu_available,
 )
@@ -704,6 +707,8 @@ def get_cluster_input():
                 _convert_mixed_precision,
             )
             if mixed_precision == "fp8":
+                if not is_fp8_available():
+                    raise ValueError("FP8 (either Transformer Engine or MSAMP) is not installed on this machine.")
                 fp8_config = {}
                 fp8_config["backend"] = _ask_options(
                     "Which FP8 backend do you want to use?",
@@ -711,6 +716,8 @@ def get_cluster_input():
                     _convert_fp8_backend,
                 )
                 if fp8_config["backend"] == "TE":
+                    if not is_transformer_engine_available():
+                        raise ValueError("TransformersEngine was selected, but it is not installed on this machine.")
                     fp8_config["use_autocast_during_eval"] = _ask_field(
                         "Do you want to use FP8 autocast during eval mode? Generally better metrics are found when this is disabled [yes/NO]: ",
                         _convert_yes_no_to_bool,
@@ -767,6 +774,8 @@ def get_cluster_input():
                         fp8_config["override_linear_precision"] = (fprop, dgrad, wgrad)
 
                 elif fp8_config["backend"] == "MSAMP":
+                    if not is_msamp_available():
+                        raise ValueError("MSAMP was selected, but it is not installed on this machine.")
                     fp8_config["optimization_level"] = _ask_options(
                         "Which optimization level should be used?",
                         ["O1", "O2"],
