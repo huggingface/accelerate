@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from types import MethodType
+
 import torch.nn as nn
 
 from .imports import is_fp8_available
@@ -91,18 +93,22 @@ def has_transformer_engine_layers(model):
     return False
 
 
-def contextual_fp8_autocast(fn, fp8_recipe, use_during_eval=False):
+def contextual_fp8_autocast(model_forward, fp8_recipe, use_during_eval=False):
     """
-    Disables FP8 autocast when switching to eval mode. Generally better for accuracy.
+    Wrapper for a model's forward method to apply FP8 autocast. Is context aware, meaning that by default it will
+    disable FP8 autocast during eval mode, which is generally better for more accurate metrics.
     """
     from transformer_engine.pytorch import fp8_autocast
 
-    def inner(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         enabled = use_during_eval or self.training
         with fp8_autocast(enabled=enabled, fp8_recipe=fp8_recipe):
-            return fn(*args, **kwargs)
+            return model_forward(*args, **kwargs)
 
-    return inner
+    # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
+    forward.__wrapped__ = model_forward
+
+    return forward
 
 
 def apply_fp8_autowrap(model, fp8_recipe_handler):
@@ -115,11 +121,9 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
     if "fp8_format" in kwargs:
         kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
-    use_during_eval = kwargs.pop("use_during_eval", False)
+    use_during_eval = kwargs.pop("use_autocast_during_eval", False)
     fp8_recipe = te_recipe.DelayedScaling(**kwargs)
     new_forward = contextual_fp8_autocast(model.forward, fp8_recipe, use_during_eval)
-
-    from types import MethodType
 
     if hasattr(model.forward, "__func__"):
         model.forward = MethodType(new_forward, model)

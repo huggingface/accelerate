@@ -299,8 +299,8 @@ class FP8RecipeKwargs(KwargsHandler):
     Args:
         backend (`str`, *optional*, defaults to "msamp"):
             Which FP8 engine to use. Must be one of `"msamp"` (MS-AMP) or `"te"` (TransformerEngine).
-        use_during_eval (`bool`, *optional*, default to `False`):
-            Whether to use FP8 during eval mode. Generally better metrics are found when this is `False`.
+        use_autocast_during_eval (`bool`, *optional*, default to `False`):
+            Whether to use FP8 autocast during eval mode. Generally better metrics are found when this is `False`.
         margin (`int`, *optional*, default to 0):
             The margin to use for the gradient scaling.
         interval (`int`, *optional*, default to 1):
@@ -326,7 +326,7 @@ class FP8RecipeKwargs(KwargsHandler):
     """
 
     backend: Backend = "MSAMP"
-    use_during_eval: bool = False
+    use_autocast_during_eval: bool = False
     opt_level: OptLevel = "O2"
     margin: int = 0
     interval: int = 1
@@ -1080,6 +1080,7 @@ class DeepSpeedPlugin:
         ds_config = self.deepspeed_config
         kwargs = {
             "fp16.enabled": mixed_precision == "fp16",
+            # When training in fp8, we still rely on bf16 autocast for the core mixed precision
             "bf16.enabled": mixed_precision in ("bf16", "fp8"),
         }
         if mixed_precision == "fp16":

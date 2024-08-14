@@ -48,12 +48,7 @@ def evaluate_model(model, dataloader, fp8_recipe=None):
     model.eval()
     for step, batch in enumerate(dataloader):
         with torch.no_grad():
-            if fp8_recipe is not None:
-                with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
-                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                        outputs = model(**batch)
-            else:
-                outputs = model(**batch)
+            outputs = model(**batch)
         predictions = outputs.logits.argmax(dim=-1)
         METRIC.add_batch(predictions=predictions, references=batch["labels"])
     return METRIC.compute()

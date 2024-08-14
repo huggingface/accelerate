@@ -49,12 +49,7 @@ def evaluate_model(model, dataloader, fp8_recipe=None, accelerator=None):
     model.eval()
     for step, batch in enumerate(dataloader):
         with torch.no_grad():
-            if fp8_recipe is not None:
-                with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
-                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                        outputs = model(**batch)
-            else:
-                outputs = model(**batch)
+            outputs = model(**batch)
         predictions = outputs.logits.argmax(dim=-1)
         predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
         METRIC.add_batch(predictions=predictions, references=references)
@@ -76,9 +71,6 @@ def train_baseline():
 
     FP8_RECIPE_KWARGS = {"fp8_format": te_recipe.Format.HYBRID, "amax_history_len": 32, "amax_compute_algo": "max"}
     fp8_recipe = DelayedScaling(**FP8_RECIPE_KWARGS)
-    # Patching the forward *then* wrap in DDP leads to better results
-    model.forward = torch.autocast(device_type="cuda", dtype=torch.bfloat16)(model.forward)
-    model.forward = te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
 
     new_named_params = get_named_parameters(model)
 
@@ -95,8 +87,10 @@ def train_baseline():
 
     for _ in range(2):
         for batch in train_dataloader:
-            batch = batch.to(device)
-            outputs = model(**batch)
+            with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    batch = batch.to(device)
+                    outputs = model(**batch)
             loss = outputs.loss
             loss.backward()
             optimizer.step()

@@ -27,9 +27,16 @@ from torch.utils.data import DataLoader, TensorDataset
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
-from accelerate.test_utils import require_bnb, require_multi_gpu, require_non_cpu, slow, torch_device
+from accelerate.test_utils import (
+    require_bnb,
+    require_multi_gpu,
+    require_non_cpu,
+    require_transformer_engine,
+    slow,
+    torch_device,
+)
 from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_non_torch_xla
-from accelerate.utils import patch_environment
+from accelerate.utils import FP8RecipeKwargs, patch_environment
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
 
 
@@ -560,6 +567,22 @@ class AcceleratorTester(AccelerateTestCase):
         sgd = torch.optim.SGD(model.parameters(), lr=0.01)
         accelerator = Accelerator(cpu=True)
         _ = accelerator.prepare(sgd)
+
+    @require_transformer_engine
+    def test_can_unwrap_model_te(self):
+        model, optimizer, *_ = create_components()
+        fp8_recipe = FP8RecipeKwargs(backend="TE")
+        accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[fp8_recipe])
+        inputs = torch.randn(10, 2).to(torch_device)
+        model, optimizer = accelerator.prepare(model, optimizer)
+        model(inputs)  # sanity check that this works
+
+        model = accelerator.unwrap_model(model, keep_fp32_wrapper=False)
+        model(inputs)  # check that this still works
+
+        # check that pickle roundtrip works
+        model_loaded = pickle.loads(pickle.dumps(model))
+        model_loaded(inputs)
 
     @require_non_cpu
     def test_can_unwrap_model_fp16(self):
