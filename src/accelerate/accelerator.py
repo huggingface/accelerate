@@ -1460,9 +1460,21 @@ class Accelerator:
                 if not is_type_fsdp:
                     self.state.fsdp_plugin.set_auto_wrap_policy(model)
                     fsdp_plugin = self.state.fsdp_plugin
-                    init_kwargs = fsdp_plugin.to_init_kwargs()
-                    init_kwargs["device_id"] = self.device
-                    model = FSDP(model, **init_kwargs)
+                    kwargs = {
+                        "sharding_strategy": fsdp_plugin.sharding_strategy,
+                        "cpu_offload": fsdp_plugin.cpu_offload,
+                        "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
+                        "mixed_precision": fsdp_plugin.mixed_precision_policy,
+                        "sync_module_states": fsdp_plugin.sync_module_states,
+                        "backward_prefetch": fsdp_plugin.backward_prefetch,
+                        "forward_prefetch": fsdp_plugin.forward_prefetch,
+                        "use_orig_params": fsdp_plugin.use_orig_params,
+                        "param_init_fn": fsdp_plugin.param_init_fn,
+                        "ignored_modules": fsdp_plugin.ignored_modules,
+                        "limit_all_gathers": fsdp_plugin.limit_all_gathers,
+                        "device_id": self.device,
+                    }
+                    model = FSDP(model, **kwargs)
                     if fsdp_plugin.activation_checkpointing:
                         from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
                             CheckpointImpl,
