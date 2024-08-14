@@ -30,8 +30,15 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY
-from .environment import str_to_bool
-from .imports import is_cuda_available, is_mlu_available, is_npu_available, is_xpu_available
+from .environment import parse_flag_from_env, str_to_bool
+from .imports import (
+    is_cuda_available,
+    is_mlu_available,
+    is_msamp_available,
+    is_npu_available,
+    is_transformer_engine_available,
+    is_xpu_available,
+)
 from .versions import compare_versions
 
 
@@ -297,8 +304,11 @@ class FP8RecipeKwargs(KwargsHandler):
     ```
 
     Args:
-        backend (`str`, *optional*, defaults to "msamp"):
-            Which FP8 engine to use. Must be one of `"msamp"` (MS-AMP) or `"te"` (TransformerEngine).
+        backend (`str`, *optional*):
+            Which FP8 engine to use. Must be one of `"msamp"` (MS-AMP) or `"te"` (TransformerEngine). If not passed,
+            will use whichever is available in the environment, prioritizing MS-AMP.
+        use_autocast_during_eval (`bool`, *optional*, default to `False`):
+            Whether to use FP8 autocast during eval mode. Generally better metrics are found when this is `False`.
         margin (`int`, *optional*, default to 0):
             The margin to use for the gradient scaling.
         interval (`int`, *optional*, default to 1):
@@ -323,28 +333,60 @@ class FP8RecipeKwargs(KwargsHandler):
                     available currently).
     """
 
-    backend: Backend = "MSAMP"
-    opt_level: OptLevel = "O2"
-    margin: int = 0
-    interval: int = 1
-    fp8_format: FP8Format = "E4M3"
-    amax_history_len: int = 1
-    amax_compute_algo: AmaxComputeAlgorithm = "most_recent"
-    override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
+    backend: Backend = None
+    use_autocast_during_eval: bool = None
+    opt_level: OptLevel = None
+    margin: int = None
+    interval: int = None
+    fp8_format: FP8Format = None
+    amax_history_len: int = None
+    amax_compute_algo: AmaxComputeAlgorithm = None
+    override_linear_precision: Tuple[bool, bool, bool] = None
 
     def __post_init__(self):
-        if self.backend.upper() not in get_args(Backend):
-            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
-
+        env_prefix = "ACCELERATE_FP8_"
+        default_backend = "msamp" if is_msamp_available() else "te"
+        if self.backend is None:
+            self.backend = os.environ.get(env_prefix + "BACKEND", default_backend)
         self.backend = self.backend.upper()
+        if self.backend not in get_args(Backend):
+            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
         # Check TE args
         if self.backend == "TE":
+            if not is_transformer_engine_available():
+                raise ValueError(
+                    "TransformerEngine is not available. Please either install it, or use the 'MSAMP' backend (if installed)."
+                )
+            if self.use_autocast_during_eval is None:
+                self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
+            if self.margin is None:
+                self.margin = int(os.environ.get(env_prefix + "MARGIN", 0))
+            if self.interval is None:
+                self.interval = int(os.environ.get(env_prefix + "INTERVAL", 1))
+            if self.fp8_format is None:
+                self.fp8_format = os.environ.get(env_prefix + "FORMAT", "E4M3")
             self.fp8_format = self.fp8_format.upper()
             if self.fp8_format not in get_args(FP8Format):
                 raise ValueError(f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}.")
+            if self.amax_compute_algo is None:
+                self.amax_compute_algo = os.environ.get(env_prefix + "AMAX_COMPUTE_ALGO", "most_recent")
+            self.amax_compute_algo = self.amax_compute_algo.lower()
             if self.amax_compute_algo not in get_args(AmaxComputeAlgorithm):
                 raise ValueError(f"`amax_compute_algo` must be one of {' or '.join(get_args(AmaxComputeAlgorithm))}")
+            if self.amax_history_len is None:
+                self.amax_history_len = int(os.environ.get(env_prefix + "AMAX_HISTORY_LEN", 1024))
+            if self.override_linear_precision is None:
+                fprop = parse_flag_from_env(env_prefix + "OVERRIDE_FPROP")
+                dgrad = parse_flag_from_env(env_prefix + "OVERRIDE_DGRAD")
+                wgrad = parse_flag_from_env(env_prefix + "OVERRIDE_WGRAD")
+                self.override_linear_precision = (fprop, dgrad, wgrad)
         elif self.backend == "MSAMP":
+            if not is_msamp_available():
+                raise ValueError(
+                    "MS-AMP is not available. Please either install it, or use the 'TE' backend (if installed)."
+                )
+            if self.opt_level is None:
+                self.opt_level = os.environ.get(env_prefix + "OPT_LEVEL", "O2")
             if self.opt_level not in get_args(OptLevel):
                 raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
 
@@ -534,6 +576,21 @@ class SageMakerDistributedType(str, enum.Enum):
     MODEL_PARALLEL = "MODEL_PARALLEL"
 
 
+class FP8BackendType(str, enum.Enum):
+    """
+    Represents the backend used for FP8.
+
+    Values:
+
+        - **TE** -- using TransformerEngine.
+        - **MSAMP** -- using msamp.
+    """
+
+    # Subclassing str as well as Enum allows the `FP8BackendType` to be JSON-serializable out of the box.
+    TE = "TE"
+    MSAMP = "MSAMP"
+
+
 class ComputeEnvironment(str, enum.Enum):
     """
     Represents a type of the compute environment.
@@ -625,7 +682,7 @@ class LoggerType(BaseEnum):
     DVCLIVE = "dvclive"
 
 
-class PrecisionType(BaseEnum):
+class PrecisionType(str, BaseEnum):
     """Represents a type of precision used on floating point values
 
     Values:
@@ -1077,12 +1134,13 @@ class DeepSpeedPlugin:
         ds_config = self.deepspeed_config
         kwargs = {
             "fp16.enabled": mixed_precision == "fp16",
-            "bf16.enabled": mixed_precision == "bf16",
+            # When training in fp8, we still rely on bf16 autocast for the core mixed precision
+            "bf16.enabled": mixed_precision in ("bf16", "fp8"),
         }
         if mixed_precision == "fp16":
             if "fp16" not in ds_config:
                 ds_config["fp16"] = {"enabled": True, "auto_cast": True}
-        elif mixed_precision == "bf16":
+        elif mixed_precision in ("bf16", "fp8"):
             if "bf16" not in ds_config:
                 ds_config["bf16"] = {"enabled": True}
 
@@ -1497,7 +1555,12 @@ class FullyShardedDataParallelPlugin:
 
     def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
         "Sets the mixed precision policy for FSDP"
-        mixed_precision_mapping = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}
+        mixed_precision_mapping = {
+            "fp8": torch.bfloat16,
+            "fp16": torch.float16,
+            "bf16": torch.bfloat16,
+            "fp32": torch.float32,
+        }
         dtype = mixed_precision
         if isinstance(mixed_precision, str):
             dtype = mixed_precision_mapping.get(mixed_precision, None)

@@ -83,11 +83,19 @@ class BaseConfig:
     def to_dict(self):
         result = self.__dict__
         # For serialization, it's best to convert Enums to strings (or their underlying value type).
-        for key, value in result.items():
+
+        def _convert_enums(value):
             if isinstance(value, Enum):
-                result[key] = value.value
-            if isinstance(value, dict) and not bool(value):
-                result[key] = None
+                return value.value
+            if isinstance(value, dict):
+                if not bool(value):
+                    return None
+                for key1, value1 in value.items():
+                    value[key1] = _convert_enums(value1)
+            return value
+
+        for key, value in result.items():
+            result[key] = _convert_enums(value)
         result = {k: v for k, v in result.items() if v is not None}
         return result
 
@@ -184,6 +192,8 @@ class ClusterConfig(BaseConfig):
     main_training_function: str = "main"
     enable_cpu_affinity: bool = False
 
+    # args for FP8 training
+    fp8_config: dict = None
     # args for deepspeed_plugin
     deepspeed_config: dict = None
     # args for fsdp
@@ -221,6 +231,8 @@ class ClusterConfig(BaseConfig):
             self.ipex_config = {}
         if self.mpirun_config is None:
             self.mpirun_config = {}
+        if self.fp8_config is None:
+            self.fp8_config = {}
         return super().__post_init__()
 
 
