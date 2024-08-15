@@ -45,18 +45,22 @@ def train_baseline(opt_level="O2"):
     accelerator = Accelerator()
     device = accelerator.device
     model, optimizer = msamp.initialize(
-        model, optimizer, 
-        opt_level=opt_level, 
-        weight_qtype=Dtypes.kfloat8_e4m3, 
+        model, optimizer,
+        opt_level=opt_level,
+        weight_qtype=Dtypes.kfloat8_e4m3,
         use_fsdp=True
     )
-    
-    model.to(device)
 
     model = FP8FullyShardedDataParallel(
         model,
         use_orig_params=True,
         auto_wrap_policy=FSDP_WRAP_POLICY,
+        cpu_offload=False,
+        sync_module_states=False,
+        backward_prefetch=None,
+        forward_prefetch=False,
+        limit_all_gathers=True,
+        device_id=device
     )
     optimizer = FSDPAdamW(optimizer)
 
@@ -67,19 +71,22 @@ def train_baseline(opt_level="O2"):
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
             outputs = model(**batch)
             loss = outputs.loss
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            lr_scheduler.step()
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        lr_scheduler.step()
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = (
+        accelerator.free_memory(model, optimizer, train_dataloader, eval_dataloader, lr_scheduler)
+    )
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
-    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
+    ), f'Baseline: Opt level {opt_level}: Accuracy should be higher for the trained model: {base_model_results["accuracy"]} < {trained_model_results["accuracy"]}'
     assert (
         trained_model_results["f1"] > base_model_results["f1"]
-    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    ), f'Baseline: Opt level {opt_level}: F1 score should be higher for the trained model: {base_model_results["f1"]} < {trained_model_results["f1"]}'
 
     return base_model_results, trained_model_results
 
@@ -98,7 +105,7 @@ def train_integration(opt_level="O2"):
     )
 
     model, optimizer = accelerator.prepare(model, optimizer)
-    # base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
+    base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
     for i, batch in enumerate(train_dataloader):
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
@@ -111,20 +118,26 @@ def train_integration(opt_level="O2"):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = (
+        accelerator.free_memory(model, optimizer, train_dataloader, eval_dataloader, lr_scheduler)
+    )
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
-    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
+    ), f'Integration: Opt level {opt_level}: Accuracy should be higher for the trained model: {base_model_results["accuracy"]} < {trained_model_results["accuracy"]}'
     assert (
         trained_model_results["f1"] > base_model_results["f1"]
-    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    ), f'Integration: Opt level {opt_level}: F1 score should be higher for the trained model: {base_model_results["f1"]} < {trained_model_results["f1"]}'
 
     return base_model_results, trained_model_results
 
 
 if __name__ == "__main__":
-    # for opt_level in ["O1", "O2"]:
-    # baseline_not_trained, baseline_trained = train_baseline(opt_level)
-    accelerator_not_trained, accelerator_trained = train_integration("O2")
+    # baseline_not_trained, baseline_trained = train_baseline("O1")
+    # accelerator_not_trained, accelerator_trained = train_integration("O1")
+    # print(baseline_trained)
+    for opt_level in ["O1", "O2"]:
+        # baseline_not_trained, baseline_trained = train_baseline(opt_level)
+        accelerator_not_trained, accelerator_trained = train_integration(opt_level)
         # assert (
         #     baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
         # ), f'Accuracy not the same for untrained baseline and accelerator using opt_level={opt_level}: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
