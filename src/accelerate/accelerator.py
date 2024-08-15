@@ -307,11 +307,11 @@ class Accelerator:
             deepspeed_plugin.set_mixed_precision(mixed_precision)
             deepspeed_plugin.set_deepspeed_weakref()
 
-        if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
-            fsdp_plugin, FullyShardedDataParallelPlugin
-        ):
-            if is_torch_version("<", FSDP_PYTORCH_VERSION):
-                raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
+        # if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
+        #     fsdp_plugin, FullyShardedDataParallelPlugin
+        # ):
+            # if is_torch_version("<", FSDP_PYTORCH_VERSION):
+            #     raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
@@ -1315,12 +1315,13 @@ class Accelerator:
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
         else:
-            if self.fp8_backend == "MSAMP" and self.distributed_type != DistributedType.FSDP:
+            if self.fp8_backend == "MSAMP":
                 args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
-            result = tuple(
-                self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
-            )
-            result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
+            result = args
+            # result = tuple(
+            #     self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
+            # )
+            # result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
         if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
@@ -1331,6 +1332,16 @@ class Accelerator:
             for obj in result:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
+
+        # if self.distributed_type == DistributedType.FSDP and self.fp8_backend == "MSAMP":
+        #     # We need to convert the underlying optimizer to FSDPAdamW *after* FSDP wrapping
+        #     result = list(result)
+        #     from msamp.optim import FSDPAdamW
+        #     for i, obj in enumerate(result):
+        #         if isinstance(obj, AcceleratedOptimizer):
+        #             result[i].optimizer = FSDPAdamW(obj.optimizer)
+        #             print(f'Wrapping optimizer in FSDP: {type(obj.optimizer)}')
+        #     result = tuple(result)
 
         for item in result:
             if any(
@@ -1368,6 +1379,7 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
+        print(f'Model device placement: {device_placement}')
         self._models.append(model)
 
         # TODO: Look at enabling native TP training directly with a proper config
@@ -1430,6 +1442,7 @@ class Accelerator:
                     "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
                 )
         elif device_placement and not self.verify_device_map(model):
+            print(f"Moving model to device: {self.device}")
             model = model.to(self.device)
         if not evaluation_mode:
             if self.distributed_type in (
@@ -1453,7 +1466,12 @@ class Accelerator:
                         self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
-                from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+                if self.mixed_precision == "fp8" and self.fp8_backend == "MSAMP":
+                    print('Importing `FP8FullyShardedDataParallel` from `msamp.fsdp`')
+                    # MS-AMP uses a patched version of FSDP
+                    from msamp.fsdp import FP8FullyShardedDataParallel as FSDP
+                else:
+                    from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
                 # don't wrap it again
@@ -1462,6 +1480,7 @@ class Accelerator:
                 is_type_fsdp = isinstance(model, FSDP) or (
                     is_compiled_module(model) and isinstance(model._orig_mod, FSDP)
                 )
+                print(f'Is type FSDP: {is_type_fsdp}')
 
                 if not is_type_fsdp:
                     self.state.fsdp_plugin.set_auto_wrap_policy(model)
@@ -1481,6 +1500,7 @@ class Accelerator:
                         "device_id": self.device,
                     }
                     model = FSDP(model, **kwargs)
+                    print(f'Wrapped model in FSDP: {type(model)}')
                     if fsdp_plugin.activation_checkpointing:
                         from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
                             CheckpointImpl,
@@ -1507,7 +1527,7 @@ class Accelerator:
                 #   * mixed_precision.param_dtype only regards _fwd_bwd_param_dtype
                 #   * if model is loaded in 16bit, and even if mixed_precision.param_dtype is None,
                 #     we sill want to upcast the flat_param.
-                if self.mixed_precision != "no":  # if mixed precision is set
+                if self.mixed_precision != "no" and self.fp8_backend != "MSAMP":  # if mixed precision is set
                     upcasted_log = []
                     for module in FSDP.fsdp_modules(model):
                         # Referencing DeepSpeed Zero3
@@ -1996,7 +2016,6 @@ class Accelerator:
             )
         else:
             import msamp
-
         model, optimizer = None, None
         num_models, num_optimizers = 0, 0
         result = [obj for obj in args]
@@ -2019,7 +2038,29 @@ class Accelerator:
                 f"You can't use multiple models ({num_models}) or optimizers {num_optimizers} with MS-AMP."
             )
         else:
-            model, optimizer = msamp.initialize(model, optimizer, opt_level=self.fp8_recipe_handler.opt_level)
+            if self.distributed_type == DistributedType.FSDP:
+                # We need to set the auto_wrap policy before initializing the model
+                self.state.fsdp_plugin.set_auto_wrap_policy(model)
+            from msamp.common.dtype import Dtypes
+            model, optimizer = msamp.initialize(
+                model, optimizer, 
+                opt_level=self.fp8_recipe_handler.opt_level,
+                use_fsdp=self.distributed_type == DistributedType.FSDP,
+                weight_qtype=Dtypes.kfloat8_e4m3,
+            )
+        # now we can prepare the model?
+        # model = self.prepare_model(model, device_placement=True)
+        from msamp.fsdp import FP8FullyShardedDataParallel as FSDP
+        
+        model = FSDP(
+            model,
+            use_orig_params=True,
+            auto_wrap_policy=self.state.fsdp_plugin.auto_wrap_policy,
+            device_id=self.device,
+        )
+        print(f'Prepared: {type(model)}')
+        from msamp.optim import FSDPAdamW
+        optimizer = FSDPAdamW(optimizer)
 
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
