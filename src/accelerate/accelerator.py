@@ -507,6 +507,9 @@ class Accelerator:
         elif self.state.mixed_precision == "fp8":
             # We always enable `native_amp` for FP8
             self.native_amp = True
+            # MS-AMP requires grad scaler however
+            if self.fp8_recipe_handler.backend == "MSAMP":
+                self.scaler = torch.cuda.amp.GradScaler()
 
         # Start of internal step tracking
         self.step = 0
@@ -1193,8 +1196,7 @@ class Accelerator:
             elif isinstance(obj, torch.nn.Module):
                 return self.prepare_model(obj, device_placement=device_placement)
             elif isinstance(obj, torch.optim.Optimizer):
-                optimizer = self.prepare_optimizer(obj, device_placement=device_placement)
-                return optimizer
+                return self.prepare_optimizer(obj, device_placement=device_placement)
         # Second pass of preparation: LR scheduler (which need the full list of optimizers)
         elif isinstance(obj, LRScheduler):
             scheduler = self.prepare_scheduler(obj)
@@ -1306,17 +1308,16 @@ class Accelerator:
                 args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex_or_xpu(*args)
-        if self.fp8_recipe_handler is not None and self.fp8_recipe_handler.backend == "TE":
-            args = self._prepare_te(*args)
+        if self.fp8_recipe_handler is not None:
+            if self.fp8_recipe_handler.backend == "TE":
+                args = self._prepare_te(*args)
+            elif self.fp8_recipe_handler.backend == "MSAMP":
+                args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
         else:
-            if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP":
-                args = self._prepare_msamp(*args)
-                # MS-AMP will handle the device placement
-                device_placement = [False for _ in args]
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
@@ -1391,7 +1392,7 @@ class Accelerator:
             else:
                 model.forward = convert_outputs_to_fp32(new_forward)
 
-        # We prepare fp8 after, allowing for bf16 autocast to happen first
+        # We prepare TE fp8 after, allowing for bf16 autocast to happen first
         if getattr(self.fp8_recipe_handler, "backend", None) == "TE" and not self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
 
@@ -1983,7 +1984,7 @@ class Accelerator:
                 result[i] = optimizer
         return tuple(result)
 
-    def _prepare_msamp(self, *args):
+    def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
             raise ImportError(
                 "MS-AMP was not found on your system. Please ensure that MS-AMP is available "
@@ -1995,14 +1996,17 @@ class Accelerator:
         model, optimizer = None, None
         num_models, num_optimizers = 0, 0
         result = [obj for obj in args]
-        for obj in result:
+        for i, obj in enumerate(result):
             if isinstance(obj, torch.nn.Module):
                 model = obj
                 num_models += 1
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
+                optimizer_index = i
                 num_optimizers += 1
-        if optimizer is None or model is None:
+        if optimizer is None and model is None:
+            return result, device_placement
+        elif optimizer is None or model is None:
             raise ValueError(
                 "You must pass a model and an optimizer together to `accelerate.prepare()` when using MS-AMP."
             )
@@ -2012,12 +2016,16 @@ class Accelerator:
             )
         else:
             model, optimizer = msamp.initialize(model, optimizer, opt_level=self.fp8_recipe_handler.opt_level)
+
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
             elif isinstance(result[i], (torch.optim.Optimizer)):
                 result[i] = optimizer
-        return tuple(result)
+        if optimizer_index is not None:
+            # NOTE: MS-AMP moves the optimizer, but not the model
+            device_placement[optimizer_index] = False
+        return tuple(result), device_placement
 
     def prepare_data_loader(
         self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
@@ -2109,7 +2117,9 @@ class Accelerator:
             return optimizer
         if device_placement is None:
             device_placement = self.device_placement
-        optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=self.scaler)
+        # NOTE: Special case: with MS-AMP we do *not* pass in the scaler, optimizer handles it for us
+        scaler = None if (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP") else self.scaler
+        optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=scaler)
         self._optimizers.append(optimizer)
         return optimizer
 
