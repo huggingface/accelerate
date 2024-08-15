@@ -107,7 +107,9 @@ def evaluate_model(model, dataloader, metric, accelerator=None):
     model.eval()
     for step, batch in enumerate(dataloader):
         with torch.no_grad():
-            outputs = model(**batch)
+            # W/ MS-AMP, we need to cast while evaluating
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                outputs = model(**batch)
         predictions = outputs.logits.argmax(dim=-1)
         references = batch["labels"]
         if accelerator is not None and accelerator.num_processes > 1:

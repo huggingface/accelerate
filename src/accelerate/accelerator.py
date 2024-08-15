@@ -402,7 +402,7 @@ class Accelerator:
                 self.distributed_type not in (DistributedType.FSDP, DistributedType.DEEPSPEED)
             ):
                 raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
-            self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
+            self.delayed_fp8_autocast = self.fp8_backend == "TE" and self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.FSDP,
             )
@@ -508,7 +508,7 @@ class Accelerator:
             # We always enable `native_amp` for FP8
             self.native_amp = True
             # MS-AMP requires grad scaler however
-            if self.fp8_recipe_handler.backend == "MSAMP":
+            if self.fp8_backend == "MSAMP":
                 self.scaler = torch.cuda.amp.GradScaler()
 
         # Start of internal step tracking
@@ -1308,20 +1308,20 @@ class Accelerator:
                 args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex_or_xpu(*args)
-        if self.fp8_recipe_handler is not None:
-            if self.fp8_recipe_handler.backend == "TE":
-                args = self._prepare_te(*args)
-            elif self.fp8_recipe_handler.backend == "MSAMP":
-                args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
+        if self.fp8_backend == "TE":
+            args = self._prepare_te(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
         else:
+            if self.fp8_backend == "MSAMP" and self.distributed_type != DistributedType.FSDP:
+                args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
+
         if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
@@ -1382,14 +1382,20 @@ class Accelerator:
             )
         if self.native_amp:
             model._original_forward = model.forward
-            model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
+            # NOTE: MS-AMP is special, and adds a `__func__` already to `model.forward`
+            # When enabled, strictly use `model.forward`
             autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
-            new_forward = autocast_context(model_forward_func)
-            if hasattr(model.forward, "__func__"):
-                model.forward = MethodType(new_forward, model)
-                model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
+            if self.fp8_backend == "MSAMP":
+                model_forward_func = model.forward
+                model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
             else:
-                model.forward = convert_outputs_to_fp32(new_forward)
+                model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
+                new_forward = autocast_context(model_forward_func)
+                if hasattr(model.forward, "__func__"):
+                    model.forward = MethodType(new_forward, model)
+                    model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
+                else:
+                    model.forward = convert_outputs_to_fp32(new_forward)
 
         # We prepare TE fp8 after, allowing for bf16 autocast to happen first
         if getattr(self.fp8_recipe_handler, "backend", None) == "TE" and not self.delayed_fp8_autocast:
@@ -2117,9 +2123,7 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement
         # NOTE: Special case: with MS-AMP we do *not* pass in the scaler, optimizer handles it for us
-        scaler = (
-            None if (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP") else self.scaler
-        )
+        scaler = None if self.fp8_backend == "MSAMP" else self.scaler
         optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=scaler)
         self._optimizers.append(optimizer)
         return optimizer
@@ -3566,3 +3570,10 @@ class Accelerator:
             raise ValueError(
                 "Backward pass not properly called on LOMO optimizers. Are you sure you passed a LOMO optimizer in accelerator.prepare()?"
             )
+
+    @property
+    def fp8_backend(self):
+        "Returns the configured backend for training in FP8"
+        if self.mixed_precision == "fp8" and self.fp8_recipe_handler is not None:
+            return self.fp8_recipe_handler.backend
+        return None
