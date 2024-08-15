@@ -90,6 +90,7 @@ from .utils import (
     is_npu_available,
     is_torch_version,
     is_torch_xla_available,
+    is_transformer_engine_available,
     is_xpu_available,
     load_fsdp_model,
     load_fsdp_optimizer,
@@ -1579,7 +1580,7 @@ class Accelerator:
         return model
 
     def _prepare_te(self, *args):
-        if not is_msamp_available():
+        if not is_transformer_engine_available():
             raise ImportError(
                 "`transformer_engine` was not found on your system. Please ensure that `transformer_engine` is installed"
             )
