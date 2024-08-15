@@ -735,8 +735,8 @@ def get_cluster_input():
                     )
                     fp8_config["fp8_format"] = _ask_options(
                         "Which weight format should be used?",
-                        ["E4M3", "HYBRID"],
-                        lambda x: "E4M3" if x == 0 else "HYBRID",
+                        ["HYBRID", "E4M3"],
+                        lambda x: "HYBRID" if x == 0 else "E4M3",
                         default=0,
                     )
                     fp8_config["amax_history_length"] = _ask_field(
