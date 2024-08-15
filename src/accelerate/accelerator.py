@@ -1380,7 +1380,6 @@ class Accelerator:
                 "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
-
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
@@ -2118,7 +2117,9 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement
         # NOTE: Special case: with MS-AMP we do *not* pass in the scaler, optimizer handles it for us
-        scaler = None if (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP") else self.scaler
+        scaler = (
+            None if (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP") else self.scaler
+        )
         optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=scaler)
         self._optimizers.append(optimizer)
         return optimizer

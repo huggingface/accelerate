@@ -18,14 +18,14 @@ This script tests to ensure that `accelerate` performs at the same level as raw 
 This particular script verifies this for single GPU training.
 """
 import evaluate
-import torch
 import msamp
-from fp8_utils import evaluate_model, get_named_parameters, get_training_utilities
-from transformer_engine.common.recipe import DelayedScaling
+import torch
+from fp8_utils import evaluate_model, get_training_utilities
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.utils import FP8RecipeKwargs, set_seed
+
 
 MODEL_NAME = "bert-base-cased"
 METRIC = evaluate.load("glue", "mrpc")
@@ -67,7 +67,7 @@ def train_baseline(opt_level="O2"):
 
 def train_integration(opt_level="O2"):
     kwargs_handlers = [FP8RecipeKwargs(backend="msamp", opt_level=opt_level)]
-    # AcceleratorState()._reset_state(True)
+    AcceleratorState()._reset_state(True)
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=kwargs_handlers)
     set_seed(42)
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(
@@ -113,5 +113,5 @@ if __name__ == "__main__":
         baseline_trained["accuracy"] == accelerator_trained["accuracy"]
     ), f'Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
     assert (
-    baseline_trained["f1"] == accelerator_trained["f1"]
+        baseline_trained["f1"] == accelerator_trained["f1"]
     ), f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
