@@ -26,7 +26,6 @@ import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
-from types import MethodType
 from typing import Any, Callable, Union
 
 import torch
@@ -73,7 +72,6 @@ from .utils import (
     clean_state_dict_for_safetensors,
     compare_versions,
     convert_model,
-    convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
     gather_object,
@@ -1380,22 +1378,22 @@ class Accelerator:
                 "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
-        if self.native_amp:
-            model._original_forward = model.forward
-            # NOTE: MS-AMP is special, and adds a `__func__` already to `model.forward`
-            # When enabled, strictly use `model.forward`
-            autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
-            if self.fp8_backend == "MSAMP":
-                model_forward_func = model.forward
-                model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
-            else:
-                model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
-                new_forward = autocast_context(model_forward_func)
-                if hasattr(model.forward, "__func__"):
-                    model.forward = MethodType(new_forward, model)
-                    model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
-                else:
-                    model.forward = convert_outputs_to_fp32(new_forward)
+        # if self.native_amp:
+        #     model._original_forward = model.forward
+        #     # NOTE: MS-AMP is special, and adds a `__func__` already to `model.forward`
+        #     # When enabled, strictly use `model.forward`
+        #     autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
+        #     if self.fp8_backend == "MSAMP":
+        #         model_forward_func = model.forward
+        #         model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
+        #     else:
+        #         model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
+        #         new_forward = autocast_context(model_forward_func)
+        #         if hasattr(model.forward, "__func__"):
+        #             model.forward = MethodType(new_forward, model)
+        #             model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
+        #         else:
+        #             model.forward = convert_outputs_to_fp32(new_forward)
 
         # We prepare TE fp8 after, allowing for bf16 autocast to happen first
         if getattr(self.fp8_recipe_handler, "backend", None) == "TE" and not self.delayed_fp8_autocast:
@@ -1446,7 +1444,6 @@ class Accelerator:
                         device_ids, output_device = [self.local_process_index], self.local_process_index
                     else:
                         device_ids, output_device = None, None
-
                     model = torch.nn.parallel.DistributedDataParallel(
                         model, device_ids=device_ids, output_device=output_device, **kwargs
                     )

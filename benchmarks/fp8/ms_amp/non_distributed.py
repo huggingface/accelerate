@@ -99,19 +99,19 @@ def train_integration(opt_level="O2"):
 
 
 if __name__ == "__main__":
-    # for opt_level in ["O1", "O2"]:
-    baseline_not_trained, baseline_trained = train_baseline()
-    accelerator_not_trained, accelerator_trained = train_integration()
+    for opt_level in ["O1", "O2"]:
+        baseline_not_trained, baseline_trained = train_baseline(opt_level)
+        accelerator_not_trained, accelerator_trained = train_integration(opt_level)
 
-    assert (
-        baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
-    ), f'Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
-    assert (
-        baseline_not_trained["f1"] == accelerator_not_trained["f1"]
-    ), f'F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
-    assert (
-        baseline_trained["accuracy"] == accelerator_trained["accuracy"]
-    ), f'Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
-    assert (
-        baseline_trained["f1"] == accelerator_trained["f1"]
-    ), f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
+        assert (
+            baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
+        ), f'Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
+        assert (
+            baseline_not_trained["f1"] == accelerator_not_trained["f1"]
+        ), f'F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
+        assert (
+            baseline_trained["accuracy"] == accelerator_trained["accuracy"]
+        ), f'Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
+        assert (
+            baseline_trained["f1"] == accelerator_trained["f1"]
+        ), f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
