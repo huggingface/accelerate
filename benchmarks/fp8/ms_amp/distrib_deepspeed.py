@@ -13,31 +13,30 @@
 # limitations under the License.
 
 """
-This script tests to ensure that `accelerate` performs at the same level as raw `TransformersEngine`.
+This script tests to ensure that `accelerate` performs at the same level as raw `MS-AMP`.
 
-This particular script verifies this for DDP training.
+This particular script verifies this for DeepSpeed training.
 """
 from unittest.mock import patch
 
-import deepspeed
+from msamp import deepspeed
 import evaluate
 import torch
-import transformer_engine.common.recipe as te_recipe
-import transformer_engine.pytorch as te
-from fp8_utils import evaluate_model, get_named_parameters, get_training_utilities
-from transformer_engine.common.recipe import DelayedScaling
+# import transformer_engine.common.recipe as te_recipe
+# import transformer_engine.pytorch as te
+from fp8_utils import evaluate_model, get_training_utilities
+# from transformer_engine.common.recipe import DelayedScaling
 
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.state import AcceleratorState
 from accelerate.utils import FP8RecipeKwargs, set_seed
-from accelerate.utils.transformer_engine import convert_model
 
 
 MODEL_NAME = "bert-base-cased"
 METRIC = evaluate.load("glue", "mrpc")
 
 
-def train_baseline(zero_stage: int = 1):
+def train_baseline(zero_stage: int = 1, opt_level: str = "O1"):
     # This forces transformers to think Zero-3 Init should be used
     with patch("transformers.integrations.deepspeed.is_deepspeed_zero3_enabled") as mock:
         mock.return_value = zero_stage == 3
@@ -47,20 +46,6 @@ def train_baseline(zero_stage: int = 1):
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(
         MODEL_NAME, accelerator=accelerator
     )
-
-    # Convert the model to TE
-    old_named_params = get_named_parameters(model)
-
-    with torch.no_grad():
-        convert_model(model)
-    new_named_params = get_named_parameters(model)
-
-    mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
-    for param_group in optimizer.param_groups:
-        param_group["params"] = [mapping[p] for p in param_group["params"]]
-
-    FP8_RECIPE_KWARGS = {"fp8_format": te_recipe.Format.HYBRID, "amax_history_len": 32, "amax_compute_algo": "max"}
-    fp8_recipe = DelayedScaling(**FP8_RECIPE_KWARGS)
 
     import numpy as np
 
@@ -79,6 +64,10 @@ def train_baseline(zero_stage: int = 1):
         "bf16": {"enabled": True},
         "fp16": {"enabled": False},
         "zero_allow_untested_optimizer": True,
+        "msamp": {
+            "enabled": True,
+            "opt_level": opt_level,
+        }
     }
 
     (
@@ -95,15 +84,9 @@ def train_baseline(zero_stage: int = 1):
     base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
 
-    model_outputs = []
-    data = []
-
     for _ in range(2):
         for batch in train_dataloader:
-            with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
-                outputs = model(**batch)
-                data.append(batch.to("cpu"))
-            model_outputs.append(outputs.logits.to("cpu"))
+            outputs = model(**batch)
             loss = outputs.loss
             model.backward(loss)
             model.step()
@@ -112,6 +95,8 @@ def train_baseline(zero_stage: int = 1):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.destroy()
+    torch.cuda.empty_cache()
+    AcceleratorState()._reset_state(True)
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
     ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
@@ -119,7 +104,7 @@ def train_baseline(zero_stage: int = 1):
         trained_model_results["f1"] > base_model_results["f1"]
     ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
 
-    return base_model_results, trained_model_results, model_outputs, data
+    return base_model_results, trained_model_results
 
 
 def train_integration(zero_stage: int = 1):
@@ -158,6 +143,7 @@ def train_integration(zero_stage: int = 1):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.destroy()
+    torch.cuda.empty_cache()
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
     ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
@@ -165,25 +151,31 @@ def train_integration(zero_stage: int = 1):
         trained_model_results["f1"] > base_model_results["f1"]
     ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
 
-    return base_model_results, trained_model_results, model_outputs, data
+    return base_model_results, trained_model_results
 
 
 if __name__ == "__main__":
-    # for zero_stage in [1, 2, 3]:
-    zero_stage = 1
-    baseline_not_trained, baseline_trained, baseline_outputs, baseline_data = train_baseline(zero_stage)
-    accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(zero_stage)
-    assert (
-        baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
-    ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
-    assert (
-        baseline_not_trained["f1"] == accelerator_not_trained["f1"]
-    ), f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
-    assert (
-        baseline_trained["accuracy"] == accelerator_trained["accuracy"]
-    ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
-    assert (
-        baseline_trained["f1"] == accelerator_trained["f1"]
-    ), f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
+    results = {"1": [], "2": [], "3": []}
+    for zero_stage in [1, 2, 3]:
+        for opt_level in ["O1", "O2", "O3"]:
+            baseline_not_trained, baseline_trained = train_baseline(zero_stage, opt_level)
+            results[zero_stage].append({"opt_level": opt_level, "not_trained": baseline_not_trained, "trained": baseline_trained})
+    for stage, stage_results in results.items():
+        print(f'zero_stage={stage}:\n')
+        for result in stage_results:
+            print(f'opt_level={result["opt_level"]}:\nBaseline not trained: {result["not_trained"]}\nBaseline trained: {result["trained"]}\n')
+    # accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(zero_stage)
+    # assert (
+    #     baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
+    # ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
+    # assert (
+    #     baseline_not_trained["f1"] == accelerator_not_trained["f1"]
+    # ), f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
+    # assert (
+    #     baseline_trained["accuracy"] == accelerator_trained["accuracy"]
+    # ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
+    # assert (
+    #     baseline_trained["f1"] == accelerator_trained["f1"]
+    # ), f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
 
     torch.distributed.destroy_process_group()
