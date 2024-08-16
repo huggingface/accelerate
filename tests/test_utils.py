@@ -49,6 +49,7 @@ from accelerate.utils import (
     listify,
     pad_across_processes,
     pad_input_tensors,
+    parse,
     patch_environment,
     recursively_apply,
     save,
@@ -411,3 +412,8 @@ class UtilsTester(unittest.TestCase):
             tqdm(True, range(3), disable=True)
         assert "Passing `True` as the first argument to" in cm.pop().message.args[0]
         tqdm(range(3), main_process_only=True, disable=True)
+
+    def test_dev0_parsing(self):
+        v1 = parse("0.34.0.dev0")
+        v2 = parse("0.34.0")
+        assert v1 == v2

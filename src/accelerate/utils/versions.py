@@ -15,9 +15,18 @@
 import importlib.metadata
 from typing import Union
 
-from packaging.version import Version, parse
+from packaging.version import Version
+from packaging.version import parse as _parse
 
 from .constants import STR_OPERATION_TO_FUNC
+
+
+def parse(version: str):
+    """
+    Same as `packaging.version.parse`, but grabs strictly the base version.
+    """
+    version = _parse(version)
+    return _parse(version.base_version)
 
 
 torch_version = parse(importlib.metadata.version("torch"))
