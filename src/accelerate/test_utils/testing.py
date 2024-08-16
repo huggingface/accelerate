@@ -255,7 +255,15 @@ def require_bnb(test_case):
     """
     Decorator marking a test that requires bitsandbytes. These tests are skipped when they are not.
     """
-    return unittest.skipUnless(is_bnb_available(), "test requires the bitsandbytes library")(test_case)
+    if is_bnb_available():
+        try:
+            import pytest
+
+            return pytest.mark.bnb(test_case)
+        except ImportError:
+            return test_case
+    else:
+        return unittest.skip("test requires the bitsandbytes library")(test_case)
 
 
 def require_tpu(test_case):

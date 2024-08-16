@@ -42,3 +42,8 @@ exclude = [
 "os.getenv".msg = "Use os.environ instead"
 "os.putenv".msg = "Use os.environ instead"
 "os.unsetenv".msg = "Use os.environ instead"
+
+[tool.pytest.ini_options]
+markers = [
+    "bnb: select bitsandbytes integration tests; `pytest -m bnb`",
+]
