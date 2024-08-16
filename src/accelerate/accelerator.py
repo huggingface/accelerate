@@ -104,7 +104,7 @@ from .utils import (
     save_fsdp_optimizer,
     wait_for_everyone,
 )
-from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME
+from .utils.constants import PROFILE_PATTERN_NAME
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -310,8 +310,8 @@ class Accelerator:
         # if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
         #     fsdp_plugin, FullyShardedDataParallelPlugin
         # ):
-            # if is_torch_version("<", FSDP_PYTORCH_VERSION):
-            #     raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
+        # if is_torch_version("<", FSDP_PYTORCH_VERSION):
+        #     raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
@@ -507,8 +507,11 @@ class Accelerator:
         elif self.state.mixed_precision == "fp8":
             # We always enable `native_amp` for FP8
             self.native_amp = True
-            # MS-AMP requires grad scaler however
-            if self.fp8_backend == "MSAMP" and self.distributed_type not in (DistributedType.FSDP, DistributedType.DEEPSPEED):
+            # MS-AMP requires `GradScaler` even with bf16 autocast w/ single GPU or DDP:
+            if self.fp8_backend == "MSAMP" and self.distributed_type not in (
+                DistributedType.FSDP,
+                DistributedType.DEEPSPEED,
+            ):
                 self.scaler = torch.cuda.amp.GradScaler()
 
         # Start of internal step tracking
@@ -1336,6 +1339,7 @@ class Accelerator:
             # We need to convert the underlying optimizer to FSDPAdamW *after* FSDP wrapping
             result = list(result)
             from msamp.optim import FSDPAdamW
+
             for i, obj in enumerate(result):
                 if isinstance(obj, AcceleratedOptimizer):
                     result[i].optimizer = FSDPAdamW(optimizer=obj.optimizer)
@@ -1636,6 +1640,13 @@ class Accelerator:
     def _prepare_deepspeed(self, *args):
         import deepspeed
 
+        ds_initialize = deepspeed.initialize
+        if self.fp8_backend == "MSAMP":
+            # MS-AMP requires DeepSpeed patches
+            from msamp import deepspeed as msamp_deepspeed
+
+            ds_initialize = msamp_deepspeed.initialize
+
         deepspeed_plugin = self.state.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
@@ -1824,7 +1835,7 @@ class Accelerator:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
 
-            engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
+            engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
             if optimizer is not None:
                 optimizer = DeepSpeedOptimizerWrapper(optimizer)
             if scheduler is not None:
@@ -2037,8 +2048,10 @@ class Accelerator:
                 # NOTE: MS-AMP fsdp relies on it's own MP policy, we must drop the users
                 self.state.fsdp_plugin.mixed_precision_policy = None
             from msamp.common.dtype import Dtypes
+
             model, optimizer = msamp.initialize(
-                model, optimizer,
+                model,
+                optimizer,
                 opt_level=self.fp8_recipe_handler.opt_level,
                 use_fsdp=self.distributed_type == DistributedType.FSDP,
                 weight_qtype=Dtypes.kfloat8_e4m3,
@@ -3598,4 +3611,6 @@ class Accelerator:
         "Returns the configured backend for training in FP8"
         if self.mixed_precision == "fp8" and self.fp8_recipe_handler is not None:
             return self.fp8_recipe_handler.backend
+        elif self.state.deepspeed_plugin is not None and self.state.deepspeed_plugin.enable_msamp:
+            return "MSAMP"
         return None

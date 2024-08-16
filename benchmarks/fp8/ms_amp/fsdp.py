@@ -17,21 +17,21 @@ This script tests to ensure that `accelerate` performs at the same level as raw 
 
 This particular script verifies this for FSDP training.
 """
+from functools import partial
+
 import evaluate
 import msamp
 import torch
-from accelerate import FullyShardedDataParallelPlugin as FSDPPlugin
+from fp8_utils import evaluate_model, get_training_utilities
+from msamp.common.dtype import Dtypes
 from msamp.fsdp import FP8FullyShardedDataParallel
 from msamp.optim import FSDPAdamW
-from msamp.common.dtype import Dtypes
-from fp8_utils import evaluate_model, get_training_utilities
-
-from accelerate import Accelerator
-from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, set_seed
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from transformers.models.bert import BertLayer
-from functools import partial
+
+from accelerate import Accelerator
+from accelerate import FullyShardedDataParallelPlugin as FSDPPlugin
+from accelerate.utils import FP8RecipeKwargs, set_seed
 
 
 MODEL_NAME = "bert-base-cased"
@@ -45,10 +45,7 @@ def train_baseline(opt_level="O2"):
     accelerator = Accelerator()
     device = accelerator.device
     model, optimizer = msamp.initialize(
-        model, optimizer,
-        opt_level=opt_level,
-        weight_qtype=Dtypes.kfloat8_e4m3,
-        use_fsdp=True
+        model, optimizer, opt_level=opt_level, weight_qtype=Dtypes.kfloat8_e4m3, use_fsdp=True
     )
 
     model = FP8FullyShardedDataParallel(
@@ -60,7 +57,7 @@ def train_baseline(opt_level="O2"):
         backward_prefetch=None,
         forward_prefetch=False,
         limit_all_gathers=True,
-        device_id=device
+        device_id=device,
     )
     optimizer = FSDPAdamW(optimizer)
 
@@ -78,8 +75,8 @@ def train_baseline(opt_level="O2"):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = (
-        accelerator.free_memory(model, optimizer, train_dataloader, eval_dataloader, lr_scheduler)
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.free_memory(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
@@ -118,8 +115,8 @@ def train_integration(opt_level="O2"):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = (
-        accelerator.free_memory(model, optimizer, train_dataloader, eval_dataloader, lr_scheduler)
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.free_memory(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
     assert (
         trained_model_results["accuracy"] > base_model_results["accuracy"]
