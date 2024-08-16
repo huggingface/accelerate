@@ -2048,14 +2048,11 @@ class Accelerator:
                 # NOTE: MS-AMP fsdp relies on it's own MP policy, we must drop the users
                 self.state.fsdp_plugin.mixed_precision_policy = None
             from msamp.common.dtype import Dtypes
-
-            model, optimizer = msamp.initialize(
-                model,
-                optimizer,
-                opt_level=self.fp8_recipe_handler.opt_level,
-                use_fsdp=self.distributed_type == DistributedType.FSDP,
-                weight_qtype=Dtypes.kfloat8_e4m3,
-            )
+            msamp_init_args = dict(model=model, optimizer=optimizer, opt_level=self.fp8_recipe_handler.opt_level)
+            if self.distributed_type == DistributedType.FSDP:
+                msamp_init_args["use_fsdp"] = True
+                msamp_init_args["weight_qtype"] = Dtypes.kfloat8_e4m3
+            model, optimizer = msamp.initialize(**msamp_init_args)
 
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
