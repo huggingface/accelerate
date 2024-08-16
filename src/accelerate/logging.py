@@ -33,7 +33,7 @@ class MultiProcessAdapter(logging.LoggerAdapter):
     def _should_log(main_process_only):
         "Check if log should be performed"
         state = PartialState()
-        return not main_process_only or (main_process_only and state.is_main_process)
+        return not main_process_only or (main_process_only and state.on_main_process)
 
     def log(self, level, msg, *args, **kwargs):
         """
