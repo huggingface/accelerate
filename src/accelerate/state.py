@@ -695,12 +695,12 @@ class PartialState:
             return torch.device("mlu")
         elif is_musa_available():
             return torch.device("musa")
+        elif is_npu_available():
+            return torch.device("npu")
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
             return torch.device("xpu:0")
-        elif is_npu_available():
-            return torch.device("npu")
         else:
             return torch.device("cpu")
 
