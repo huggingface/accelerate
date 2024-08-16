@@ -314,7 +314,8 @@ class FP8RecipeKwargs(KwargsHandler):
         interval (`int`, *optional*, default to 1):
             The interval to use for how often the scaling factor is recomputed.
         fp8_format (`str`, *optional*, default to "HYBRID"):
-            The format to use for the FP8 recipe. Must be one of `HYBRID` or `E4M3`. (Generally `HYBRID` for training, `E4M3` for evaluation)
+            The format to use for the FP8 recipe. Must be one of `HYBRID` or `E4M3`. (Generally `HYBRID` for training,
+            `E4M3` for evaluation)
         amax_history_len (`int`, *optional*, default to 1024):
             The length of the history to use for the scaling factor computation
         amax_compute_algo (`str`, *optional*, default to "most_recent"):
