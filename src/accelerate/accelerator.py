@@ -2048,6 +2048,7 @@ class Accelerator:
                 # NOTE: MS-AMP fsdp relies on it's own MP policy, we must drop the users
                 self.state.fsdp_plugin.mixed_precision_policy = None
             from msamp.common.dtype import Dtypes
+
             msamp_init_args = dict(model=model, optimizer=optimizer, opt_level=self.fp8_recipe_handler.opt_level)
             if self.distributed_type == DistributedType.FSDP:
                 msamp_init_args["use_fsdp"] = True
