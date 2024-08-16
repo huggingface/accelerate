@@ -155,15 +155,16 @@ def train_integration(zero_stage: int = 1):
 
 
 if __name__ == "__main__":
-    results = {"1": [], "2": [], "3": []}
-    for zero_stage in [1, 2, 3]:
-        for opt_level in ["O1", "O2", "O3"]:
-            baseline_not_trained, baseline_trained = train_baseline(zero_stage, opt_level)
-            results[str(zero_stage)].append({"opt_level": opt_level, "not_trained": baseline_not_trained, "trained": baseline_trained})
-    for stage, stage_results in results.items():
-        print(f'zero_stage={stage}:\n')
-        for result in stage_results:
-            print(f'opt_level={result["opt_level"]}:\nBaseline not trained: {result["not_trained"]}\nBaseline trained: {result["trained"]}\n')
+    # results = {"1": [], "2": [], "3": []}
+    # for zero_stage in [1, 2, 3]:
+    #     for opt_level in ["O1", "O2", "O3"]:
+    baseline_not_trained, baseline_trained = train_baseline(3, "O3")
+    print(baseline_not_trained, baseline_trained)
+    # results[str(zero_stage)].append({"opt_level": opt_level, "not_trained": baseline_not_trained, "trained": baseline_trained})
+    # for stage, stage_results in results.items():
+    #     print(f'zero_stage={stage}:\n')
+    #     for result in stage_results:
+    #         print(f'opt_level={result["opt_level"]}:\nBaseline not trained: {result["not_trained"]}\nBaseline trained: {result["trained"]}\n')
     # accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(zero_stage)
     # assert (
     #     baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
