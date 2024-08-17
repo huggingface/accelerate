@@ -695,6 +695,8 @@ class PartialState:
             return torch.device("mlu")
         elif is_musa_available():
             return torch.device("musa")
+        # NPU should be checked before CUDA when using `transfer_to_npu`
+        # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
         elif is_npu_available():
             return torch.device("npu")
         elif torch.cuda.is_available():
@@ -724,6 +726,8 @@ class PartialState:
             elif is_musa_available():
                 backend = "mccl"
                 distributed_type = DistributedType.MULTI_MUSA
+            # NPU should be checked before CUDA when using `transfer_to_npu`
+            # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
             elif is_npu_available():
                 backend = "hccl"
                 distributed_type = DistributedType.MULTI_NPU
