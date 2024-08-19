@@ -154,7 +154,7 @@ def prepare_pippy(
             If `True`, the output from the last GPU (which holds the true outputs) is sent across to all GPUs.
     """
     if not is_pippy_available():
-        raise ImportError("Using PiPPy requires PyTorch 2.4.0 or later.")
+        raise ImportError("Using `torch.distributed.pipelining` requires PyTorch 2.4.0 or later.")
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
     example_kwargs = send_to_device(example_kwargs, "cpu")
