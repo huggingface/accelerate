@@ -81,7 +81,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True, recursive
 
         options += (DeepSpeedEngine,)
 
-    if is_torch_version("<", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
+    if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
         options += (FSDP,)
