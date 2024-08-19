@@ -56,7 +56,7 @@ fp8_config:
   amax_compute_algorithm: max
   amax_history_length: 1024
   backend: TE
-  fp8_format: E4M3
+  fp8_format: HYBRID
   interval: 1
   margin: 0
   override_linear_precision: false
@@ -117,7 +117,7 @@ fp8_config:
     amax_compute_algorithm: max
     amax_history_length: 1024
     backend: TE
-    fp8_format: E4M3
+    fp8_format: HYBRID
     interval: 1
     margin: 0
     override_linear_precision: false

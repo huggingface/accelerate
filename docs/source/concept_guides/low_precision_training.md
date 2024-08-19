@@ -50,7 +50,7 @@ The `TransformerEngine` can receive many different arguments that customize how 
 
 * `margin`: The margin to use for the gradient scaling.
 * `interval`: The interval to use for how often the scaling factor is recomputed.
-* `fp8_format``: The format to use for the FP8 recipe. Must be one of `E4M3` or `HYBRID`.
+* `fp8_format``: The format to use for the FP8 recipe. Must be one of `HYBRID` or `E4M3`. (Generally `HYBRID` for training, `E4M3` for evaluation)
 * `amax_history_len`: The length of the history to use for the scaling factor computation
 * `amax_compute_algo`: The algorithm to use for the scaling factor computation. Must be one of `max` or `most_recent`.
 * `override_linear_precision`: Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
