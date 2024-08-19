@@ -79,8 +79,6 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     `AcceleratorState.num_processes`
     """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
-    # from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
-    # from pippy.PipelineStage import PipelineStage
     from torch.distributed.pipelining import ScheduleGPipe, SplitPoint, pipeline
 
     # We need to annotate the split points in the model for PiPPy
