@@ -157,6 +157,8 @@ accelerate launch --multi_gpu --num_processes 2 examples/nlp_example.py
 
 To learn more, check the CLI documentation available [here](https://huggingface.co/docs/accelerate/package_reference/cli).
 
+Or view the configuration zoo [here](https://github.com/huggingface/accelerate/blob/main/examples/config_yaml_templates/)
+
 ## Launching multi-CPU run using MPI
 
 🤗 Here is another way to launch multi-CPU run using MPI. You can learn how to install Open MPI on [this page](https://www.open-mpi.org/faq/?category=building#easy-build). You can use Intel MPI or MVAPICH as well.
@@ -256,7 +258,7 @@ pip install accelerate
 - multi-GPU on several nodes (machines)
 - TPU
 - FP16/BFloat16 mixed precision
-- FP8 mixed precision with [Transformer Engine](https://github.com/NVIDIA/TransformerEngine)
+- FP8 mixed precision with [Transformer Engine](https://github.com/NVIDIA/TransformerEngine) or [MS-AMP](https://github.com/Azure/MS-AMP/)
 - DeepSpeed support (Experimental)
 - PyTorch Fully Sharded Data Parallel (FSDP) support (Experimental)
 - Megatron-LM support (Experimental)

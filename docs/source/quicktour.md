@@ -53,6 +53,8 @@ accelerate launch path_to_script.py --args_for_the_script
 
 To learn more, check out the [Launch distributed code](basic_tutorials/launch) tutorial for more information about launching your scripts.
 
+We also have a [configuration zoo](https://github.com/huggingface/accelerate/blob/main/examples/config_yaml_templates) which showcases a number of premade **minimal** example configurations for a variety of setups you can run.
+
 ## Adapt training code
 
 The next main feature of Accelerate is the [`Accelerator`] class which adapts your PyTorch code to run on different distributed setups.
