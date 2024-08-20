@@ -1,0 +1,18 @@
+# Since we are doing FSDP (even though it's multi-GPU), we need to specify the distributed type as FSDP
+distributed_type: FSDP
+# Can be one of "no", "fp16", or "bf16" (see `transformer_engine.yaml` for `fp8`, but it works for FSDP as well)
+mixed_precision: 'bf16'
+# Specify the number of GPUs to use
+num_processes: 2
+# Then we can specify the FSDP config
+fsdp_config:
+  fsdp_activation_checkpointing: false
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_backward_prefetch: BACKWARD_PRE
+  fsdp_cpu_ram_efficient_loading: true
+  fsdp_forward_prefetch: false
+  fsdp_offload_params: false
+  fsdp_sharding_strategy: FULL_SHARD
+  fsdp_state_dict_type: SHARDED_STATE_DICT
+  fsdp_sync_module_states: true
+  fsdp_use_orig_params: true

@@ -1,0 +1,16 @@
+# This config template is for a multi-node setup. This assumes DDP, but can be interop'd with the other configs in this folder
+# Generally it's recommended to look at the SLURM config template for a more robust multi-node setup
+distributed_type: MULTI_GPU
+# We need to specify the current machine's rank
+machine_rank: 0
+# We then need to specify the IP address and port of the main process
+main_process_ip: '1234'
+main_process_port: 9999
+# We need to specify the number of machines
+num_machines: 2
+# We need to specify the *total* number of processes
+num_processes: 8
+# And then we need to specify how rdvz comms will be handled 
+rdzv_backend: static # or c10d
+# If the compute nodes are on the same network (cloud will more than likely be false)
+same_network: false
