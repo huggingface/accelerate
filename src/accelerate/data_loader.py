@@ -401,7 +401,9 @@ class DataLoaderAdapter:
             from torchdata.stateful_dataloader import StatefulDataLoader
 
         if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
-            raise ImportError("StatefulDataLoader is not available. Please install torchdata to use it.")
+            raise ImportError(
+                "StatefulDataLoader is not available. Please install the nightly version of torchdata to use it."
+            )
         if use_stateful_dataloader:
             self.base_dataloader = StatefulDataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
         else:
@@ -430,8 +432,9 @@ class DataLoaderAdapter:
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
 
-        for attr in self.base_dataloader.__dict__.keys():
-            setattr(self, attr, getattr(self.base_dataloader, attr))
+    def __getattr__(self, name):
+        # Delegate attribute access to the internal dataloader
+        return getattr(self.base_dataloader, name)
 
     def state_dict(self):
         return self.dl_state_dict
@@ -440,7 +443,7 @@ class DataLoaderAdapter:
         super().load_state_dict(state_dict)
         self.dl_state_dict = self.state_dict
 
-    def _save_state_dict(self):
+    def _update_state_dict(self):
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = super().state_dict()
 
@@ -492,7 +495,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         _non_blocking: bool = False,
         **kwargs,
     ):
-        super().__init__(dataset, use_stateful_dataloader, **kwargs)
+        super().__init__(dataset, use_stateful_dataloader=use_stateful_dataloader, **kwargs)
         self.device = device
         self.rng_types = rng_types
         self.synchronized_generator = synchronized_generator
@@ -521,7 +524,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                 # But we still move it to the device so it is done before `StopIteration` is reached
                 if self.device is not None:
                     current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
-                self._save_state_dict()
+                self._update_state_dict()
                 next_batch = next(dataloader_iter)
                 if batch_index >= self.skip_batches:
                     yield current_batch
@@ -670,7 +673,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             # We need to save the shuffling state of the DataPipe
             if isinstance(dataset, ShufflerIterDataPipe):
                 shuffle = dataset._shuffle_enabled
-        super().__init__(dataset, use_stateful_dataloader, **kwargs)
+        super().__init__(dataset, use_stateful_dataloader=use_stateful_dataloader, **kwargs)
         self.split_batches = split_batches
         if shuffle:
             torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
@@ -691,14 +694,14 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             try:
                 if self.split_batches:
                     # One batch of the main iterator is dispatched and split.
-                    self._save_state_dict()
+                    self._update_state_dict()
                     batch = next(iterator)
                 else:
                     # num_processes batches of the main iterator are concatenated then dispatched and split.
                     # We add the batches one by one so we have the remainder available when drop_last=False.
                     batches = []
                     for _ in range(self.state.num_processes):
-                        self._save_state_dict()
+                        self._update_state_dict()
                         batches.append(next(iterator))
                     try:
                         batch = concatenate(batches, dim=0)
@@ -943,7 +946,7 @@ def prepare_data_loader(
         use_stateful_dataloader (`bool`, *optional*, defaults to `False`):
             "If set to true, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
-            This requires a version" " of `torchdata` with StatefulDataLoader to be installed."
+            This requires the nightly version of `torchdata` that supports StatefulDataLoader to be installed."
 
 
     Returns:
@@ -1152,13 +1155,13 @@ class SkipDataLoader(DataLoaderAdapter):
     """
 
     def __init__(self, dataset, skip_batches=0, use_stateful_dataloader=False, **kwargs):
-        super().__init__(dataset, use_stateful_dataloader, **kwargs)
+        super().__init__(dataset, use_stateful_dataloader=use_stateful_dataloader, **kwargs)
         self.skip_batches = skip_batches
 
     def __iter__(self):
         for index, batch in enumerate(super().__iter__()):
             if index >= self.skip_batches:
-                self._save_state_dict()
+                self._update_state_dict()
                 yield batch
 
 
