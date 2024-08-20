@@ -1338,7 +1338,7 @@ class FullyShardedDataParallelPlugin:
         },
     )
     sync_module_states: bool = field(
-        default=False,
+        default=None,
         metadata={
             "help": "Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 "
             "to ensure they are the same across all ranks after initialization. Defaults to `True`"
