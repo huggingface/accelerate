@@ -1,0 +1,4 @@
+# Since this is single GPU, we don't need distributed training
+distributed_type: "NO"
+# Can be one of "no", "fp16", or "bf16" (see `transformer_engine.yaml` for `fp8`)
+mixed_precision: "bf16"

@@ -27,6 +27,23 @@ from .versions import is_torch_version
 logger = get_logger(__name__)
 
 
+def enable_fsdp_ram_efficient_loading():
+    """
+    Enables RAM efficient loading of Hugging Face models for FSDP in the environment.
+    """
+    # Sets values for `transformers.modeling_utils.is_fsdp_enabled`
+    if "ACCELERATE_USE_FSDP" not in os.environ:
+        os.environ["ACCELERATE_USE_FSDP"] = "True"
+    os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "True"
+
+
+def disable_fsdp_ram_efficient_loading():
+    """
+    Disables RAM efficient loading of Hugging Face models for FSDP in the environment.
+    """
+    os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "False"
+
+
 def _get_model_state_dict(model, adapter_only=False):
     if adapter_only and is_peft_model(model):
         from peft import get_peft_model_state_dict

@@ -112,6 +112,8 @@
     title: Distributed inference with big models
   - local: package_reference/kwargs
     title: Kwargs handlers
+  - local: package_reference/fp8
+    title: FP8 Functionality
   - local: package_reference/utilities
     title: Utility functions and classes
   - local: package_reference/megatron_lm

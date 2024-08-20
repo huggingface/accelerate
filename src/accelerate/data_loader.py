@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
-from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
+from .state import AcceleratorState, DistributedType, GradientState, PartialState, is_torch_xla_available
 from .utils import (
     RNGType,
     broadcast,
@@ -600,6 +600,7 @@ if is_torch_xla_available():
             super().__init__(dataloader, device)
             self._rng_types = self._loader.rng_types
             self._loader.rng_types = None
+            self.device = device
 
         def __iter__(self):
             if self._rng_types is not None:
@@ -618,6 +619,10 @@ if is_torch_xla_available():
         @property
         def batch_sampler(self):
             return self._loader.batch_sampler
+
+        @property
+        def dataloader(self):
+            return self._loader
 
 
 class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
@@ -1164,6 +1169,11 @@ def skip_first_batches(dataloader, num_batches=0):
     if is_torchdata_stateful_dataloader_available():
         from torchdata.stateful_dataloader import StatefulDataLoader
 
+    state = PartialState()
+    if state.distributed_type == DistributedType.XLA:
+        device = dataloader.device
+        dataloader = dataloader.dataloader
+
     dataset = dataloader.dataset
     sampler_is_batch_sampler = False
     if isinstance(dataset, IterableDataset):
@@ -1232,4 +1242,8 @@ def skip_first_batches(dataloader, num_batches=0):
             dataloader = StatefulDataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+
+    if state.distributed_type == DistributedType.XLA:
+        dataloader = MpDeviceLoaderWrapper(dataloader, device)
+
     return dataloader

@@ -151,6 +151,7 @@ from .offload import (
 )
 from .operations import (
     CannotPadNestedTensorWarning,
+    GatheredParameters,
     broadcast,
     broadcast_object_list,
     concatenate,
@@ -190,7 +191,15 @@ if is_deepspeed_available():
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model
-from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, merge_fsdp_weights, save_fsdp_model, save_fsdp_optimizer
+from .fsdp_utils import (
+    disable_fsdp_ram_efficient_loading,
+    enable_fsdp_ram_efficient_loading,
+    load_fsdp_model,
+    load_fsdp_optimizer,
+    merge_fsdp_weights,
+    save_fsdp_model,
+    save_fsdp_optimizer,
+)
 from .launch import (
     PrepareForLaunch,
     _filter_args,
@@ -244,4 +253,9 @@ from .other import (
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
 from .torch_xla import install_xla
 from .tqdm import tqdm
-from .transformer_engine import convert_model, has_transformer_engine_layers
+from .transformer_engine import (
+    apply_fp8_autowrap,
+    contextual_fp8_autocast,
+    convert_model,
+    has_transformer_engine_layers,
+)

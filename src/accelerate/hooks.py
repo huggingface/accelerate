@@ -26,6 +26,7 @@ from .utils import (
     send_to_device,
     set_module_tensor_to_device,
 )
+from .utils.memory import clear_device_cache
 from .utils.modeling import get_non_persistent_buffers
 from .utils.other import recursive_getattr
 
@@ -695,6 +696,7 @@ class CpuOffload(ModelHook):
     def pre_forward(self, module, *args, **kwargs):
         if self.prev_module_hook is not None:
             self.prev_module_hook.offload()
+            clear_device_cache()
         module.to(self.execution_device)
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 

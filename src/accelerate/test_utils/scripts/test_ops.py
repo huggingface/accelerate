@@ -173,6 +173,7 @@ def main():
     test_op_checker(state)
     state.print("testing sending tensors across devices")
     test_copy_tensor_to_devices(state)
+    state.destroy_process_group()
 
 
 if __name__ == "__main__":

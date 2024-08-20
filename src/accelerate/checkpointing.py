@@ -252,7 +252,8 @@ def load_accelerator_state(
     # Random states
     try:
         states = torch.load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
-        override_attributes["step"] = states["step"]
+        if "step" in states:
+            override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])

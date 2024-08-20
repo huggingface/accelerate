@@ -15,6 +15,10 @@ rendered properly in your Markdown viewer.
 
 # Utilities for Fully Sharded Data Parallelism
 
+[[autodoc]] utils.enable_fsdp_ram_efficient_loading
+
+[[autodoc]] utils.disable_fsdp_ram_efficient_loading
+
 [[autodoc]] utils.merge_fsdp_weights
 
 [[autodoc]] utils.FullyShardedDataParallelPlugin

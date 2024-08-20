@@ -217,6 +217,7 @@ def training_function(config, args):
     # And call it at the end with no arguments
     # Note: You could also refactor this outside of your training loop function
     inner_training_loop()
+    accelerator.end_training()
 
 
 def main():

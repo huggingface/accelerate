@@ -1,0 +1,15 @@
+# Similar to FSDP, we set the distributed type as DEEPSPEED
+distributed_type: DEEPSPEED
+# With DeepSpeed, we utilize a deepspeed config file for the entire configuration
+deepspeed_config:
+  # Can also be any of the config json's in accelerate/examples/deepspeed_config_templates
+  deepspeed_config_file: ../deepspeed_config_templates/zero_stage1_config.json
+  # If using ZeRO-3 and wanting to load big models in, this should be set to `true` so 
+  # `transformers` uses the right `init` function
+  zero3_init_flag: false # true 
+
+# Finally we need to specify the number of GPUs to use
+num_processes: 2
+# Optionally we can set the mixed precision now instead of in the deepspeed config file,
+# however this requires the `fp16` and `bf16` options to be set to `auto` in the deepspeed config file
+# mixed_precision: "bf16"
