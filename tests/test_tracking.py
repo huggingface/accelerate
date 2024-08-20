@@ -27,6 +27,7 @@ from unittest import mock
 
 import numpy as np
 import torch
+from packaging import version
 
 # We use TF to parse the logs
 from accelerate import Accelerator
@@ -67,6 +68,7 @@ logger = logging.getLogger(__name__)
 
 
 @require_tensorboard
+@unittest.skipIf(version.parse(np.__version__) >= version.parse("2.0"), "TB doesn't support numpy 2.0")
 class TensorBoardTrackingTest(unittest.TestCase):
     def test_init_trackers(self):
         project_name = "test_project_with_config"
