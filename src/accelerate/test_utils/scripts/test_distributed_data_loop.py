@@ -307,6 +307,8 @@ def main():
     loader = DataLoader(dataset, sampler=sampler, batch_size=None, collate_fn=default_collate, num_workers=NUM_WORKERS)
     test_data_loader(loader, accelerator)
 
+    accelerator.end_training()
+
 
 if __name__ == "__main__":
     main()

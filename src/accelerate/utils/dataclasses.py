@@ -313,8 +313,9 @@ class FP8RecipeKwargs(KwargsHandler):
             The margin to use for the gradient scaling.
         interval (`int`, *optional*, default to 1):
             The interval to use for how often the scaling factor is recomputed.
-        fp8_format (`str`, *optional*, default to "E4M3"):
-            The format to use for the FP8 recipe. Must be one of `E4M3` or `HYBRID`.
+        fp8_format (`str`, *optional*, default to "HYBRID"):
+            The format to use for the FP8 recipe. Must be one of `HYBRID` or `E4M3`. (Generally `HYBRID` for training,
+            `E4M3` for evaluation)
         amax_history_len (`int`, *optional*, default to 1024):
             The length of the history to use for the scaling factor computation
         amax_compute_algo (`str`, *optional*, default to "most_recent"):
@@ -364,7 +365,7 @@ class FP8RecipeKwargs(KwargsHandler):
             if self.interval is None:
                 self.interval = int(os.environ.get(env_prefix + "INTERVAL", 1))
             if self.fp8_format is None:
-                self.fp8_format = os.environ.get(env_prefix + "FORMAT", "E4M3")
+                self.fp8_format = os.environ.get(env_prefix + "FORMAT", "HYBRID")
             self.fp8_format = self.fp8_format.upper()
             if self.fp8_format not in get_args(FP8Format):
                 raise ValueError(f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}.")
@@ -1337,10 +1338,11 @@ class FullyShardedDataParallelPlugin:
         },
     )
     sync_module_states: bool = field(
-        default=False,
+        default=None,
         metadata={
             "help": "Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 "
-            "to ensure they are the same across all ranks after initialization. Defaults to `True`"
+            "to ensure they are the same across all ranks after initialization. Defaults to `False` unless "
+            "`cpu_ram_efficient_loading` is `True`, then will be forcibly enabled."
         },
     )
     forward_prefetch: bool = field(

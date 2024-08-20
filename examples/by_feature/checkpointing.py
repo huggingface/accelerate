@@ -276,6 +276,7 @@ def training_function(config, args):
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
+    accelerator.end_training()
 
 
 def main():

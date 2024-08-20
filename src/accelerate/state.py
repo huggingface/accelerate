@@ -695,12 +695,14 @@ class PartialState:
             return torch.device("mlu")
         elif is_musa_available():
             return torch.device("musa")
+        # NPU should be checked before CUDA when using `transfer_to_npu`
+        # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
+        elif is_npu_available():
+            return torch.device("npu")
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
             return torch.device("xpu:0")
-        elif is_npu_available():
-            return torch.device("npu")
         else:
             return torch.device("cpu")
 
@@ -724,13 +726,15 @@ class PartialState:
             elif is_musa_available():
                 backend = "mccl"
                 distributed_type = DistributedType.MULTI_MUSA
+            # NPU should be checked before CUDA when using `transfer_to_npu`
+            # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
+            elif is_npu_available():
+                backend = "hccl"
+                distributed_type = DistributedType.MULTI_NPU
             elif torch.cuda.is_available():
                 if backend is None:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
-            elif is_npu_available():
-                backend = "hccl"
-                distributed_type = DistributedType.MULTI_NPU
 
         if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
@@ -784,6 +788,16 @@ class PartialState:
             device_index = self.local_process_index % device_module.device_count()
             self.device = torch.device(device, device_index)
             device_module.set_device(self.device)
+
+    def destroy_process_group(self, group=None):
+        """
+        Destroys the process group. If one is not specified, the default process group is destroyed.
+        """
+        if self.fork_launched and group is None:
+            return
+        # needed when using torch.distributed.init_process_group
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group(group)
 
     def __getattr__(self, name: str):
         # By this point we know that no attributes of `self` contain `name`,
@@ -978,6 +992,18 @@ class AcceleratorState:
         AcceleratorState._shared_state.clear()
         if reset_partial_state:
             PartialState._reset_state()
+
+    def destroy_process_group(self, group=None):
+        """
+        Destroys the process group. If one is not specified, the default process group is destroyed.
+
+        If `self.fork_lauched` is `True` and `group` is `None`, nothing happens.
+        """
+        PartialState().destroy_process_group(group)
+
+    @property
+    def fork_launched(self):
+        return PartialState().fork_launched
 
     @property
     def use_distributed(self):
