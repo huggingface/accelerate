@@ -793,6 +793,8 @@ class PartialState:
         """
         Destroys the process group. If one is not specified, the default process group is destroyed.
         """
+        if self.fork_launched and group is None:
+            return
         # needed when using torch.distributed.init_process_group
         if torch.distributed.is_initialized():
             torch.distributed.destroy_process_group(group)
@@ -994,8 +996,14 @@ class AcceleratorState:
     def destroy_process_group(self, group=None):
         """
         Destroys the process group. If one is not specified, the default process group is destroyed.
+
+        If `self.fork_lauched` is `True` and `group` is `None`, nothing happens.
         """
         PartialState().destroy_process_group(group)
+
+    @property
+    def fork_launched(self):
+        return PartialState().fork_launched
 
     @property
     def use_distributed(self):
