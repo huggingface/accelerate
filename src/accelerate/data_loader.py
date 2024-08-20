@@ -402,7 +402,7 @@ class DataLoaderAdapter:
 
         if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
             raise ImportError(
-                "StatefulDataLoader is not available. Please install the nightly version of torchdata to use it."
+                "StatefulDataLoader is not available. Please install torchdata version 0.8.0 or higher to use it."
             )
         if use_stateful_dataloader:
             self.base_dataloader = StatefulDataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
@@ -946,7 +946,7 @@ def prepare_data_loader(
         use_stateful_dataloader (`bool`, *optional*, defaults to `False`):
             "If set to true, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
-            This requires the nightly version of `torchdata` that supports StatefulDataLoader to be installed."
+            This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
 
 
     Returns:
