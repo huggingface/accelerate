@@ -1341,7 +1341,8 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={
             "help": "Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 "
-            "to ensure they are the same across all ranks after initialization. Defaults to `True`"
+            "to ensure they are the same across all ranks after initialization. Defaults to `False` unless "
+            "`cpu_ram_efficient_loading` is `True`, then will be forcibly enabled."
         },
     )
     forward_prefetch: bool = field(
