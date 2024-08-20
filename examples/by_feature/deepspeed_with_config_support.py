@@ -716,6 +716,7 @@ def main():
 
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
             json.dump({"perplexity": perplexity, "eval_loss": eval_loss.item()}, f)
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

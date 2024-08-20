@@ -789,6 +789,16 @@ class PartialState:
             self.device = torch.device(device, device_index)
             device_module.set_device(self.device)
 
+    def destroy_process_group(self, group=None):
+        """
+        Destroys the process group. If one is not specified, the default process group is destroyed.
+        """
+        if self.fork_launched and group is None:
+            return
+        # needed when using torch.distributed.init_process_group
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group(group)
+
     def __getattr__(self, name: str):
         # By this point we know that no attributes of `self` contain `name`,
         # so we just modify the error message
@@ -982,6 +992,18 @@ class AcceleratorState:
         AcceleratorState._shared_state.clear()
         if reset_partial_state:
             PartialState._reset_state()
+
+    def destroy_process_group(self, group=None):
+        """
+        Destroys the process group. If one is not specified, the default process group is destroyed.
+
+        If `self.fork_lauched` is `True` and `group` is `None`, nothing happens.
+        """
+        PartialState().destroy_process_group(group)
+
+    @property
+    def fork_launched(self):
+        return PartialState().fork_launched
 
     @property
     def use_distributed(self):

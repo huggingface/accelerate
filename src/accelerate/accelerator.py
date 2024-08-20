@@ -2727,9 +2727,7 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.finish()
 
-        if torch.distributed.is_initialized():
-            # needed when using torch.distributed.init_process_group
-            torch.distributed.destroy_process_group()
+        self.state.destroy_process_group()
 
     def save(self, obj, f, safe_serialization=False):
         """

@@ -14,6 +14,9 @@
 
 import unittest
 
+import numpy as np
+from packaging import version
+
 from accelerate import debug_launcher
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
@@ -29,6 +32,7 @@ from accelerate.utils import patch_environment
 
 
 @require_huggingface_suite
+@unittest.skipIf(version.parse(np.__version__) >= version.parse("2.0"), "Test requires numpy version < 2.0")
 class MetricTester(unittest.TestCase):
     def setUp(self):
         self.test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_metrics.py")
