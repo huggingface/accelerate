@@ -991,6 +991,12 @@ class AcceleratorState:
         if reset_partial_state:
             PartialState._reset_state()
 
+    def destroy_process_group(self, group=None):
+        """
+        Destroys the process group. If one is not specified, the default process group is destroyed.
+        """
+        PartialState().destroy_process_group(group)
+
     @property
     def use_distributed(self):
         """
