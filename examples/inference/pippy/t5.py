@@ -87,3 +87,4 @@ if PartialState().is_last_process:
     output = torch.stack(tuple(output[0]))
     print(f"Time of first pass: {first_batch}")
     print(f"Average time per batch: {(end_time - start_time) / 5}")
+PartialState().destroy_process_group()

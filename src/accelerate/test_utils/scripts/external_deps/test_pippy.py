@@ -125,5 +125,6 @@ if __name__ == "__main__":
         state.print("Testing CV model...")
         test_resnet()
         test_resnet(3)
+        state.destroy_process_group()
     else:
         print("Less than two GPUs found, not running tests!")

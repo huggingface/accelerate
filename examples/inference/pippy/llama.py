@@ -52,3 +52,4 @@ if PartialState().is_last_process:
     next_token_logits = output[0][:, -1, :]
     next_token = torch.argmax(next_token_logits, dim=-1)
     print(tokenizer.batch_decode(next_token))
+PartialState().destroy_process_group()

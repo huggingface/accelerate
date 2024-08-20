@@ -789,6 +789,14 @@ class PartialState:
             self.device = torch.device(device, device_index)
             device_module.set_device(self.device)
 
+    def destroy_process_group(self, group=None):
+        """
+        Destroys the process group. If one is not specified, the default process group is destroyed.
+        """
+        # needed when using torch.distributed.init_process_group
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group(group)
+
     def __getattr__(self, name: str):
         # By this point we know that no attributes of `self` contain `name`,
         # so we just modify the error message

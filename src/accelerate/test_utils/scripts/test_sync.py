@@ -392,6 +392,7 @@ def main():
                             f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}` and `sync_each_batch={sync_each_batch}`**",
                         )
                     test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches, sync_each_batch)
+    state.destroy_process_group()
 
 
 def _mp_fn(index):

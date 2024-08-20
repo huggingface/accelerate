@@ -399,8 +399,7 @@ def training_function(config, args):
                 step=epoch,
             )
 
-    if args.with_tracking:
-        accelerator.end_training()
+    accelerator.end_training()
 
 
 def main():

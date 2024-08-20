@@ -821,6 +821,7 @@ def main():
         if state.local_process_index == 0:
             print("\n**Test reinstantiated state**")
         test_reinstantiated_state()
+    state.destroy_process_group()
 
 
 if __name__ == "__main__":

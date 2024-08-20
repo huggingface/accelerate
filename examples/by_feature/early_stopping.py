@@ -222,6 +222,7 @@ def training_function(config, args):
 
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
+    accelerator.end_training()
 
 
 def main():

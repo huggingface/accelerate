@@ -158,3 +158,4 @@ if __name__ == "__main__":
             if accelerator.is_main_process:
                 shutil.rmtree(out_path)
             accelerator.wait_for_everyone()
+            accelerator.end_training()

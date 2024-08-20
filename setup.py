@@ -70,7 +70,7 @@ setup(
     },
     python_requires=">=3.8.0",
     install_requires=[
-        "numpy>=1.17,<2.0.0",
+        "numpy>=1.17,<3.0.0",
         "packaging>=20.0",
         "psutil",
         "pyyaml",

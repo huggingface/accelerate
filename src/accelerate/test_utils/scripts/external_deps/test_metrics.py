@@ -294,6 +294,7 @@ def main():
     if accelerator.is_local_main_process:
         print("**Test that `drop_last` is taken into account**")
     test_gather_for_metrics_drop_last()
+    accelerator.end_training()
     accelerator.state._reset_state()
 
 

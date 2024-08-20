@@ -110,6 +110,8 @@ def main():
     if is_bnb_available():
         print("Test problematic imports (bnb)")
         test_problematic_imports()
+    if NUM_PROCESSES > 1:
+        PartialState().destroy_process_group()
 
 
 if __name__ == "__main__":
