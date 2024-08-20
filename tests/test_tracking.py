@@ -68,8 +68,8 @@ logger = logging.getLogger(__name__)
 
 
 @require_tensorboard
-@unittest.skipIf(version.parse(np.__version__) >= version.parse("2.0"), "TB doesn't support numpy 2.0")
 class TensorBoardTrackingTest(unittest.TestCase):
+    @unittest.skipIf(version.parse(np.__version__) >= version.parse("2.0"), "TB doesn't support numpy 2.0")
     def test_init_trackers(self):
         project_name = "test_project_with_config"
         with tempfile.TemporaryDirectory() as dirpath:
