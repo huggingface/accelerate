@@ -781,8 +781,7 @@ class DataLoaderConfiguration:
         default=False,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
-            "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires a version"
-            " of `torchdata` with StatefulDataLoader to be installed."
+            "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
         },
     )
 

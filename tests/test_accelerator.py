@@ -50,9 +50,7 @@ from accelerate.utils.random import set_seed
 
 
 if is_torchdata_stateful_dataloader_available():
-    from torchdata.stateful_dataloader import (
-        StatefulDataLoader,
-    )
+    from torchdata.stateful_dataloader import StatefulDataLoader
 
 
 class ModelWithTiedWeights(torch.nn.Module):
@@ -87,9 +85,7 @@ class ModelForTest(torch.nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
-def create_dataloaders_for_test(
-    a=2, b=3, batch_size=3, n_train_batches: int = 12, n_valid_batches: int = 2, num_workers=0
-):
+def create_dataloaders_for_test(batch_size=3, n_train_batches: int = 12, n_valid_batches: int = 2, num_workers=0):
     "Generates a tuple of dummy DataLoaders to test with"
 
     def get_dataset(n_batches):
@@ -685,7 +681,6 @@ class AcceleratorTester(AccelerateTestCase):
         """
         Test that saving and loading a model with a stateful dataloader returns the same model,
         and that the dataloader's iterator is restored properly."""
-        print()
         set_seed(42)
         dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=True)
         accelerator = Accelerator(dataloader_config=dataloader_config)

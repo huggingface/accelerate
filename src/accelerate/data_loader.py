@@ -428,11 +428,13 @@ class DataLoaderAdapter:
         parent_cls_name = self.base_dataloader.__class__
         self.__class__ = type(base_cls_name, (base_cls, parent_cls_name), {})
 
-        # Allow this class to transparently pass through attributes from the underlying class
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
 
     def __getattr__(self, name):
+        # Avoid infinite recursion if we try to access a nonexistent base_dataloader attribute.
+        if name == "base_dataloader":
+            raise AttributeError()
         # Delegate attribute access to the internal dataloader
         return getattr(self.base_dataloader, name)
 
@@ -444,6 +446,11 @@ class DataLoaderAdapter:
         self.dl_state_dict = self.state_dict
 
     def _update_state_dict(self):
+        # The state_dict of the underlying base_dataloader may be ahead of what is currently being yielded.
+        # E.g. the implementation of DataLoaderShard involves having an underlying iterator 1 element ahead of
+        # what it wants to yield.
+        #
+        # _update_state_dict is called to snapshot the state_dict that would properly recover the DataLoaderAdapter.
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = super().state_dict()
 

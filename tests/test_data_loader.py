@@ -15,6 +15,7 @@
 import random
 import unittest
 
+import pytest
 import torch
 from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
@@ -408,6 +409,9 @@ class DataLoaderTester(unittest.TestCase):
         assert isinstance(dl_shard.base_dataloader, DataLoader)
         assert isinstance(dl_dispatcher.base_dataloader, DataLoader)
 
+        with pytest.raises(AttributeError):
+            _ = DataLoaderShard.base_dataloader
+
     def test_skip_data_loader(self):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2)
         assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
@@ -498,6 +502,7 @@ class StatefulDataLoaderTester(unittest.TestCase):
 
         data1 = vals[2:]
         data2 = list(dataloader2)
+        assert len(data1) == len(data2)
         for d1, d2 in zip(data1, data2):
             assert torch.allclose(d1, d2)
 
@@ -527,6 +532,7 @@ class StatefulDataLoaderTester(unittest.TestCase):
 
         data1 = vals[2:]
         data2 = list(dataloader2)
+        assert len(data1) == len(data2)
         for d1, d2 in zip(data1, data2):
             assert torch.allclose(d1, d2)
 
