@@ -380,7 +380,7 @@ class DataLoaderTester(unittest.TestCase):
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=True)
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=True)
 
-    def test_iterable_dataset_using_none_batch_size():
+    def test_iterable_dataset_using_none_batch_size(self):
         dataset = SimpleIterableDataset(100)
         accelerator = Accelerator()
         dataloader = DataLoader(dataset, batch_size=None)
