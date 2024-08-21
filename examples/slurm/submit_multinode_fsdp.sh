@@ -39,5 +39,5 @@ export SCRIPT_ARGS=" \
     "
     
 # This step is necessary because accelerate launch does not handle multiline arguments properly
-export CMD="$LAUNCHER $PYTHON_FILE $ARGS" 
+export CMD="$LAUNCHER $SCRIPT $SCRIPT_ARGS" 
 srun $CMD
