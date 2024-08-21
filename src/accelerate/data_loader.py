@@ -442,7 +442,7 @@ class DataLoaderAdapter:
         return self.dl_state_dict
 
     def load_state_dict(self, state_dict):
-        super().load_state_dict(state_dict)
+        self.base_dataloader.load_state_dict(state_dict)
         self.dl_state_dict = self.state_dict
 
     def _update_state_dict(self):
@@ -452,7 +452,7 @@ class DataLoaderAdapter:
         #
         # _update_state_dict is called to snapshot the state_dict that would properly recover the DataLoaderAdapter.
         if hasattr(self.base_dataloader, "state_dict"):
-            self.dl_state_dict = super().state_dict()
+            self.dl_state_dict = self.base_dataloader.state_dict()
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -518,7 +518,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.begin()
 
         self.set_epoch(self.iteration)
-        dataloader_iter = super().__iter__()
+        dataloader_iter = self.base_dataloader.__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
             current_batch = next(dataloader_iter)
@@ -749,9 +749,9 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
             # shared seed to all dist processes. Thus, we need to create iterator for all dist processes.
             # But, we only iterate through the DataLoader on process 0.
-            main_iterator = super().__iter__()
+            main_iterator = self.base_dataloader.__iter__()
         elif self.state.process_index == 0:
-            main_iterator = super().__iter__()
+            main_iterator = self.base_dataloader.__iter__()
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
@@ -1166,7 +1166,7 @@ class SkipDataLoader(DataLoaderAdapter):
         self.skip_batches = skip_batches
 
     def __iter__(self):
-        for index, batch in enumerate(super().__iter__()):
+        for index, batch in enumerate(self.base_dataloader.__iter__()):
             if index >= self.skip_batches:
                 self._update_state_dict()
                 yield batch
