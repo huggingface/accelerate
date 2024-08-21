@@ -404,6 +404,10 @@ class DataLoaderTester(unittest.TestCase):
         assert isinstance(dl_shard, DataLoaderStateMixin)
         assert isinstance(dl_dispatcher, DataLoaderStateMixin)
 
+        assert isinstance(skip_dl.base_dataloader, DataLoader)
+        assert isinstance(dl_shard.base_dataloader, DataLoader)
+        assert isinstance(dl_dispatcher.base_dataloader, DataLoader)
+
     def test_skip_data_loader(self):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2)
         assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
@@ -542,6 +546,10 @@ class StatefulDataLoaderTester(unittest.TestCase):
 
         assert isinstance(dl_shard, DataLoaderStateMixin)
         assert isinstance(dl_dispatcher, DataLoaderStateMixin)
+
+        assert isinstance(skip_dl.base_dataloader, StatefulDataLoader)
+        assert isinstance(dl_shard.base_dataloader, StatefulDataLoader)
+        assert isinstance(dl_dispatcher.base_dataloader, StatefulDataLoader)
 
     @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
     @require_torchdata_stateful_dataloader
