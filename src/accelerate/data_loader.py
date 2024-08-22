@@ -1162,7 +1162,7 @@ class SkipBatchSampler(BatchSampler):
         return len(self.batch_sampler) - self.skip_batches
 
 
-class SkipDataLoader(DataLoaderAdapter):
+class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
     """
     Subclass of a PyTorch `DataLoader` that will skip the first batches.
 
