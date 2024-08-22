@@ -1180,12 +1180,15 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
     def __init__(self, dataset, skip_batches=0, use_stateful_dataloader=False, **kwargs):
         super().__init__(dataset, use_stateful_dataloader=use_stateful_dataloader, **kwargs)
         self.skip_batches = skip_batches
+        self.gradient_state = GradientState()
 
     def __iter__(self):
+        self.begin()
         for index, batch in enumerate(self.base_dataloader.__iter__()):
             if index >= self.skip_batches:
                 self._update_state_dict()
                 yield batch
+        self.end()
 
 
 def skip_first_batches(dataloader, num_batches=0):
