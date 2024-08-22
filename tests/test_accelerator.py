@@ -27,7 +27,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
-from accelerate.data_loader import skip_first_batches
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
@@ -682,7 +681,7 @@ class AcceleratorTester(AccelerateTestCase):
         Test that saving and loading a model with a stateful dataloader returns the same model,
         and that the dataloader's iterator is restored properly."""
         set_seed(42)
-        n_train_batches = 64 # Use enough batches to ensure we can get partial iterations on large compute
+        n_train_batches = 64  # Use enough batches to ensure we can get partial iterations on large compute
         dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=True)
         accelerator = Accelerator(dataloader_config=dataloader_config)
 
@@ -716,11 +715,11 @@ class AcceleratorTester(AccelerateTestCase):
                 prepared_optimizer.zero_grad()
                 if step == num_batches_to_skip - 1:
                     # Save the state once we've gone through a few batches
-                    accelerator.save_state(f'{tmpdirname}/state', safe_serialization=use_safetensors)
+                    accelerator.save_state(f"{tmpdirname}/state", safe_serialization=use_safetensors)
                     # When breaking out without fully going through the iterator, must call end() to unregister this iterator from gradient state.
                     # TODO: Maybe this could be done automatically?
-                    #prepared_train_dl.end()
-                    #break
+                    # prepared_train_dl.end()
+                    # break
                 if step >= num_batches_to_skip:
                     untrained_batches.append(batch)
 
@@ -733,7 +732,7 @@ class AcceleratorTester(AccelerateTestCase):
             original_linear2 = unwrapped_model.linear2.weight.clone()
 
             # Resume the state
-            accelerator.load_state(f'{tmpdirname}/state')
+            accelerator.load_state(f"{tmpdirname}/state")
 
             # Train this to the end of the DataLoader
             batches_seen_with_loaded_dl = 0

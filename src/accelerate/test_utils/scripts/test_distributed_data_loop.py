@@ -77,7 +77,9 @@ def create_accelerator(even_batches=True):
     return accelerator
 
 
-def create_dataloader(accelerator: Accelerator, dataset_size: int, batch_size: int, iterable: bool = False, shuffle: bool = False):
+def create_dataloader(
+    accelerator: Accelerator, dataset_size: int, batch_size: int, iterable: bool = False, shuffle: bool = False
+):
     """
     Create a simple DataLoader to use during the test cases
     """
@@ -266,7 +268,9 @@ def test_data_loader(data_loader, accelerator):
 def test_stateful_dataloader(accelerator):
     old_dataloader_config = accelerator.dataloader_config
     accelerator.dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
-    prepared_dl = create_dataloader(accelerator, dataset_size=32*accelerator.num_processes, batch_size=4, iterable=True, shuffle=True)
+    prepared_dl = create_dataloader(
+        accelerator, dataset_size=32 * accelerator.num_processes, batch_size=4, iterable=True, shuffle=True
+    )
     untrained_batches = []
     # Calculate what step that will be
     total_batches = 32 * accelerator.num_processes // (4 * accelerator.num_processes)
@@ -279,71 +283,99 @@ def test_stateful_dataloader(accelerator):
             # Otherwise grab the "unseen" batches
             untrained_batches.append(batch)
     not_skipped_batches = accelerator.gather(untrained_batches)
-    # state_dict["_sampler_iter_yielded"] -= 1
-    # state_dict["_num_yielded"] -= 1
-    # state_dict["_index_sampler_state"]["samples_yielded"] -= prepared_dl.batch_size
     prepared_dl.load_state_dict(state_dict)
     resumed_batches = []
     for batch in prepared_dl:
         resumed_batches.append(batch)
     resumed_batches = accelerator.gather(resumed_batches)
-    print(f'not_skipped_batches:\n{torch.cat(not_skipped_batches, dim=0)}\nresumed_batches:\n{torch.cat(resumed_batches, dim=0)}')
-    # for b1, b2 in zip(not_skipped_batches, resumed_batches):
-    #     for v1, v2 in zip(b1, b2):
-    #         assert torch.equal(v1, v2), f"Batch {b1} and {b2} are not equal"
+    for b1, b2 in zip(not_skipped_batches, resumed_batches):
+        for v1, v2 in zip(b1, b2):
+            assert torch.equal(v1, v2), f"Batch {b1} and {b2} are not equal"
 
     accelerator.dataloader_config = old_dataloader_config
 
 
+def test_stateful_dataloader_save_state(accelerator):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_dataloader_config = accelerator.dataloader_config
+        accelerator.dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
+        prepared_dl = create_dataloader(
+            accelerator, dataset_size=32 * accelerator.num_processes, batch_size=4, iterable=True, shuffle=True
+        )
+        untrained_batches = []
+        # Calculate what step that will be
+        total_batches = 32 * accelerator.num_processes // (4 * accelerator.num_processes)
+        last_batch_num = total_batches - 1
+        for step, batch in enumerate(prepared_dl):
+            # Step just before
+            if step == last_batch_num - 1:
+                accelerator.save_state(tmpdir)
+                # state_dict = prepared_dl.state_dict()
+            if step >= last_batch_num:
+                # Otherwise grab the "unseen" batches
+                untrained_batches.append(batch)
+        not_skipped_batches = accelerator.gather(untrained_batches)
+        # prepared_dl.load_state_dict(state_dict)
+        accelerator.load_state(tmpdir)
+        resumed_batches = []
+        for batch in prepared_dl:
+            resumed_batches.append(batch)
+        resumed_batches = accelerator.gather(resumed_batches)
+        for b1, b2 in zip(not_skipped_batches, resumed_batches):
+            for v1, v2 in zip(b1, b2):
+                assert torch.equal(v1, v2), f"Batch {b1} and {b2} are not equal"
+
+        accelerator.dataloader_config = old_dataloader_config
 
 
 def main():
     accelerator = create_accelerator()
     torch.manual_seed(accelerator.process_index)
 
-    # accelerator.print("Test that even_batches variable ensures uniform batches across processes")
-    # test_default_ensures_even_batch_sizes()
+    accelerator.print("Test that even_batches variable ensures uniform batches across processes")
+    test_default_ensures_even_batch_sizes()
 
-    # accelerator.print("Run tests with even_batches disabled")
-    # test_can_disable_even_batches()
+    accelerator.print("Run tests with even_batches disabled")
+    test_can_disable_even_batches()
 
-    # accelerator.print("Test joining uneven inputs")
-    # test_can_join_uneven_inputs()
+    accelerator.print("Test joining uneven inputs")
+    test_can_join_uneven_inputs()
 
-    # accelerator.print("Test overriding even_batches when joining uneven inputs")
-    # test_join_can_override_even_batches()
+    accelerator.print("Test overriding even_batches when joining uneven inputs")
+    test_join_can_override_even_batches()
 
-    # accelerator.print("Test overriding even_batches for mixed dataloader types")
-    # test_join_can_override_for_mixed_type_dataloaders()
+    accelerator.print("Test overriding even_batches for mixed dataloader types")
+    test_join_can_override_for_mixed_type_dataloaders()
 
-    # accelerator.print("Test overriding even_batches raises a warning for iterable dataloaders")
-    # test_join_raises_warning_for_iterable_when_overriding_even_batches()
+    accelerator.print("Test overriding even_batches raises a warning for iterable dataloaders")
+    test_join_raises_warning_for_iterable_when_overriding_even_batches()
 
-    # accelerator.print("Test join with non DDP distributed raises warning")
-    # original_state = accelerator.state.distributed_type
-    # accelerator.state.distributed_type = DistributedType.FSDP
-    # test_join_raises_warning_for_non_ddp_distributed(accelerator)
-    # accelerator.state.distributed_type = original_state
+    accelerator.print("Test join with non DDP distributed raises warning")
+    original_state = accelerator.state.distributed_type
+    accelerator.state.distributed_type = DistributedType.FSDP
+    test_join_raises_warning_for_non_ddp_distributed(accelerator)
+    accelerator.state.distributed_type = original_state
 
-    # dataset = DummyDataset()
-    # # Conventional Dataloader with shuffle=False
-    # loader = DataLoader(dataset, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
-    # test_data_loader(loader, accelerator)
+    dataset = DummyDataset()
+    # Conventional Dataloader with shuffle=False
+    loader = DataLoader(dataset, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+    test_data_loader(loader, accelerator)
 
-    # # Conventional Dataloader with shuffle=True
-    # loader = DataLoader(dataset, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
-    # test_data_loader(loader, accelerator)
+    # Conventional Dataloader with shuffle=True
+    loader = DataLoader(dataset, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+    test_data_loader(loader, accelerator)
 
-    # # Dataloader with batch_sampler
-    # sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
-    # loader = DataLoader(dataset, batch_sampler=sampler, num_workers=NUM_WORKERS)
-    # test_data_loader(loader, accelerator)
+    # Dataloader with batch_sampler
+    sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
+    loader = DataLoader(dataset, batch_sampler=sampler, num_workers=NUM_WORKERS)
+    test_data_loader(loader, accelerator)
 
-    # # Dataloader with sampler as an instance of `BatchSampler`
-    # sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
-    # loader = DataLoader(dataset, sampler=sampler, batch_size=None, collate_fn=default_collate, num_workers=NUM_WORKERS)
-    # test_data_loader(loader, accelerator)
+    # Dataloader with sampler as an instance of `BatchSampler`
+    sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
+    loader = DataLoader(dataset, sampler=sampler, batch_size=None, collate_fn=default_collate, num_workers=NUM_WORKERS)
+    test_data_loader(loader, accelerator)
     test_stateful_dataloader(accelerator)
+    test_stateful_dataloader_save_state(accelerator)
 
     accelerator.end_training()
 
