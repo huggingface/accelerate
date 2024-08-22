@@ -46,18 +46,18 @@ class RandomIterableDataset(IterableDataset):
 
 
 class SimpleIterableDataset(IterableDataset):
-        def __init__(self, num_samples=1000):
-            self.num_samples = num_samples
+    def __init__(self, num_samples=1000):
+        self.num_samples = num_samples
 
-        def __iter__(self):
-            for _ in range(self.num_samples):
-                yield torch.rand(1)
+    def __iter__(self):
+        for _ in range(self.num_samples):
+            yield torch.rand(1)
 
-        def __len__(self):
-            return self.num_samples
+    def __len__(self):
+        return self.num_samples
 
-        def set_epoch(self, epoch):
-            self.epoch = epoch
+    def set_epoch(self, epoch):
+        self.epoch = epoch
 
 
 class DataLoaderTester(unittest.TestCase):
