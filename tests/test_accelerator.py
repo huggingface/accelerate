@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import itertools
 import json
 import os
 import pickle
@@ -26,6 +27,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
+from accelerate.data_loader import skip_first_batches
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
@@ -35,9 +37,20 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
-from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_non_torch_xla
-from accelerate.utils import FP8RecipeKwargs, patch_environment
+from accelerate.test_utils.testing import (
+    AccelerateTestCase,
+    require_cuda,
+    require_non_torch_xla,
+    require_torchdata_stateful_dataloader,
+)
+from accelerate.utils import FP8RecipeKwargs, is_torchdata_stateful_dataloader_available, patch_environment
+from accelerate.utils.dataclasses import DataLoaderConfiguration
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
+from accelerate.utils.random import set_seed
+
+
+if is_torchdata_stateful_dataloader_available():
+    from torchdata.stateful_dataloader import StatefulDataLoader
 
 
 class ModelWithTiedWeights(torch.nn.Module):
@@ -58,7 +71,6 @@ def create_components(tied_weights=False):
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.01, steps_per_epoch=2, epochs=1)
     train_dl = DataLoader(TensorDataset(torch.tensor([1, 2, 3])))
     valid_dl = DataLoader(TensorDataset(torch.tensor([4, 5, 6])))
-
     return model, optimizer, scheduler, train_dl, valid_dl
 
 
@@ -71,6 +83,21 @@ class ModelForTest(torch.nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
+
+
+def create_dataloaders_for_test(batch_size=3, n_train_batches: int = 12, n_valid_batches: int = 2, num_workers=0):
+    "Generates a tuple of dummy DataLoaders to test with"
+
+    def get_dataset(n_batches):
+        x = torch.randn(batch_size * n_batches, 3)
+        y = torch.randn(batch_size * n_batches, 5)
+        return TensorDataset(x, y)
+
+    train_dataset = get_dataset(n_train_batches)
+    valid_dataset = get_dataset(n_valid_batches)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, num_workers=num_workers)
+    return (train_dataloader, valid_dataloader)
 
 
 def get_signature(model):
@@ -89,7 +116,12 @@ def parameterized_custom_name_func(func, param_num, param):
     # customize the test name generator function as we want both params to appear in the sub-test
     # name, as by default it shows only the first param
     param_based_name = "use_safetensors" if param.args[0] is True else "use_pytorch"
-    param_based_name += "_tied_weights" if (len(param.args) == 2 and param.args[1] is True) else ""
+    if len(param.args) > 1:
+        param_based_name += "_tied_weights" if param.args[1] is True else ""
+    if len(param.args) > 2:
+        param_based_name += f"_num_workers_{param.args[2]}"
+    if len(param.args) > 3:
+        param_based_name += "_dispatch_batches" if param.args[3] is True else "_no_dispatch_batches"
     return f"{func.__name__}_{param_based_name}"
 
 
@@ -615,3 +647,133 @@ class AcceleratorTester(AccelerateTestCase):
         # check that pickle roundtrip works
         model_loaded = pickle.loads(pickle.dumps(model))
         model_loaded(inputs)
+
+    # Ideally would be a parameterized test which works with either stateful or non-stateful dataloaders, but dependencies are a bit awkward.
+    @require_torchdata_stateful_dataloader
+    def test_prepared_objects_are_referenced_with_stateful_dataloader(self):
+        """Test that setting `use_stateful_dataloader=True` in `DataLoaderConfiguration` prepares a `StatefulDataLoader` object instead of a `DataLoader` object."""
+        dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
+        accelerator = Accelerator(dataloader_config=dataloader_config)
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+
+        (
+            prepared_model,
+            prepared_optimizer,
+            prepared_scheduler,
+            prepared_train_dl,
+            prepared_valid_dl,
+        ) = accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
+
+        assert prepared_model in accelerator._models
+        assert prepared_optimizer in accelerator._optimizers
+        assert prepared_scheduler in accelerator._schedulers
+        assert prepared_train_dl in accelerator._dataloaders
+        assert prepared_valid_dl in accelerator._dataloaders
+        assert isinstance(prepared_train_dl, StatefulDataLoader)
+        assert isinstance(prepared_valid_dl, StatefulDataLoader)
+
+    @parameterized.expand(
+        itertools.product([True, False], [True, False], [0, 2], [True, False]),
+        name_func=parameterized_custom_name_func,
+    )
+    @require_torchdata_stateful_dataloader
+    def test_save_model_with_stateful_dataloader(self, use_safetensors, tied_weights, num_workers, dispatch_batches):
+        """
+        Test that saving and loading a model with a stateful dataloader returns the same model,
+        and that the dataloader's iterator is restored properly."""
+        set_seed(42)
+        dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=True)
+        accelerator = Accelerator(dataloader_config=dataloader_config)
+
+        model, optimizer, scheduler, train_dl, valid_dl = create_components(tied_weights)
+        train_dl, valid_dl = create_dataloaders_for_test(num_workers=num_workers)
+        model = ModelForTest()
+
+        (
+            prepared_model,
+            prepared_optimizer,
+            prepared_scheduler,
+            prepared_train_dl,
+            prepared_valid_dl,
+        ) = accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
+
+        assert isinstance(prepared_train_dl, StatefulDataLoader)
+        assert isinstance(prepared_valid_dl, StatefulDataLoader)
+
+        # Perform 3 training iterations to ensure the dataloader's iterator is advanced
+        num_batches_to_skip = 3
+        model.train()
+        for step, batch in enumerate(prepared_train_dl):
+            x, y = batch
+            x.to(accelerator.device)
+            y.to(accelerator.device)
+            with accelerator.accumulate(prepared_model):
+                outputs = prepared_model(x)
+                loss = torch.nn.functional.mse_loss(outputs, y)
+                accelerator.backward(loss)
+                prepared_optimizer.step()
+                prepared_scheduler.step()
+                prepared_optimizer.zero_grad()
+            if step == num_batches_to_skip - 1:
+                state_dict = prepared_train_dl.state_dict()
+                # When breaking out without fully going through the iterator, must call end() to unregister this iterator from gradient state.
+                # TODO: Maybe this could be done automatically?
+                prepared_train_dl.end()
+                break
+
+        assert accelerator.gradient_state.active_dataloader is None
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Save model for later use
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors)
+
+            # Starting from where we left off, train this model to the end of the DataLoader
+            prepared_train_dl = skip_first_batches(prepared_train_dl, num_batches_to_skip)
+            batches_seen_with_original_dl = 0
+            for batch in prepared_train_dl:
+                x, y = batch
+                x.to(accelerator.device)
+                y.to(accelerator.device)
+                with accelerator.accumulate(prepared_model):
+                    outputs = prepared_model(x)
+                    loss = torch.nn.functional.mse_loss(outputs, y)
+                    accelerator.backward(loss)
+                    prepared_optimizer.step()
+                    prepared_scheduler.step()
+                    prepared_optimizer.zero_grad()
+                batches_seen_with_original_dl += 1
+
+            original_linear1 = prepared_model.linear1.weight.clone()
+            original_batchnorm = prepared_model.batchnorm.weight.clone()
+            original_linear2 = prepared_model.linear2.weight.clone()
+
+            # Load the model and state dict
+            load_checkpoint_in_model(model, tmpdirname)
+            stateful_train_dl, _ = create_dataloaders_for_test(num_workers=num_workers)
+            prepared_stateful_train_dl = accelerator.prepare_data_loader(stateful_train_dl)
+            prepared_stateful_train_dl.load_state_dict(state_dict)
+
+            # Train this to the end of the DataLoader
+            batches_seen_with_loaded_dl = 0
+            for batch in prepared_stateful_train_dl:
+                x, y = batch
+                x.to(accelerator.device)
+                y.to(accelerator.device)
+                with accelerator.accumulate(prepared_model):
+                    outputs = prepared_model(x)
+                    loss = torch.nn.functional.mse_loss(outputs, y)
+                    accelerator.backward(loss)
+                    prepared_optimizer.step()
+                    prepared_scheduler.step()
+                    prepared_optimizer.zero_grad()
+                batches_seen_with_loaded_dl += 1
+
+            new_linear1 = prepared_model.linear1.weight
+            new_batchnorm = prepared_model.batchnorm.weight
+            new_linear2 = prepared_model.linear2.weight
+
+            # Assert equalities
+            assert batches_seen_with_original_dl == batches_seen_with_loaded_dl
+            assert torch.allclose(original_linear1, new_linear1)
+            assert torch.allclose(original_batchnorm, new_batchnorm)
+            assert torch.allclose(original_linear2, new_linear2)

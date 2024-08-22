@@ -749,7 +749,7 @@ class DataLoaderConfiguration:
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
             " and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
-            " underlying dataset is an `IterableDataslet`, `False` otherwise."
+            " underlying dataset is an `IterableDataset`, `False` otherwise."
         },
     )
     even_batches: bool = field(
@@ -775,6 +775,13 @@ class DataLoaderConfiguration:
             "help": "If set to `True`, the dataloader prepared by the Accelerator will utilize non-blocking host-to-device"
             " transfers, allowing for better overlap between dataloader communication and computation.  Recommended that the"
             " prepared dataloader has `pin_memory` set to `True` to work properly."
+        },
+    )
+    use_stateful_dataloader: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
+            "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
         },
     )
 
