@@ -451,7 +451,10 @@ class DataLoaderAdapter:
             if state_dict["_num_yielded"] > 0:
                 state_dict["_num_yielded"] -= factor
             if state_dict["_index_sampler_state"] is not None:
-                if "samples_yielded" in state_dict["_index_sampler_state"] and state_dict["_index_sampler_state"]["samples_yielded"] > 0:
+                if (
+                    "samples_yielded" in state_dict["_index_sampler_state"]
+                    and state_dict["_index_sampler_state"]["samples_yielded"] > 0
+                ):
                     state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
         self.base_dataloader.load_state_dict(state_dict)
 
@@ -463,15 +466,7 @@ class DataLoaderAdapter:
         # _update_state_dict is called to snapshot the state_dict that would properly recover the DataLoaderAdapter.
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
-
-    def reset_state_dict(self, state_dict=None):
-        if state_dict is None:
-            state_dict = self.dl_state_dict
-        for key, value in state_dict.items():
-            if isinstance(value, dict):
-                self.reset_state_dict(value)
-            elif key.endswith("_yielded"):
-                state_dict[key] = 0
+            self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -558,7 +553,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                 current_batch = next_batch
             except StopIteration:
                 self.end_of_dataloader = True
-                self.reset_state_dict()
+                self._update_state_dict()
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
@@ -829,7 +824,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
 
             if stop_iteration:
                 self.end_of_dataloader = True
-                self.reset_state_dict()
+                self._update_state_dict()
                 self.remainder = observed_batch_size
             if batch_index >= self.skip_batches:
                 yield batch

@@ -19,9 +19,10 @@ import torch
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
-from accelerate import Accelerator, DistributedType, DataLoaderConfiguration
+from accelerate import Accelerator, DataLoaderConfiguration, DistributedType
+from accelerate.utils import set_seed
 
 
 ########################################################################
@@ -147,7 +148,7 @@ def training_function(config, args):
     else:
         checkpointing_steps = None
 
-    set_seed(seed)
+    set_seed(seed, deterministic=True)
 
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
     metric = evaluate.load("glue", "mrpc")
@@ -254,7 +255,6 @@ def training_function(config, args):
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
-        accelerator.print(f"num_samples train: {num_samples}")
         model.eval()
         num_samples = 0
         for step, batch in enumerate(eval_dataloader):
@@ -269,7 +269,6 @@ def training_function(config, args):
                 predictions=predictions,
                 references=references,
             )
-        accelerator.print(f"num_samples eval: {num_samples}")
         eval_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
