@@ -584,6 +584,12 @@ class Accelerator:
         return self.dataloader_config.non_blocking
 
     @property
+    def use_stateful_dataloader(self):
+        if hasattr(self.dataloader_config, "use_stateful_dataloader"):
+            return self.dataloader_config.use_stateful_dataloader
+        return False
+
+    @property
     def project_dir(self):
         return self.project_configuration.project_dir
 
@@ -2068,6 +2074,7 @@ class Accelerator:
             slice_fn_for_dispatch=slice_fn_for_dispatch,
             use_seedable_sampler=self.use_seedable_sampler,
             non_blocking=self.non_blocking,
+            use_stateful_dataloader=self.use_stateful_dataloader,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
