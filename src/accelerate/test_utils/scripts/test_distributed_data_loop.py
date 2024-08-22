@@ -310,12 +310,10 @@ def test_stateful_dataloader_save_state(accelerator):
             # Step just before
             if step == last_batch_num - 1:
                 accelerator.save_state(tmpdir)
-                # state_dict = prepared_dl.state_dict()
             if step >= last_batch_num:
                 # Otherwise grab the "unseen" batches
                 untrained_batches.append(batch)
         not_skipped_batches = accelerator.gather(untrained_batches)
-        # prepared_dl.load_state_dict(state_dict)
         accelerator.load_state(tmpdir)
         resumed_batches = []
         for batch in prepared_dl:

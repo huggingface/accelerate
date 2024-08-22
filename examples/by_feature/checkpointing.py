@@ -21,7 +21,7 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
-from accelerate import Accelerator, DistributedType
+from accelerate import Accelerator, DistributedType, DataLoaderConfiguration
 
 
 ########################################################################
@@ -125,7 +125,8 @@ def training_function(config, args):
     if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
         config["num_epochs"] = 2
     # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=args.use_stateful_dataloader)
+    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, dataloader_config=dataloader_config)
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
@@ -217,16 +218,21 @@ def training_function(config, args):
         model.train()
         # New Code #
         if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
-            # We need to skip steps until we reach the resumed step
-            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            # We need to skip steps until we reach the resumed step only if we are not using a stateful dataloader
+            if not args.use_stateful_dataloader:
+                active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            else:
+                active_dataloader = train_dataloader
             overall_step += resume_step
         else:
             # After the first iteration though, we need to go back to the original dataloader
             active_dataloader = train_dataloader
+        num_samples = 0
         for step, batch in enumerate(active_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
+            num_samples += batch["input_ids"].shape[0]
             loss = outputs.loss
             loss = loss / gradient_accumulation_steps
             accelerator.backward(loss)
@@ -248,20 +254,22 @@ def training_function(config, args):
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
-
+        accelerator.print(f"num_samples train: {num_samples}")
         model.eval()
+        num_samples = 0
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True` (the default).
             batch.to(accelerator.device)
             with torch.no_grad():
                 outputs = model(**batch)
+            num_samples += batch["input_ids"].shape[0]
             predictions = outputs.logits.argmax(dim=-1)
             predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
             metric.add_batch(
                 predictions=predictions,
                 references=references,
             )
-
+        accelerator.print(f"num_samples eval: {num_samples}")
         eval_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
@@ -308,6 +316,11 @@ def main():
         type=str,
         default=None,
         help="If the training should continue from a checkpoint folder.",
+    )
+    parser.add_argument(
+        "--use_stateful_dataloader",
+        action="store_true",
+        help="If the dataloader should be a resumable stateful dataloader.",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}

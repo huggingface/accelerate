@@ -445,14 +445,15 @@ class DataLoaderAdapter:
         # The state dict will be off by a factor of `n-1` batch too many during DDP,
         # so we need to adjust it here
         if PartialState().distributed_type != DistributedType.NO:
-            state_dict["_sampler_iter_yielded"] -= PartialState().num_processes - 1
-            state_dict["_num_yielded"] -= PartialState().num_processes - 1
-            state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * (
-                PartialState().num_processes - 1
-            )
-
+            factor = PartialState().num_processes - 1
+            if state_dict["_sampler_iter_yielded"] > 0:
+                state_dict["_sampler_iter_yielded"] -= factor
+            if state_dict["_num_yielded"] > 0:
+                state_dict["_num_yielded"] -= factor
+            if state_dict["_index_sampler_state"] is not None:
+                if "samples_yielded" in state_dict["_index_sampler_state"] and state_dict["_index_sampler_state"]["samples_yielded"] > 0:
+                    state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
         self.base_dataloader.load_state_dict(state_dict)
-        self.dl_state_dict = self.state_dict
 
     def _update_state_dict(self):
         # The state_dict of the underlying base_dataloader may be ahead of what is currently being yielded.
@@ -462,6 +463,15 @@ class DataLoaderAdapter:
         # _update_state_dict is called to snapshot the state_dict that would properly recover the DataLoaderAdapter.
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
+
+    def reset_state_dict(self, state_dict=None):
+        if state_dict is None:
+            state_dict = self.dl_state_dict
+        for key, value in state_dict.items():
+            if isinstance(value, dict):
+                self.reset_state_dict(value)
+            elif key.endswith("_yielded"):
+                state_dict[key] = 0
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -548,6 +558,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                 current_batch = next_batch
             except StopIteration:
                 self.end_of_dataloader = True
+                self.reset_state_dict()
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
@@ -818,6 +829,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
 
             if stop_iteration:
                 self.end_of_dataloader = True
+                self.reset_state_dict()
                 self.remainder = observed_batch_size
             if batch_index >= self.skip_batches:
                 yield batch

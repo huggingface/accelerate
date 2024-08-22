@@ -127,7 +127,7 @@ def save_accelerator_state(
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
-        if hasattr(dataloader, "state_dict"):
+        if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
             state_dict = dataloader.state_dict()
@@ -246,7 +246,7 @@ def load_accelerator_state(
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 sampler = dataloader.set_sampler(torch.load(input_sampler_file))
-        if hasattr(dataloader, "state_dict"):
+        if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
             state_dict = torch.load(input_dataloader_state_dict_file)
