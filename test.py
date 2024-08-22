@@ -76,7 +76,8 @@ assert isinstance(prepared_valid_dl, StatefulDataLoader)
 # Should be 12 batches at the end
 num_batches_to_skip = 4
 model.train()
-path = "saved_model_for_test"
+# path = "saved_model_for_test"
+path = "saved_state_for_test"
 not_skipped_batches = []
 for step, batch in enumerate(prepared_train_dl):
     x, y = batch
@@ -87,10 +88,11 @@ for step, batch in enumerate(prepared_train_dl):
     prepared_scheduler.step()
     prepared_optimizer.zero_grad()
     if step == num_batches_to_skip - 1:
-        state_dict = prepared_train_dl.state_dict()
-        # Save model for later use
+        # state_dict = prepared_train_dl.state_dict()
+        # # Save model for later use
         unwrapped_model = accelerator.unwrap_model(prepared_model)
-        accelerator.save_model(unwrapped_model, path)
+        # accelerator.save_model(unwrapped_model, path)
+        accelerator.save_state(path)
     if step >= num_batches_to_skip:
         not_skipped_batches.append(batch)
 
@@ -105,15 +107,16 @@ original_batchnorm = unwrapped_model.batchnorm.weight.clone()
 original_linear2 = unwrapped_model.linear2.weight.clone()
 
 # Load the model and state dict
-load_checkpoint_in_model(prepared_model, path)
+accelerator.load_state(path)
+# load_checkpoint_in_model(prepared_model, path)
 # set_seed(42)
-stateful_train_dl, _ = create_dataloaders_for_test(n_train_batches=32)
-prepared_stateful_train_dl = accelerator.prepare_data_loader(stateful_train_dl)
-prepared_stateful_train_dl.load_state_dict(state_dict)
+# stateful_train_dl, _ = create_dataloaders_for_test(n_train_batches=32)
+# prepared_stateful_train_dl = accelerator.prepare_data_loader(stateful_train_dl)
+# prepared_stateful_train_dl.load_state_dict(state_dict)
 
 # Train this to the end of the DataLoader
 batches_seen_with_loaded_dl = 0
-for batch in prepared_stateful_train_dl:
+for batch in prepared_train_dl:
     x, y = batch
     outputs = prepared_model(x)
     loss = torch.nn.functional.mse_loss(outputs, y)

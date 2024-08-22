@@ -442,6 +442,13 @@ class DataLoaderAdapter:
         return self.dl_state_dict
 
     def load_state_dict(self, state_dict):
+        # The state dict will be off by a factor of `n-1` batch too many during DDP,
+        # so we need to adjust it here
+        if PartialState().distributed_type != DistributedType.NO:
+            state_dict["_sampler_iter_yielded"] -= PartialState().num_processes - 1
+            state_dict["_num_yielded"] -= PartialState().num_processes - 1
+            state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * (PartialState().num_processes - 1)
+
         self.base_dataloader.load_state_dict(state_dict)
         self.dl_state_dict = self.state_dict
 

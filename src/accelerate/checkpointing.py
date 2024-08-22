@@ -127,6 +127,11 @@ def save_accelerator_state(
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
+        if hasattr(dataloader, "state_dict"):
+            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
+            state_dict = dataloader.state_dict()
+            torch.save(state_dict, output_dataloader_state_dict_file)
         logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
 
     # GradScaler state
@@ -241,6 +246,11 @@ def load_accelerator_state(
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 sampler = dataloader.set_sampler(torch.load(input_sampler_file))
+        if hasattr(dataloader, "state_dict"):
+            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
+            state_dict = torch.load(input_dataloader_state_dict_file)
+            dataloader.load_state_dict(state_dict)
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
