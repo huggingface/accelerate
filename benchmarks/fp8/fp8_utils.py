@@ -109,7 +109,8 @@ def evaluate_model(model, dataloader, metric, accelerator=None):
         with torch.no_grad():
             outputs = model(**batch)
         predictions = outputs.logits.argmax(dim=-1)
+        references = batch["labels"]
         if accelerator is not None and accelerator.num_processes > 1:
-            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
+            predictions, references = accelerator.gather_for_metrics((predictions, references))
         metric.add_batch(predictions=predictions, references=references)
     return metric.compute()
