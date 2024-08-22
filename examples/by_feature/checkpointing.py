@@ -228,12 +228,10 @@ def training_function(config, args):
         else:
             # After the first iteration though, we need to go back to the original dataloader
             active_dataloader = train_dataloader
-        num_samples = 0
         for step, batch in enumerate(active_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
-            num_samples += batch["input_ids"].shape[0]
             loss = outputs.loss
             loss = loss / gradient_accumulation_steps
             accelerator.backward(loss)
@@ -256,13 +254,11 @@ def training_function(config, args):
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
         model.eval()
-        num_samples = 0
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True` (the default).
             batch.to(accelerator.device)
             with torch.no_grad():
                 outputs = model(**batch)
-            num_samples += batch["input_ids"].shape[0]
             predictions = outputs.logits.argmax(dim=-1)
             predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
             metric.add_batch(
