@@ -1480,6 +1480,7 @@ class Accelerator:
                         "ignored_modules": fsdp_plugin.ignored_modules,
                         "limit_all_gathers": fsdp_plugin.limit_all_gathers,
                         "device_id": self.device,
+                        "device_mesh": fsdp_plugin.device_mesh,
                     }
                     model = FSDP(model, **kwargs)
                     if fsdp_plugin.activation_checkpointing:
