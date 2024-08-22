@@ -266,10 +266,10 @@ def test_data_loader(data_loader, accelerator):
 def test_stateful_dataloader(accelerator):
     old_dataloader_config = accelerator.dataloader_config
     accelerator.dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
-    prepared_dl = create_dataloader(accelerator, dataset_size=32, batch_size=4, iterable=True, shuffle=True)
+    prepared_dl = create_dataloader(accelerator, dataset_size=256, batch_size=4, iterable=True, shuffle=True)
     untrained_batches = []
     # Calculate what step that will be
-    total_batches = 32 // (4 * accelerator.num_processes)
+    total_batches = 256 // (4 * accelerator.num_processes)
     last_batch_num = total_batches - 1
     for step, batch in enumerate(prepared_dl):
         # Step just before
