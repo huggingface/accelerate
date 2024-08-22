@@ -73,7 +73,7 @@ class DummyIterableDataset(IterableDataset):
 def create_accelerator(even_batches=True):
     dataloader_config = DataLoaderConfiguration(even_batches=even_batches)
     accelerator = Accelerator(dataloader_config=dataloader_config)
-    # assert accelerator.num_processes == 2, "this script expects that two GPUs are available"
+    assert accelerator.num_processes == 2, "this script expects that two GPUs are available"
     return accelerator
 
 
