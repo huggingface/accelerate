@@ -64,6 +64,21 @@ class RandomIterableDataset(IterableDataset):
             stop = random.random() < self.p_stop
 
 
+class SimpleIterableDataset(IterableDataset):
+    def __init__(self, num_samples=1000):
+        self.num_samples = num_samples
+
+    def __iter__(self):
+        for _ in range(self.num_samples):
+            yield torch.rand(1)
+
+    def __len__(self):
+        return self.num_samples
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+
 class DataLoaderTester(unittest.TestCase):
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False, even_batches=True):
         batch_sampler_shards = [
@@ -383,6 +398,14 @@ class DataLoaderTester(unittest.TestCase):
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=False)
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=True)
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=True)
+
+    def test_iterable_dataset_using_none_batch_size(self):
+        dataset = SimpleIterableDataset(100)
+        accelerator = Accelerator()
+        dataloader = DataLoader(dataset, batch_size=None)
+        dataloader = accelerator.prepare(dataloader)
+        for d in dataloader:
+            assert isinstance(d, torch.Tensor)
 
     def test_skip_batch_sampler(self):
         batch_sampler = BatchSampler(range(16), batch_size=4, drop_last=False)
