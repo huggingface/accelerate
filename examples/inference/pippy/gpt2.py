@@ -32,7 +32,7 @@ model.eval()
 input = torch.randint(
     low=0,
     high=model.config.vocab_size,
-    size=(2, 1024),  # bs x seq_len
+    size=(1, 1024),  # bs x seq_len
     device="cpu",
     dtype=torch.int64,
     requires_grad=False,
