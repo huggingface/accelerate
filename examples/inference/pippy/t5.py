@@ -59,9 +59,18 @@ model = prepare_pippy(
 #     gather_outputs=True
 # )
 
+# Create new inputs of the expected size (n_processes)
+input = torch.randint(
+    low=0,
+    high=model.config.vocab_size,
+    size=(1, 512),  # bs x seq_len
+    device="cpu",
+    dtype=torch.int64,
+    requires_grad=False,
+)
 # The model expects a tuple during real inference
 # with the data on the first device
-args = (example_inputs["input_ids"].to("cuda:0"), example_inputs["decoder_input_ids"].to("cuda:0"))
+args = (input.to("cuda:0"), input.to("cuda:0"))
 
 # Take an average of 5 times
 # Measure first batch

@@ -142,11 +142,12 @@ def prepare_pippy(
         no_split_module_classes (`List[str]`):
             A list of class names for layers we don't want to be split.
         example_args (tuple of model inputs):
-            The expected inputs for the model that uses order-based inputs for a *single process*. Recommended to use this method if possible.
+            The expected inputs for the model that uses order-based inputs for a *single process*. Recommended to use
+            this method if possible.
         example_kwargs (dict of model inputs)
-            The expected inputs for the model that uses dictionary-based inputs for a *single process*. This is a *highly* limiting structure
-            that requires the same keys be present at *all* inference calls. Not recommended unless the prior condition
-            is true for all cases.
+            The expected inputs for the model that uses dictionary-based inputs for a *single process*. This is a
+            *highly* limiting structure that requires the same keys be present at *all* inference calls. Not
+            recommended unless the prior condition is true for all cases.
         num_chunks (`int`, defaults to the number of available GPUs):
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
             this can be tuned and played with. In general one should have num_chunks >= num_gpus.
