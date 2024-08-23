@@ -716,10 +716,6 @@ class AcceleratorTester(AccelerateTestCase):
                 if step == num_batches_to_skip - 1:
                     # Save the state once we've gone through a few batches
                     accelerator.save_state(f"{tmpdirname}/state", safe_serialization=use_safetensors)
-                    # When breaking out without fully going through the iterator, must call end() to unregister this iterator from gradient state.
-                    # TODO: Maybe this could be done automatically?
-                    # prepared_train_dl.end()
-                    # break
                 if step >= num_batches_to_skip:
                     untrained_batches.append(batch)
 
