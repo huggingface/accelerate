@@ -365,6 +365,13 @@ class DataLoaderStateMixin:
         - **remainder** (`int`) -- The number of items that are remaining in the last batch, relative to the total
           batch size
 
+    <Tip warning={true}>
+
+        Inheriters of this class should ensure that the class creates a `GradientState()` instance, stored in
+        `self.gradient_state`.
+
+    </Tip>
+
     """
 
     def __init_subclass__(cls, **kwargs):
