@@ -442,20 +442,6 @@ class DataLoaderAdapter:
         return self.dl_state_dict
 
     def load_state_dict(self, state_dict):
-        # The state dict will be off by a factor of `n-1` batch too many during DDP,
-        # so we need to adjust it here
-        if PartialState().distributed_type != DistributedType.NO:
-            factor = PartialState().num_processes - 1
-            if state_dict["_sampler_iter_yielded"] > 0:
-                state_dict["_sampler_iter_yielded"] -= factor
-            if state_dict["_num_yielded"] > 0:
-                state_dict["_num_yielded"] -= factor
-            if state_dict["_index_sampler_state"] is not None:
-                if (
-                    "samples_yielded" in state_dict["_index_sampler_state"]
-                    and state_dict["_index_sampler_state"]["samples_yielded"] > 0
-                ):
-                    state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
         self.base_dataloader.load_state_dict(state_dict)
 
     def _update_state_dict(self):
@@ -466,6 +452,20 @@ class DataLoaderAdapter:
         # _update_state_dict is called to snapshot the state_dict that would properly recover the DataLoaderAdapter.
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
+            # The state dict will be off by a factor of `n-1` batch too many during DDP,
+            # so we need to adjust it here
+            if PartialState().distributed_type != DistributedType.NO:
+                factor = PartialState().num_processes - 1
+                if self.dl_state_dict["_sampler_iter_yielded"] > 0:
+                    self.dl_state_dict["_sampler_iter_yielded"] -= factor
+                if self.dl_state_dict["_num_yielded"] > 0:
+                    self.dl_state_dict["_num_yielded"] -= factor
+                if self.dl_state_dict["_index_sampler_state"] is not None:
+                    if (
+                        "samples_yielded" in self.dl_state_dict["_index_sampler_state"]
+                        and self.dl_state_dict["_index_sampler_state"]["samples_yielded"] > 0
+                    ):
+                        self.dl_state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
             self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
 
 

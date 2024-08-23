@@ -148,7 +148,7 @@ def training_function(config, args):
     else:
         checkpointing_steps = None
 
-    set_seed(seed, deterministic=True)
+    set_seed(seed)
 
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
     metric = evaluate.load("glue", "mrpc")

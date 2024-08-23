@@ -249,8 +249,9 @@ def load_accelerator_state(
         if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
-            state_dict = torch.load(input_dataloader_state_dict_file)
-            dataloader.load_state_dict(state_dict)
+            if input_dataloader_state_dict_file.exists():
+                state_dict = torch.load(input_dataloader_state_dict_file)
+                dataloader.load_state_dict(state_dict)
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
