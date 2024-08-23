@@ -451,6 +451,28 @@ class DataLoaderAdapter:
     def load_state_dict(self, state_dict):
         self.base_dataloader.load_state_dict(state_dict)
 
+    def adjust_state_dict_for_prefetch(self):
+        """
+        Adjusts the state dict for prefetching. Natively, this will adjust all of the sampler iters yielded by a factor
+        of `num_processes - 1`, however if a custom correction is needed, this can be overridden.
+
+        This should modify `self.dl_state_dict` directly
+        """
+        # The state dict will be off by a factor of `n-1` batch too many during DDP,
+        # so we need to adjust it here
+        if PartialState().distributed_type != DistributedType.NO:
+            factor = PartialState().num_processes - 1
+            if self.dl_state_dict["_sampler_iter_yielded"] > 0:
+                self.dl_state_dict["_sampler_iter_yielded"] -= factor
+            if self.dl_state_dict["_num_yielded"] > 0:
+                self.dl_state_dict["_num_yielded"] -= factor
+            if self.dl_state_dict["_index_sampler_state"] is not None:
+                if (
+                    "samples_yielded" in self.dl_state_dict["_index_sampler_state"]
+                    and self.dl_state_dict["_index_sampler_state"]["samples_yielded"] > 0
+                ):
+                    self.dl_state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
+
     def _update_state_dict(self):
         # The state_dict of the underlying base_dataloader may be ahead of what is currently being yielded.
         # E.g. the implementation of DataLoaderShard involves having an underlying iterator 1 element ahead of
@@ -459,20 +481,9 @@ class DataLoaderAdapter:
         # _update_state_dict is called to snapshot the state_dict that would properly recover the DataLoaderAdapter.
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
-            # The state dict will be off by a factor of `n-1` batch too many during DDP,
-            # so we need to adjust it here
-            if PartialState().distributed_type != DistributedType.NO:
-                factor = PartialState().num_processes - 1
-                if self.dl_state_dict["_sampler_iter_yielded"] > 0:
-                    self.dl_state_dict["_sampler_iter_yielded"] -= factor
-                if self.dl_state_dict["_num_yielded"] > 0:
-                    self.dl_state_dict["_num_yielded"] -= factor
-                if self.dl_state_dict["_index_sampler_state"] is not None:
-                    if (
-                        "samples_yielded" in self.dl_state_dict["_index_sampler_state"]
-                        and self.dl_state_dict["_index_sampler_state"]["samples_yielded"] > 0
-                    ):
-                        self.dl_state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
+            # Potentially modify the state_dict to adjust for prefetching
+            self.adjust_state_dict_for_prefetch()
+            # Then tag if we are at the end of the dataloader
             self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
 
 
