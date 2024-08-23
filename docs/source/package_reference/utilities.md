@@ -215,7 +215,7 @@ These include general utilities that should be used when working in parallel.
 
 [[autodoc]] utils.save
 
-[[autodoc]] utils.load
+[[autodoc]] utils.torch_load_maybe_weights_only
 
 [[autodoc]] utils.wait_for_everyone
 
