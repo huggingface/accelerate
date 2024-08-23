@@ -268,7 +268,7 @@ def load_accelerator_state(
 
     # Random states
     try:
-        states = load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"), weights_only=False)
+        states = load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"), weights_only=True)
         if "step" in states:
             override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
