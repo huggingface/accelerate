@@ -17,6 +17,7 @@ import os
 import platform
 import re
 import socket
+from codecs import encode
 from contextlib import contextmanager
 from functools import partial, reduce
 from types import MethodType
@@ -219,13 +220,17 @@ TORCH_SAFE_GLOBALS = [
     # numpy arrays are just numbers, not objects, so we can reconstruct them safely
     np.core.multiarray._reconstruct,
     np.ndarray,
+    # The following are needed for the RNG states
+    encode,
+    np.dtype,
+    np.dtypes.UInt32Dtype,
 ]
 
 
-def load(f, map_location=None, **kwargs):
+def torch_load_maybe_weights_only(f, map_location=None, **kwargs):
     """
     Compatible drop-in replacement of `torch.load()` which allows for `weights_only` to be used if `torch` version is
-    2.0.0 or higher. Otherwise will ignore the kwarg.
+    2.4.0 or higher. Otherwise will ignore the kwarg.
 
     Will also add (and then remove) an exception for numpy arrays
 
@@ -237,15 +242,17 @@ def load(f, map_location=None, **kwargs):
         **kwargs:
             Additional keyword arguments to pass to `torch.load()`.
     """
-    if is_weights_only_available():
-        if "weights_only" not in kwargs:
-            kwargs["weights_only"] = True
-        torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS)
-    else:
-        kwargs.pop("weights_only", None)
-    loaded_obj = torch.load(f, map_location=map_location, **kwargs)
-    if is_weights_only_available():
-        torch.serialization.clear_safe_globals()
+    try:
+        if is_weights_only_available():
+            if "weights_only" not in kwargs:
+                kwargs["weights_only"] = True
+            torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS)
+        else:
+            kwargs.pop("weights_only", None)
+        loaded_obj = torch.load(f, map_location=map_location, **kwargs)
+    finally:
+        if is_weights_only_available():
+            torch.serialization.clear_safe_globals()
     return loaded_obj
 
 
