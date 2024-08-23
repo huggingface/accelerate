@@ -453,8 +453,9 @@ class DataLoaderAdapter:
 
     def adjust_state_dict_for_prefetch(self):
         """
-        Adjusts the state dict for prefetching. Natively, this will adjust all of the sampler iters yielded by a factor
-        of `num_processes - 1`, however if a custom correction is needed, this can be overridden.
+        Adjusts the state dict for prefetching. Natively, this will adjust all of the iters yielded keys in
+        `self.dl_state_dict` by a factor of `num_processes - 1`, however if a custom correction is needed, this can be
+        overridden.
 
         This should modify `self.dl_state_dict` directly
         """
