@@ -266,6 +266,12 @@ def test_data_loader(data_loader, accelerator):
 
 
 def test_stateful_dataloader(accelerator):
+    """
+    Tests that a stateful dataloader can be iterated over, saved after a few batches using `load_state_dict`, and then
+    resumed from the saved state.
+
+    The result should be the same as the rest of the data that iterated over after saving.
+    """
     old_dataloader_config = accelerator.dataloader_config
     try:
         accelerator.dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
@@ -297,6 +303,12 @@ def test_stateful_dataloader(accelerator):
 
 
 def test_stateful_dataloader_save_state(accelerator):
+    """
+    Tests that a stateful dataloader can be iterated over, saved after a few batches using `Accelerator.save_state`,
+    and then resumed from the saved state.
+
+    The result should be the same as the rest of the data that iterated over after saving.
+    """
     old_dataloader_config = accelerator.dataloader_config
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
