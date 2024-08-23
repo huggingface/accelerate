@@ -446,4 +446,6 @@ def deepspeed_required(func):
 
     return wrapper
 def is_weights_only_available():
-    return is_torch_version(">=", "2.0.0")
+    # Weights only with allowlist was added in 2.4.0
+    # ref: https://github.com/pytorch/pytorch/pull/124331
+    return is_torch_version(">=", "2.4.0")
