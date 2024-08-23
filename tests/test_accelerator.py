@@ -27,7 +27,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
-from accelerate.data_loader import skip_first_batches
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
@@ -682,11 +681,12 @@ class AcceleratorTester(AccelerateTestCase):
         Test that saving and loading a model with a stateful dataloader returns the same model,
         and that the dataloader's iterator is restored properly."""
         set_seed(42)
+        n_train_batches = 64  # Use enough batches to ensure we can get partial iterations on large compute
         dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=True)
         accelerator = Accelerator(dataloader_config=dataloader_config)
 
         model, optimizer, scheduler, train_dl, valid_dl = create_components(tied_weights)
-        train_dl, valid_dl = create_dataloaders_for_test(num_workers=num_workers)
+        train_dl, valid_dl = create_dataloaders_for_test(n_train_batches=n_train_batches, num_workers=num_workers)
         model = ModelForTest()
 
         (
@@ -703,77 +703,53 @@ class AcceleratorTester(AccelerateTestCase):
         # Perform 3 training iterations to ensure the dataloader's iterator is advanced
         num_batches_to_skip = 3
         model.train()
-        for step, batch in enumerate(prepared_train_dl):
-            x, y = batch
-            x.to(accelerator.device)
-            y.to(accelerator.device)
-            with accelerator.accumulate(prepared_model):
+        untrained_batches = []
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            for step, batch in enumerate(prepared_train_dl):
+                x, y = batch
                 outputs = prepared_model(x)
                 loss = torch.nn.functional.mse_loss(outputs, y)
                 accelerator.backward(loss)
                 prepared_optimizer.step()
                 prepared_scheduler.step()
                 prepared_optimizer.zero_grad()
-            if step == num_batches_to_skip - 1:
-                state_dict = prepared_train_dl.state_dict()
-                # When breaking out without fully going through the iterator, must call end() to unregister this iterator from gradient state.
-                # TODO: Maybe this could be done automatically?
-                prepared_train_dl.end()
-                break
+                if step == num_batches_to_skip - 1:
+                    # Save the state once we've gone through a few batches
+                    accelerator.save_state(f"{tmpdirname}/state", safe_serialization=use_safetensors)
+                if step >= num_batches_to_skip:
+                    untrained_batches.append(batch)
 
-        assert accelerator.gradient_state.active_dataloader is None
+            not_skipped_batches = accelerator.gather(untrained_batches)
+            # We then unwrap the trained model
+            unwrapped_model = accelerator.unwrap_model(prepared_model)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            # Save model for later use
-            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors)
+            original_linear1 = unwrapped_model.linear1.weight.clone()
+            original_batchnorm = unwrapped_model.batchnorm.weight.clone()
+            original_linear2 = unwrapped_model.linear2.weight.clone()
 
-            # Starting from where we left off, train this model to the end of the DataLoader
-            prepared_train_dl = skip_first_batches(prepared_train_dl, num_batches_to_skip)
-            batches_seen_with_original_dl = 0
-            for batch in prepared_train_dl:
-                x, y = batch
-                x.to(accelerator.device)
-                y.to(accelerator.device)
-                with accelerator.accumulate(prepared_model):
-                    outputs = prepared_model(x)
-                    loss = torch.nn.functional.mse_loss(outputs, y)
-                    accelerator.backward(loss)
-                    prepared_optimizer.step()
-                    prepared_scheduler.step()
-                    prepared_optimizer.zero_grad()
-                batches_seen_with_original_dl += 1
-
-            original_linear1 = prepared_model.linear1.weight.clone()
-            original_batchnorm = prepared_model.batchnorm.weight.clone()
-            original_linear2 = prepared_model.linear2.weight.clone()
-
-            # Load the model and state dict
-            load_checkpoint_in_model(model, tmpdirname)
-            stateful_train_dl, _ = create_dataloaders_for_test(num_workers=num_workers)
-            prepared_stateful_train_dl = accelerator.prepare_data_loader(stateful_train_dl)
-            prepared_stateful_train_dl.load_state_dict(state_dict)
+            # Resume the state
+            accelerator.load_state(f"{tmpdirname}/state")
 
             # Train this to the end of the DataLoader
             batches_seen_with_loaded_dl = 0
-            for batch in prepared_stateful_train_dl:
+            for batch in prepared_train_dl:
                 x, y = batch
-                x.to(accelerator.device)
-                y.to(accelerator.device)
-                with accelerator.accumulate(prepared_model):
-                    outputs = prepared_model(x)
-                    loss = torch.nn.functional.mse_loss(outputs, y)
-                    accelerator.backward(loss)
-                    prepared_optimizer.step()
-                    prepared_scheduler.step()
-                    prepared_optimizer.zero_grad()
+                outputs = prepared_model(x)
+                loss = torch.nn.functional.mse_loss(outputs, y)
+                accelerator.backward(loss)
+                prepared_optimizer.step()
+                prepared_scheduler.step()
+                prepared_optimizer.zero_grad()
                 batches_seen_with_loaded_dl += 1
 
-            new_linear1 = prepared_model.linear1.weight
-            new_batchnorm = prepared_model.batchnorm.weight
-            new_linear2 = prepared_model.linear2.weight
+            unwrapped_model_2 = accelerator.unwrap_model(prepared_model)
+
+            new_linear1 = unwrapped_model_2.linear1.weight
+            new_batchnorm = unwrapped_model_2.batchnorm.weight
+            new_linear2 = unwrapped_model_2.linear2.weight
 
             # Assert equalities
-            assert batches_seen_with_original_dl == batches_seen_with_loaded_dl
+            assert batches_seen_with_loaded_dl == len(not_skipped_batches)
             assert torch.allclose(original_linear1, new_linear1)
             assert torch.allclose(original_batchnorm, new_batchnorm)
             assert torch.allclose(original_linear2, new_linear2)

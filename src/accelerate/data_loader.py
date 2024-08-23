@@ -365,6 +365,13 @@ class DataLoaderStateMixin:
         - **remainder** (`int`) -- The number of items that are remaining in the last batch, relative to the total
           batch size
 
+    <Tip warning={true}>
+
+        Inheriters of this class should ensure that the class creates a `GradientState()` instance, stored in
+        `self.gradient_state`.
+
+    </Tip>
+
     """
 
     def __init_subclass__(cls, **kwargs):
@@ -443,7 +450,29 @@ class DataLoaderAdapter:
 
     def load_state_dict(self, state_dict):
         self.base_dataloader.load_state_dict(state_dict)
-        self.dl_state_dict = self.state_dict
+
+    def adjust_state_dict_for_prefetch(self):
+        """
+        Adjusts the state dict for prefetching. Natively, this will adjust all of the iters yielded keys in
+        `self.dl_state_dict` by a factor of `num_processes - 1`, however if a custom correction is needed, this can be
+        overridden.
+
+        This should modify `self.dl_state_dict` directly
+        """
+        # The state dict will be off by a factor of `n-1` batch too many during DDP,
+        # so we need to adjust it here
+        if PartialState().distributed_type != DistributedType.NO:
+            factor = PartialState().num_processes - 1
+            if self.dl_state_dict["_sampler_iter_yielded"] > 0:
+                self.dl_state_dict["_sampler_iter_yielded"] -= factor
+            if self.dl_state_dict["_num_yielded"] > 0:
+                self.dl_state_dict["_num_yielded"] -= factor
+            if self.dl_state_dict["_index_sampler_state"] is not None:
+                if (
+                    "samples_yielded" in self.dl_state_dict["_index_sampler_state"]
+                    and self.dl_state_dict["_index_sampler_state"]["samples_yielded"] > 0
+                ):
+                    self.dl_state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
 
     def _update_state_dict(self):
         # The state_dict of the underlying base_dataloader may be ahead of what is currently being yielded.
@@ -453,6 +482,10 @@ class DataLoaderAdapter:
         # _update_state_dict is called to snapshot the state_dict that would properly recover the DataLoaderAdapter.
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
+            # Potentially modify the state_dict to adjust for prefetching
+            self.adjust_state_dict_for_prefetch()
+            # Then tag if we are at the end of the dataloader
+            self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -539,6 +572,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                 current_batch = next_batch
             except StopIteration:
                 self.end_of_dataloader = True
+                self._update_state_dict()
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
@@ -809,6 +843,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
 
             if stop_iteration:
                 self.end_of_dataloader = True
+                self._update_state_dict()
                 self.remainder = observed_batch_size
             if batch_index >= self.skip_batches:
                 yield batch
@@ -1146,7 +1181,7 @@ class SkipBatchSampler(BatchSampler):
         return len(self.batch_sampler) - self.skip_batches
 
 
-class SkipDataLoader(DataLoaderAdapter):
+class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
     """
     Subclass of a PyTorch `DataLoader` that will skip the first batches.
 
@@ -1164,12 +1199,15 @@ class SkipDataLoader(DataLoaderAdapter):
     def __init__(self, dataset, skip_batches=0, use_stateful_dataloader=False, **kwargs):
         super().__init__(dataset, use_stateful_dataloader=use_stateful_dataloader, **kwargs)
         self.skip_batches = skip_batches
+        self.gradient_state = GradientState()
 
     def __iter__(self):
+        self.begin()
         for index, batch in enumerate(self.base_dataloader.__iter__()):
             if index >= self.skip_batches:
                 self._update_state_dict()
                 yield batch
+        self.end()
 
 
 def skip_first_batches(dataloader, num_batches=0):

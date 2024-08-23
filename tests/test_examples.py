@@ -45,11 +45,13 @@ from accelerate.utils import write_basic_config
 
 EXCLUDE_EXAMPLES = [
     "cross_validation.py",
+    "checkpointing.py",
     "gradient_accumulation.py",
     "local_sgd.py",
     "multi_process_metrics.py",
     "memory.py",
     "schedule_free.py",
+    "tracking.py",
     "automatic_gradient_accumulation.py",
     "fsdp_with_peak_mem_tracking.py",
     "deepspeed_with_config_support.py",
