@@ -70,12 +70,11 @@ class AccelerateLauncherTester(unittest.TestCase):
             cls.changed_path.rename(cls.config_path)
 
     def test_no_config(self):
+        args = ["--monitor_interval", "0.1", str(self.test_file_path)]
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
-            cmd = get_launch_command(multi_gpu=True)
-        else:
-            cmd = DEFAULT_LAUNCH_COMMAND
-        cmd.append(self.test_file_path)
-        execute_subprocess_async(cmd, env=os.environ.copy())
+            args = ["--multi_gpu"] + args
+        args = self.parser.parse_args(["--monitor_interval", "0.1", str(self.test_file_path)])
+        launch_command(args)
 
     def test_config_compatibility(self):
         invalid_configs = ["fp8", "invalid", "mpi", "sagemaker"]
