@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -20,14 +19,13 @@ from unittest.mock import patch
 import torch
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
+import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
-from accelerate.commands.launch import _validate_launch_command, launch_command_parser
-from accelerate.test_utils import execute_subprocess_async
+from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
+from accelerate.commands.tpu import tpu_command_launcher, tpu_command_parser
 from accelerate.test_utils.testing import (
-    DEFAULT_LAUNCH_COMMAND,
     capture_call_output,
-    get_launch_command,
     path_in_accelerate_package,
     require_multi_device,
     require_timm,
@@ -36,9 +34,6 @@ from accelerate.test_utils.testing import (
 )
 from accelerate.utils import patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
-
-from accelerate.commands.launch import launch_command_parser, launch_command
-import accelerate.commands.test as accelerate_test_cmd
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -268,7 +263,6 @@ class ClusterConfigTester(unittest.TestCase):
         config = load_config_from_file(str(self.test_config_path / "0_30_0_sagemaker.yaml"))
 
 
-from accelerate.commands.tpu import tpu_command_launcher, tpu_command_parser
 class TpuConfigTester(unittest.TestCase):
     """
     Test case for verifying the `accelerate tpu-config` CLI passes the right `gcloud` command.
@@ -286,12 +280,26 @@ class TpuConfigTester(unittest.TestCase):
         self.parser = tpu_command_parser()
 
     def test_base(self):
-        args = self.parser.parse_args(["--command", self.command, "--tpu_zone", self.tpu_zone, "--tpu_name", self.tpu_name, "--debug"])
+        args = self.parser.parse_args(
+            ["--command", self.command, "--tpu_zone", self.tpu_zone, "--tpu_name", self.tpu_name, "--debug"]
+        )
         output = capture_call_output(tpu_command_launcher, args)
         assert f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all" in output
 
     def test_base_backward_compatibility(self):
-        args = self.parser.parse_args(["--config_file", "tests/test_configs/0_12_0.yaml", "--command", self.command, "--tpu_zone", self.tpu_zone, "--tpu_name", self.tpu_name, "--debug"])
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                "tests/test_configs/0_12_0.yaml",
+                "--command",
+                self.command,
+                "--tpu_zone",
+                self.tpu_zone,
+                "--tpu_name",
+                self.tpu_name,
+                "--debug",
+            ]
+        )
         output = capture_call_output(tpu_command_launcher, args)
         assert f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all" in output
 
@@ -304,20 +312,24 @@ class TpuConfigTester(unittest.TestCase):
         )
 
     def test_with_config_file_and_command(self):
-        args = self.parser.parse_args(["--config_file", "tests/test_configs/latest.yaml", "--command", self.command, "--debug"])
+        args = self.parser.parse_args(
+            ["--config_file", "tests/test_configs/latest.yaml", "--command", self.command, "--debug"]
+        )
         output = capture_call_output(tpu_command_launcher, args)
         assert f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all" in output
 
     def test_with_config_file_and_multiple_command(self):
-        args = self.parser.parse_args([
-            "--config_file", 
-            "tests/test_configs/latest.yaml", 
-            "--command", 
-            self.command, 
-            "--command", 
-            'echo "Hello World"',
-            "--debug"
-        ])
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                "tests/test_configs/latest.yaml",
+                "--command",
+                self.command,
+                "--command",
+                'echo "Hello World"',
+                "--debug",
+            ]
+        )
         output = capture_call_output(tpu_command_launcher, args)
         assert (
             f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls; echo "Hello World" --worker all'
@@ -325,7 +337,9 @@ class TpuConfigTester(unittest.TestCase):
         )
 
     def test_with_config_file_and_command_file(self):
-        args = self.parser.parse_args(["--config_file", "tests/test_configs/latest.yaml", "--command_file", self.command_file, "--debug"])
+        args = self.parser.parse_args(
+            ["--config_file", "tests/test_configs/latest.yaml", "--command_file", self.command_file, "--debug"]
+        )
         output = capture_call_output(tpu_command_launcher, args)
         assert (
             f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all'
@@ -333,7 +347,19 @@ class TpuConfigTester(unittest.TestCase):
         )
 
     def test_with_config_file_and_command_file_backward_compatibility(self):
-        args = self.parser.parse_args(["--config_file", "tests/test_configs/0_12_0.yaml", "--command_file", self.command_file, "--tpu_zone", self.tpu_zone, "--tpu_name", self.tpu_name, "--debug"])
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                "tests/test_configs/0_12_0.yaml",
+                "--command_file",
+                self.command_file,
+                "--tpu_zone",
+                self.tpu_zone,
+                "--tpu_name",
+                self.tpu_name,
+                "--debug",
+            ]
+        )
         output = capture_call_output(tpu_command_launcher, args)
         assert (
             f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all'
@@ -341,7 +367,9 @@ class TpuConfigTester(unittest.TestCase):
         )
 
     def test_accelerate_install(self):
-        args = self.parser.parse_args(["--config_file", "tests/test_configs/latest.yaml", "--install_accelerate", "--debug"])
+        args = self.parser.parse_args(
+            ["--config_file", "tests/test_configs/latest.yaml", "--install_accelerate", "--debug"]
+        )
         output = capture_call_output(tpu_command_launcher, args)
         assert (
             f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate -U; echo "hello world"; echo "this is a second command" --worker all'
@@ -349,7 +377,16 @@ class TpuConfigTester(unittest.TestCase):
         )
 
     def test_accelerate_install_version(self):
-        args = self.parser.parse_args(["--config_file", "tests/test_configs/latest.yaml", "--install_accelerate", "--accelerate_version", "12.0.0", "--debug"])
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                "tests/test_configs/latest.yaml",
+                "--install_accelerate",
+                "--accelerate_version",
+                "12.0.0",
+                "--debug",
+            ]
+        )
         output = capture_call_output(tpu_command_launcher, args)
         assert (
             f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate==12.0.0; echo "hello world"; echo "this is a second command" --worker all'

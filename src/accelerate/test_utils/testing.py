@@ -672,10 +672,10 @@ def assert_exception(exception_class: Exception, msg: str = None) -> bool:
     if was_ran:
         raise AssertionError(f"Expected exception of type {exception_class} but ran without issue.")
 
+
 def capture_call_output(func, *args, **kwargs):
     """
-    Takes in a `func` with `args` and `kwargs`
-    and returns the captured stdout as a string
+    Takes in a `func` with `args` and `kwargs` and returns the captured stdout as a string
     """
     captured_output = io.StringIO()
     original_stdout = sys.stdout
