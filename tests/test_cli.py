@@ -83,8 +83,8 @@ class AccelerateLauncherTester(unittest.TestCase):
             if any(invalid_config in str(config) for invalid_config in invalid_configs):
                 continue
             with self.subTest(config_file=config):
-                cmd = get_launch_command(config_file=config) + [self.test_file_path]
-                execute_subprocess_async(cmd)
+                args = self.parser.parse_args(["--config_file", str(config), str(self.test_file_path)])
+                launch_command(args)
 
     def test_invalid_keys(self):
         config_path = self.test_config_path / "invalid_keys.yaml"
