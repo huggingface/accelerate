@@ -14,6 +14,7 @@
 
 import asyncio
 import inspect
+import io
 import os
 import shutil
 import subprocess
@@ -670,3 +671,19 @@ def assert_exception(exception_class: Exception, msg: str = None) -> bool:
             assert msg in str(e), f"Expected message '{msg}' to be in exception but got '{str(e)}'"
     if was_ran:
         raise AssertionError(f"Expected exception of type {exception_class} but ran without issue.")
+
+def capture_call_output(func, *args, **kwargs):
+    """
+    Takes in a `func` with `args` and `kwargs`
+    and returns the captured stdout as a string
+    """
+    captured_output = io.StringIO()
+    original_stdout = sys.stdout
+    try:
+        sys.stdout = captured_output
+        func(*args, **kwargs)
+    except Exception as e:
+        raise e
+    finally:
+        sys.stdout = original_stdout
+    return captured_output.getvalue()
