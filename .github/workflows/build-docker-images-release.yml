@@ -38,9 +38,7 @@ jobs:
         with:
           file: docker/accelerate-cpu/Dockerfile
           push: true
-          tags: |
-            huggingface/accelerate:cpu-release-${{ needs.get-version.outputs.version }}
-            huggingface/accelerate:cpu
+          tags: huggingface/accelerate:cpu-release-${{ needs.get-version.outputs.version }}
 
   version-cuda:
     name: "Latest Accelerate GPU [version]"
@@ -61,9 +59,7 @@ jobs:
         with:
           file: docker/accelerate-gpu/Dockerfile
           push: true
-          tags: |
-            huggingface/accelerate:gpu-release-${{needs.get-version.outputs.version}}
-            huggingface/accelerate:gpu
+          tags: huggingface/accelerate:gpu-release-${{needs.get-version.outputs.version}}
 
   version-cuda-deepspeed:
     name: "Latest Accelerate GPU DeepSpeed [version]"
@@ -84,9 +80,7 @@ jobs:
         with:
           file: docker/accelerate-gpu-deepspeed/Dockerfile
           push: true
-          tags: |
-            huggingface/accelerate:gpu-deepspeed-release-${{needs.get-version.outputs.version}}
-            huggingface/accelerate:gpu-deepspeed
+          tags: huggingface/accelerate:gpu-deepspeed-release-${{needs.get-version.outputs.version}}
 
   version-cuda-fp8-transformerengine:
     name: "Latest Accelerate GPU FP8 TransformerEngine [version]"
@@ -107,6 +101,4 @@ jobs:
         with:
           file: docker/accelerate-gpu/Dockerfile
           push: true
-          tags: |
-            huggingface/accelerate:gpu-fp8-transformerengine-release-${{needs.get-version.outputs.version}}
-            huggingface/accelerate:gpu-fp8-transformerengine
+          tags: huggingface/accelerate:gpu-fp8-transformerengine-release-${{needs.get-version.outputs.version}}
