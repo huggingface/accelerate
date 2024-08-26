@@ -61,8 +61,8 @@ jobs:
             huggingface/accelerate:gpu-nightly
             huggingface/accelerate:gpu-nightly-${{ env.date }}
 
-  latest-deepspeed:
-    name: "Latest Accelerate GPU Deepspeed [dev]"
+  latest-cuda-deepspeed:
+    name: "Latest Accelerate GPU DeepSpeed [dev]"
     runs-on:
       group: aws-g6-4xlarge-plus
     steps:
