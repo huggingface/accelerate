@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
-from .state import AcceleratorState, DistributedType, GradientState, PartialState, is_torch_xla_available
+from .state import DistributedType, GradientState, PartialState, is_torch_xla_available
 from .utils import (
     RNGType,
     broadcast,
@@ -720,7 +720,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
 
         self.gradient_state = GradientState()
-        self.state = AcceleratorState()
+        self.state = PartialState()
         self._drop_last = _drop_last
         self._non_blocking = _non_blocking
         self.skip_batches = skip_batches
@@ -937,10 +937,9 @@ def prepare_data_loader(
         device (`torch.device`):
             The target device for the returned `DataLoader`.
         num_processes (`int`, *optional*):
-            The number of processes running concurrently. Will default to the value given by
-            [`~state.AcceleratorState`].
+            The number of processes running concurrently. Will default to the value given by [`~state.PartialState`].
         process_index (`int`, *optional*):
-            The index of the current process. Will default to the value given by [`~state.AcceleratorState`].
+            The index of the current process. Will default to the value given by [`~state.PartialState`].
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
             yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
@@ -1009,8 +1008,8 @@ def prepare_data_loader(
 
     if dispatch_batches and not put_on_device:
         raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
-    # Grab defaults from AcceleratorState
-    state = AcceleratorState()
+    # Grab defaults from PartialState
+    state = PartialState()
     if num_processes is None:
         num_processes = state.num_processes
     if process_index is None:
