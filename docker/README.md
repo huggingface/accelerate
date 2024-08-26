@@ -33,6 +33,7 @@ huggingface/accelerate:{accelerator}-{nightly,release}
 * `cpu`: Comes compiled off of `python:3.9-slim` and is designed for non-CUDA based workloads.
 * More to come soon
 * `gpu-deepspeed`: Comes compiled off of the `nvidia/cuda` image and includes core parts like `bitsandbytes` as well as the latest `deepspeed` version. Runs off python 3.10.
+* `gpu-fp8-transformerengine`: Comes compiled off of `nvcr.io/nvidia/pytorch` and is specifically for running the `benchmarks/fp8` scripts on devices which support FP8 operations using the `TransformerEngine` library (RTX 4090, H100, etc)
 
 ## Nightlies vs Releases
 

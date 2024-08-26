@@ -61,8 +61,8 @@ jobs:
             huggingface/accelerate:gpu-nightly
             huggingface/accelerate:gpu-nightly-${{ env.date }}
 
-  latest-cuda-deepspeed:
-    name: "Latest Accelerate GPU DeepSpeed [dev]"
+  latest-cuda-fp8-transformerengine:
+    name: "Latest Accelerate GPU FP8 TransformerEngine [dev]"
     runs-on:
       group: aws-g6-4xlarge-plus
     steps:
@@ -80,9 +80,8 @@ jobs:
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
         with:
-          file: docker/accelerate-gpu-deepspeed/Dockerfile
+          file: benchmarks/fp8/Dockerfile
           push: true
           tags: |
-            huggingface/accelerate:gpu-deepspeed-nightly
-            huggingface/accelerate:gpu-deepspeed-nightly-${{ env.date }}
-
+            huggingface/accelerate:gpu-fp8-transformerengine-nightly
+            huggingface/accelerate:gpu-fp8-transformerengine-nightly-${{ env.date }}

@@ -15,6 +15,8 @@ To run them, it's recommended to use a docker image (see the attached `Dockerfil
 
 ## Running:
 
+There are official Docker images located at `huggingface/accelerate:gpu-fp8-transformerengine-nightly` which can be used.
+
 You can run all scripts using the core `accelerate launch` command without any `accelerate config` being needed.
 
 For single GPU, run it via `python`:
