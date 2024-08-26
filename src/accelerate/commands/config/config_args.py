@@ -177,7 +177,7 @@ class BaseConfig:
 
 @dataclass
 class ClusterConfig(BaseConfig):
-    num_processes: int
+    num_processes: int = -1  # For instance if we use SLURM and the user manually passes it in
     machine_rank: int = 0
     num_machines: int = 1
     gpu_ids: Optional[str] = None
