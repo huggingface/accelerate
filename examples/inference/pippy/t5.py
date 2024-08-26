@@ -14,10 +14,19 @@
 import time
 
 import torch
+from packaging import version
 from transformers import AutoModelForSeq2SeqLM
 
 from accelerate import PartialState, prepare_pippy
+from accelerate import __version__ as accelerate_version
 from accelerate.utils import set_seed
+
+
+if version.parse(accelerate_version) > version.parse("0.33.0"):
+    raise RuntimeError(
+        "Using encoder/decoder models is not supported with the `torch.pipelining` integration or accelerate>=0.34.0. "
+        "Please use a lower accelerate version and `torchpippy`, which this example uses."
+    )
 
 
 # Set the random seed to have reproducable outputs

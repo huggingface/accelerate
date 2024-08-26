@@ -32,7 +32,7 @@ model.eval()
 input = torch.randint(
     low=0,
     high=model.config.vocab_size,
-    size=(2, 1024),  # bs x seq_len
+    size=(1, 1024),  # bs x seq_len
     device="cpu",
     dtype=torch.int64,
     requires_grad=False,
@@ -47,6 +47,16 @@ model = prepare_pippy(model, split_points="auto", example_args=(input,))
 # You can pass `gather_output=True` to have the output from the model
 # available on all GPUs
 # model = prepare_pippy(model, split_points="auto", example_args=(input,), gather_output=True)
+
+# Create new inputs of the expected size (n_processes)
+input = torch.randint(
+    low=0,
+    high=model.config.vocab_size,
+    size=(2, 1024),  # bs x seq_len
+    device="cpu",
+    dtype=torch.int64,
+    requires_grad=False,
+)
 
 # Move the inputs to the first device
 input = input.to("cuda:0")

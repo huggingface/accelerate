@@ -27,7 +27,7 @@ model.eval()
 # Input configs
 # Create example inputs for the model
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-prompts = ("I would like to", "I really like to", "The weather is pretty")  # bs = 3
+prompts = ("I would like to", "I really like to")  # bs = 2, sending 2 per process
 tokenizer.pad_token = tokenizer.eos_token
 inputs = tokenizer(prompts, return_tensors="pt", padding=True)
 
@@ -43,6 +43,8 @@ model = prepare_pippy(model, split_points="auto", example_kwargs=inputs)
 
 # currently we don't support `model.generate`
 # output = model.generate(**inputs, max_new_tokens=1)
+prompts = ("I would like to", "I really like to", "The weather is pretty")  # bs = 3
+inputs = tokenizer(prompts, return_tensors="pt", padding=True)
 inputs = inputs.to(0)
 with torch.no_grad():
     output = model(**inputs)

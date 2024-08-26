@@ -178,11 +178,7 @@ def is_deepspeed_available():
 
 
 def is_pippy_available():
-    package_exists = _is_package_available("pippy", "torchpippy")
-    if package_exists:
-        pippy_version = version.parse(importlib.metadata.version("torchpippy"))
-        return compare_versions(pippy_version, ">", "0.1.1")
-    return False
+    return is_torch_version(">=", "2.4.0")
 
 
 def is_bf16_available(ignore_tpu=False):
