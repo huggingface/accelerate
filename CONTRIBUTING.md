@@ -123,12 +123,15 @@ Follow these steps to start contributing:
 4. Set up a development environment by running the following command in a conda or a virtual environment you've created for working on this library:
 
    ```bash
-   $ pip install -e ".[quality]"
+   $ pip install -e ".[dev]"
    ```
+   
+   This will install all testing and linting/code quality dependencies for the library (see `quality`, `test_dev`, 
+   `test_prod` targets in [`setup.py`](./setup.py)).
 
    (If accelerate was already installed in the virtual environment, remove
    it with `pip uninstall accelerate` before reinstalling it in editable
-   mode with the `-e` flag.)
+   mode with the `-e` flag).
 
    Alternatively, if you are using [Visual Studio Code](https://code.visualstudio.com/Download), the fastest way to get set up is by using
    the provided Dev Container. Documentation on how to get started with dev containers is available [here](https://code.visualstudio.com/docs/remote/containers).
