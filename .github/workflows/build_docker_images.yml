@@ -107,6 +107,4 @@ jobs:
         with:
           file: benchmarks/fp8/Dockerfile
           push: true
-          tags: |
-            huggingface/accelerate:gpu-fp8-transformerengine-nightly
-            huggingface/accelerate:gpu-fp8-transformerengine-nightly-${{ env.date }}
+          tags: huggingface/accelerate:gpu-fp8-transformerengine-nightly-${{ env.date }}
