@@ -125,13 +125,15 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         """
         Sets the optimizer to "train" mode. Useful for optimizers like `schedule_free`
         """
-        return self.optimizer.train()
+        if hasattr(self.optimizer, "train") and callable(getattr(self.optimizer, "train")):
+            self.optimizer.train()
 
     def eval(self):
         """
         Sets the optimizer to "eval" mode. Useful for optimizers like `schedule_free`
         """
-        return self.optimizer.eval()
+        if hasattr(self.optimizer, "eval") and callable(getattr(self.optimizer, "eval")):
+            self.optimizer.eval()
 
     def step(self, closure=None):
         if is_lomo_available():
