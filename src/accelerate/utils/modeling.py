@@ -648,7 +648,7 @@ def _get_named_modules(
             memo.add(module)
         yield prefix, module
         for name, sub_module in module._modules.items():
-            if module is None:
+            if sub_module is None:
                 continue
             submodule_prefix = prefix + ("." if prefix else "") + name
             yield from _get_named_modules(sub_module, memo, submodule_prefix, remove_duplicate)
