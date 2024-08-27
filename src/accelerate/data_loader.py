@@ -653,8 +653,8 @@ if is_torch_xla_available():
             return super().__iter__()
 
         def set_epoch(self, epoch: int):
-             if hasattr(self.dataloader, "set_epoch"):
-                 self.dataloader.set_epoch(epoch)
+            if hasattr(self.dataloader, "set_epoch"):
+                self.dataloader.set_epoch(epoch)
 
         @property
         def total_batch_size(self):
