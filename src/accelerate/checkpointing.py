@@ -18,7 +18,7 @@ from typing import List
 
 import numpy as np
 import torch
-from safetensors.torch import load_file
+from safetensors.torch import load_model
 from torch.cuda.amp import GradScaler
 
 from .utils import (
@@ -32,6 +32,7 @@ from .utils import (
     SCHEDULER_NAME,
     WEIGHTS_NAME,
     get_pretty_name,
+    is_mlu_available,
     is_torch_xla_available,
     is_xpu_available,
     save,
@@ -126,6 +127,11 @@ def save_accelerator_state(
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
+        if getattr(dataloader, "use_stateful_dataloader", False):
+            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
+            state_dict = dataloader.state_dict()
+            torch.save(state_dict, output_dataloader_state_dict_file)
         logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
 
     # GradScaler state
@@ -143,6 +149,8 @@ def save_accelerator_state(
     states["torch_manual_seed"] = torch.get_rng_state()
     if is_xpu_available():
         states["torch_xpu_manual_seed"] = torch.xpu.get_rng_state_all()
+    if is_mlu_available():
+        states["torch_mlu_manual_seed"] = torch.mlu.get_rng_state_all()
     else:
         states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
     if is_torch_xla_available():
@@ -205,12 +213,12 @@ def load_accelerator_state(
         ending = f"_{i}" if i > 0 else ""
         input_model_file = input_dir.joinpath(f"{SAFE_MODEL_NAME}{ending}.safetensors")
         if input_model_file.exists():
-            state_dict = load_file(input_model_file, device=str(map_location))
+            load_model(model, input_model_file, device=str(map_location), **load_model_func_kwargs)
         else:
             # Load with torch
             input_model_file = input_dir.joinpath(f"{MODEL_NAME}{ending}.bin")
             state_dict = torch.load(input_model_file, map_location=map_location)
-        models[i].load_state_dict(state_dict, **load_model_func_kwargs)
+            model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
     # Optimizer states
@@ -238,6 +246,12 @@ def load_accelerator_state(
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 sampler = dataloader.set_sampler(torch.load(input_sampler_file))
+        if getattr(dataloader, "use_stateful_dataloader", False):
+            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
+            if input_dataloader_state_dict_file.exists():
+                state_dict = torch.load(input_dataloader_state_dict_file)
+                dataloader.load_state_dict(state_dict)
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
@@ -249,12 +263,15 @@ def load_accelerator_state(
     # Random states
     try:
         states = torch.load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
-        override_attributes["step"] = states["step"]
+        if "step" in states:
+            override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
         if is_xpu_available():
             torch.xpu.set_rng_state_all(states["torch_xpu_manual_seed"])
+        if is_mlu_available():
+            torch.mlu.set_rng_state_all(states["torch_mlu_manual_seed"])
         else:
             torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
         if is_torch_xla_available():

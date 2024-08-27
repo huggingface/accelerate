@@ -86,7 +86,7 @@ def is_import_timer_available():
 
 
 def is_pynvml_available():
-    return _is_package_available("pynvml")
+    return _is_package_available("pynvml") or _is_package_available("pynvml", "nvidia-ml-py")
 
 
 def is_pytest_available():
@@ -102,7 +102,7 @@ def is_schedulefree_available():
 
 
 def is_transformer_engine_available():
-    return _is_package_available("transformer_engine")
+    return _is_package_available("transformer_engine", "transformer-engine")
 
 
 def is_lomo_available():
@@ -178,11 +178,7 @@ def is_deepspeed_available():
 
 
 def is_pippy_available():
-    package_exists = _is_package_available("pippy", "torchpippy")
-    if package_exists:
-        pippy_version = version.parse(importlib.metadata.version("torchpippy"))
-        return compare_versions(pippy_version, ">", "0.1.1")
-    return False
+    return is_torch_version(">=", "2.4.0")
 
 
 def is_bf16_available(ignore_tpu=False):
@@ -364,6 +360,24 @@ def is_mlu_available(check_device=False):
 
 
 @lru_cache
+def is_musa_available(check_device=False):
+    "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
+    if importlib.util.find_spec("torch_musa") is None:
+        return False
+
+    import torch_musa  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MUSA is found
+            _ = torch.musa.device_count()
+            return torch.musa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "musa") and torch.musa.is_available()
+
+
+@lru_cache
 def is_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if importlib.util.find_spec("torch_npu") is None:
@@ -413,3 +427,16 @@ def is_xpu_available(check_device=False):
 
 def is_dvclive_available():
     return _is_package_available("dvclive")
+
+
+def is_torchdata_available():
+    return _is_package_available("torchdata")
+
+
+# TODO: Remove this function once stateful_dataloader is a stable feature in torchdata.
+def is_torchdata_stateful_dataloader_available():
+    package_exists = _is_package_available("torchdata")
+    if package_exists:
+        torchdata_version = version.parse(importlib.metadata.version("torchdata"))
+        return compare_versions(torchdata_version, ">=", "0.8.0")
+    return False

@@ -208,23 +208,13 @@ To run it in each of these various modes, use the following commands:
 
 - [huggan project](https://github.com/huggingface/community-events/tree/main/huggan)
 
+
 ### Using AWS SageMaker integration
 - [Examples showcasing AWS SageMaker integration of 🤗 Accelerate.](https://github.com/pacman100/accelerate-aws-sagemaker)
 
-
-## Simple Multi-GPU Hardware Launcher
-
-[multigpu_remote_launcher.py](./multigpu_remote_launcher.py) is a minimal script that demonstrates launching accelerate
-on multiple remote GPUs, and with automatic hardware environment and dependency setup for reproducibility. You can
-easily customize the training function used, training arguments, hyperparameters, and type of compute hardware, and then
-run the script to automatically launch multi GPU training on remote hardware.
-
-This script uses [Runhouse](https://github.com/run-house/runhouse) to launch on self-hosted hardware (e.g. in your own
-cloud account or on-premise cluster) but there are other options for running remotely as well. Runhouse can be installed
-with `pip install runhouse`, and you can refer to
-[hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/latest/api/python/cluster.html#hardware-setup)
-for hardware setup instructions, or this
-[Colab tutorial](https://colab.research.google.com/drive/1qVwYyLTCPYPSdz9ZX7BZl9Qm0A3j7RJe) for a more in-depth walkthrough.
+## Configuration zoo
+In [/config_yaml_templates](./config_yaml_templates/) we have a variety of *minimal* `config.yaml` templates and examples to help you learn
+how to create your own configuration files depending on the scenario. 
 
 ## SLURM Scripts 
 In [/slurm/submit_multigpu.sh](./slurm/submit_multigpu.sh) and [/slurm/submit_multinode.sh](./slurm/submit_multinode.sh) we present two scripts for running the examples on a machine with [SLURM](https://slurm.schedmd.com/documentation.html) workload manager. 
@@ -250,6 +240,20 @@ export TRANSFORMERS_OFFLINE=1
 export PYTHONPATH=/home/nct01/nct01328/transformers-in-supercomputers:$PYTHONPATH 
 export GPUS_PER_NODE=4
 ```
+
+## Simple Multi-GPU Hardware Launcher (using an external platform)
+
+[multigpu_remote_launcher.py](./multigpu_remote_launcher.py) is a minimal script that demonstrates launching accelerate
+on multiple remote GPUs, and with automatic hardware environment and dependency setup for reproducibility. You can
+easily customize the training function used, training arguments, hyperparameters, and type of compute hardware, and then
+run the script to automatically launch multi GPU training on remote hardware.
+
+This script uses [Runhouse](https://github.com/run-house/runhouse) to launch on self-hosted hardware (e.g. in your own
+cloud account or on-premise cluster) but there are other options for running remotely as well. Runhouse can be installed
+with `pip install runhouse`, and you can refer to
+[hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/latest/api/python/cluster.html#hardware-setup)
+for hardware setup instructions, or this
+[Colab tutorial](https://colab.research.google.com/drive/1qVwYyLTCPYPSdz9ZX7BZl9Qm0A3j7RJe) for a more in-depth walkthrough.
 
 ## Finer Examples
 

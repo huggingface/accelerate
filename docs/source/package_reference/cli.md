@@ -145,10 +145,11 @@ values. They can also be passed in manually.
 
 The following arguments are useful for fine-tuning how available hardware should be used
 
-* `--mixed_precision {no,fp16,bf16}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
+* `--mixed_precision {no,fp16,bf16,fp8}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
 * `--num_processes NUM_PROCESSES` (`int`) -- The total number of processes to be launched in parallel.
 * `--num_machines NUM_MACHINES` (`int`) -- The total number of machines used in this training.
 * `--num_cpu_threads_per_process NUM_CPU_THREADS_PER_PROCESS` (`int`) -- The number of CPU threads per process. Can be tuned for optimal performance.
+* `--enable_cpu_affinity` (`bool`) -- Whether or not CPU affinity and balancing should be enabled. Currently only supported on NVIDIA hardware.
 
 **Training Paradigm Arguments**:
 
@@ -165,19 +166,26 @@ The following arguments are only useful when `multi_gpu` is passed or multi-gpu 
 
 * `--gpu_ids` (`str`) -- What GPUs (by id) should be used for training on this machine as a comma-seperated list
 * `--same_network` (`bool`) -- Whether all machines used for multinode training exist on the same local network.
-* `--machine_rank MACHINE_RANK` (`int`) -- The rank of the machine on which this script is launched.
-* `--main_process_ip MAIN_PROCESS_IP` (`str`) -- The IP address of the machine of rank 0.
-* `--main_process_port MAIN_PROCESS_PORT` (`int`) -- The port to use to communicate with the machine of rank 0.
-* `--rdzv_backend` (`str`) -- The rendezvous method to use, such as "static" or "c10d"
+* `--machine_rank` (`int`) -- The rank of the machine on which this script is launched.
+* `--main_process_ip` (`str`) -- The IP address of the machine of rank 0.
+* `--main_process_port` (`int`) -- The port to use to communicate with the machine of rank 0.
+* `-t`, `--tee` (`str`) -- Tee std streams into a log file and also to console.
+* `--log_dir` (`str`) -- Base directory to use for log files when using torchrun/torch.distributed.run as launcher. Use with --tee to redirect std streams info log files.
+* `--role` (`str`) -- User-defined role for the workers.
+* `--rdzv_backend` (`str`) -- The rendezvous method to use, such as 'static' (the default) or 'c10d'
 * `--rdzv_conf` (`str`) -- Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).
 * `--max_restarts` (`int`) -- Maximum number of worker group restarts before failing.
-* `--monitor_interval` (`float`) -- Interval, in seconds, to monitor the state of workers.
+* `--monitor_interval` (`int`) -- Interval, in seconds, to monitor the state of workers.
 
 **TPU Arguments**:
 
 The following arguments are only useful when `tpu` is passed or TPU training is configured through `accelerate config`: 
 
-* `--main_training_function MAIN_TRAINING_FUNCTION` (`str`) -- The name of the main function to be executed in your script.
+* `--tpu_cluster` (`bool`) -- Whether to use a GCP TPU pod for training.
+* `--tpu_use_sudo` (`bool`) -- Whether to use `sudo` when running the TPU training script in each pod.
+* `--vm` (`str`) -- List of single Compute VM instance names. If not provided we assume usage of instance groups. For TPU pods.
+* `--env` (`str`) -- List of environment variables to set on the Compute VM instances. For TPU pods.
+* `--main_training_function` (`str`) -- The name of the main function to be executed in your script (only for TPU training).
 * `--downcast_bf16` (`bool`) -- Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.
 
 **DeepSpeed Arguments**:
@@ -188,6 +196,7 @@ The following arguments are only useful when `use_deepspeed` is passed or `deeps
 * `--zero_stage` (`int`) -- DeepSpeed's ZeRO optimization stage.
 * `--offload_optimizer_device` (`str`) -- Decides where (none|cpu|nvme) to offload optimizer states.
 * `--offload_param_device` (`str`) -- Decides where (none|cpu|nvme) to offload parameters.
+* `--offload_optimizer_nvme_path` (`str`) -- Decides Nvme Path to offload optimizer states.
 * `--gradient_accumulation_steps` (`int`) -- No of gradient_accumulation_steps used in your training script.
 * `--gradient_clipping` (`float`) -- Gradient clipping value used in your training script.
 * `--zero3_init_flag` (`str`) -- Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with DeepSpeed ZeRO Stage-3.
@@ -196,6 +205,7 @@ The following arguments are only useful when `use_deepspeed` is passed or `deeps
 * `--deepspeed_exclusion_filter` (`str`) -- DeepSpeed exclusion filter string when using mutli-node setup.
 * `--deepspeed_inclusion_filter` (`str`) -- DeepSpeed inclusion filter string when using mutli-node setup.
 * `--deepspeed_multinode_launcher` (`str`) -- DeepSpeed multi-node launcher to use.
+* `--deepspeed_moe_layer_cls_names` (`str`) -- comma-separated list of transformer MoE layer class names (case-sensitive) to wrap, e.g, `MixtralSparseMoeBlock` `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock`
 
 **Fully Sharded Data Parallelism Arguments**:
 
@@ -210,8 +220,9 @@ The following arguments are only useful when `use_fsdp` is passed or Fully Shard
 * `--fsdp_state_dict_type` (`str`) -- FSDP's state dict type.
 * `--fsdp_forward_prefetch` (`str`) -- FSDP forward prefetch.
 * `--fsdp_use_orig_params` (`str`) -- If True, allows non-uniform `requires_grad` mixed in a FSDP unit.
-* `--fsdp_cpu_ram_efficient_loading` (`str`) - If true, only the first process loads the pretrained model checkoint while all other processes have empty weights. When using this, `--fsdp_sync_module_states` needs to True. 
-* `--fsdp_sync_module_states` (`str`) - If true, each individually wrapped FSDP unit will broadcast module parameters from rank 0.
+* `--fsdp_cpu_ram_efficient_loading` (`str`) -- If true, only the first process loads the pretrained model checkoint while all other processes have empty weights. When using this, `--fsdp_sync_module_states` needs to True.
+* `--fsdp_sync_module_states` (`str`) -- If true, each individually wrapped FSDP unit will broadcast module parameters from rank 0.
+* `--fsdp_activation_checkpointing` (`bool`) -- Decides Whether intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder
 
 **Megatron-LM Arguments**:
 
@@ -224,6 +235,18 @@ The following arguments are only useful when `use_megatron_lm` is passed or Mega
 * `--megatron_lm_recompute_activations` (``) -- Decides Whether (true|false) to enable Selective Activation Recomputation.
 * `--megatron_lm_use_distributed_optimizer` (``) -- Decides Whether (true|false) to use distributed optimizer which shards optimizer state and gradients across Data Parallel (DP) ranks.
 * `--megatron_lm_gradient_clipping` (``) -- Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable).
+
+**FP8 Arguments**:
+
+* `--fp8_backend` (`str`) -- Choose a backend to train with FP8 (`te` or `msamp`)
+* `--fp8_use_autocast_during_eval` (`bool`) -- Whether to use FP8 autocast during eval mode (useful only when `--fp8_backend=te` is passed). Generally better metrics are found when this is not passed.
+* `--fp8_margin` (`int`) -- The margin to use for the gradient scaling (useful only when `--fp8_backend=te` is passed).
+* `--fp8_interval` (`int`) -- The interval to use for how often the scaling factor is recomputed (useful only when `--fp8_backend=te` is passed).
+* `--fp8_format` (`str`) -- The format to use for the FP8 recipe (useful only when `--fp8_backend=te` is passed).
+* `--fp8_amax_history_len` (`int`) -- The length of the history to use for the scaling factor computation (useful only when `--fp8_backend=te` is passed).
+* `--fp8_amax_compute_algo` (`str`) -- The algorithm to use for the scaling factor computation. (useful only when `--fp8_backend=te` is passed).
+* `--fp8_override_linear_precision` (`Tuple[bool, bool, bool]`) -- Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
+* `--fp8_opt_level` (`str`) -- What level of 8-bit collective communication should be used with MS-AMP (useful only when `--fp8_backend=msamp` is passed)
 
 **AWS SageMaker Arguments**:
 

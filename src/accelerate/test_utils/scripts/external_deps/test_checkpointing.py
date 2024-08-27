@@ -223,6 +223,7 @@ def training_function(config, args):
         if accelerator.is_main_process:
             with open(os.path.join(args.output_dir, f"state_{epoch}.json"), "w") as f:
                 json.dump(state, f)
+    accelerator.end_training()
 
 
 def main():

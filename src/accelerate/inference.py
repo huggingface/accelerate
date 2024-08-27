@@ -79,22 +79,21 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     `AcceleratorState.num_processes`
     """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
-    from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
-    from pippy.PipelineStage import PipelineStage
+    from torch.distributed.pipelining import ScheduleGPipe, SplitPoint, pipeline
 
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
-    annotate_split_points(model, {split_point: PipeSplitWrapper.SplitPoint.BEGINNING for split_point in split_points})
-    found_batch_size = find_pippy_batch_size(args, kwargs)
-    if found_batch_size != num_chunks:
-        if args is not None:
-            args = pad_input_tensors(args, found_batch_size, num_chunks)
-        if kwargs is not None:
-            kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
-    pipe = Pipe.from_tracing(model, num_chunks=num_chunks, example_args=args, example_kwargs=kwargs)
-    stage = PipelineStage(pipe, state.local_process_index, device=state.device)
+    split_spec = {split_point: SplitPoint.BEGINNING for split_point in split_points}
+    pipe = pipeline(
+        model,
+        mb_args=args,
+        mb_kwargs=kwargs,
+        split_spec=split_spec,
+    )
+    stage = pipe.build_stage(state.local_process_index, device=state.device)
+    schedule = ScheduleGPipe(stage, num_chunks)
 
-    return stage
+    return schedule
 
 
 def pippy_forward(forward, num_chunks, gather_output, *args, **kwargs):
@@ -143,11 +142,12 @@ def prepare_pippy(
         no_split_module_classes (`List[str]`):
             A list of class names for layers we don't want to be split.
         example_args (tuple of model inputs):
-            The expected inputs for the model that uses order-based inputs. Recommended to use this method if possible.
+            The expected inputs for the model that uses order-based inputs for a *single process*. Recommended to use
+            this method if possible.
         example_kwargs (dict of model inputs)
-            The expected inputs for the model that uses dictionary-based inputs. This is a *highly* limiting structure
-            that requires the same keys be present at *all* inference calls. Not recommended unless the prior condition
-            is true for all cases.
+            The expected inputs for the model that uses dictionary-based inputs for a *single process*. This is a
+            *highly* limiting structure that requires the same keys be present at *all* inference calls. Not
+            recommended unless the prior condition is true for all cases.
         num_chunks (`int`, defaults to the number of available GPUs):
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
             this can be tuned and played with. In general one should have num_chunks >= num_gpus.
@@ -155,10 +155,7 @@ def prepare_pippy(
             If `True`, the output from the last GPU (which holds the true outputs) is sent across to all GPUs.
     """
     if not is_pippy_available():
-        raise ImportError(
-            "`pippy` was not found to be installed on your system. Please "
-            "install using `pip install torchpippy` or ensure you have at least version 0.2.0"
-        )
+        raise ImportError("Using `torch.distributed.pipelining` requires PyTorch 2.4.0 or later.")
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
     example_kwargs = send_to_device(example_kwargs, "cpu")
@@ -177,7 +174,7 @@ def prepare_pippy(
     model.hf_split_points = split_points
 
     def forward(*args, **kwargs):
-        return pippy_forward(stage.forward, num_chunks, gather_output, *args, **kwargs)
+        return pippy_forward(stage.step, num_chunks, gather_output, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
     # Note: creates an infinite recursion loop with `generate`

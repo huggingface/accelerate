@@ -20,6 +20,7 @@ from ...utils.dataclasses import (
     ComputeEnvironment,
     DistributedType,
     DynamoBackend,
+    FP8BackendType,
     PrecisionType,
     SageMakerDistributedType,
 )
@@ -70,7 +71,9 @@ def _convert_compute_environment(value):
 
 def _convert_distributed_mode(value):
     value = int(value)
-    return DistributedType(["NO", "MULTI_CPU", "MULTI_XPU", "MULTI_GPU", "MULTI_NPU", "MULTI_MLU", "XLA"][value])
+    return DistributedType(
+        ["NO", "MULTI_CPU", "MULTI_XPU", "MULTI_GPU", "MULTI_NPU", "MULTI_MLU", "MULTI_MUSA", "XLA"][value]
+    )
 
 
 def _convert_dynamo_backend(value):
@@ -86,6 +89,11 @@ def _convert_mixed_precision(value):
 def _convert_sagemaker_distributed_mode(value):
     value = int(value)
     return SageMakerDistributedType(["NO", "DATA_PARALLEL", "MODEL_PARALLEL"][value])
+
+
+def _convert_fp8_backend(value):
+    value = int(value)
+    return FP8BackendType(["TE", "MSAMP"][value])
 
 
 def _convert_yes_no_to_bool(value):

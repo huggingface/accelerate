@@ -23,21 +23,35 @@ import inspect
 
 import torch
 
-from .imports import is_mlu_available, is_mps_available, is_npu_available, is_xpu_available
+from .imports import (
+    is_cuda_available,
+    is_mlu_available,
+    is_mps_available,
+    is_musa_available,
+    is_npu_available,
+    is_xpu_available,
+)
 
 
-def clear_device_cache():
-    gc.collect()
+def clear_device_cache(garbage_collection=False):
+    """
+    Clears the device cache by calling `torch.{backend}.empty_cache`. Can also run `gc.collect()`, but do note that
+    this is a *considerable* slowdown and should be used sparingly.
+    """
+    if garbage_collection:
+        gc.collect()
 
     if is_xpu_available():
         torch.xpu.empty_cache()
     elif is_mlu_available():
         torch.mlu.empty_cache()
+    elif is_musa_available():
+        torch.musa.empty_cache()
     elif is_npu_available():
         torch.npu.empty_cache()
     elif is_mps_available(min_version="2.0"):
         torch.mps.empty_cache()
-    else:
+    elif is_cuda_available():
         torch.cuda.empty_cache()
 
 
@@ -67,7 +81,7 @@ def release_memory(*objects):
         objects = list(objects)
     for i in range(len(objects)):
         objects[i] = None
-    clear_device_cache()
+    clear_device_cache(garbage_collection=True)
     return objects
 
 
@@ -123,7 +137,7 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
 
     def decorator(*args, **kwargs):
         nonlocal batch_size
-        clear_device_cache()
+        clear_device_cache(garbage_collection=True)
         params = list(inspect.signature(function).parameters.keys())
         # Guard against user error
         if len(params) < (len(args) + 1):
@@ -139,7 +153,7 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
                 return function(batch_size, *args, **kwargs)
             except Exception as e:
                 if should_reduce_batch_size(e):
-                    clear_device_cache()
+                    clear_device_cache(garbage_collection=True)
                     batch_size //= 2
                 else:
                     raise

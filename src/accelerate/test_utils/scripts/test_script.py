@@ -37,6 +37,7 @@ from accelerate.utils import (
     is_datasets_available,
     is_ipex_available,
     is_mlu_available,
+    is_musa_available,
     is_npu_available,
     is_pytest_available,
     is_xpu_available,
@@ -474,7 +475,7 @@ def training_check(use_seedable_sampler=False):
 
     accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
 
-    if torch.cuda.is_available() or is_npu_available() or is_mlu_available():
+    if torch.cuda.is_available() or is_npu_available() or is_mlu_available() or is_musa_available():
         # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
         print("FP16 training check.")
         AcceleratorState._reset_state()
@@ -820,6 +821,8 @@ def main():
         if state.local_process_index == 0:
             print("\n**Test reinstantiated state**")
         test_reinstantiated_state()
+
+    state.destroy_process_group()
 
 
 if __name__ == "__main__":

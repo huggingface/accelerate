@@ -180,6 +180,7 @@ def training_function(config, args):
         eval_metric = accurate.item() / num_elems
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
+    accelerator.end_training()
 
 
 def main():

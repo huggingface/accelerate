@@ -20,9 +20,13 @@ from ...utils import (
     ComputeEnvironment,
     DistributedType,
     is_deepspeed_available,
+    is_fp8_available,
     is_mlu_available,
     is_mps_available,
+    is_msamp_available,
+    is_musa_available,
     is_npu_available,
+    is_transformer_engine_available,
     is_transformers_available,
     is_xpu_available,
 )
@@ -41,6 +45,7 @@ from .config_utils import (
     _ask_options,
     _convert_distributed_mode,
     _convert_dynamo_backend,
+    _convert_fp8_backend,
     _convert_mixed_precision,
     _convert_yes_no_to_bool,
 )
@@ -49,7 +54,16 @@ from .config_utils import (
 def get_cluster_input():
     distributed_type = _ask_options(
         "Which type of machine are you using?",
-        ["No distributed training", "multi-CPU", "multi-XPU", "multi-GPU", "multi-NPU", "multi-MLU", "TPU"],
+        [
+            "No distributed training",
+            "multi-CPU",
+            "multi-XPU",
+            "multi-GPU",
+            "multi-NPU",
+            "multi-MLU",
+            "multi-MUSA",
+            "TPU",
+        ],
         _convert_distributed_mode,
     )
 
@@ -66,6 +80,7 @@ def get_cluster_input():
     if distributed_type in [
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_CPU,
@@ -145,7 +160,13 @@ def get_cluster_input():
         not use_cpu
         and is_xpu_available()
         and distributed_type
-        not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_MLU, DistributedType.XLA]
+        not in [
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_MLU,
+            DistributedType.XLA,
+            DistributedType.MULTI_MUSA,
+        ]
     ):
         ipex_config["use_xpu"] = _ask_field(
             "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
@@ -205,6 +226,7 @@ def get_cluster_input():
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.NO,
         ]
         and not use_mps
@@ -358,6 +380,7 @@ def get_cluster_input():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_MUSA,
         DistributedType.MULTI_XPU,
     ]:
         use_fsdp = _ask_field(
@@ -529,6 +552,7 @@ def get_cluster_input():
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
         DistributedType.XLA,
     ]:
@@ -565,6 +589,7 @@ def get_cluster_input():
         in [
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.NO,
@@ -576,6 +601,8 @@ def get_cluster_input():
             machine_type = "NPU(s)"
         elif is_mlu_available():
             machine_type = "MLU(s)"
+        elif is_musa_available():
+            machine_type = "MUSA(s)"
         else:
             machine_type = "GPU(s)"
         gpu_ids = _ask_field(
@@ -593,6 +620,7 @@ def get_cluster_input():
             error_message="Please enter yes or no.",
         )
 
+    fp8_config = None
     if distributed_type == DistributedType.XLA:
         mixed_precision = "no"
         main_training_function = _ask_field(
@@ -674,10 +702,86 @@ def get_cluster_input():
             mixed_precision = None
         else:
             mixed_precision = _ask_options(
-                "Do you wish to use FP16 or BF16 (mixed precision)?",
+                "Do you wish to use mixed precision?",
                 ["no", "fp16", "bf16", "fp8"],
                 _convert_mixed_precision,
             )
+            if mixed_precision == "fp8":
+                if not is_fp8_available():
+                    raise ValueError("FP8 (either Transformer Engine or MSAMP) is not installed on this machine.")
+                fp8_config = {}
+                fp8_config["backend"] = _ask_options(
+                    "Which FP8 backend do you want to use?",
+                    ["te", "msamp"],
+                    _convert_fp8_backend,
+                )
+                if fp8_config["backend"] == "TE":
+                    if not is_transformer_engine_available():
+                        raise ValueError("TransformersEngine was selected, but it is not installed on this machine.")
+                    fp8_config["use_autocast_during_eval"] = _ask_field(
+                        "Do you want to use FP8 autocast during eval mode? Generally better metrics are found when this is disabled [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                    )
+                    fp8_config["margin"] = _ask_field(
+                        "What margin should be used for gradient scaling? [0]: ",
+                        int,
+                        default=0,
+                    )
+                    fp8_config["interval"] = _ask_field(
+                        "What interval should be used for for how often the scaling factor is recomputed? [1]: ",
+                        int,
+                        default=1,
+                    )
+                    fp8_config["fp8_format"] = _ask_options(
+                        "Which weight format should be used?",
+                        ["HYBRID", "E4M3"],
+                        lambda x: "HYBRID" if x == 0 else "E4M3",
+                        default=0,
+                    )
+                    fp8_config["amax_history_length"] = _ask_field(
+                        "What length of history should be used for the amax scaling factor computation? [1024]: ",
+                        int,
+                        default=1024,
+                    )
+                    fp8_config["amax_compute_algorithm"] = _ask_options(
+                        "Which algorithm should be used for the amax scaling factor computation?",
+                        ["max", "most_recent"],
+                        lambda x: "max" if x == 0 else "most_recent",
+                        default=0,
+                    )
+                    fp8_config["override_linear_precision"] = _ask_field(
+                        "Do you want to to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision? [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                    )
+                    if fp8_config["override_linear_precision"]:
+                        fprop = _ask_field(
+                            "Should `fprop` be executed in higher precision? [yes/NO]: ",
+                            _convert_yes_no_to_bool,
+                            default=False,
+                        )
+                        dgrad = _ask_field(
+                            "Should `dgrad` be executed in higher precision? [yes/NO]: ",
+                            _convert_yes_no_to_bool,
+                            default=False,
+                        )
+                        wgrad = _ask_field(
+                            "Should `wgrad` be executed in higher precision? [yes/NO]: ",
+                            _convert_yes_no_to_bool,
+                            default=False,
+                        )
+                        fp8_config["override_linear_precision"] = (fprop, dgrad, wgrad)
+
+                elif fp8_config["backend"] == "MSAMP":
+                    if not is_msamp_available():
+                        raise ValueError("MSAMP was selected, but it is not installed on this machine.")
+                    fp8_config["optimization_level"] = _ask_options(
+                        "Which optimization level should be used?",
+                        ["O1", "O2"],
+                        lambda x: "O1" if x == 0 else "O2",
+                        default=1,
+                    )
 
     if use_dynamo and mixed_precision == "no" and not use_cpu:
         print(
@@ -701,6 +805,7 @@ def get_cluster_input():
         main_process_ip=main_process_ip,
         main_process_port=main_process_port,
         main_training_function=main_training_function,
+        fp8_config=fp8_config,
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
         megatron_lm_config=megatron_lm_config,

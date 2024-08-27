@@ -23,7 +23,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
 
-from accelerate import Accelerator
+from accelerate import Accelerator, DataLoaderConfiguration
 
 
 ########################################################################
@@ -72,12 +72,19 @@ class PetsDataset(Dataset):
 
 def training_function(config, args):
     # Initialize accelerator
+    dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=args.use_stateful_dataloader)
     if args.with_tracking:
         accelerator = Accelerator(
-            cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all", project_dir=args.project_dir
+            cpu=args.cpu,
+            mixed_precision=args.mixed_precision,
+            log_with="all",
+            project_dir=args.project_dir,
+            dataloader_config=dataloader_config,
         )
     else:
-        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+        accelerator = Accelerator(
+            cpu=args.cpu, mixed_precision=args.mixed_precision, dataloader_config=dataloader_config
+        )
 
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
@@ -262,8 +269,7 @@ def training_function(config, args):
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
+    accelerator.end_training()
 
 
 def main():
@@ -297,6 +303,11 @@ def main():
         type=str,
         default=None,
         help="If the training should continue from a checkpoint folder.",
+    )
+    parser.add_argument(
+        "--use_stateful_dataloader",
+        action="store_true",
+        help="If the dataloader should be a resumable stateful dataloader.",
     )
     parser.add_argument(
         "--with_tracking",

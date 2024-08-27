@@ -40,6 +40,7 @@ from accelerate.utils import (
     is_bf16_available,
     is_deepspeed_available,
     is_mlu_available,
+    is_musa_available,
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
@@ -52,6 +53,7 @@ from accelerate.utils import (
     prepare_sagemager_args_inputs,
     prepare_simple_launcher_cmd_env,
     prepare_tpu,
+    str_to_bool,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS, TORCH_DYNAMO_MODES
 
@@ -73,11 +75,14 @@ options_to_group = {
     "use_deepspeed": "DeepSpeed Arguments",
     "use_fsdp": "FSDP Arguments",
     "use_megatron_lm": "Megatron-LM Arguments",
+    "fp8_backend": "FP8 Arguments",
 }
 
 
 def clean_option(option):
     "Finds all cases of - after the first two characters and changes them to _"
+    if "fp8_backend" in option:
+        option = "--fp8_backend"
     if option.startswith("--"):
         return option[2:].replace("-", "_")
 
@@ -213,7 +218,6 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether or not CPU affinity and balancing should be enabled. Currently only supported on NVIDIA hardware.",
     )
-
     # Dynamo arguments
     resource_args.add_argument(
         "--dynamo_backend",
@@ -641,6 +645,68 @@ def launch_command_parser(subparsers=None):
         "(useful only when `use_megatron_lm` flag is passed).",
     )
 
+    # FP8 arguments
+    fp8_args = parser.add_argument_group(
+        "FP8 Arguments", "Arguments related to FP8 training (requires `--mixed_precision=fp8`)"
+    )
+    fp8_args.add_argument(
+        "--fp8_backend",
+        type=str,
+        choices=["te", "msamp"],
+        help="Choose a backend to train with FP8 (te: TransformerEngine, msamp: MS-AMP)",
+    )
+    fp8_args.add_argument(
+        "--fp8_use_autocast_during_eval",
+        default=False,
+        action="store_true",
+        help="Whether to use FP8 autocast during eval mode (useful only when `--fp8_backend=te` is passed). Generally better metrics are found when this is not passed.",
+    )
+    fp8_args.add_argument(
+        "--fp8_margin",
+        type=int,
+        default=0,
+        help="The margin to use for the gradient scaling (useful only when `--fp8_backend=te` is passed).",
+    )
+    fp8_args.add_argument(
+        "--fp8_interval",
+        type=int,
+        default=1,
+        help="The interval to use for how often the scaling factor is recomputed (useful only when `--fp8_backend=te` is passed).",
+    )
+    fp8_args.add_argument(
+        "--fp8_format",
+        type=str,
+        default="E4M3",
+        choices=["E4M3", "HYBRID"],
+        help="The format to use for the FP8 recipe (useful only when `--fp8_backend=te` is passed).",
+    )
+    fp8_args.add_argument(
+        "--fp8_amax_history_len",
+        type=int,
+        default=1024,
+        help="The length of the history to use for the scaling factor computation (useful only when `--fp8_backend=te` is passed).",
+    )
+    fp8_args.add_argument(
+        "--fp8_amax_compute_algo",
+        type=str,
+        default="most_recent",
+        choices=["max", "most_recent"],
+        help="The algorithm to use for the scaling factor computation. (useful only when `--fp8_backend=te` is passed).",
+    )
+    fp8_args.add_argument(
+        "--fp8_override_linear_precision",
+        type=lambda x: tuple(map(str_to_bool, x.split(","))),
+        default=(False, False, False),
+        help="Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision. Should be passed in a comma-seperated string of booleans (useful only when `--fp8_backend=te` is passed).",
+    )
+    fp8_args.add_argument(
+        "--fp8_opt_level",
+        type=str,
+        default="O2",
+        choices=["O1", "O2"],
+        help="What level of 8-bit collective communication should be used with MS-AMP (useful only when `--fp8_backend=msamp` is passed).",
+    )
+
     # AWS arguments
     aws_args = parser.add_argument_group("AWS Arguments", "Arguments related to AWS.")
     aws_args.add_argument(
@@ -934,6 +1000,7 @@ def _validate_launch_command(args):
                     DistributedType.MULTI_GPU,
                     DistributedType.MULTI_NPU,
                     DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_MUSA,
                     DistributedType.MULTI_XPU,
                 )
                 else False
@@ -1007,12 +1074,16 @@ def _validate_launch_command(args):
         # Silently set the default here
         if args.dynamo_backend is None:
             args.dynamo_backend = "no"
+        if args.num_processes == -1:
+            raise ValueError("You need to manually pass in `--num_processes` using this config yaml.")
     else:
         if args.num_processes is None:
             if args.use_xpu and is_xpu_available():
                 args.num_processes = torch.xpu.device_count()
             elif is_mlu_available():
                 args.num_processes = torch.mlu.device_count()
+            elif is_musa_available():
+                args.num_processes = torch.musa.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
             else:
@@ -1020,11 +1091,16 @@ def _validate_launch_command(args):
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
         if args.debug is None:
             args.debug = False
-        if not args.multi_gpu and (
-            (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
-            or (is_mlu_available() and torch.mlu.device_count() > 1)
-            or (is_npu_available() and torch.npu.device_count() > 1)
-            or (torch.cuda.device_count() > 1)
+        if (
+            not args.multi_gpu
+            and args.num_processes > 1
+            and (
+                (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
+                or (is_mlu_available() and torch.mlu.device_count() > 1)
+                or (is_musa_available() and torch.musa.device_count() > 1)
+                or (is_npu_available() and torch.npu.device_count() > 1)
+                or (torch.cuda.device_count() > 1)
+            )
         ):
             warned.append(
                 "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
@@ -1052,7 +1128,8 @@ def _validate_launch_command(args):
         args.num_cpu_threads_per_process = get_int_from_env(["OMP_NUM_THREADS"], 1)
         if args.use_cpu and args.num_processes >= 1 and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0:
             local_size = get_int_from_env(
-                ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
+                ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"],
+                max(int(args.num_processes / args.num_machines), 1),
             )
             threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
             if threads_per_process > 1:

@@ -27,6 +27,23 @@ from .versions import is_torch_version
 logger = get_logger(__name__)
 
 
+def enable_fsdp_ram_efficient_loading():
+    """
+    Enables RAM efficient loading of Hugging Face models for FSDP in the environment.
+    """
+    # Sets values for `transformers.modeling_utils.is_fsdp_enabled`
+    if "ACCELERATE_USE_FSDP" not in os.environ:
+        os.environ["ACCELERATE_USE_FSDP"] = "True"
+    os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "True"
+
+
+def disable_fsdp_ram_efficient_loading():
+    """
+    Disables RAM efficient loading of Hugging Face models for FSDP in the environment.
+    """
+    os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "False"
+
+
 def _get_model_state_dict(model, adapter_only=False):
     if adapter_only and is_peft_model(model):
         from peft import get_peft_model_state_dict
@@ -274,10 +291,28 @@ def merge_fsdp_weights(
         remove_checkpoint_dir (`bool`, *optional*, defaults to `False`):
             Whether to remove the checkpoint directory after merging.
     """
+    checkpoint_dir = Path(checkpoint_dir)
     from accelerate.state import PartialState
 
     if not is_torch_version(">=", "2.3.0"):
         raise ValueError("`merge_fsdp_weights` requires PyTorch >= 2.3.0`")
+
+    # Verify that the checkpoint directory exists
+    if not checkpoint_dir.exists():
+        model_path_exists = (checkpoint_dir / "pytorch_model_fsdp_0").exists()
+        optimizer_path_exists = (checkpoint_dir / "optimizer_0").exists()
+        err = f"Tried to load from {checkpoint_dir} but couldn't find a valid metadata file."
+        if model_path_exists and optimizer_path_exists:
+            err += " However, potential model and optimizer checkpoint directories exist."
+            err += f"Please pass in either {checkpoint_dir}/pytorch_model_fsdp_0 or {checkpoint_dir}/optimizer_0"
+            err += "instead."
+        elif model_path_exists:
+            err += " However, a potential model checkpoint directory exists."
+            err += f"Please try passing in {checkpoint_dir}/pytorch_model_fsdp_0 instead."
+        elif optimizer_path_exists:
+            err += " However, a potential optimizer checkpoint directory exists."
+            err += f"Please try passing in {checkpoint_dir}/optimizer_0 instead."
+        raise ValueError(err)
 
     # To setup `save` to work
     state = PartialState()

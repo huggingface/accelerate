@@ -255,6 +255,7 @@ def training_function(config, args):
     preds = torch.stack(test_predictions, dim=0).sum(dim=0).div(int(args.num_folds)).argmax(dim=-1)
     test_metric = metric.compute(predictions=preds, references=test_references)
     accelerator.print("Average test metrics from all folds:", test_metric)
+    accelerator.end_training()
 
 
 def main():
