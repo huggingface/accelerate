@@ -83,21 +83,33 @@ class BaseConfig:
     def to_dict(self):
         result = self.__dict__
         # For serialization, it's best to convert Enums to strings (or their underlying value type).
-        for key, value in result.items():
+
+        def _convert_enums(value):
             if isinstance(value, Enum):
-                result[key] = value.value
-            if isinstance(value, dict) and not bool(value):
-                result[key] = None
+                return value.value
+            if isinstance(value, dict):
+                if not bool(value):
+                    return None
+                for key1, value1 in value.items():
+                    value[key1] = _convert_enums(value1)
+            return value
+
+        for key, value in result.items():
+            result[key] = _convert_enums(value)
         result = {k: v for k, v in result.items() if v is not None}
         return result
 
-    @classmethod
-    def from_json_file(cls, json_file=None):
-        json_file = default_json_config_file if json_file is None else json_file
-        with open(json_file, encoding="utf-8") as f:
-            config_dict = json.load(f)
+    @staticmethod
+    def process_config(config_dict):
+        """
+        Processes `config_dict` and sets default values for any missing keys
+        """
         if "compute_environment" not in config_dict:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
+        if "distributed_type" not in config_dict:
+            raise ValueError("A `distributed_type` must be specified in the config file.")
+        if "num_processes" not in config_dict and config_dict["distributed_type"] == DistributedType.NO:
+            config_dict["num_processes"] = 1
         if "mixed_precision" not in config_dict:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
         if "fp16" in config_dict:  # Convert the config to the new format.
@@ -111,6 +123,14 @@ class BaseConfig:
             config_dict["debug"] = False
         if "enable_cpu_affinity" not in config_dict:
             config_dict["enable_cpu_affinity"] = False
+        return config_dict
+
+    @classmethod
+    def from_json_file(cls, json_file=None):
+        json_file = default_json_config_file if json_file is None else json_file
+        with open(json_file, encoding="utf-8") as f:
+            config_dict = json.load(f)
+        config_dict = cls.process_config(config_dict)
         extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
             raise ValueError(
@@ -130,23 +150,7 @@ class BaseConfig:
         yaml_file = default_yaml_config_file if yaml_file is None else yaml_file
         with open(yaml_file, encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
-        if "compute_environment" not in config_dict:
-            config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
-        if "mixed_precision" not in config_dict:
-            config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
-        if isinstance(config_dict["mixed_precision"], bool) and not config_dict["mixed_precision"]:
-            config_dict["mixed_precision"] = "no"
-        if "fp16" in config_dict:  # Convert the config to the new format.
-            del config_dict["fp16"]
-        if "dynamo_backend" in config_dict:  # Convert the config to the new format.
-            dynamo_backend = config_dict.pop("dynamo_backend")
-            config_dict["dynamo_config"] = {} if dynamo_backend == "NO" else {"dynamo_backend": dynamo_backend}
-        if "use_cpu" not in config_dict:
-            config_dict["use_cpu"] = False
-        if "debug" not in config_dict:
-            config_dict["debug"] = False
-        if "enable_cpu_affinity" not in config_dict:
-            config_dict["enable_cpu_affinity"] = False
+        config_dict = cls.process_config(config_dict)
         extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
             raise ValueError(
@@ -173,7 +177,7 @@ class BaseConfig:
 
 @dataclass
 class ClusterConfig(BaseConfig):
-    num_processes: int
+    num_processes: int = -1  # For instance if we use SLURM and the user manually passes it in
     machine_rank: int = 0
     num_machines: int = 1
     gpu_ids: Optional[str] = None
@@ -184,6 +188,8 @@ class ClusterConfig(BaseConfig):
     main_training_function: str = "main"
     enable_cpu_affinity: bool = False
 
+    # args for FP8 training
+    fp8_config: dict = None
     # args for deepspeed_plugin
     deepspeed_config: dict = None
     # args for fsdp
@@ -221,6 +227,8 @@ class ClusterConfig(BaseConfig):
             self.ipex_config = {}
         if self.mpirun_config is None:
             self.mpirun_config = {}
+        if self.fp8_config is None:
+            self.fp8_config = {}
         return super().__post_init__()
 
 

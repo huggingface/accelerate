@@ -127,6 +127,11 @@ def save_accelerator_state(
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
+        if getattr(dataloader, "use_stateful_dataloader", False):
+            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
+            state_dict = dataloader.state_dict()
+            torch.save(state_dict, output_dataloader_state_dict_file)
         logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
 
     # GradScaler state
@@ -241,6 +246,12 @@ def load_accelerator_state(
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
                 sampler = dataloader.set_sampler(torch.load(input_sampler_file))
+        if getattr(dataloader, "use_stateful_dataloader", False):
+            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
+            if input_dataloader_state_dict_file.exists():
+                state_dict = torch.load(input_dataloader_state_dict_file)
+                dataloader.load_state_dict(state_dict)
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
@@ -252,7 +263,8 @@ def load_accelerator_state(
     # Random states
     try:
         states = torch.load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
-        override_attributes["step"] = states["step"]
+        if "step" in states:
+            override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])

@@ -41,6 +41,7 @@ from .testing import (
     require_torch_min_version,
     require_torchvision,
     require_tpu,
+    require_transformer_engine,
     require_xpu,
     skip,
     slow,

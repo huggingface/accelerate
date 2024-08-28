@@ -1,0 +1,26 @@
+compute_environment: LOCAL_MACHINE
+debug: false
+distributed_type: MULTI_GPU
+downcast_bf16: 'no'
+enable_cpu_affinity: false
+fp8_config:
+  amax_compute_algorithm: max
+  amax_history_length: 1024
+  backend: TE
+  fp8_format: E4M3
+  interval: 1
+  margin: 0
+  override_linear_precision: false
+  use_autocast_during_eval: false
+gpu_ids: all
+machine_rank: 0
+main_training_function: main
+mixed_precision: fp8
+num_machines: 1
+num_processes: 2
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

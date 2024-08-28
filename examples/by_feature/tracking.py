@@ -236,11 +236,7 @@ def training_function(config, args):
                 step=epoch,
             )
 
-    # New Code #
-    # When a run is finished, you should call `accelerator.end_training()`
-    # to close all of the open trackers
-    if args.with_tracking:
-        accelerator.end_training()
+    accelerator.end_training()
 
 
 def main():

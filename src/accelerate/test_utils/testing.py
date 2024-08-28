@@ -52,7 +52,9 @@ from ..utils import (
     is_timm_available,
     is_torch_version,
     is_torch_xla_available,
+    is_torchdata_stateful_dataloader_available,
     is_torchvision_available,
+    is_transformer_engine_available,
     is_transformers_available,
     is_triton_available,
     is_wandb_available,
@@ -404,6 +406,14 @@ def require_import_timer(test_case):
     return unittest.skipUnless(is_import_timer_available(), "test requires tuna interpreter")(test_case)
 
 
+def require_transformer_engine(test_case):
+    """
+    Decorator marking a test that requires transformers engine installed. These tests are skipped when transformers
+    engine isn't installed
+    """
+    return unittest.skipUnless(is_transformer_engine_available(), "test requires transformers engine")(test_case)
+
+
 _atleast_one_tracker_available = (
     any([is_wandb_available(), is_tensorboard_available()]) and not is_comet_ml_available()
 )
@@ -417,6 +427,18 @@ def require_trackers(test_case):
     return unittest.skipUnless(
         _atleast_one_tracker_available,
         "test requires at least one tracker to be available and for `comet_ml` to not be installed",
+    )(test_case)
+
+
+def require_torchdata_stateful_dataloader(test_case):
+    """
+    Decorator marking a test that requires torchdata.stateful_dataloader.
+
+    These tests are skipped when torchdata with stateful_dataloader module isn't installed.
+
+    """
+    return unittest.skipUnless(
+        is_torchdata_stateful_dataloader_available(), "test requires torchdata.stateful_dataloader"
     )(test_case)
 
 

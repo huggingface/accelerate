@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## What training on FP8 means
 
-To explore more of the nitty-gritty in training in FP8 with PyTorch and 🤗 Accelerate, check out the [concept_guide](../concept_guides/low_precision_training.md) on why this can be difficult. But essentially rather than training in BF16, some (or all) aspects of training a model can be performed using 8 bits instead of 16. The challenge is doing so without degrading final performance. 
+To explore more of the nitty-gritty in training in FP8 with PyTorch and 🤗 Accelerate, check out the [concept_guide](../concept_guides/low_precision_training) on why this can be difficult. But essentially rather than training in BF16, some (or all) aspects of training a model can be performed using 8 bits instead of 16. The challenge is doing so without degrading final performance. 
 
 This is only enabled on specific NVIDIA hardware, namely:
 
@@ -39,7 +39,7 @@ from accelerate import Accelerator
 accelerator = Accelerator(mixed_precision="fp8")
 ```
 
-By default, if `MS-AMP` is available in your environment, 🤗 Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize the [`utils.FP8RecipeKwargs`]:
+By default, if `MS-AMP` is available in your environment, 🤗 Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize the [`utils.FP8RecipeKwargs`] or clarify it in your config `yaml`/during `accelerate launch`:
 
 ```{python}
 from accelerate import Accelerator
@@ -48,6 +48,19 @@ kwargs = [FP8RecipeKwargs(backend="msamp")]
 # Or to specify the backend as `TransformersEngine` even if MS-AMP is installed
 # kwargs = [FP8RecipeKwargs(backend="te")]
 accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
+```
+
+```{yaml}
+mixed_precision: fp8
+fp8_config:
+  amax_compute_algorithm: max
+  amax_history_length: 1024
+  backend: TE
+  fp8_format: HYBRID
+  interval: 1
+  margin: 0
+  override_linear_precision: false
+  use_autocast_during_eval: false
 ```
 
 ## Configuring MS-AMP
@@ -68,6 +81,17 @@ kwargs = [FP8RecipeKwargs(backend="msamp", optimization_level="O2")]
 accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 ```
 
+Or during `accelerate launch` via `--fp8_backend=msamp --fp8_opt_level=O2`
+
+Similarly this can be set in your `config.yaml`:
+
+```{yaml}
+mixed_precision: fp8
+fp8_config:
+    backend: MSAMP
+    opt_level: O2
+```
+
 ## Configuring TransformersEngine
 
 TransformersEngine has much more available for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
@@ -83,10 +107,39 @@ kwargs = [FP8RecipeKwargs(backend="te", ...)]
 accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 ```
 
+Or during `accelerate launch` via `--fp8_backend=te ...`. Use `accelerate launch --fp8_backend=te -h` to see relevent arguments.
+
+Similarly this can be set in your `config.yaml`:
+
+```{yaml}
+mixed_precision: fp8
+fp8_config:
+    amax_compute_algorithm: max
+    amax_history_length: 1024
+    backend: TE
+    fp8_format: HYBRID
+    interval: 1
+    margin: 0
+    override_linear_precision: false
+    use_autocast_during_eval: false
+```
+
+## Example Zoo
+
+We have examples showcasing training with FP8 both with accelerate and its underlying implementation available in the accelerate repo.
+Currently we support scripts showcasing:
+
+* Single GPU
+* Distributed Data Parallelism (Multi-GPU)
+* Fully Sharded Data Parallelism
+* DeepSpeed ZeRO 1 through 3
+
+Find out more [here](https://github.com/huggingface/accelerate/tree/main/benchmarks/fp8)
+
 ## Further Reading
 
 To learn more about training in FP8 please check out the following resources:
 
-* [Our concept guide](../concept_guides/low_precision_training.md) detailing into more about both TransformersEngine and MS-AMP
+* [Our concept guide](../concept_guides/low_precision_training) detailing into more about both TransformersEngine and MS-AMP
 * [The `transformers-engine` documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html)
 * [The `MS-AMP` documentation](https://azure.github.io/MS-AMP/docs/)

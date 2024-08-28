@@ -73,7 +73,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_config_compatibility(self):
-        invalid_configs = ["invalid", "mpi", "sagemaker"]
+        invalid_configs = ["fp8", "invalid", "mpi", "sagemaker"]
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
             if any(invalid_config in str(config) for invalid_config in invalid_configs):
                 continue
@@ -435,7 +435,10 @@ class ModelEstimatorTester(unittest.TestCase):
             estimate_command(args)
 
     def test_gated(self):
-        with self.assertRaises(GatedRepoError, msg="Repo for model `meta-llama/Llama-2-7b-hf` is gated"):
+        with self.assertRaises(
+            (GatedRepoError, EnvironmentError),
+            msg="Repo for model `meta-llama/Llama-2-7b-hf` is gated or environment error occurred",
+        ):
             args = self.parser.parse_args(["meta-llama/Llama-2-7b-hf"])
             with patch_environment(hf_hub_disable_implicit_token="1"):
                 estimate_command(args)

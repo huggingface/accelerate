@@ -20,7 +20,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
-from accelerate.accelerator import Accelerator, GradientAccumulationPlugin
+from accelerate.accelerator import Accelerator, DataLoaderConfiguration, GradientAccumulationPlugin
 from accelerate.state import GradientState
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
@@ -249,9 +249,9 @@ def test_gradient_accumulation_with_opt_and_scheduler(
     split_batches=False, dispatch_batches=False, sync_each_batch=False
 ):
     gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=2, sync_each_batch=sync_each_batch)
+    dataloader_config = DataLoaderConfiguration(split_batches=split_batches, dispatch_batches=dispatch_batches)
     accelerator = Accelerator(
-        split_batches=split_batches,
-        dispatch_batches=dispatch_batches,
+        dataloader_config=dataloader_config,
         gradient_accumulation_plugin=gradient_accumulation_plugin,
     )
     # Test that context manager behaves properly
@@ -305,12 +305,12 @@ def test_gradient_accumulation_with_opt_and_scheduler(
 
 def test_dataloader_break():
     accelerator = Accelerator()
-
     first_dset = RegressionDataset(length=80)
     first_dataloader = DataLoader(first_dset, batch_size=16)
     second_dset = RegressionDataset(length=96)
     second_dataloader = DataLoader(second_dset, batch_size=16)
     first_dataloader, second_dataloader = accelerator.prepare(first_dataloader, second_dataloader)
+
     assert accelerator.gradient_state.active_dataloader is None
     for iteration, _ in enumerate(first_dataloader):
         assert id(accelerator.gradient_state.active_dataloader) == id(first_dataloader)
@@ -392,6 +392,7 @@ def main():
                             f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}` and `sync_each_batch={sync_each_batch}`**",
                         )
                     test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches, sync_each_batch)
+    state.destroy_process_group()
 
 
 def _mp_fn(index):

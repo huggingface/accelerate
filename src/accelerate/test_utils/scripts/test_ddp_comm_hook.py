@@ -13,7 +13,7 @@
 # limitations under the License.
 import torch
 
-from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs
+from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs, PartialState
 
 
 class MockModel(torch.nn.Module):
@@ -71,6 +71,7 @@ def main():
     ]:
         print(f"Test DDP comm hook: {comm_hook}, comm wrapper: {comm_wrapper}")
         test_ddp_comm_hook(comm_hook, comm_wrapper, comm_state_option)
+    PartialState().destroy_process_group()
 
 
 if __name__ == "__main__":

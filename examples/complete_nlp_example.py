@@ -21,7 +21,7 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
-from accelerate import Accelerator, DistributedType
+from accelerate import Accelerator, DataLoaderConfiguration, DistributedType
 
 
 ########################################################################
@@ -49,12 +49,19 @@ EVAL_BATCH_SIZE = 32
 
 def training_function(config, args):
     # Initialize accelerator
+    dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=args.use_stateful_dataloader)
     if args.with_tracking:
         accelerator = Accelerator(
-            cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all", project_dir=args.project_dir
+            cpu=args.cpu,
+            mixed_precision=args.mixed_precision,
+            dataloader_config=dataloader_config,
+            log_with="all",
+            project_dir=args.project_dir,
         )
     else:
-        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+        accelerator = Accelerator(
+            cpu=args.cpu, mixed_precision=args.mixed_precision, dataloader_config=dataloader_config
+        )
 
     if hasattr(args.checkpointing_steps, "isdigit"):
         if args.checkpointing_steps == "epoch":
@@ -194,7 +201,10 @@ def training_function(config, args):
             total_loss = 0
         if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
             # We need to skip steps until we reach the resumed step
-            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            if not args.use_stateful_dataloader:
+                active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            else:
+                active_dataloader = train_dataloader
             overall_step += resume_step
         else:
             # After the first iteration though, we need to go back to the original dataloader
@@ -256,8 +266,7 @@ def training_function(config, args):
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
+    accelerator.end_training()
 
 
 def main():
@@ -283,6 +292,11 @@ def main():
         type=str,
         default=None,
         help="If the training should continue from a checkpoint folder.",
+    )
+    parser.add_argument(
+        "--use_stateful_dataloader",
+        action="store_true",
+        help="If the dataloader should be a resumable stateful dataloader.",
     )
     parser.add_argument(
         "--with_tracking",

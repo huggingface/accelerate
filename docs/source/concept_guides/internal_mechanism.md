@@ -69,4 +69,10 @@ setting the same seed in the main random number generator in all processes.
 
 </Tip>
 
+<Note>
+
+If you have [`torchdata>=0.8.0`](https://github.com/pytorch/data/tree/main) installed, and you have passed `use_stateful_dataloader=True` into your [`~utils.DataLoaderConfiguration`], these classes will directly inherit from `StatefulDataLoader` instead, and maintain a `state_dict`.
+
+</Note>
+
 For more details about the internals, see the [Internals page](package_reference/torch_wrappers).

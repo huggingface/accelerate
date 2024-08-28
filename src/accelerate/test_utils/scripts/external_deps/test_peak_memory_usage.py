@@ -240,6 +240,7 @@ def training_function(config, args):
     if accelerator.is_main_process:
         with open(os.path.join(args.output_dir, "peak_memory_utilization.json"), "w") as f:
             json.dump(train_total_peak_memory, f)
+    accelerator.end_training()
 
 
 def main():

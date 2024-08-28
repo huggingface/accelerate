@@ -205,6 +205,7 @@ def training_function(config, args):
     if accelerator.is_main_process:
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
             json.dump(performance_metric, f)
+    accelerator.end_training()
 
 
 def main():
