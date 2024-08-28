@@ -97,4 +97,4 @@ class LazyImportTester(TempDirTestCase):
     def test_te_import(self):
         output = run_import_time("import accelerate, accelerate.utils.transformer_engine")
 
-        self.assertFalse(' transformer_engine' in output, '`transformer_engine` should not be imported on import')
+        self.assertFalse(" transformer_engine" in output, "`transformer_engine` should not be imported on import")

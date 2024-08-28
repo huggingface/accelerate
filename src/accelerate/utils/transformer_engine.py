@@ -19,6 +19,7 @@ import torch.nn as nn
 from .imports import is_fp8_available
 from .operations import GatheredParameters
 
+
 # Do not import `transformer_engine` at package level to avoid potential issues
 
 
