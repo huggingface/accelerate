@@ -18,6 +18,7 @@ from accelerate.test_utils import require_transformer_engine
 from accelerate.test_utils.testing import TempDirTestCase, require_import_timer
 from accelerate.utils import is_import_timer_available
 
+
 if is_import_timer_available():
     from import_timer import calculate_total_time, read_import_profile
     from import_timer.core import get_paths_above_threshold, sort_nodes_by_total_time
