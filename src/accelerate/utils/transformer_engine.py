@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import wraps
 from types import MethodType
 
 import torch.nn as nn
@@ -87,7 +86,7 @@ def has_transformer_engine_layers(model):
     Returns whether a given model has some `transformer_engine` layer or not.
     """
     if not is_fp8_available():
-        raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
+        raise ImportError("Using `has_transformer_engine_layers` requires transformer_engine to be installed.")
     import transformer_engine.pytorch as te
 
     for m in model.modules():
@@ -102,7 +101,7 @@ def contextual_fp8_autocast(model_forward, fp8_recipe, use_during_eval=False):
     disable FP8 autocast during eval mode, which is generally better for more accurate metrics.
     """
     if not is_fp8_available():
-        raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
+        raise ImportError("Using `contextual_fp8_autocast` requires transformer_engine to be installed.")
     from transformer_engine.pytorch import fp8_autocast
 
     def forward(self, *args, **kwargs):
@@ -121,7 +120,7 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
     Applies FP8 context manager to the model's forward method
     """
     if not is_fp8_available():
-        raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
+        raise ImportError("Using `apply_fp8_autowrap` requires transformer_engine to be installed.")
     import transformer_engine.common.recipe as te_recipe
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
