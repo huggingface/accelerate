@@ -20,16 +20,13 @@ from .imports import is_fp8_available
 from .operations import GatheredParameters
 
 
-if is_fp8_available():
-    import transformer_engine.pytorch as te
-
-
 def convert_model(model, to_transformer_engine=True, _convert_linear=True, _convert_ln=True):
     """
     Recursively converts the linear and layernorm layers of a model to their `transformers_engine` counterpart.
     """
     if not is_fp8_available():
         raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
+    import transformer_engine.pytorch as te
     for name, module in model.named_children():
         if isinstance(module, nn.Linear) and to_transformer_engine and _convert_linear:
             has_bias = module.bias is not None
@@ -87,6 +84,7 @@ def has_transformer_engine_layers(model):
     """
     if not is_fp8_available():
         raise ImportError("Using `has_transformer_engine_layers` requires transformer_engine to be installed.")
+    import transformer_engine.pytorch as te
     for m in model.modules():
         if isinstance(m, (te.LayerNorm, te.Linear, te.TransformerLayer)):
             return True
@@ -98,6 +96,8 @@ def contextual_fp8_autocast(model_forward, fp8_recipe, use_during_eval=False):
     Wrapper for a model's forward method to apply FP8 autocast. Is context aware, meaning that by default it will
     disable FP8 autocast during eval mode, which is generally better for more accurate metrics.
     """
+    if not is_fp8_available():
+        raise ImportError("Using `has_transformer_engine_layers` requires transformer_engine to be installed.")
     from transformer_engine.pytorch import fp8_autocast
 
     def forward(self, *args, **kwargs):
@@ -115,7 +115,8 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
     """
     Applies FP8 context manager to the model's forward method
     """
-    # Import here to keep base imports fast
+    if not is_fp8_available():
+        raise ImportError("Using `has_transformer_engine_layers` requires transformer_engine to be installed.")
     import transformer_engine.common.recipe as te_recipe
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
