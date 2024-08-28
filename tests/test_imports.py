@@ -94,7 +94,6 @@ class LazyImportTester(TempDirTestCase):
     e.g. in huggingface/accelerate#3056.
     """
 
-    # @require_transformer_engine
     def test_te_import(self):
         output = run_import_time("import accelerate, accelerate.utils.transformer_engine")
 
