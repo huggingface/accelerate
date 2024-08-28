@@ -84,6 +84,7 @@ class ImportSpeedTester(TempDirTestCase):
         self.assertLess(pct_more, 20, err_msg)
 
 
+@require_transformer_engine
 class LazyImportTester(TempDirTestCase):
     """
     Test suite which checks if specific packages are lazy-loaded.
