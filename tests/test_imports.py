@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sys
 import subprocess
+import sys
 
 from accelerate.test_utils import require_transformer_engine
 from accelerate.test_utils.testing import TempDirTestCase, require_import_timer
