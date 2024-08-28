@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import sys
 import subprocess
 
+from accelerate.test_utils import require_transformer_engine
 from accelerate.test_utils.testing import TempDirTestCase, require_import_timer
 from accelerate.utils import is_import_timer_available
-
 
 if is_import_timer_available():
     from import_timer import calculate_total_time, read_import_profile
@@ -31,7 +32,7 @@ def convert_list_to_string(data):
 
 
 def run_import_time(command: str):
-    output = subprocess.run(["python3", "-X", "importtime", "-c", command], capture_output=True, text=True)
+    output = subprocess.run([sys.executable, "-X", "importtime", "-c", command], capture_output=True, text=True)
     return output.stderr
 
 
@@ -81,3 +82,18 @@ class ImportSpeedTester(TempDirTestCase):
         paths_above_threshold = get_paths_above_threshold(sorted_data, 0.05, max_depth=7)
         err_msg += f"\n{convert_list_to_string(paths_above_threshold)}"
         self.assertLess(pct_more, 20, err_msg)
+
+
+class LazyImportTester(TempDirTestCase):
+    """
+    Test suite which checks if specific packages are lazy-loaded.
+
+    Eager-import will trigger circular import in some case,
+    e.g. in huggingface/accelerate#3056.
+    """
+
+    # @require_transformer_engine
+    def test_te_import(self):
+        output = run_import_time("import accelerate, accelerate.utils.transformer_engine")
+
+        self.assertFalse(' transformer_engine' in output, '`transformer_engine` should not be imported on import')
