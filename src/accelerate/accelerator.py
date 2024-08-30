@@ -1425,9 +1425,9 @@ class Accelerator:
                             "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}` or `device_map={'':torch.xpu.current_device()}`"
                         )
 
-            if "cpu" in model_devices or "disk" in model_devices:
+            if "disk" in model_devices:
                 raise ValueError(
-                    "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
+                    "You can't train a model that has been loaded in 8-bit precision with disk offload."
                 )
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
