@@ -1247,6 +1247,7 @@ def infer_auto_device_map(
     current_memory_used = 0
     device_memory_used = {}
     device_buffer_sizes = {}
+    device_minimum_assignment_memory = {}
 
     # Direct submodules and parameters
     modules_to_treat = (
@@ -1318,7 +1319,8 @@ def infer_auto_device_map(
                 # -> no split, we go to the next device
                 if verbose:
                     print("This module cannot be split, going to the next device.")
-
+                if current_memory_used == 0:
+                    device_minimum_assignment_memory[device] = module_size + current_memory_reserved
                 device_memory_used[device] = current_memory_used + current_memory_reserved
                 current_device += 1
                 modules_to_treat = [(name, module)] + modules_to_treat
@@ -1417,6 +1419,8 @@ def infer_auto_device_map(
                     # If the tied module is not split, we go to the next device
                     if verbose:
                         print("None of the tied module can be split, going to the next device.")
+                    if current_memory_used == 0:
+                        device_minimum_assignment_memory[device] = module_size_with_ties + current_memory_reserved
 
                     device_memory_used[device] = current_memory_used + current_memory_reserved
                     current_device += 1
@@ -1464,6 +1468,13 @@ def infer_auto_device_map(
                 f"not fit any GPU's remaining memory. If you are experiencing a OOM later, please consider using "
                 f"offload_buffers=True."
             )
+
+    for device, mem in device_minimum_assignment_memory.items():
+        warnings.warn(
+            f"No modules could be assigned to {device} as the minimum memory required is {mem} "
+            f"for the current calculation, which is higher than the available memory {max_memory[device]}."
+            f"Consider increasing the memory available."
+        )
 
     return device_map
 
