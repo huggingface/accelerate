@@ -1469,13 +1469,17 @@ def infer_auto_device_map(
                 f"offload_buffers=True."
             )
 
-    for device, mem in device_minimum_assignment_memory.items():
-        warnings.warn(
-            f"No modules could be assigned to {device} as the minimum memory required is {mem} "
-            f"for the current calculation, which is higher than the available memory {max_memory[device]}."
-            f"Consider increasing the memory available."
+    if device_minimum_assignment_memory:
+        devices_info = "\n".join(
+            f"  - {device}: {mem} bytes required" for device, mem in device_minimum_assignment_memory.items()
         )
-
+        warnings.warn(
+            f"Based on the current allocation process, no modules could be assigned to the following devices due to"
+            f"insufficient memory:\n"
+            f"{devices_info}\n"
+            f"These minimum requirements are specific to this allocation attempt and may vary. Consider increasing"
+            f"the available memory for these devices to at least the specified minimum, or adjusting the model config."
+        )
     return device_map
 
 
