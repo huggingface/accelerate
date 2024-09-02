@@ -1190,8 +1190,6 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
             The dataset to use to build this datalaoder.
         skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
-        use_stateful_dataloader (`bool`, *optional*, defaults to `False`):
-            Whether to have this class adapt `StatefulDataLoader` from `torchdata` instead of the regular `DataLoader`.
         kwargs:
             All other keyword arguments to pass to the regular `DataLoader` initialization.
     """
