@@ -1164,7 +1164,6 @@ class SkipBatchSampler(BatchSampler):
 
     def __init__(self, batch_sampler, skip_batches=0):
         self.batch_sampler = batch_sampler
-        self.sampler = batch_sampler.sampler
         self.skip_batches = skip_batches
 
     def __iter__(self):
@@ -1213,9 +1212,6 @@ def skip_first_batches(dataloader, num_batches=0):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
     """
-    if is_torchdata_stateful_dataloader_available():
-        from torchdata.stateful_dataloader import StatefulDataLoader
-
     state = PartialState()
     if state.distributed_type == DistributedType.XLA:
         device = dataloader.device
@@ -1259,7 +1255,6 @@ def skip_first_batches(dataloader, num_batches=0):
             split_batches=dataloader.split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader._drop_last,
-            use_stateful_dataloader=dataloader.use_stateful_dataloader,
             **kwargs,
         )
     elif isinstance(dataloader, DataLoaderShard):
@@ -1276,17 +1271,12 @@ def skip_first_batches(dataloader, num_batches=0):
             device=dataloader.device,
             rng_types=dataloader.rng_types,
             synchronized_generator=dataloader.synchronized_generator,
-            use_stateful_dataloader=dataloader.use_stateful_dataloader,
             **kwargs,
         )
     else:
         if new_batch_sampler is None:
             # Need to manually skip batches in the dataloader
-            dataloader = SkipDataLoader(
-                dataset, skip_batches=num_batches, use_stateful_dataloader=dataloader.use_stateful_dataloader, **kwargs
-            )
-        elif is_torchdata_stateful_dataloader_available() and isinstance(dataloader, StatefulDataLoader):
-            dataloader = StatefulDataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+            dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
 
