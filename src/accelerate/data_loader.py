@@ -1160,6 +1160,7 @@ def prepare_data_loader(
 class SkipBatchSampler(BatchSampler):
     """
     A `torch.utils.data.BatchSampler` that skips the first `n` batches of another `torch.utils.data.BatchSampler`.
+    Should not be used if the original dataloader is a `StatefulDataLoader`.
     """
 
     def __init__(self, batch_sampler, skip_batches=0):
@@ -1181,7 +1182,8 @@ class SkipBatchSampler(BatchSampler):
 
 class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
     """
-    Subclass of a PyTorch `DataLoader` that will skip the first batches.
+    Subclass of a PyTorch `DataLoader` that will skip the first batches. Generally it's preferable to use
+    `skip_first_batches`/`torchdata.StatefulDataLoader` instead of this class.
 
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
@@ -1210,7 +1212,8 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
 
 def skip_first_batches(dataloader, num_batches=0):
     """
-    Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
+    Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`. Should not be used if
+    the original dataloader is a `StatefulDataLoader`.
     """
     state = PartialState()
     if state.distributed_type == DistributedType.XLA:
