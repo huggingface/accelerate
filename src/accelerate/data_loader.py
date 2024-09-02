@@ -1164,11 +1164,11 @@ def prepare_data_loader(
 class SkipBatchSampler(BatchSampler):
     """
     A `torch.utils.data.BatchSampler` that skips the first `n` batches of another `torch.utils.data.BatchSampler`.
+    Should not be used if the original dataloader is a `StatefulDataLoader`.
     """
 
     def __init__(self, batch_sampler, skip_batches=0):
         self.batch_sampler = batch_sampler
-        self.sampler = batch_sampler.sampler
         self.skip_batches = skip_batches
 
     def __iter__(self):
@@ -1186,15 +1186,14 @@ class SkipBatchSampler(BatchSampler):
 
 class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
     """
-    Subclass of a PyTorch `DataLoader` that will skip the first batches.
+    Subclass of a PyTorch `DataLoader` that will skip the first batches. Generally it's preferable to use
+    `skip_first_batches`/`torchdata.StatefulDataLoader` instead of this class.
 
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
             The dataset to use to build this datalaoder.
         skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
-        use_stateful_dataloader (`bool`, *optional*, defaults to `False`):
-            Whether to have this class adapt `StatefulDataLoader` from `torchdata` instead of the regular `DataLoader`.
         kwargs:
             All other keyword arguments to pass to the regular `DataLoader` initialization.
     """
@@ -1215,11 +1214,9 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
 
 def skip_first_batches(dataloader, num_batches=0):
     """
-    Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
+    Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`. Should not be used if
+    the original dataloader is a `StatefulDataLoader`.
     """
-    if is_torchdata_stateful_dataloader_available():
-        from torchdata.stateful_dataloader import StatefulDataLoader
-
     state = PartialState()
     if state.distributed_type == DistributedType.XLA:
         device = dataloader.device
@@ -1263,7 +1260,6 @@ def skip_first_batches(dataloader, num_batches=0):
             split_batches=dataloader.split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader._drop_last,
-            use_stateful_dataloader=dataloader.use_stateful_dataloader,
             **kwargs,
         )
     elif isinstance(dataloader, DataLoaderShard):
@@ -1280,17 +1276,12 @@ def skip_first_batches(dataloader, num_batches=0):
             device=dataloader.device,
             rng_types=dataloader.rng_types,
             synchronized_generator=dataloader.synchronized_generator,
-            use_stateful_dataloader=dataloader.use_stateful_dataloader,
             **kwargs,
         )
     else:
         if new_batch_sampler is None:
             # Need to manually skip batches in the dataloader
-            dataloader = SkipDataLoader(
-                dataset, skip_batches=num_batches, use_stateful_dataloader=dataloader.use_stateful_dataloader, **kwargs
-            )
-        elif is_torchdata_stateful_dataloader_available() and isinstance(dataloader, StatefulDataLoader):
-            dataloader = StatefulDataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+            dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
 
