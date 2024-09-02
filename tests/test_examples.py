@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import mock, skip
 
 import torch
 
@@ -261,6 +261,9 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/ddp_comm_hook.py", "--ddp_comm_hook", "fp16"]
         run_command(self.launch_args + testargs)
 
+    @skip(
+        reason="stable-diffusion-v1-5 is no longer available. Potentially `Comfy-Org/stable-diffusion-v1-5-archive` once diffusers support is added."
+    )
     @require_multi_device
     def test_distributed_inference_examples_stable_diffusion(self):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
