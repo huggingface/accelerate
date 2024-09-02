@@ -15,6 +15,7 @@ from .testing import (
     DEFAULT_LAUNCH_COMMAND,
     are_the_same_tensors,
     assert_exception,
+    capture_call_output,
     device_count,
     execute_subprocess_async,
     get_launch_command,
