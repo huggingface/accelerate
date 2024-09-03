@@ -132,10 +132,13 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
     """
     if function is None:
         return functools.partial(find_executable_batch_size, starting_batch_size=starting_batch_size)
-    if reduce_batch_size_fn is None:
-        reduce_batch_size_fn = lambda: batch_size // 2
 
     batch_size = starting_batch_size
+    if reduce_batch_size_fn is None:
+        def reduce_batch_size_fn():
+            nonlocal batch_size
+            batch_size = batch_size // 2
+            return batch_size
 
     def decorator(*args, **kwargs):
         nonlocal batch_size
