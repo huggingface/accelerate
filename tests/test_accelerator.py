@@ -662,6 +662,7 @@ class AcceleratorTester(AccelerateTestCase):
         # TODO: Add support for pickling StatefulDataLoader
         dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=False)
         accelerator = Accelerator(dataloader_config=dataloader_config)
+        torch.manual_seed(accelerator.process_index)
         original_dl, prepared_skip_dl = accelerator.prepare(dl, skip_dl)
         prepared_model_dumps = pickle.dumps(accelerator)
 
