@@ -435,9 +435,8 @@ class DataLoaderAdapter:
     @property
     def __class__(self):
         """
-        In order to maintain backwards compatability with other code, we need to ensure `isinstance(obj, DataLoader)`
-        returs true. This is because some downstream code assumes that the `DataLoader` is the base class of the
-        object.
+        In order to maintain backwards compatability with other code, we need to ensure `isinstance(obj, DataLoader)` returs true.
+        This is because some downstream code assumes that the `DataLoader` is the base class of the object.
         """
         return self.base_dataloader.__class__
 
@@ -479,18 +478,6 @@ class DataLoaderAdapter:
             self.adjust_state_dict_for_prefetch()
             # Then tag if we are at the end of the dataloader
             self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
-
-
-class DataLoaderAdapterImpl(DataLoaderAdapter, DataLoader):
-    pass
-
-
-if is_torchdata_stateful_dataloader_available():
-    from torchdata.stateful_dataloader import StatefulDataLoader
-
-    class StatefulDataLoaderAdapterImpl(DataLoaderAdapter, StatefulDataLoader):
-        pass
-
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     """
