@@ -412,8 +412,7 @@ def main():
 
     # Dataloader after pickling
     iterable_loader = create_dataloader(accelerator, dataset_size=NUM_ELEMENTS, batch_size=BATCH_SIZE, iterable=True)
-    loader = DataLoader(DummyIterableDataset(iterable_loader), shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
-    test_pickled_dataloader(loader, accelerator)
+    test_pickled_dataloader(iterable_loader, accelerator)
 
     accelerator.end_training()
 
