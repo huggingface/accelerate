@@ -1829,6 +1829,8 @@ class Accelerator:
                             kwargs["lr_scheduler"] = scheduler
 
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
+            if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
+                engine.compile(backend=self.state.dynamo_plugin.backend, compile_kwargs=self.state.dynamo_plugin.to_kwargs())
             if optimizer is not None:
                 optimizer = DeepSpeedOptimizerWrapper(optimizer)
             if scheduler is not None:
