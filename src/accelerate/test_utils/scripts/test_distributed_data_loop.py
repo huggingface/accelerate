@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pickle
 import tempfile
 import warnings
 from typing import List
@@ -339,6 +340,26 @@ def test_stateful_dataloader_save_state(accelerator):
     finally:
         accelerator.dataloader_config = old_dataloader_config
 
+def test_pickled_dataloader(accelerator):
+    # Prepare the DataLoader
+    data_loader = accelerator.prepare(data_loader)
+    # Pickle then reload the dataloader
+    prepared_model_dumps = pickle.dumps(accelerator)
+    loaded_accelerator = pickle.loads(prepared_model_dumps)
+    assert len(loaded_accelerator._dataloaders) == 1
+    loaded_dataloader = loaded_accelerator._dataloaders[0]
+    all_examples = []
+    for i, batch in enumerate(loaded_dataloader):
+        index, _ = accelerator.gather_for_metrics((batch["index"], batch["label"]))
+        all_examples.extend(index.detach().cpu().numpy().tolist())
+
+    # Sort the examples
+    sorted_all_examples = sorted(all_examples)
+
+    # Check if all elements are present in the sorted list of iterated samples
+    assert (
+        len(set(sorted_all_examples)) == NUM_ELEMENTS
+    ), "Not all the dataset elements have been iterated in an epoch due to duplication of samples across processes."
 
 def main():
     accelerator = create_accelerator()
@@ -389,6 +410,9 @@ def main():
     test_stateful_dataloader(accelerator)
     test_stateful_dataloader_save_state(accelerator)
 
+    # Dataloader after pickling
+    loader = DataLoader(dataset, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+    test_pickled_dataloader(accelerator)
     accelerator.end_training()
 
 
