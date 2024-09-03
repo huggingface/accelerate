@@ -416,25 +416,6 @@ class DataLoaderAdapter:
         else:
             self.base_dataloader = DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
 
-        # Dynamically mixin the parent class. See https://stackoverflow.com/a/31075641
-        # In C++ terms, this is analogous to creating `DataLoaderAdapter<T> : T`, where T is a DataLoader or
-        # StatefulDataLoader
-        #
-        # The same functionality could be achieved by directly creating the required subclasses for both {DataLoader,
-        # StatefulDataLoader}, however that could lead to much messier code, with duplicated classes and conditional
-        # dispatching scattered throughout various functions and files.
-        #
-        # This code is incredibly awkward but it's the only way to make `isinstance(obj, StatefulDataLoader)` work
-        # transparently.
-        #
-        # A more robust solution is for DataLoaderAdapter to not inherit from DataLoader (compose rather than inherit),
-        # but this would not be backwards compatible with existing code which assumes
-        # DataLoaderShard/DataLoaderDispatcher are DataLoaders.
-        base_cls = self.__class__
-        base_cls_name = self.__class__.__name__
-        parent_cls_name = self.base_dataloader.__class__
-        self.__class__ = type(base_cls_name, (base_cls, parent_cls_name), {})
-
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
 
@@ -450,6 +431,18 @@ class DataLoaderAdapter:
 
     def load_state_dict(self, state_dict):
         self.base_dataloader.load_state_dict(state_dict)
+
+    @property
+    def __class__(self):
+        """
+        In order to maintain backwards compatability with other code, we need to ensure `isinstance(obj, DataLoader)`
+        returs true. This is because some downstream code assumes that the `DataLoader` is the base class of the
+        object.
+        """
+        return self.base_dataloader.__class__
+
+    def __len__(self):
+        return len(self.base_dataloader)
 
     def adjust_state_dict_for_prefetch(self):
         """
@@ -486,6 +479,17 @@ class DataLoaderAdapter:
             self.adjust_state_dict_for_prefetch()
             # Then tag if we are at the end of the dataloader
             self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
+
+
+class DataLoaderAdapterImpl(DataLoaderAdapter, DataLoader):
+    pass
+
+
+if is_torchdata_stateful_dataloader_available():
+    from torchdata.stateful_dataloader import StatefulDataLoader
+
+    class StatefulDataLoaderAdapterImpl(DataLoaderAdapter, StatefulDataLoader):
+        pass
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -579,6 +583,22 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
         self.iteration += 1
         self.end()
+
+    def __reduce__(self):
+        return (
+            DataLoaderShard,
+            (
+                self.base_dataloader.dataset,
+                self.device,
+                self.rng_types,
+                self.synchronized_generator,
+                self.skip_batches,
+                self.use_stateful_dataloader,
+                self._drop_last,
+                self._non_blocking,
+            ),
+            self.__dict__,
+        )
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like
@@ -865,13 +885,28 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             self.dataset.set_epoch(epoch)
 
     def __len__(self):
-        whole_length = super().__len__()
+        whole_length = self.base_dataloader.__len__()
         if self.split_batches:
             return whole_length
         elif self._drop_last:
             return whole_length // self.state.num_processes
         else:
             return math.ceil(whole_length / self.state.num_processes)
+
+    def __reduce__(self):
+        return (
+            DataLoaderDispatcher,
+            (
+                self.base_dataloader.dataset,
+                self.split_batches,
+                self.skip_batches,
+                self.use_stateful_dataloader,
+                self._drop_last,
+                self._non_blocking,
+                self.slice_fn,
+            ),
+            self.__dict__,
+        )
 
     @property
     def total_batch_size(self):
@@ -1210,6 +1245,16 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
                 self._update_state_dict()
                 yield batch
         self.end()
+
+    def __len__(self):
+        return len(self.base_dataloader) - self.skip_batches
+
+    def __reduce__(self):
+        return (
+            SkipDataLoader,
+            (self.base_dataloader.dataset, self.skip_batches, self.use_stateful_dataloader),
+            self.__dict__,
+        )
 
 
 def skip_first_batches(dataloader, num_batches=0):
