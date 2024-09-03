@@ -653,7 +653,7 @@ class AcceleratorTester(AccelerateTestCase):
         """
         Test that pickling a prepared dataloader works.
         """
-        data = torch.arange(10)
+        data = torch.arange(10).to(torch_device)
         ds = torch.utils.data.TensorDataset(data)
         dl = torch.utils.data.DataLoader(ds)
         # Currently, StatefulDataLoader doesn't seem to support pickling, so we aren't testing that functionality
@@ -674,8 +674,8 @@ class AcceleratorTester(AccelerateTestCase):
         assert [i for i in model_loaded._dataloaders[0]] == [i for i in original_dl]
 
         # Test skip dataloader works as expected as well
-        skip_dl = skip_first_batches(original_dl, 2)
-        assert isinstance(skip_dl, torch.utils.data.DataLoader)
+        skip_dl = skip_first_batches(dl, 2)
+        assert isinstance(skip_dl, DataLoader)
         assert len(skip_dl) == len(original_dl) - 2
         orig_items = [i for i in original_dl]
         skip_dl_items = [i for i in skip_dl]
