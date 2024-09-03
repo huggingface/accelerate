@@ -411,7 +411,7 @@ def main():
     test_stateful_dataloader_save_state(accelerator)
 
     # Dataloader after pickling
-    loader = DataLoader(dataset, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+    loader = DataLoader(DummyIterableDataset(), shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
     test_pickled_dataloader(loader, accelerator)
 
     accelerator.end_training()
