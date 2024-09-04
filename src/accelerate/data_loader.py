@@ -572,20 +572,9 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.end()
 
     def __reduce__(self):
-        return (
-            DataLoaderShard,
-            (
-                self.base_dataloader.dataset,
-                self.device,
-                self.rng_types,
-                self.synchronized_generator,
-                self.skip_batches,
-                self.use_stateful_dataloader,
-                self._drop_last,
-                self._non_blocking,
-            ),
-            self.__dict__,
-        )
+        args = super().__reduce__()
+        return (DataLoaderShard, *args[1:])
+
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like
@@ -881,19 +870,8 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             return math.ceil(whole_length / self.state.num_processes)
 
     def __reduce__(self):
-        return (
-            DataLoaderDispatcher,
-            (
-                self.base_dataloader.dataset,
-                self.split_batches,
-                self.skip_batches,
-                self.use_stateful_dataloader,
-                self._drop_last,
-                self._non_blocking,
-                self.slice_fn,
-            ),
-            self.__dict__,
-        )
+        args = super().__reduce__()
+        return (DataLoaderDispatcher, *args[1:])
 
     @property
     def total_batch_size(self):
@@ -1238,11 +1216,9 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
         return len(self.base_dataloader) - self.skip_batches
 
     def __reduce__(self):
-        return (
-            SkipDataLoader,
-            (self.base_dataloader.dataset, self.skip_batches, self.use_stateful_dataloader),
-            self.__dict__,
-        )
+        args = super().__reduce__()
+        return (SkipDataLoader, *args[1:])
+
 
 
 def skip_first_batches(dataloader, num_batches=0):
