@@ -1212,7 +1212,6 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
         self.end()
 
     def __len__(self):
-        print("len called")
         return len(self.base_dataloader) - self.skip_batches
 
     def __reduce__(self):

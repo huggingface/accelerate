@@ -686,7 +686,6 @@ class AcceleratorTester(AccelerateTestCase):
 
         # Test skip dataloader works as expected as well
         loaded_skip_dl = model_loaded._dataloaders[1]
-        print(model_loaded._dataloaders)
         assert isinstance(loaded_skip_dl, DataLoader)
         if dispatch_batches:
             assert isinstance(loaded_dl, DataLoaderDispatcher)
