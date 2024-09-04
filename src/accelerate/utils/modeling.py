@@ -32,6 +32,7 @@ from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
+    get_xpu_available_memory,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
@@ -900,15 +901,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
         elif is_xpu_available():
-            from intel_extension_for_pytorch.xpu import mem_get_info
-
             for i in range(torch.xpu.device_count()):
                 try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
-                    max_memory[i] = mem_get_info(i)[0]
+                    max_memory[i] = get_xpu_available_memory(i)
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
+
         else:
             for i in range(torch.cuda.device_count()):
                 try:

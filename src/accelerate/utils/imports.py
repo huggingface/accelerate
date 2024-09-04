@@ -425,6 +425,16 @@ def is_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
+def get_xpu_available_memory(i: int):
+    if is_ipex_available():
+        from intel_extension_for_pytorch.xpu import mem_get_info
+
+        return mem_get_info(i)[0]
+    else:
+        # this branch is for stock PyTorch 2.4
+        return torch.xpu.max_memory_allocated(i)
+
+
 def is_dvclive_available():
     return _is_package_available("dvclive")
 
