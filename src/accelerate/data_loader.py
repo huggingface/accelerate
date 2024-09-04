@@ -881,7 +881,19 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             return math.ceil(whole_length / self.state.num_processes)
 
     def __reduce__(self):
-        return super().__reduce__()
+        return (
+            DataLoaderDispatcher,
+            (
+                self.base_dataloader.dataset,
+                self.split_batches,
+                self.skip_batches,
+                self.use_stateful_dataloader,
+                self._drop_last,
+                self._non_blocking,
+                self.slice_fn,
+            ),
+            self.__dict__,
+        )
 
     @property
     def total_batch_size(self):
