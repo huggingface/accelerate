@@ -1500,7 +1500,7 @@ class FullyShardedDataParallelPlugin:
 
     def set_state_dict_type(self):
         """
-        Set the state dict config based on the `StateDictType.
+        Set the state dict config based on the `StateDictType`.
         """
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             FullOptimStateDictConfig,
@@ -1538,9 +1538,7 @@ class FullyShardedDataParallelPlugin:
 
         # First base off of `_no_split_modules`
         no_split_modules = getattr(model, "_no_split_modules", None)
-        default_transformer_cls_names_to_wrap = (
-            ",".join(model._no_split_modules) if no_split_modules is not None else ""
-        )
+        default_transformer_cls_names_to_wrap = list(no_split_modules) if no_split_modules is not None else []
         if self.auto_wrap_policy == transformer_auto_wrap_policy:
             if self.transformer_cls_names_to_wrap is None:
                 self.transformer_cls_names_to_wrap = default_transformer_cls_names_to_wrap
