@@ -49,6 +49,7 @@ from accelerate.utils.other import patch_environment
 set_seed(42)
 
 BERT_BASE_CASED = "bert-base-cased"
+LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 FP16 = "fp16"
 BF16 = "bf16"
 dtypes = [FP16, BF16]
@@ -136,15 +137,15 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert fsdp_plugin.state_dict_config.rank0_only
 
     def test_auto_wrap_policy(self):
-        model = AutoModel.from_pretrained(BERT_BASE_CASED)
+        model = AutoModel.from_pretrained(LLAMA_TESTING)
         for policy in FSDP_AUTO_WRAP_POLICY:
             env = self.fsdp_env.copy()
             env["FSDP_AUTO_WRAP_POLICY"] = policy
             transformer_cls_to_wrap = None
             min_num_params = None
             if policy == "TRANSFORMER_BASED_WRAP":
-                env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = "BertLayer"
-                transformer_cls_to_wrap = "BertLayer"
+                env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = "LlamaDecoderLayer"
+                transformer_cls_to_wrap = "LlamaDecoderLayer"
             elif policy == "SIZE_BASED_WRAP":
                 env["FSDP_MIN_NUM_PARAMS"] = "2000"
                 min_num_params = 2000
