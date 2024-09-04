@@ -572,7 +572,20 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.end()
 
     def __reduce__(self):
-        return super().__reduce__()
+        return (
+            DataLoaderShard,
+            (
+                self.base_dataloader.dataset,
+                self.device,
+                self.rng_types,
+                self.synchronized_generator,
+                self.skip_batches,
+                self.use_stateful_dataloader,
+                self._drop_last,
+                self._non_blocking,
+            ),
+            self.__dict__,
+        )
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like
