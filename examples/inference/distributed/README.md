@@ -23,3 +23,7 @@ Or:
 ```bash
 torchrun --nproc-per-node {NUM_GPUS} phi2.py
 ```
+
+## Notes
+
+You can also refer to [this gist](https://gist.github.com/sayakpaul/cfaebd221820d7b43fae638b4dfa01ba) that provides a more end-to-end example for image generation with advanced features like model offloading. You'd want to use `PartialState()` instead of `Accelerator()` there. 
