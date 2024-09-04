@@ -572,20 +572,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.end()
 
     def __reduce__(self):
-        return (
-            DataLoaderShard,
-            (
-                self.base_dataloader.dataset,
-                self.device,
-                self.rng_types,
-                self.synchronized_generator,
-                self.skip_batches,
-                self.use_stateful_dataloader,
-                self._drop_last,
-                self._non_blocking,
-            ),
-            self.__dict__,
-        )
+        return super().__reduce__()
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like
@@ -872,7 +859,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             self.dataset.set_epoch(epoch)
 
     def __len__(self):
-        whole_length = self.base_dataloader.__len__()
+        whole_length = len(self.base_dataloader)
         if self.split_batches:
             return whole_length
         elif self._drop_last:
@@ -881,19 +868,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             return math.ceil(whole_length / self.state.num_processes)
 
     def __reduce__(self):
-        return (
-            DataLoaderDispatcher,
-            (
-                self.base_dataloader.dataset,
-                self.split_batches,
-                self.skip_batches,
-                self.use_stateful_dataloader,
-                self._drop_last,
-                self._non_blocking,
-                self.slice_fn,
-            ),
-            self.__dict__,
-        )
+        return super().__reduce__()
 
     @property
     def total_batch_size(self):

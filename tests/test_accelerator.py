@@ -664,6 +664,11 @@ class AcceleratorTester(AccelerateTestCase):
         accelerator = Accelerator(dataloader_config=dataloader_config)
 
         original_dl, prepared_skip_dl = accelerator.prepare(dl, skip_dl)
+        if dispatch_batches:
+            assert isinstance(original_dl, DataLoaderDispatcher)
+        else:
+            assert isinstance(original_dl, DataLoaderShard)
+
         prepared_model_dumps = pickle.dumps(accelerator)
 
         model_loaded = pickle.loads(prepared_model_dumps)
