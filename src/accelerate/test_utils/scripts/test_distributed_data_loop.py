@@ -253,7 +253,8 @@ def test_pickle_accelerator():
     _ = accelerator.prepare(data_loader)
     pickled_accelerator = pickle.dumps(accelerator)
     unpickled_accelerator = pickle.loads(pickled_accelerator)
-    assert accelerator.state == unpickled_accelerator.state
+    # TODO: Maybe this should be implemented as __eq__ for AcceleratorState?
+    assert accelerator.state.__dict__ == unpickled_accelerator.state.__dict__
 
 
 def test_data_loader(data_loader, accelerator):
