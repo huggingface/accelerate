@@ -908,7 +908,6 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
-
         else:
             for i in range(torch.cuda.device_count()):
                 try:
