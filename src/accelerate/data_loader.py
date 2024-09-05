@@ -494,7 +494,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
-            The dataset to use to build this datalaoder.
+            The dataset to use to build this dataloader.
         device (`torch.device`, *optional*):
             If passed, the device to put all batches on.
         rng_types (list of `str` or [`~utils.RNGType`]):
@@ -1191,7 +1191,7 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
 
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
-            The dataset to use to build this datalaoder.
+            The dataset to use to build this dataloader.
         skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
         kwargs:
