@@ -425,22 +425,6 @@ def is_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
-def get_xpu_available_memory(device_index: int):
-    if is_ipex_available():
-        try:
-            from intel_extension_for_pytorch.xpu import mem_get_info
-
-            return mem_get_info(device_index)[0]
-        except Exception:
-            warnings.warn(
-                "The XPU `mem_get_info` API is available in IPEX version >=2.5. The current returned availabel memory is incorrect. Pls consider upgrading your IPEX version."
-            )
-            return torch.xpu.max_memory_allocated(device_index)
-    else:
-        # this branch is for stock PyTorch 2.4
-        return torch.xpu.max_memory_allocated(device_index)
-
-
 def is_dvclive_available():
     return _is_package_available("dvclive")
 

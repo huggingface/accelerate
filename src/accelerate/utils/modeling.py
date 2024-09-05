@@ -32,7 +32,6 @@ from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
-    get_xpu_available_memory,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
@@ -41,7 +40,7 @@ from .imports import (
     is_torch_xla_available,
     is_xpu_available,
 )
-from .memory import clear_device_cache
+from .memory import clear_device_cache, get_xpu_available_memory
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import compare_versions, is_torch_version
