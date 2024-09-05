@@ -136,6 +136,12 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert fsdp_plugin.state_dict_config.offload_to_cpu
                 assert fsdp_plugin.state_dict_config.rank0_only
 
+        # We can also override the state_dict_type,
+        # typical case: user trains with sharded, but final save is with full
+        fsdp_plugin = FullyShardedDataParallelPlugin(state_dict_type="FULL_STATE_DICT")
+        fsdp_plugin.set_state_dict_type("SHARDED_STATE_DICT")
+        assert fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT
+
     def test_auto_wrap_policy(self):
         for model_name in [LLAMA_TESTING, BERT_BASE_CASED]:
             model = AutoModel.from_pretrained(model_name)

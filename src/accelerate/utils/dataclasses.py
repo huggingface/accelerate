@@ -1498,7 +1498,7 @@ class FullyShardedDataParallelPlugin:
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
-    def set_state_dict_type(self):
+    def set_state_dict_type(self, state_dict_type=None):
         """
         Set the state dict config based on the `StateDictType`.
         """
@@ -1509,6 +1509,11 @@ class FullyShardedDataParallelPlugin:
             ShardedStateDictConfig,
             StateDictType,
         )
+
+        # Override the state_dict_type if provided, typical use case:
+        # user trains with sharded, but final save is with full
+        if state_dict_type is not None:
+            self.state_dict_type = state_dict_type
 
         if self.state_dict_type is None:
             self.state_dict_type = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
