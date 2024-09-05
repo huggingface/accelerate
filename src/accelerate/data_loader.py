@@ -416,25 +416,6 @@ class DataLoaderAdapter:
         else:
             self.base_dataloader = DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
 
-        # Dynamically mixin the parent class. See https://stackoverflow.com/a/31075641
-        # In C++ terms, this is analogous to creating `DataLoaderAdapter<T> : T`, where T is a DataLoader or
-        # StatefulDataLoader
-        #
-        # The same functionality could be achieved by directly creating the required subclasses for both {DataLoader,
-        # StatefulDataLoader}, however that could lead to much messier code, with duplicated classes and conditional
-        # dispatching scattered throughout various functions and files.
-        #
-        # This code is incredibly awkward but it's the only way to make `isinstance(obj, StatefulDataLoader)` work
-        # transparently.
-        #
-        # A more robust solution is for DataLoaderAdapter to not inherit from DataLoader (compose rather than inherit),
-        # but this would not be backwards compatible with existing code which assumes
-        # DataLoaderShard/DataLoaderDispatcher are DataLoaders.
-        base_cls = self.__class__
-        base_cls_name = self.__class__.__name__
-        parent_cls_name = self.base_dataloader.__class__
-        self.__class__ = type(base_cls_name, (base_cls, parent_cls_name), {})
-
         if hasattr(self.base_dataloader, "state_dict"):
             self.dl_state_dict = self.base_dataloader.state_dict()
 
@@ -450,6 +431,18 @@ class DataLoaderAdapter:
 
     def load_state_dict(self, state_dict):
         self.base_dataloader.load_state_dict(state_dict)
+
+    @property
+    def __class__(self):
+        """
+        In order to maintain backwards compatability with other code, we need to ensure `isinstance(obj, DataLoader)`
+        returs true. This is because some downstream code assumes that the `DataLoader` is the base class of the
+        object.
+        """
+        return self.base_dataloader.__class__
+
+    def __len__(self):
+        return len(self.base_dataloader)
 
     def adjust_state_dict_for_prefetch(self):
         """
@@ -579,6 +572,15 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
         self.iteration += 1
         self.end()
+
+    def __reduce__(self):
+        """
+        Define the `__reduce__` method to ensure a `DataLoaderShard` can be pickled and unpickled. This needs to be
+        explicitly defined since default pickling behavior is broken by `DataLoaderAdapter` messing with its
+        `__class__` member.
+        """
+        args = super().__reduce__()
+        return (DataLoaderShard, *args[1:])
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like
@@ -865,13 +867,22 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             self.dataset.set_epoch(epoch)
 
     def __len__(self):
-        whole_length = super().__len__()
+        whole_length = len(self.base_dataloader)
         if self.split_batches:
             return whole_length
         elif self._drop_last:
             return whole_length // self.state.num_processes
         else:
             return math.ceil(whole_length / self.state.num_processes)
+
+    def __reduce__(self):
+        """
+        Define the `__reduce__` method to ensure a `DataLoaderDispatcher` can be pickled and unpickled. This needs to
+        be explicitly defined since default pickling behavior is broken by `DataLoaderAdapter` messing with its
+        `__class__` member.
+        """
+        args = super().__reduce__()
+        return (DataLoaderDispatcher, *args[1:])
 
     @property
     def total_batch_size(self):
@@ -1210,6 +1221,18 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
                 self._update_state_dict()
                 yield batch
         self.end()
+
+    def __len__(self):
+        return len(self.base_dataloader) - self.skip_batches
+
+    def __reduce__(self):
+        """
+        Define the `__reduce__` method to ensure a `SkipDataLoader` can be pickled and unpickled. This needs to be
+        explicitly defined since default pickling behavior is broken by `DataLoaderAdapter` messing with its
+        `__class__` member.
+        """
+        args = super().__reduce__()
+        return (SkipDataLoader, *args[1:])
 
 
 def skip_first_batches(dataloader, num_batches=0):
