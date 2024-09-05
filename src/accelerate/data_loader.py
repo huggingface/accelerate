@@ -969,7 +969,7 @@ def prepare_data_loader(
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
         dispatch_batches (`bool`, *optional*):
-            If set to `True`, the datalaoder prepared is only iterated through on the main process and then the batches
+            If set to `True`, the dataloader prepared is only iterated through on the main process and then the batches
             are split and broadcast to each process. Will default to `True` when the underlying dataset is an
             `IterableDataset`, `False` otherwise.
         even_batches (`bool`, *optional*, defaults to `True`):
