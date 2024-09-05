@@ -27,6 +27,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
+from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, skip_first_batches
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
@@ -646,6 +647,52 @@ class AcceleratorTester(AccelerateTestCase):
         # check that pickle roundtrip works
         model_loaded = pickle.loads(pickle.dumps(model))
         model_loaded(inputs)
+
+    @parameterized.expand([True, False])
+    def test_can_pickle_dataloader(self, dispatch_batches):
+        """
+        Test that pickling a prepared dataloader works.
+        """
+        data = torch.arange(10).to(torch_device)
+        ds = torch.utils.data.TensorDataset(data)
+        dl = torch.utils.data.DataLoader(ds)
+        skip_dl = skip_first_batches(dl, 2)
+
+        # Currently, StatefulDataLoader doesn't seem to support pickling, so we aren't testing that functionality
+        # TODO: Add support for pickling StatefulDataLoader
+        dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=False)
+        accelerator = Accelerator(dataloader_config=dataloader_config)
+
+        original_dl, _ = accelerator.prepare(dl, skip_dl)
+        if dispatch_batches:
+            assert isinstance(original_dl, DataLoaderDispatcher)
+        else:
+            assert isinstance(original_dl, DataLoaderShard)
+
+        prepared_model_dumps = pickle.dumps(accelerator)
+
+        model_loaded = pickle.loads(prepared_model_dumps)
+        assert len(model_loaded._dataloaders) == 2
+
+        # Assert equality of recovered and original dataloader
+        loaded_dl = model_loaded._dataloaders[0]
+        assert isinstance(loaded_dl, DataLoader)
+        if dispatch_batches:
+            assert isinstance(loaded_dl, DataLoaderDispatcher)
+        else:
+            assert isinstance(loaded_dl, DataLoaderShard)
+        assert len(loaded_dl) == len(original_dl)
+        assert [i for i in loaded_dl] == [i for i in original_dl]
+
+        # Test skip dataloader works as expected as well
+        loaded_skip_dl = model_loaded._dataloaders[1]
+        assert isinstance(loaded_skip_dl, DataLoader)
+        if dispatch_batches:
+            assert isinstance(loaded_dl, DataLoaderDispatcher)
+        else:
+            assert isinstance(loaded_dl, DataLoaderShard)
+        assert len(loaded_skip_dl) == len(original_dl) - 2
+        assert [i for i in loaded_skip_dl] == [i for i in original_dl][2:]
 
     # Ideally would be a parameterized test which works with either stateful or non-stateful dataloaders, but dependencies are a bit awkward.
     @require_torchdata_stateful_dataloader
