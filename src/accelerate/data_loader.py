@@ -487,7 +487,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
-            The dataset to use to build this datalaoder.
+            The dataset to use to build this dataloader.
         device (`torch.device`, *optional*):
             If passed, the device to put all batches on.
         rng_types (list of `str` or [`~utils.RNGType`]):
@@ -980,7 +980,7 @@ def prepare_data_loader(
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
         dispatch_batches (`bool`, *optional*):
-            If set to `True`, the datalaoder prepared is only iterated through on the main process and then the batches
+            If set to `True`, the dataloader prepared is only iterated through on the main process and then the batches
             are split and broadcast to each process. Will default to `True` when the underlying dataset is an
             `IterableDataset`, `False` otherwise.
         even_batches (`bool`, *optional*, defaults to `True`):
@@ -1202,7 +1202,7 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
 
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
-            The dataset to use to build this datalaoder.
+            The dataset to use to build this dataloader.
         skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
         kwargs:
