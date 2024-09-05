@@ -435,8 +435,9 @@ class DataLoaderAdapter:
     @property
     def __class__(self):
         """
-        In order to maintain backwards compatability with other code, we need to ensure `isinstance(obj, DataLoader)` returs true.
-        This is because some downstream code assumes that the `DataLoader` is the base class of the object.
+        In order to maintain backwards compatability with other code, we need to ensure `isinstance(obj, DataLoader)`
+        returs true. This is because some downstream code assumes that the `DataLoader` is the base class of the
+        object.
         """
         return self.base_dataloader.__class__
 
@@ -478,6 +479,7 @@ class DataLoaderAdapter:
             self.adjust_state_dict_for_prefetch()
             # Then tag if we are at the end of the dataloader
             self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
+
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     """
@@ -572,9 +574,13 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.end()
 
     def __reduce__(self):
+        """
+        Define the `__reduce__` method to ensure a `DataLoaderShard` can be pickled and unpickled. This needs to be
+        explicitly defined since default pickling behavior is broken by `DataLoaderAdapter` messing with its
+        `__class__` member.
+        """
         args = super().__reduce__()
         return (DataLoaderShard, *args[1:])
-
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like
@@ -870,6 +876,11 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             return math.ceil(whole_length / self.state.num_processes)
 
     def __reduce__(self):
+        """
+        Define the `__reduce__` method to ensure a `DataLoaderDispatcher` can be pickled and unpickled. This needs to
+        be explicitly defined since default pickling behavior is broken by `DataLoaderAdapter` messing with its
+        `__class__` member.
+        """
         args = super().__reduce__()
         return (DataLoaderDispatcher, *args[1:])
 
@@ -1215,9 +1226,13 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
         return len(self.base_dataloader) - self.skip_batches
 
     def __reduce__(self):
+        """
+        Define the `__reduce__` method to ensure a `SkipDataLoader` can be pickled and unpickled. This needs to be
+        explicitly defined since default pickling behavior is broken by `DataLoaderAdapter` messing with its
+        `__class__` member.
+        """
         args = super().__reduce__()
         return (SkipDataLoader, *args[1:])
-
 
 
 def skip_first_batches(dataloader, num_batches=0):

@@ -247,6 +247,7 @@ def test_join_raises_warning_for_iterable_when_overriding_even_batches():
         assert issubclass(w[-1].category, UserWarning)
         assert "only supported for map-style datasets" in str(w[-1].message)
 
+
 def test_pickle_accelerator():
     accelerator = create_accelerator()
     data_loader = create_dataloader(accelerator, dataset_size=32, batch_size=4)
@@ -348,6 +349,7 @@ def test_stateful_dataloader_save_state(accelerator):
                     assert torch.equal(v1, v2), f"Batch {b1} and {b2} are not equal"
     finally:
         accelerator.dataloader_config = old_dataloader_config
+
 
 def main():
     accelerator = create_accelerator()

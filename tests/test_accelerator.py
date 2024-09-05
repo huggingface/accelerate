@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
-from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, SkipDataLoader, skip_first_batches
+from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, skip_first_batches
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
@@ -663,7 +663,7 @@ class AcceleratorTester(AccelerateTestCase):
         dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, use_stateful_dataloader=False)
         accelerator = Accelerator(dataloader_config=dataloader_config)
 
-        original_dl, prepared_skip_dl = accelerator.prepare(dl, skip_dl)
+        original_dl, _ = accelerator.prepare(dl, skip_dl)
         if dispatch_batches:
             assert isinstance(original_dl, DataLoaderDispatcher)
         else:
