@@ -436,7 +436,7 @@ def attach_execution_device_hook(
         return
 
     for child in module.children():
-        attach_execution_device_hook(child, execution_device, tied_params_map=tied_params_map)
+        attach_execution_device_hook(child, execution_device, skip_keys=skip_keys, tied_params_map=tied_params_map)
 
 
 def attach_align_device_hook(
@@ -614,7 +614,7 @@ def attach_align_device_hook_on_blocks(
             tied_params_map=tied_params_map,
         )
         add_hook_to_module(module, hook)
-        attach_execution_device_hook(module, execution_device[module_name], tied_params_map=tied_params_map)
+        attach_execution_device_hook(module, execution_device[module_name], skip_keys=skip_keys, tied_params_map=tied_params_map)
     elif module_name in execution_device and module_name in offload:
         attach_align_device_hook(
             module,
