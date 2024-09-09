@@ -284,12 +284,10 @@ class Accelerator:
             deepspeed_plugin = (
                 DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
             )
-        else:
-            assert isinstance(
-                deepspeed_plugin, DeepSpeedPlugin
-            ), "`deepspeed_plugin` must be an `accelerate.utils.DeepSpeedPlugin` object."
+        if deepspeed_plugin is not None:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
-        if deepspeed_plugin:
+            if not isinstance(deepspeed_plugin, (tuple, list)):
+                deepspeed_plugin = [deepspeed_plugin]
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
             if is_mlu_available():
@@ -304,8 +302,10 @@ class Accelerator:
             mixed_precision = (
                 os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
             )
-            deepspeed_plugin.set_mixed_precision(mixed_precision)
-            deepspeed_plugin.set_deepspeed_weakref()
+            # The first plugin is always the active one
+            for plugin in deepspeed_plugin:
+                plugin.set_mixed_precision(mixed_precision)
+            deepspeed_plugin[0].enable()
 
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
@@ -531,6 +531,10 @@ class Accelerator:
         self.flag_tensor = None
 
         check_os_kernel()
+
+    @property
+    def deepspeed_plugin(self):
+        return self.state.deepspeed_plugin
 
     @property
     def use_distributed(self):
@@ -1676,20 +1680,19 @@ class Accelerator:
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
 
-        model = None
-        optimizer = None
-        scheduler = None
+        models = []
+        optimizers = []
+        schedulers = []
         for obj in result:
             if isinstance(obj, torch.nn.Module):
-                model = obj
+                models.append(obj)
             elif isinstance(obj, (torch.optim.Optimizer, DummyOptim)):
-                optimizer = obj
+                optimizers.append(obj)
             elif (isinstance(obj, (LRScheduler, DummyScheduler))) or (
                 type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
             ):
-                scheduler = obj
-
-        if optimizer is not None:
+                schedulers.append(obj)
+        for optimizer in optimizers:
             if "optimizer" in deepspeed_plugin.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
                 raise ValueError(
                     "You cannot specify an optimizer in the config file and in the code at the same time. "
@@ -1704,7 +1707,7 @@ class Accelerator:
             if isinstance(optimizer, (torch.optim.Optimizer)):
                 deepspeed_plugin.deepspeed_config["zero_allow_untested_optimizer"] = True
 
-        if scheduler is not None:
+        for scheduler in schedulers:
             if "scheduler" in deepspeed_plugin.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
                 raise ValueError(
                     "You cannot specify a scheduler in the config file and in the code at the same time. "
@@ -1721,14 +1724,15 @@ class Accelerator:
                     "pass in the `lr_scheduler_callable` parameter when using `accelerate.utils.DummyScheduler`."
                 )
 
-        if optimizer is not None and scheduler is not None:
-            if isinstance(optimizer, (DummyOptim)) and not isinstance(scheduler, (DummyScheduler)):
-                raise ValueError(
+        if len(optimizers) > 0 and len(schedulers) > 0:
+            for optimizer, scheduler in zip(optimizers, schedulers):
+                if isinstance(optimizer, (DummyOptim)) and not isinstance(scheduler, (DummyScheduler)):
+                    raise ValueError(
                     "You can only specify `accelerate.utils.DummyScheduler` in the code when using "
                     "`accelerate.utils.DummyOptim`."
                 )
 
-        if model is not None:
+        for model in models:
             # If we are using FP8, we need to apply the autowrap now
             if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
                 model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
@@ -1827,13 +1831,11 @@ class Accelerator:
                     scheduler = DeepSpeedSchedulerWrapper(lr_scheduler, optimizer)
 
             for i in range(len(result)):
-                if isinstance(result[i], torch.nn.Module):
+                if result[i] == model:
                     result[i] = engine
-                elif isinstance(result[i], (torch.optim.Optimizer, DummyOptim)):
+                elif result[i] == optimizer:
                     result[i] = optimizer
-                elif (isinstance(result[i], (LRScheduler, DummyScheduler))) or (
-                    type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
-                ):
+                elif result[i] == scheduler:
                     result[i] = scheduler
             # pointing for deepspeed_engine_wrapped.backward()
             self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
@@ -1842,10 +1844,6 @@ class Accelerator:
                 self._optimizers.append(optimizer)
             if scheduler is not None:
                 self._schedulers.append(scheduler)
-            if len(self._models) > 1:
-                raise AssertionError(
-                    "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
-                )
         return tuple(result)
 
     def _prepare_megatron_lm(self, *args):

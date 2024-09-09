@@ -980,6 +980,13 @@ class DeepSpeedPlugin:
             " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
         },
     )
+    name_to_model: dict = field(
+        default=None,
+        metadata={
+            "help": "A dictionary that maps model instances to their reference names. This is used during multiple-model support. Model names can then be referenced later such as during `accelerator.backward()`. "
+            "This is an experimental API and may change in the future."
+        }
+    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -1083,6 +1090,7 @@ class DeepSpeedPlugin:
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
+        self.enabled = False
 
     def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
         mismatches = [] if mismatches is None else mismatches
@@ -1166,14 +1174,13 @@ class DeepSpeedPlugin:
 
     def set_deepspeed_weakref(self):
         from .imports import is_transformers_available
-
+        ds_config = copy.deepcopy(self.deepspeed_config)
         if self.zero3_init_flag:
             if not is_transformers_available():
                 raise Exception(
                     "When `zero3_init_flag` is set, it requires Transformers to be installed. "
                     "Please run `pip install transformers`."
                 )
-            ds_config = copy.deepcopy(self.deepspeed_config)
             if "gradient_accumulation_steps" not in ds_config or ds_config["gradient_accumulation_steps"] == "auto":
                 ds_config["gradient_accumulation_steps"] = 1
             if (
@@ -1184,12 +1191,12 @@ class DeepSpeedPlugin:
             if ds_config.get("train_batch_size", None) == "auto":
                 del ds_config["train_batch_size"]
 
-            if compare_versions("transformers", "<", "4.33"):
-                from transformers.deepspeed import HfDeepSpeedConfig
-            else:
-                from transformers.integrations import HfDeepSpeedConfig
+        if compare_versions("transformers", "<", "4.33"):
+            from transformers.deepspeed import HfDeepSpeedConfig
+        else:
+            from transformers.integrations import HfDeepSpeedConfig
 
-            self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
+        self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
     def is_zero3_init_enabled(self):
         return self.zero3_init_flag
@@ -1254,6 +1261,21 @@ class DeepSpeedPlugin:
                 else:
                     transformer_moe_cls.append(transformer_cls)
             set_z3_leaf_modules(model, transformer_moe_cls)  # z3_leaf
+
+    def enable(self):
+        """
+        Sets the HfDeepSpeedWeakref to use the current deepspeed plugin configuration
+        """
+        self.set_deepspeed_weakref()
+        from accelerate.state import AcceleratorState
+        if AcceleratorState._shared_state != {}:
+            for plugin in AcceleratorState().deepspeed_plugin:
+                if plugin is not self:
+                    plugin.disable()
+        self.enabled = True
+
+    def disable(self):
+        self.enabled = False
 
 
 @dataclass

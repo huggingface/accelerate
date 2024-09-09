@@ -51,6 +51,7 @@ from .utils import (
 from .utils.dataclasses import SageMakerDistributedType
 
 
+
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -901,6 +902,7 @@ class AcceleratorState:
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
                 self.deepspeed_plugin = deepspeed_plugin
+                self.distributed_type = DistributedType.DEEPSPEED
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
@@ -946,7 +948,9 @@ class AcceleratorState:
     def __repr__(self):
         repr = PartialState().__repr__() + f"\nMixed precision type: {self.mixed_precision}\n"
         if self.distributed_type == DistributedType.DEEPSPEED:
-            repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
+            from accelerate.utils.deepspeed import get_active_deepspeed_plugin
+            active_plugin = get_active_deepspeed_plugin(self)
+            repr += f"ds_config: {active_plugin.deepspeed_config}\n"
         return repr
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
@@ -975,7 +979,9 @@ class AcceleratorState:
     @property
     def mixed_precision(self):
         if self.distributed_type == DistributedType.DEEPSPEED:
-            config = self.deepspeed_plugin.deepspeed_config
+            from accelerate.utils.deepspeed import get_active_deepspeed_plugin
+            active_plugin = get_active_deepspeed_plugin(self)
+            config = active_plugin.deepspeed_config
             if config.get("fp16", {}).get("enabled", False):
                 mixed_precision = "fp16"
             elif config.get("bf16", {}).get("enabled", False):
@@ -1095,17 +1101,17 @@ class AcceleratorState:
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
 
-    def __getattr__(self, name: str):
-        # By this point we know that no attributes of `self` contain `name`,
-        # so we just modify the error message
-        if name in self._known_attrs:
-            raise AttributeError(
-                f"`AcceleratorState` object has no attribute `{name}`. "
-                "This happens if `AcceleratorState._reset_state()` was called and "
-                "an `Accelerator` or `PartialState` was not reinitialized."
-            )
-        # Raise a typical AttributeError
-        raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
+    # def __getattr__(self, name: str):
+    #     # By this point we know that no attributes of `self` contain `name`,
+    #     # so we just modify the error message
+    #     if name in self._known_attrs:
+    #         raise AttributeError(
+    #             f"`AcceleratorState` object has no attribute `{name}`. "
+    #             "This happens if `AcceleratorState._reset_state()` was called and "
+    #             "an `Accelerator` or `PartialState` was not reinitialized."
+    #         )
+    #     # Raise a typical AttributeError
+    #     raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
 
 
 class GradientState:
