@@ -172,6 +172,6 @@ def get_xpu_available_memory(device_index: int):
 
             return mem_get_info(device_index)[0]
     warnings.warn(
-            "The XPU `mem_get_info` API is available in IPEX version >=2.5. The current returned available memory is incorrect. Please consider upgrading your IPEX version."
-        )
+        "The XPU `mem_get_info` API is available in IPEX version >=2.5. The current returned available memory is incorrect. Please consider upgrading your IPEX version."
+    )
     return torch.xpu.max_memory_allocated(device_index)
