@@ -16,21 +16,24 @@
 A collection of utilities for ensuring that training can always occur. Heavily influenced by the
 [toma](https://github.com/BlackHC/toma) library.
 """
-
 import functools
 import gc
+import importlib
 import inspect
+import warnings
 
 import torch
 
 from .imports import (
     is_cuda_available,
+    is_ipex_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
     is_xpu_available,
 )
+from .versions import compare_versions
 
 
 def clear_device_cache(garbage_collection=False):
@@ -159,3 +162,16 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
                     raise
 
     return decorator
+
+
+def get_xpu_available_memory(device_index: int):
+    if is_ipex_available():
+        ipex_version = importlib.metadata.version("intel_extension_for_pytorch")
+        if compare_versions(ipex_version, ">=", "2.5"):
+            from intel_extension_for_pytorch.xpu import mem_get_info
+
+            return mem_get_info(device_index)[0]
+    warnings.warn(
+        "The XPU `mem_get_info` API is available in IPEX version >=2.5. The current returned available memory is incorrect. Please consider upgrading your IPEX version."
+    )
+    return torch.xpu.max_memory_allocated(device_index)
