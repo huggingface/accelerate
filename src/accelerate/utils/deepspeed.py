@@ -273,38 +273,3 @@ class DummyScheduler:
         self.warmup_num_steps = warmup_num_steps
         self.lr_scheduler_callable = lr_scheduler_callable
         self.kwargs = kwargs
-
-
-class DeepSpeedPluginContainer:
-    def __init__(self, plugins):
-        self.plugins = plugins
-        self.active_plugin = plugins[0] if plugins else None
-
-    def enable(self, index_or_plugin):
-        if isinstance(index_or_plugin, int):
-            self.active_plugin = self.plugins[index_or_plugin]
-        else:
-            if index_or_plugin in self.plugins:
-                self.active_plugin = index_or_plugin
-            else:
-                raise ValueError("Plugin not found in container")
-        for plugin in self.plugins:
-            if plugin != self.active_plugin:
-                plugin.disable()
-            else:
-                plugin.enable()
-
-    def __getattr__(self, name):
-        return getattr(self.active_plugin, name)
-
-    def __setattr__(self, name, value):
-        if name in ["plugins", "active_plugin"]:
-            super().__setattr__(name, value)
-        else:
-            setattr(self.active_plugin, name, value)
-
-    def __getitem__(self, index):
-        return self.plugins[index]
-
-    def __setitem__(self, index, value):
-        self.plugins[index] = value

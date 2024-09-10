@@ -184,7 +184,6 @@ if is_deepspeed_available():
     from .deepspeed import (
         DeepSpeedEngineWrapper,
         DeepSpeedOptimizerWrapper,
-        DeepSpeedPluginContainer,
         DeepSpeedSchedulerWrapper,
         DummyOptim,
         DummyScheduler,
