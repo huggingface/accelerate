@@ -21,6 +21,7 @@ from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.test_utils.testing import AccelerateTestCase, require_deepspeed, require_non_cpu
+from accelerate.utils.deepspeed import get_active_deepspeed_plugin
 
 
 GPT2_TINY = "sshleifer/tiny-gpt2"
@@ -77,3 +78,15 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         ds_zero2.enable()
         assert not ds_zero3.enabled
         assert ds_zero2.enabled
+
+    def test_get_active_plugin(self):
+        ds_zero2 = DeepSpeedPlugin(
+            hf_ds_config=self.config_zero2,
+        )
+        ds_zero3 = DeepSpeedPlugin(
+            hf_ds_config=self.config_zero3,
+        )
+        accelerator = Accelerator(deepspeed_plugin=[ds_zero2, ds_zero3])
+        assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
+        ds_zero3.enable()
+        assert get_active_deepspeed_plugin(accelerator.state) == ds_zero3

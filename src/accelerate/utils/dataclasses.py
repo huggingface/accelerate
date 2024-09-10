@@ -1293,7 +1293,7 @@ class DeepSpeedPlugin:
         from accelerate.state import AcceleratorState
 
         if AcceleratorState._shared_state != {}:
-            for plugin in AcceleratorState().deepspeed_plugin:
+            for plugin in AcceleratorState().deepspeed_plugins:
                 if plugin is not self:
                     plugin.disable()
         self.enabled = True
