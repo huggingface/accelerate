@@ -1712,13 +1712,14 @@ class Accelerator:
         )
 
         config_kwargs = {
-            "train_micro_batch_size_per_gpu": batch_size_per_device,
-            "train_batch_size": batch_size_per_device
-            * deepspeed_plugin.get_value("gradient_accumulation_steps")
-            * self.num_processes,
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
+        if batch_size_per_device is not None:
+            config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
+            config_kwargs["train_batch_size"] = (
+                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes
+            )
 
         model = None
         optimizer = None
@@ -1893,10 +1894,6 @@ class Accelerator:
                 self._optimizers.append(optimizer)
             if scheduler is not None:
                 self._schedulers.append(scheduler)
-            if len(self._models) > 1:
-                raise AssertionError(
-                    "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
-                )
         return tuple(result)
 
     def _prepare_megatron_lm(self, *args):

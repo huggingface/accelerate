@@ -17,11 +17,13 @@ import json
 from functools import partial
 from pathlib import Path
 
+import torch
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.test_utils.testing import AccelerateTestCase, require_deepspeed, require_non_cpu
-from accelerate.utils.deepspeed import get_active_deepspeed_plugin
+from accelerate.test_utils.training import RegressionDataset
+from accelerate.utils.deepspeed import DummyOptim, DummyScheduler, get_active_deepspeed_plugin
 
 
 GPT2_TINY = "sshleifer/tiny-gpt2"
@@ -48,7 +50,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
         self.ds_config_file = dict(
             zero2=f"{self.test_file_dir_str}/ds_config_zero2.json",
-            zero3=f"{self.test_file_dir_str}/ds_config_zero3.json",
+            zero3=f"{self.test_file_dir_str}/ds_config_zero3_model_only.json",
         )
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
@@ -59,13 +61,18 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
         self.model_init = partial(AutoModelForCausalLM.from_pretrained, GPT2_TINY)
 
+    def get_ds_plugins(self):
+        return [
+            DeepSpeedPlugin(
+                hf_ds_config=self.config_zero2,
+            ),
+            DeepSpeedPlugin(
+                hf_ds_config=self.config_zero3,
+            ),
+        ]
+
     def test_enable_disable(self):
-        ds_zero2 = DeepSpeedPlugin(
-            hf_ds_config=self.config_zero2,
-        )
-        ds_zero3 = DeepSpeedPlugin(
-            hf_ds_config=self.config_zero3,
-        )
+        ds_zero2, ds_zero3 = self.get_ds_plugins()
         _ = Accelerator(
             deepspeed_plugin=[ds_zero2, ds_zero3],
         )
@@ -90,3 +97,25 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
         ds_zero3.enable()
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero3
+
+    def test_prepare_multiple_models(self):
+        ds_zero2, ds_zero3 = self.get_ds_plugins()
+        accelerator = Accelerator(deepspeed_plugin=[ds_zero2, ds_zero3])
+        # Using Zero-2 first
+        model1 = self.model_init()
+        optimizer = DummyOptim(model1.parameters())
+        scheduler = DummyScheduler(optimizer)
+
+        dataset = RegressionDataset()
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=1)
+        model1, optimizer, scheduler, dataloader = accelerator.prepare(model1, optimizer, scheduler, dataloader)
+        ds_zero3.enable()
+        model2 = self.model_init()
+        with self.assertLogs(level="WARNING") as captured:
+            model2 = accelerator.prepare(model2)
+            self.assertIn(
+                "A wrapped DeepSpeed engine reference is currently tied for this `Accelerator()` instance.",
+                captured.output[0],
+            )
+
+        assert accelerator.deepspeed_engine_wrapped.engine is model1
