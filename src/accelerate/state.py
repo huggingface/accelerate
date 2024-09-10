@@ -1110,6 +1110,8 @@ class AcceleratorState:
         If using multiple plugins, the first one will be the active one by default. Manually call `plugin.enable()` to
         activate a different plugin.
         """
+        if self.distributed_type != DistributedType.DEEPSPEED:
+            return None
         from accelerate.utils.deepspeed import get_active_deepspeed_plugin
 
         return get_active_deepspeed_plugin(self)
