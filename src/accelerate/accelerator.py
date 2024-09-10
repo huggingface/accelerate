@@ -180,9 +180,10 @@ class Accelerator:
             the execution on one process only.
         dataloader_config (`DataLoaderConfiguration`, *optional*):
             A configuration for how the dataloaders should be handled in distributed scenarios.
-        deepspeed_plugin ([`~utils.DeepSpeedPlugin`], *optional*):
+        deepspeed_plugin ([`~utils.DeepSpeedPlugin`] or list of [`~utils.DeepSpeedPlugin`], *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
-            directly using *accelerate config*
+            directly using *accelerate config*. If using multiple plugins, the first one will be the active one by
+            default. Manually call `plugin.enable()` to activate a different plugin.
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
@@ -285,6 +286,15 @@ class Accelerator:
             deepspeed_plugin = (
                 DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
             )
+        else:
+            if isinstance(deepspeed_plugin, (tuple, list)):
+                for plugin in deepspeed_plugin:
+                    if not isinstance(plugin, DeepSpeedPlugin):
+                        raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
+            else:
+                if not isinstance(deepspeed_plugin, DeepSpeedPlugin):
+                    raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
+
         if deepspeed_plugin is not None:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
             if not isinstance(deepspeed_plugin, (tuple, list)):
