@@ -1396,19 +1396,15 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
-            # NOTE: MS-AMP is special, and adds a `__func__` already to `model.forward`
-            # When enabled, strictly use `model.forward`
-            if self.fp8_backend == "MSAMP":
+            # NOTE: MS-AMP adds `__func__` already to `model.forward`, so we should always use `model.forward`
+            if self.fp8_backend == "MSAMP" or not hasattr(model.forward, "__func__"):
                 model_forward_func = model.forward
                 model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
             else:
                 model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
                 new_forward = autocast_context(model_forward_func)
-                if hasattr(model.forward, "__func__"):
-                    model.forward = MethodType(new_forward, model)
-                    model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
-                else:
-                    model.forward = convert_outputs_to_fp32(model.forward)
+                model.forward = MethodType(new_forward, model)
+                model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
 
         # We prepare TE after, allowing for bf16 autocast to happen first
         if self.fp8_backend == "TE" and not self.delayed_fp8_autocast:
@@ -2144,7 +2140,8 @@ class Accelerator:
             return optimizer
         if device_placement is None:
             device_placement = self.device_placement
-        # NOTE: Special case with MS-AMP we do *not* pass in the scaler, optimizer handles it for us
+        # NOTE: Special case with MS-AMP we do *not* pass in the scaler explicitly to the `AcceleratedOptimizer`,
+        # Their optimizer handles it for us.
         scaler = None if self.fp8_backend == "MSAMP" else self.scaler
         optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=scaler)
         self._optimizers.append(optimizer)
