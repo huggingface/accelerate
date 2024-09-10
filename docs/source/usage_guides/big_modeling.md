@@ -72,7 +72,7 @@ Each time an input is passed through a layer, it is sent from the CPU to the GPU
 
 Multiple GPUs, or "model parallelism", can be utilized but only one GPU will be active at any given moment. This forces the GPU to wait for the previous GPU to send it the output. You should launch your script normally with Python instead of other tools like torchrun and accelerate launch.
 
-<Youtube id="MWCSGj9jEAo">
+<Youtube id="MWCSGj9jEAo"/>
 
 Take a look at a full example of Big Model Inference below.
 
