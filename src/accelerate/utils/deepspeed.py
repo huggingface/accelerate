@@ -34,7 +34,7 @@ def get_active_deepspeed_plugin(state: AcceleratorState) -> DeepSpeedPlugin:
         raise ValueError(
             "Couldn't retrieve the active `DeepSpeedPlugin` as none were enabled. "
             "Please make sure that either `Accelerator` is configured for `deepspeed` "
-            "and make sure that a `DeepSpeedPlugin` has been enabled (`plugin.enable()`) before calling this."
+            "or make sure that the desired `DeepSpeedPlugin` has been enabled (`plugin.enable()`) before calling this function."
         )
     return next(plugin for plugin in state.deepspeed_plugins if plugin.enabled)
 

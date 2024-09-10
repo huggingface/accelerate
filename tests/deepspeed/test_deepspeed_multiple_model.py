@@ -76,7 +76,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         _ = Accelerator(
             deepspeed_plugin=[ds_zero2, ds_zero3],
         )
-        # Accelerator should flag the first plugin as enabled
+        # Accelerator's constructor should automatically enable the first plugin 
         assert ds_zero2.enabled
         assert not ds_zero3.enabled
         ds_zero3.enable()
