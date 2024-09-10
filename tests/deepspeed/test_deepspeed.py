@@ -783,9 +783,9 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
     def test_ds_config_assertions(self):
         ambiguous_env = self.dist_env.copy()
-        ambiguous_env[
-            "ACCELERATE_CONFIG_DS_FIELDS"
-        ] = "gradient_accumulation_steps,gradient_clipping,zero_stage,offload_optimizer_device,offload_param_device,zero3_save_16bit_model,mixed_precision"
+        ambiguous_env["ACCELERATE_CONFIG_DS_FIELDS"] = (
+            "gradient_accumulation_steps,gradient_clipping,zero_stage,offload_optimizer_device,offload_param_device,zero3_save_16bit_model,mixed_precision"
+        )
 
         with mockenv_context(**ambiguous_env):
             with self.assertRaises(ValueError) as cm:
