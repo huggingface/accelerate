@@ -1098,6 +1098,8 @@ class DeepSpeedPlugin:
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
+        # NOTE: Set to False by default, will be set to `True` automatically if it's the first plugin passed
+        # to the `Accelerator`'s `deepspeed_plugin` param, *or* `plugin.enable()` is manually called
         self.enabled = False
 
         # Ignore if it's already set
