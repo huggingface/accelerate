@@ -1858,7 +1858,7 @@ class Accelerator:
                 logger.warning(
                     "A wrapped DeepSpeed engine reference is currently tied for this `Accelerator()` instance. "
                     "If you want to call `accelerator.backward()` referencing a new model/engine, "
-                    "please create a seperate `Accelerator()` instance and call `accelerator.prepare()` on it."
+                    "please create a separate `Accelerator()` instance and call `accelerator.prepare()` on it."
                 )
             self._models.append(engine)
             if optimizer is not None:
