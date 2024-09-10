@@ -189,6 +189,7 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
         HfDeepSpeedConfig,
+        get_active_deepspeed_plugin,
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model

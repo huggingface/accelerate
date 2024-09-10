@@ -116,6 +116,7 @@ if is_deepspeed_available():
         DeepSpeedSchedulerWrapper,
         DummyOptim,
         DummyScheduler,
+        get_active_deepspeed_plugin,
     )
 
 if is_megatron_lm_available():
@@ -1628,7 +1629,7 @@ class Accelerator:
     def _prepare_deepspeed(self, *args):
         import deepspeed
 
-        deepspeed_plugin = self.state.deepspeed_plugin
+        deepspeed_plugin = get_active_deepspeed_plugin(self.state)
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         result = [
@@ -1680,6 +1681,9 @@ class Accelerator:
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
 
+        model = None
+        optimizer = None
+        scheduler = None
         for obj in result:
             if isinstance(obj, torch.nn.Module):
                 model = obj
@@ -1689,6 +1693,7 @@ class Accelerator:
                 type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
             ):
                 scheduler = obj
+
         if optimizer is not None:
             if "optimizer" in deepspeed_plugin.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
                 raise ValueError(
@@ -1728,109 +1733,124 @@ class Accelerator:
                     "`accelerate.utils.DummyOptim`."
                 )
 
-        # If we are using FP8, we need to apply the autowrap now
-        if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
-            model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
-        # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
-        deepspeed_plugin.set_moe_leaf_modules(model)
-        # deal with config keys that use `auto` value and rely on model's hidden_size
-        hidden_size_based_keys = [
-            "zero_optimization.reduce_bucket_size",
-            "zero_optimization.stage3_prefetch_bucket_size",
-            "zero_optimization.stage3_param_persistence_threshold",
-        ]
-        hidden_size_auto_keys = [x for x in hidden_size_based_keys if deepspeed_plugin.is_auto(x)]
-        if len(hidden_size_auto_keys) > 0:
-            reasoning = (
-                "therefore it's not possible to automatically fill out the following `auto` entries "
-                + f"in the DeepSpeed config file: {hidden_size_auto_keys}. You can fix that by replacing "
-                + "`auto` values for these keys with an integer value of your choice."
-            )
-            if not hasattr(model, "config"):
-                raise ValueError("Can't find `model.config` entry, " + reasoning)
+        if model is not None:
+            # If we are using FP8, we need to apply the autowrap now
+            if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
+                model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
+            # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
+            deepspeed_plugin.set_moe_leaf_modules(model)
+            # deal with config keys that use `auto` value and rely on model's hidden_size
+            hidden_size_based_keys = [
+                "zero_optimization.reduce_bucket_size",
+                "zero_optimization.stage3_prefetch_bucket_size",
+                "zero_optimization.stage3_param_persistence_threshold",
+            ]
+            hidden_size_auto_keys = [x for x in hidden_size_based_keys if deepspeed_plugin.is_auto(x)]
+            if len(hidden_size_auto_keys) > 0:
+                reasoning = (
+                    "therefore it's not possible to automatically fill out the following `auto` entries "
+                    + f"in the DeepSpeed config file: {hidden_size_auto_keys}. You can fix that by replacing "
+                    + "`auto` values for these keys with an integer value of your choice."
+                )
+                if not hasattr(model, "config"):
+                    raise ValueError("Can't find `model.config` entry, " + reasoning)
 
-            if hasattr(model.config, "hidden_size"):
-                hidden_size = model.config.hidden_size
-            elif hasattr(model.config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.hidden_sizes)
-            else:
-                raise ValueError(
-                    "Can find neither `model.config.hidden_size` nor `model.config.hidden_sizes`, " + reasoning
+                if hasattr(model.config, "hidden_size"):
+                    hidden_size = model.config.hidden_size
+                elif hasattr(model.config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.hidden_sizes)
+                else:
+                    raise ValueError(
+                        "Can find neither `model.config.hidden_size` nor `model.config.hidden_sizes`, " + reasoning
+                    )
+
+                config_kwargs.update(
+                    {
+                        "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
+                        "zero_optimization.stage3_prefetch_bucket_size": int(0.9 * hidden_size * hidden_size),
+                        "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
+                    }
                 )
 
-            config_kwargs.update(
-                {
-                    "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
-                    "zero_optimization.stage3_prefetch_bucket_size": int(0.9 * hidden_size * hidden_size),
-                    "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
-                }
-            )
-
-        if isinstance(optimizer, (DummyOptim)):
-            config_kwargs.update(
-                {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
-            )
-        if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is None:
-            max_lr = (
-                getattr(scheduler.optimizer, "lr", None)
-                if getattr(scheduler.optimizer, "defaults", None) is None
-                else scheduler.optimizer.defaults["lr"]
-            )
-            config_kwargs.update(
-                {
-                    "scheduler.params.warmup_min_lr": 0,
-                    "scheduler.params.warmup_max_lr": max_lr,
-                    "scheduler.params.warmup_num_steps": scheduler.warmup_num_steps,
-                }
-            )
-            if scheduler.total_num_steps is not None:
-                config_kwargs["scheduler.params.total_num_steps"] = (
-                    math.ceil(scheduler.total_num_steps / self.num_processes)
-                    if not self.split_batches
-                    else scheduler.total_num_steps
-                )
-        deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
-        self.deepspeed_config = deepspeed_plugin.deepspeed_config
-        kwargs = dict(model=model, config_params=self.deepspeed_config)
-        if optimizer is not None:
             if isinstance(optimizer, (DummyOptim)):
-                kwargs["model_parameters"] = optimizer.params
-                if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is not None:
-                    kwargs["lr_scheduler"] = scheduler.lr_scheduler_callable
-            else:
-                if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
-                    "device", "none"
-                ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", True):
-                    from deepspeed.ops.adam import DeepSpeedCPUAdam
-
-                    defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
-                    optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
-                kwargs["optimizer"] = optimizer
-                if scheduler is not None:
-                    if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
-                        kwargs["lr_scheduler"] = scheduler
-
-        engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
-        if optimizer is not None:
-            optimizer = DeepSpeedOptimizerWrapper(optimizer)
-        if scheduler is not None:
-            if lr_scheduler is None:
-                scheduler = AcceleratedScheduler(
-                    scheduler,
-                    optimizer,
-                    step_with_optimizer=self.step_scheduler_with_optimizer,
-                    split_batches=self.split_batches,
+                config_kwargs.update(
+                    {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
                 )
-            else:
-                scheduler = DeepSpeedSchedulerWrapper(lr_scheduler, optimizer)
-        # pointing for deepspeed_engine_wrapped.backward()
-        self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
-        self._models.append(engine)
-        if optimizer is not None:
-            self._optimizers.append(optimizer)
-        if scheduler is not None:
-            self._schedulers.append(scheduler)
+            if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is None:
+                max_lr = (
+                    getattr(scheduler.optimizer, "lr", None)
+                    if getattr(scheduler.optimizer, "defaults", None) is None
+                    else scheduler.optimizer.defaults["lr"]
+                )
+                config_kwargs.update(
+                    {
+                        "scheduler.params.warmup_min_lr": 0,
+                        "scheduler.params.warmup_max_lr": max_lr,
+                        "scheduler.params.warmup_num_steps": scheduler.warmup_num_steps,
+                    }
+                )
+                if scheduler.total_num_steps is not None:
+                    config_kwargs["scheduler.params.total_num_steps"] = (
+                        math.ceil(scheduler.total_num_steps / self.num_processes)
+                        if not self.split_batches
+                        else scheduler.total_num_steps
+                    )
+            deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
+            self.deepspeed_config = deepspeed_plugin.deepspeed_config
+            kwargs = dict(model=model, config_params=self.deepspeed_config)
+            if optimizer is not None:
+                if isinstance(optimizer, (DummyOptim)):
+                    kwargs["model_parameters"] = optimizer.params
+                    if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is not None:
+                        kwargs["lr_scheduler"] = scheduler.lr_scheduler_callable
+                else:
+                    if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
+                        "device", "none"
+                    ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", True):
+                        from deepspeed.ops.adam import DeepSpeedCPUAdam
+
+                        defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
+                        optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
+                    kwargs["optimizer"] = optimizer
+                    if scheduler is not None:
+                        if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
+                            kwargs["lr_scheduler"] = scheduler
+
+            engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
+            if optimizer is not None:
+                optimizer = DeepSpeedOptimizerWrapper(optimizer)
+            if scheduler is not None:
+                if lr_scheduler is None:
+                    scheduler = AcceleratedScheduler(
+                        scheduler,
+                        optimizer,
+                        step_with_optimizer=self.step_scheduler_with_optimizer,
+                        split_batches=self.split_batches,
+                    )
+                else:
+                    scheduler = DeepSpeedSchedulerWrapper(lr_scheduler, optimizer)
+
+            for i in range(len(result)):
+                if isinstance(result[i], torch.nn.Module):
+                    result[i] = engine
+                elif isinstance(result[i], (torch.optim.Optimizer, DummyOptim)):
+                    result[i] = optimizer
+                elif (isinstance(result[i], (LRScheduler, DummyScheduler))) or (
+                    type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
+                ):
+                    result[i] = scheduler
+            # pointing for deepspeed_engine_wrapped.backward()
+            self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
+            self._models.append(engine)
+            if optimizer is not None:
+                self._optimizers.append(optimizer)
+            if scheduler is not None:
+                self._schedulers.append(scheduler)
+            if len(self._models) > 1:
+                raise AssertionError(
+                    "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
+                )
         return tuple(result)
 
     def _prepare_megatron_lm(self, *args):
