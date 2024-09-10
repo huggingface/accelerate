@@ -106,7 +106,7 @@ def _nvidia_smi():
         # try from systemd drive with default installation path
         command = which("nvidia-smi")
         if command is None:
-            command = "%s\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe" % os.environ["systemdrive"]
+            command = f"{os.environ['systemdrive']}\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe"
     else:
         command = "nvidia-smi"
     return command
