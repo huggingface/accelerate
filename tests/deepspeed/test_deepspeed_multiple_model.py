@@ -73,30 +73,21 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
     def test_enable_disable(self):
         ds_zero2, ds_zero3 = self.get_ds_plugins()
-        _ = Accelerator(
+        accelerator = Accelerator(
             deepspeed_plugin=[ds_zero2, ds_zero3],
         )
         # Accelerator should flag the first plugin as enabled
         assert ds_zero2.enabled
         assert not ds_zero3.enabled
+        assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
         ds_zero3.enable()
         assert not ds_zero2.enabled
         assert ds_zero3.enabled
+        assert get_active_deepspeed_plugin(accelerator.state) == ds_zero3
         ds_zero2.enable()
         assert not ds_zero3.enabled
         assert ds_zero2.enabled
-
-    def test_get_active_plugin(self):
-        ds_zero2 = DeepSpeedPlugin(
-            hf_ds_config=self.config_zero2,
-        )
-        ds_zero3 = DeepSpeedPlugin(
-            hf_ds_config=self.config_zero3,
-        )
-        accelerator = Accelerator(deepspeed_plugin=[ds_zero2, ds_zero3])
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
-        ds_zero3.enable()
-        assert get_active_deepspeed_plugin(accelerator.state) == ds_zero3
 
     def test_prepare_multiple_models(self):
         ds_zero2, ds_zero3 = self.get_ds_plugins()
