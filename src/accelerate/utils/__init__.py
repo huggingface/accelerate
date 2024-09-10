@@ -138,7 +138,6 @@ from .modeling import (
     named_module_tensors,
     retie_parameters,
     set_module_tensor_to_device,
-    shard_checkpoint,
 )
 from .offload import (
     OffloadedWeightsLoader,

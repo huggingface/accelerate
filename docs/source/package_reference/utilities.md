@@ -202,8 +202,6 @@ These utilities relate to interacting with PyTorch models
 
 [[autodoc]] utils.set_module_tensor_to_device
 
-[[autodoc]] utils.shard_checkpoint
-
 
 ## Parallel
 
