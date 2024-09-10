@@ -985,7 +985,7 @@ class DeepSpeedPlugin:
         metadata={
             "help": "A dictionary that maps model instances to their reference names. This is used during multiple-model support. Model names can then be referenced later such as during `accelerator.backward()`. "
             "This is an experimental API and may change in the future."
-        }
+        },
     )
 
     def __post_init__(self):
@@ -1174,6 +1174,7 @@ class DeepSpeedPlugin:
 
     def set_deepspeed_weakref(self):
         from .imports import is_transformers_available
+
         ds_config = copy.deepcopy(self.deepspeed_config)
         if self.zero3_init_flag:
             if not is_transformers_available():
@@ -1268,6 +1269,7 @@ class DeepSpeedPlugin:
         """
         self.set_deepspeed_weakref()
         from accelerate.state import AcceleratorState
+
         if AcceleratorState._shared_state != {}:
             for plugin in AcceleratorState().deepspeed_plugin:
                 if plugin is not self:

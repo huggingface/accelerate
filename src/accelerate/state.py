@@ -51,7 +51,6 @@ from .utils import (
 from .utils.dataclasses import SageMakerDistributedType
 
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -949,6 +948,7 @@ class AcceleratorState:
         repr = PartialState().__repr__() + f"\nMixed precision type: {self.mixed_precision}\n"
         if self.distributed_type == DistributedType.DEEPSPEED:
             from accelerate.utils.deepspeed import get_active_deepspeed_plugin
+
             active_plugin = get_active_deepspeed_plugin(self)
             repr += f"ds_config: {active_plugin.deepspeed_config}\n"
         return repr
@@ -980,6 +980,7 @@ class AcceleratorState:
     def mixed_precision(self):
         if self.distributed_type == DistributedType.DEEPSPEED:
             from accelerate.utils.deepspeed import get_active_deepspeed_plugin
+
             active_plugin = get_active_deepspeed_plugin(self)
             config = active_plugin.deepspeed_config
             if config.get("fp16", {}).get("enabled", False):

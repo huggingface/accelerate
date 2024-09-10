@@ -184,11 +184,11 @@ if is_deepspeed_available():
     from .deepspeed import (
         DeepSpeedEngineWrapper,
         DeepSpeedOptimizerWrapper,
+        DeepSpeedPluginContainer,
         DeepSpeedSchedulerWrapper,
         DummyOptim,
         DummyScheduler,
         HfDeepSpeedConfig,
-        DeepSpeedPluginContainer,
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model

@@ -298,7 +298,7 @@ class DeepSpeedPluginContainer:
         return getattr(self.active_plugin, name)
 
     def __setattr__(self, name, value):
-        if name in ['plugins', 'active_plugin']:
+        if name in ["plugins", "active_plugin"]:
             super().__setattr__(name, value)
         else:
             setattr(self.active_plugin, name, value)

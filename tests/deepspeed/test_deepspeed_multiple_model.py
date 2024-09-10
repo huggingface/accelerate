@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import inspect
+import json
 from functools import partial
 from pathlib import Path
-from accelerate import Accelerator, DeepSpeedPlugin
-from accelerate.utils.deepspeed import DeepSpeedEngineWrapper
-from accelerate.test_utils.testing import AccelerateTestCase, require_deepspeed, require_non_cpu
+
 from transformers import AutoModelForCausalLM
-from transformers.testing_utils import mockenv_context
+
+from accelerate import Accelerator, DeepSpeedPlugin
+from accelerate.test_utils.testing import AccelerateTestCase, require_deepspeed, require_non_cpu
+
 
 GPT2_TINY = "sshleifer/tiny-gpt2"
 
