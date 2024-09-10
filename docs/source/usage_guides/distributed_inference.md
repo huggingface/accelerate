@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Distributed Inference with 🤗 Accelerate
+# Distributed inference
 
 Distributed inference can fall into three brackets:
 
@@ -56,13 +56,13 @@ def run_inference(rank, world_size):
 ```
 One will notice how we have to check the rank to know what prompt to send, which can be a bit tedious.
 
-A user might then also think that with 🤗 Accelerate, using the `Accelerator` to prepare a dataloader for such a task might also be 
+A user might then also think that with Accelerate, using the `Accelerator` to prepare a dataloader for such a task might also be 
 a simple way to manage this. (To learn more, check out the relevant section in the [Quick Tour](../quicktour#distributed-evaluation))
 
 Can it manage it? Yes. Does it add unneeded extra code however: also yes.
 
 
-With 🤗 Accelerate, we can simplify this process by using the [`Accelerator.split_between_processes`] context manager (which also exists in `PartialState` and `AcceleratorState`). 
+With Accelerate, we can simplify this process by using the [`Accelerator.split_between_processes`] context manager (which also exists in `PartialState` and `AcceleratorState`). 
 This function will automatically split whatever data you pass to it (be it a prompt, a set of tensors, a dictionary of the prior data, etc.) across all the processes (with a potential
 to be padded) for you to use right away.
 
@@ -82,7 +82,7 @@ with distributed_state.split_between_processes(["a dog", "a cat"]) as prompt:
     result.save(f"result_{distributed_state.process_index}.png")
 ```
 
-And then to launch the code, we can use the 🤗 Accelerate:
+And then to launch the code, we can use the Accelerate:
 
 If you have generated a config file to be used using `accelerate config`:
 

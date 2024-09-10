@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Helpful Utilities
+# Utility functions and classes
 
 Below are a variety of utility functions that 🤗 Accelerate provides, broken down by use-case. 
 

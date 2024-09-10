@@ -40,7 +40,7 @@ Check more approaches for [IPEX installation](https://intel.github.io/intel-exte
 
 ## How It Works For Training optimization in CPU
 
-🤗 Accelerate has integrated [IPEX](https://github.com/intel/intel-extension-for-pytorch), all you need to do is enabling it through the config.
+Accelerate has integrated [IPEX](https://github.com/intel/intel-extension-for-pytorch), all you need to do is enabling it through the config.
 
 **Scenario 1**: Acceleration of No distributed CPU training
 

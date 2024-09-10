@@ -13,14 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Learning how to incorporate 🤗 Accelerate features quickly!
+# Start Here!
 
 Please use the interactive tool below to help you get started with learning about a particular 
-feature of 🤗 Accelerate and how to utilize it! It will provide you with a code diff, an explanation
+feature of Accelerate and how to utilize it! It will provide you with a code diff, an explanation
 towards what is going on, as well as provide you with some useful links to explore more within
 the documentation!
 
-Most code examples start from the following python code before integrating 🤗 Accelerate in some way:
+Most code examples start from the following python code before integrating Accelerate in some way:
 
 ```python
 for batch in dataloader:

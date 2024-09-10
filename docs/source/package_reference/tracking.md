@@ -13,23 +13,38 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Experiment Tracking
+# Experiment Trackers
 
-## The Base Tracker Class
+## GeneralTracker
 
 [[autodoc]] tracking.GeneralTracker
 
-## Integrated Trackers
+## TensorBoardTracker
 
 [[autodoc]] tracking.TensorBoardTracker
     - __init__
+
+## WandBTracker
+
 [[autodoc]] tracking.WandBTracker
     - __init__
+
+## CometMLTracker
+
 [[autodoc]] tracking.CometMLTracker
     - __init__
+
+## AimTracker
+
 [[autodoc]] tracking.AimTracker
     - __init__
+
+## MLflowTracker
+
 [[autodoc]] tracking.MLflowTracker
     - __init__
+
+## ClearMLTracker
+
 [[autodoc]] tracking.ClearMLTracker
     - __init__

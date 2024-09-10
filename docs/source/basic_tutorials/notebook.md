@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Launching Multi-GPU Training from a Jupyter Environment
+# Launching distributed training from Jupyter Notebooks
 
 This tutorial teaches you how to fine tune a computer vision model with 🤗 Accelerate from a Jupyter Notebook on a distributed system.
 You will also learn how to setup a few requirements needed for ensuring your environment is configured properly, your data has been prepared properly, and finally how to launch training.
@@ -26,13 +26,13 @@ You will also learn how to setup a few requirements needed for ensuring your env
 
 ## Configuring the Environment
 
-Before any training can be performed, a 🤗 Accelerate config file must exist in the system. Usually this can be done by running the following in a terminal and answering the prompts:
+Before any training can be performed, a Accelerate config file must exist in the system. Usually this can be done by running the following in a terminal and answering the prompts:
 
 ```bash
 accelerate config
 ```
 
-However, if general defaults are fine and you are *not* running on a TPU, 🤗Accelerate has a utility to quickly write your GPU configuration into a config file via [`utils.write_basic_config`].
+However, if general defaults are fine and you are *not* running on a TPU, Accelerate has a utility to quickly write your GPU configuration into a config file via [`utils.write_basic_config`].
 
 The following code will restart Jupyter after writing the configuration, as CUDA code was called to perform this. 
 
@@ -454,7 +454,7 @@ epoch 4: 94.71
 
 And that's it!
 
-Please note that [`notebook_launcher`] ignores the 🤗 Accelerate config file, to launch based on the config use:
+Please note that [`notebook_launcher`] ignores the Accelerate config file, to launch based on the config use:
 
 ```bash
 accelerate launch

@@ -13,8 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# The inference API
+# PiPPy
 
 These docs refer to the [PiPPy](https://github.com/PyTorch/PiPPy) integration.
+
+## prepare_pippy
 
 [[autodoc]] inference.prepare_pippy

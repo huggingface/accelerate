@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Profiler is a tool that allows the collection of performance metrics during training and inference. Profiler’s context manager API can be used to better understand what model operators are the most expensive, examine their input shapes and stack traces, study device kernel activity, and visualize the execution trace. It provides insights into the performance of your model, allowing you to optimize and improve it.
 
-This guide explains how to use PyTorch Profiler to measure the time and memory consumption of the model’s operators and how to integrate this with 🤗 Accelerate. We will cover various use cases and provide examples for each.
+This guide explains how to use PyTorch Profiler to measure the time and memory consumption of the model’s operators and how to integrate this with Accelerate. We will cover various use cases and provide examples for each.
 
 ## Using profiler to analyze execution time
 
@@ -329,6 +329,6 @@ Self CUDA time total: 4.165ms
 
 ## Conclusion and Further Information
 
-PyTorch Profiler is a powerful tool for analyzing the performance of your models. By integrating it with 🤗 Accelerate, you can easily profile your models and gain insights into their performance, helping you to optimize and improve them.
+PyTorch Profiler is a powerful tool for analyzing the performance of your models. By integrating it with Accelerate, you can easily profile your models and gain insights into their performance, helping you to optimize and improve them.
 
 For more detailed information, refer to the [PyTorch Profiler documentation](https://pytorch.org/docs/stable/profiler.html).

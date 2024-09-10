@@ -21,8 +21,14 @@ instances share the same state, which is initialized on the first instantiation.
 These classes are immutable and store information about certain configurations or 
 states.
 
+## PartialState
+
 [[autodoc]] state.PartialState
 
+## AcceleratorState
+
 [[autodoc]] state.AcceleratorState
+
+## GradientState
 
 [[autodoc]] state.GradientState

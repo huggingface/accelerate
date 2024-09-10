@@ -32,7 +32,7 @@ independently and in parallel by each shard followed by syncing across all GPUs 
 In a simple transformer layer, this leads to 2 `all-reduces` in the forward path and 2 in the backward path.
 For more details, please refer research paper [Megatron-LM: Training Multi-Billion Parameter Language Models Using
 Model Parallelism](https://arxiv.org/pdf/1909.08053.pdf) and 
-this section of 🤗 blogpost [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#tensor-parallelism).
+this section of blogpost [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#tensor-parallelism).
 
 
 b. **Pipeline Parallelism (PP)**: Reduces memory footprint and enables large scale training via inter-node parallelization. 
@@ -41,7 +41,7 @@ Layers are distributed uniformly across PP stages. For example, if a model has `
 pipeline parallelism, each GPU will have `6` layers (24/4). For more details on schedules to reduce the idle time of PP,
 please refer to the research paper [Efficient Large-Scale Language Model Training on GPU Clusters
 Using Megatron-LM](https://arxiv.org/pdf/2104.04473.pdf) and 
-this section of 🤗 blogpost [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#pipeline-parallelism).
+this section of blogpost [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#pipeline-parallelism).
 
 c. **Sequence Parallelism (SP)**: Reduces memory footprint without any additional communication. Only applicable when using TP.
 It reduces activation memory required as it prevents the same copies to be on the tensor parallel ranks 
@@ -57,7 +57,7 @@ d. **Data Parallelism (DP)** via Distributed Optimizer: Reduces the memory footp
 For example, when using Adam optimizer with mixed-precision training, each parameter accounts for 12 bytes of memory.
 This gets distributed equally across the GPUs, i.e., each parameter would account for 3 bytes (12/4) if we have 4 GPUs.
 For more details, please refer the research paper [ZeRO: Memory Optimizations Toward Training Trillion
-Parameter Models](https://arxiv.org/pdf/1910.02054.pdf) and following section of 🤗 blog 
+Parameter Models](https://arxiv.org/pdf/1910.02054.pdf) and following section of blog 
 [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#zero-data-parallelism).
 
 e. **Selective Activation Recomputation**: Reduces the memory footprint of activations significantly via smart activation checkpointing.
@@ -72,9 +72,9 @@ PyTorch JIT compiled Fused GeLU and Fused Bias+Dropout+Residual addition.
 g. **Support for Indexed datasets**: Efficient binary format of datasets for large scale training. Support for the `mmap`, `cached` index file and the `lazy` loader format.
 
 h. **Checkpoint reshaping and interoperability**: Utility for reshaping Megatron-LM checkpoints of variable 
-tensor and pipeline parallel sizes to the beloved 🤗 Transformers sharded checkpoints as it has great support with plethora of tools
-such as 🤗 Accelerate Big Model Inference, Megatron-DeepSpeed Inference etc. 
-Support is also available for converting 🤗 Transformers sharded checkpoints to Megatron-LM checkpoint of variable tensor and pipeline parallel sizes
+tensor and pipeline parallel sizes to the beloved Transformers sharded checkpoints as it has great support with plethora of tools
+such as Accelerate Big Model Inference, Megatron-DeepSpeed Inference etc. 
+Support is also available for converting Transformers sharded checkpoints to Megatron-LM checkpoint of variable tensor and pipeline parallel sizes
 for large scale training.  
 
 
@@ -359,7 +359,7 @@ def main():
 2. For using the Megatron-LM datasets, a few more changes are required. Dataloaders for these datasets
 are available only on rank 0 of each tensor parallel group. As such, there are rank where dataloader won't be
 available and this requires tweaks to the training loop. Being able to do all this shows how
-flexible and extensible 🤗 Accelerate is. The changes required are as follows.
+flexible and extensible Accelerate is. The changes required are as follows.
 
 a. For Megatron-LM indexed datasets, we need to use `MegatronLMDummyDataLoader` 
 and pass the required dataset args to it such as `data_path`, `seq_length` etc. 
@@ -391,7 +391,7 @@ c. Changes to training and evaluation loops as dataloader is only available on t
 So, we need to iterate only if the dataloader isn't `None` else provide empty dict
 As such, we loop using `while` loop and break when `completed_steps` is equal to `args.max_train_steps`
 This is similar to the Megatron-LM setup wherein user has to provide `max_train_steps` when using Megaton-LM indexed datasets.
-This displays how flexible and extensible 🤗 Accelerate is.
+This displays how flexible and extensible Accelerate is.
 
 ```python
 while completed_steps < args.max_train_steps:
@@ -414,10 +414,10 @@ while completed_steps < args.max_train_steps:
     
 ## Utility for Checkpoint reshaping and interoperability
 
-1. The scripts for these are present in 🤗 Transformers library under respective models. 
+1. The scripts for these are present in Transformers library under respective models. 
 Currently, it is available for GPT model [checkpoint_reshaping_and_interoperability.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/megatron_gpt2/checkpoint_reshaping_and_interoperability.py)
 
-2. Below is an example of conversion of checkpoint from Megatron-LM to universal 🤗 Transformers sharded checkpoint.
+2. Below is an example of conversion of checkpoint from Megatron-LM to universal Transformers sharded checkpoint.
 ```bash
 python checkpoint_reshaping_and_interoperability.py \
 --convert_checkpoint_from_megatron_to_transformers \
@@ -569,18 +569,18 @@ setting is synonymous with gradient accumulation.
 
 7. When using Megatron-LM, use `accelerator.save_state` and `accelerator.load_state` for saving and loading checkpoints.
 
-8. Below are the mapping from Megatron-LM model architectures to the the equivalent 🤗 transformers model architectures.
-Only these 🤗 transformers model architectures are supported.
+8. Below are the mapping from Megatron-LM model architectures to the the equivalent transformers model architectures.
+Only these transformers model architectures are supported.
 
 a. Megatron-LM [BertModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/bert_model.py) : 
-🤗 transformers models with `megatron-bert` in config's model type, e.g., 
+transformers models with `megatron-bert` in config's model type, e.g., 
 [MegatronBERT](https://huggingface.co/docs/transformers/model_doc/megatron-bert)
     
 b. Megatron-LM [GPTModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py) : 
-🤗 transformers models with `gpt2` in config's model type, e.g., 
+transformers models with `gpt2` in config's model type, e.g., 
 [OpenAI GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
    
 c. Megatron-LM [T5Model](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/t5_model.py) : 
-🤗 transformers models with `t5` in  config's model type, e.g., 
+transformers models with `t5` in  config's model type, e.g., 
 [T5](https://huggingface.co/docs/transformers/model_doc/t5) and 
 [MT5](https://huggingface.co/docs/transformers/model_doc/mt5)

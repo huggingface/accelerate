@@ -13,16 +13,26 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# FP8 Functionality
+# FP8
 
 Below are functions and classes relative to the underlying FP8 implementation
 
+## FP8RecipeKwargs
+
 [[autodoc]] utils.FP8RecipeKwargs
+
+## convert_model
 
 [[autodoc]] utils.convert_model
 
+## has_transformer_engine_layers
+
 [[autodoc]] utils.has_transformer_engine_layers
 
+## contextual_fp8_autocast
+
 [[autodoc]] utils.contextual_fp8_autocast
+
+## apply_fp8_autowrap
 
 [[autodoc]] utils.apply_fp8_autowrap

@@ -13,10 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Tracking
+# Experiment trackers
 
 There are a large number of experiment tracking API's available, however getting them all to work with in a multi-processing environment can oftentimes be complex.
-🤗 Accelerate provides a general tracking API that can be used to log useful items during your script through [`Accelerator.log`]
+Accelerate provides a general tracking API that can be used to log useful items during your script through [`Accelerator.log`]
 
 ## Integrated Trackers
 
