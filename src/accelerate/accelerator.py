@@ -312,9 +312,9 @@ class Accelerator:
             mixed_precision = (
                 os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
             )
-            # The first plugin is always the active one
             for plugin in deepspeed_plugin:
                 plugin.set_mixed_precision(mixed_precision)
+            # The first plugin is always the active one
             deepspeed_plugin[0].enable()
             self.deepspeed_engine_wrapped = None
 
