@@ -17,6 +17,7 @@ This script tests to ensure that `accelerate` performs at the same level as raw 
 
 This particular script verifies this for single GPU training.
 """
+
 import evaluate
 import torch
 import transformer_engine.common.recipe as te_recipe

@@ -4,7 +4,6 @@ target-version = "py38"
 
 [tool.ruff.lint]
 preview = true
-ignore-init-module-imports = true
 extend-select = [
     "B009", # static getattr
     "B010", # static setattr

@@ -17,6 +17,7 @@ This script tests to ensure that `accelerate` performs at the same level as raw 
 
 This particular script verifies this for FSDP training.
 """
+
 from functools import partial
 
 import evaluate
