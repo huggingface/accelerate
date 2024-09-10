@@ -984,10 +984,10 @@ class DeepSpeedPlugin:
         default=None,
         metadata={"help": "Flag to indicate whether to enable MS-AMP backend for FP8 training."},
     )
-    msamp_opt_level: str = field(
+    msamp_opt_level: Optional[Literal["O1", "O2"]] = field(
         default=None,
         metadata={
-            "help": "Optimization level for MS-AMP. Only applicable if `enable_msamp` is True. Should be one of ['O1' or 'O2']."
+            "help": "Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one of ['O1' or 'O2']."
         },
     )
 
