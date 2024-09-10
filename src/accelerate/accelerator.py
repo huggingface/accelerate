@@ -507,6 +507,15 @@ class Accelerator:
         elif self.state.mixed_precision == "fp8":
             # We always enable `native_amp` for FP8
             self.native_amp = True
+            if self.fp8_backend == "MSAMP":
+                if self.distributed_type == DistributedType.FSDP:
+                    raise NotImplementedError(
+                        "`accelerate` + `MS-AMP` + `FSDP` is not supported at this time. "
+                        "Please consider using deepspeed, which is supported."
+                    )
+                elif self.distributed_type != DistributedType.DEEPSPEED:
+                    # MS-AMP requires `GradScaler` even with bf16 autocast w/ single GPU or DDP:
+                    self.scaler = torch.cuda.amp.GradScaler()
 
         # Start of internal step tracking
         self.step = 0
@@ -1312,17 +1321,15 @@ class Accelerator:
                 args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex_or_xpu(*args)
-        if self.fp8_recipe_handler is not None and self.fp8_recipe_handler.backend == "TE":
+        if self.fp8_backend == "TE":
             args = self._prepare_te(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
         else:
-            if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP":
-                args = self._prepare_msamp(*args)
-                # MS-AMP will handle the device placement
-                device_placement = [False for _ in args]
+            if self.fp8_backend == "MSAMP":
+                args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
@@ -1388,17 +1395,19 @@ class Accelerator:
 
         if self.native_amp:
             model._original_forward = model.forward
-            model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
-            new_forward = autocast_context(model_forward_func)
-            if hasattr(model.forward, "__func__"):
+            # NOTE: MS-AMP adds `__func__` already to `model.forward`, so we should always use `model.forward`
+            if self.fp8_backend == "MSAMP" or not hasattr(model.forward, "__func__"):
+                model_forward_func = model.forward
+                model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
+            else:
+                model_forward_func = model.forward.__func__
+                new_forward = autocast_context(model_forward_func)
                 model.forward = MethodType(new_forward, model)
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
-            else:
-                model.forward = convert_outputs_to_fp32(new_forward)
 
-        # We prepare fp8 after, allowing for bf16 autocast to happen first
-        if getattr(self.fp8_recipe_handler, "backend", None) == "TE" and not self.delayed_fp8_autocast:
+        # We prepare TE after, allowing for bf16 autocast to happen first
+        if self.fp8_backend == "TE" and not self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
@@ -1624,6 +1633,13 @@ class Accelerator:
     def _prepare_deepspeed(self, *args):
         import deepspeed
 
+        ds_initialize = deepspeed.initialize
+        if self.fp8_backend == "MSAMP":
+            # MS-AMP requires DeepSpeed patches
+            from msamp import deepspeed as msamp_deepspeed
+
+            ds_initialize = msamp_deepspeed.initialize
+
         deepspeed_plugin = self.state.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
@@ -1812,7 +1828,7 @@ class Accelerator:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
 
-            engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
+            engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
             if optimizer is not None:
                 optimizer = DeepSpeedOptimizerWrapper(optimizer)
             if scheduler is not None:
@@ -1989,26 +2005,31 @@ class Accelerator:
                 result[i] = optimizer
         return tuple(result)
 
-    def _prepare_msamp(self, *args):
+    def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
             raise ImportError(
                 "MS-AMP was not found on your system. Please ensure that MS-AMP is available "
                 " or choose `'te'` as the backend for FP8 mixed precision training."
             )
-        else:
-            import msamp
+        # We've already checked for FSDP + MS-AMP during `__init__`
+        import msamp
 
         model, optimizer = None, None
+        optimizer_index = None
         num_models, num_optimizers = 0, 0
         result = [obj for obj in args]
-        for obj in result:
+        for i, obj in enumerate(result):
             if isinstance(obj, torch.nn.Module):
                 model = obj
                 num_models += 1
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
+                optimizer_index = i
                 num_optimizers += 1
-        if optimizer is None or model is None:
+        # DataLoader/Scheduler case
+        if optimizer is None and model is None:
+            return result, device_placement
+        elif optimizer is None or model is None:
             raise ValueError(
                 "You must pass a model and an optimizer together to `accelerate.prepare()` when using MS-AMP."
             )
@@ -2023,7 +2044,10 @@ class Accelerator:
                 result[i] = model
             elif isinstance(result[i], (torch.optim.Optimizer)):
                 result[i] = optimizer
-        return tuple(result)
+        if optimizer_index is not None:
+            # NOTE: MS-AMP moves the optimizer, but *not* the model to the right device
+            device_placement[optimizer_index] = False
+        return tuple(result), device_placement
 
     def prepare_data_loader(
         self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
@@ -2116,7 +2140,10 @@ class Accelerator:
             return optimizer
         if device_placement is None:
             device_placement = self.device_placement
-        optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=self.scaler)
+        # NOTE: Special case with MS-AMP we do *not* pass in the scaler explicitly to the `AcceleratedOptimizer`,
+        # Their optimizer handles it for us.
+        scaler = None if self.fp8_backend == "MSAMP" else self.scaler
+        optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=scaler)
         self._optimizers.append(optimizer)
         return optimizer
 
@@ -3558,3 +3585,12 @@ class Accelerator:
             raise ValueError(
                 "Backward pass not properly called on LOMO optimizers. Are you sure you passed a LOMO optimizer in accelerator.prepare()?"
             )
+
+    @property
+    def fp8_backend(self):
+        "Returns the configured backend for training in FP8"
+        if self.mixed_precision == "fp8" and self.fp8_recipe_handler is not None:
+            return self.fp8_recipe_handler.backend
+        elif self.state.deepspeed_plugin is not None and self.state.deepspeed_plugin.enable_msamp:
+            return "MSAMP"
+        return None

@@ -980,6 +980,16 @@ class DeepSpeedPlugin:
             " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
         },
     )
+    enable_msamp: bool = field(
+        default=None,
+        metadata={"help": "Flag to indicate whether to enable MS-AMP backend for FP8 training."},
+    )
+    msamp_opt_level: Optional[Literal["O1", "O2"]] = field(
+        default=None,
+        metadata={
+            "help": "Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one of ['O1' or 'O2']."
+        },
+    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -1013,6 +1023,11 @@ class DeepSpeedPlugin:
             self.zero3_save_16bit_model = (
                 os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
             )
+        if self.enable_msamp is None:
+            self.enable_msamp = os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"
+
+        if self.msamp_opt_level is None:
+            self.msamp_opt_level = os.environ.get("ACCELERATE_FP8_OPT_LEVEL", "O1")
 
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
@@ -1084,6 +1099,16 @@ class DeepSpeedPlugin:
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
 
+        # Ignore if it's already set
+        if self.enable_msamp and "msamp" not in self.deepspeed_config:
+            if self.zero_stage == 3:
+                raise NotImplementedError(
+                    "MS-AMP is not supported for ZeRO Stage 3. Please use ZeRO Stage 0, 1, or 2 instead."
+                )
+            if self.msamp_opt_level not in ["O1", "O2"]:
+                raise ValueError("Invalid optimization level for MS-AMP. Please use one of ['O1' or'O2'].")
+            self.deepspeed_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
+
     def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
         mismatches = [] if mismatches is None else mismatches
         config, ds_key = self.hf_ds_config.find_config_node(ds_key_long)
@@ -1151,6 +1176,10 @@ class DeepSpeedPlugin:
         elif mixed_precision in ("bf16", "fp8"):
             if "bf16" not in ds_config:
                 ds_config["bf16"] = {"enabled": True}
+
+        if mixed_precision == "fp8" and self.enable_msamp:
+            if "msamp" not in ds_config:
+                ds_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
 
         if mixed_precision != "no":
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
