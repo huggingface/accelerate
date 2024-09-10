@@ -130,7 +130,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
         model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
     ):
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
-            if type(model) is FSDP and accelerator.process_index != 0:
+            if type(model) is not FSDP and accelerator.process_index != 0:
                 if not fsdp_plugin.sync_module_states:
                     raise ValueError(
                         "Set the `sync_module_states` flag to `True` so that model states are synced across processes when "
