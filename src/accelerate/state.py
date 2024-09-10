@@ -861,7 +861,7 @@ class AcceleratorState:
         self.__dict__.update(PartialState._shared_state)
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
-            self.deepspeed_plugin = None
+            self.deepspeed_plugins = []
             self.use_ipex = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
@@ -900,7 +900,10 @@ class AcceleratorState:
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
-                self.deepspeed_plugin = deepspeed_plugin
+                # Just in case a user manually creates an `AcceleratorState`/bypasses the `Accelerator`
+                if not isinstance(deepspeed_plugin, (list, tuple)):
+                    deepspeed_plugin = [deepspeed_plugin]
+                self.deepspeed_plugins = deepspeed_plugin
                 self.distributed_type = DistributedType.DEEPSPEED
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
@@ -1098,6 +1101,18 @@ class AcceleratorState:
         """
         with PartialState().local_main_process_first():
             yield
+
+    @property
+    def deepspeed_plugin(self):
+        """
+        Returns the currently active DeepSpeedPlugin.
+
+        If using multiple plugins, the first one will be the active one by default. Manually call `plugin.enable()` to
+        activate a different plugin.
+        """
+        from accelerate.utils.deepspeed import get_active_deepspeed_plugin
+
+        return get_active_deepspeed_plugin(self)
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)

@@ -291,14 +291,13 @@ class Accelerator:
                 for plugin in deepspeed_plugin:
                     if not isinstance(plugin, DeepSpeedPlugin):
                         raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
+            elif isinstance(deepspeed_plugin, DeepSpeedPlugin):
+                deepspeed_plugin = [deepspeed_plugin]
             else:
-                if not isinstance(deepspeed_plugin, DeepSpeedPlugin):
-                    raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
+                raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
 
         if deepspeed_plugin is not None:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
-            if not isinstance(deepspeed_plugin, (tuple, list)):
-                deepspeed_plugin = [deepspeed_plugin]
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
             if is_mlu_available():
@@ -546,7 +545,20 @@ class Accelerator:
 
     @property
     def deepspeed_plugin(self):
+        """
+        Returns the currently active DeepSpeedPlugin.
+
+        If using multiple plugins, the first one will be the active one by default. Manually call `plugin.enable()` to
+        activate a different plugin.
+        """
         return self.state.deepspeed_plugin
+
+    @property
+    def deepspeed_plugins(self):
+        """
+        Returns all of the DeepSpeedPlugins
+        """
+        return self.state.deepspeed_plugins
 
     @property
     def use_distributed(self):
