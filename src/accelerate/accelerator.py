@@ -1854,6 +1854,12 @@ class Accelerator:
             # pointing for deepspeed_engine_wrapped.backward()
             if self.deepspeed_engine_wrapped is None:
                 self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
+            else:
+                logger.warning(
+                    "Wrapped DeepSpeed engine already exists. Skipping for this model. "
+                    "If you want to call `accelerator.backward()` referencing this engine, "
+                    "please create a seperate `Accelerator()` instance and call `accelerator.prepare()` on it."
+                )
             self._models.append(engine)
             if optimizer is not None:
                 self._optimizers.append(optimizer)
