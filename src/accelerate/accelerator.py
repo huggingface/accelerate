@@ -317,6 +317,7 @@ class Accelerator:
             for plugin in deepspeed_plugin:
                 plugin.set_mixed_precision(mixed_precision)
             deepspeed_plugin[0].enable()
+            self.deepspeed_engine_wrapped = None
 
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
@@ -1851,7 +1852,8 @@ class Accelerator:
                 ):
                     result[i] = scheduler
             # pointing for deepspeed_engine_wrapped.backward()
-            self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
+            if self.deepspeed_engine_wrapped is None:
+                self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
             self._models.append(engine)
             if optimizer is not None:
                 self._optimizers.append(optimizer)
