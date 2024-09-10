@@ -53,7 +53,6 @@ from accelerate.utils import (
     recursively_apply,
     save,
     send_to_device,
-    tqdm,
 )
 from accelerate.utils.operations import is_namedtuple
 
@@ -405,9 +404,3 @@ class UtilsTester(unittest.TestCase):
         with self.assertLogs("accelerate.utils.environment", level="WARNING"):
             valid_env_items = convert_dict_to_env_variables(env)
         assert valid_env_items == ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
-
-    def test_tqdm_deprecation(self):
-        with pytest.warns(FutureWarning) as cm:
-            tqdm(True, range(3), disable=True)
-        assert "Passing `True` as the first argument to" in cm.pop().message.args[0]
-        tqdm(range(3), main_process_only=True, disable=True)

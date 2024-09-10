@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import inspect
-import warnings
 
 import torch
 
@@ -176,16 +175,6 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def _switch_parameters(self, parameters_map):
         for param_group in self.optimizer.param_groups:
             param_group["params"] = [parameters_map.get(p, p) for p in param_group["params"]]
-
-    @property
-    def is_overflow(self):
-        """Whether or not the optimizer step was done, or skipped because of gradient overflow."""
-        warnings.warn(
-            "The `is_overflow` property is deprecated and will be removed in version 1.0 of Accelerate use "
-            "`optimizer.step_was_skipped` instead.",
-            FutureWarning,
-        )
-        return self._is_overflow
 
     @property
     def step_was_skipped(self):

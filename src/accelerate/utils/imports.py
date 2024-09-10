@@ -132,28 +132,6 @@ def is_cuda_available():
 
 
 @lru_cache
-def is_tpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    warnings.warn(
-        "`is_tpu_available` is deprecated and will be removed in v0.27.0. "
-        "Please use the `is_torch_xla_available` instead.",
-        FutureWarning,
-    )
-    # Due to bugs on the amp series GPUs, we disable torch-xla on them
-    if is_cuda_available():
-        return False
-    if check_device:
-        if _tpu_available:
-            try:
-                # Will raise a RuntimeError if no XLA configuration is found
-                _ = xm.xla_device()
-                return True
-            except RuntimeError:
-                return False
-    return _tpu_available
-
-
-@lru_cache
 def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     """
     Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
@@ -274,11 +252,6 @@ def is_boto3_available():
 
 def is_rich_available():
     if _is_package_available("rich"):
-        if "ACCELERATE_DISABLE_RICH" in os.environ:
-            warnings.warn(
-                "`ACCELERATE_DISABLE_RICH` is deprecated and will be removed in v0.22.0 and deactivated by default. Please use `ACCELERATE_ENABLE_RICH` if you wish to use `rich`."
-            )
-            return not parse_flag_from_env("ACCELERATE_DISABLE_RICH", False)
         return parse_flag_from_env("ACCELERATE_ENABLE_RICH", False)
     return False
 

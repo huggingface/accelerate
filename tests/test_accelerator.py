@@ -20,7 +20,6 @@ import time
 from unittest.mock import patch
 
 import psutil
-import pytest
 import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
@@ -126,43 +125,6 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
-    # Should be removed after 1.0.0 release
-    def test_deprecated_values(self):
-        # Test defaults
-        accelerator = Accelerator()
-        assert accelerator.split_batches is False, "split_batches should be False by default"
-        assert accelerator.dispatch_batches is None, "dispatch_batches should be None by default"
-        assert accelerator.even_batches is True, "even_batches should be True by default"
-        assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
-
-        # Pass some arguments only
-        with pytest.warns(FutureWarning) as cm:
-            accelerator = Accelerator(
-                dispatch_batches=True,
-                split_batches=False,
-            )
-            deprecation_warning = str(cm.list[0].message)
-            assert accelerator.split_batches is False, "split_batches should be True"
-            assert accelerator.dispatch_batches is True, "dispatch_batches should be True"
-            assert accelerator.even_batches is True, "even_batches should be True by default"
-            assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
-            assert "dispatch_batches" in deprecation_warning
-            assert "split_batches" in deprecation_warning
-            assert "even_batches" not in deprecation_warning
-            assert "use_seedable_sampler" not in deprecation_warning
-
-        # Pass in some arguments, but with their defaults
-        with pytest.warns(FutureWarning) as cm:
-            accelerator = Accelerator(
-                even_batches=True,
-                use_seedable_sampler=False,
-            )
-            deprecation_warning = str(cm.list[0].message)
-            assert "even_batches" in deprecation_warning
-            assert accelerator.even_batches is True
-            assert "use_seedable_sampler" in deprecation_warning
-            assert accelerator.use_seedable_sampler is False
-
     def test_partial_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to
