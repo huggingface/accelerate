@@ -900,7 +900,7 @@ class AcceleratorState:
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
-                # Just in case a user manually creates an `AcceleratorState`/bypasses the `Accelerator`
+                # Just incase a user manually creates an `AcceleratorState`/bypasses the `Accelerator`
                 if not isinstance(deepspeed_plugin, (list, tuple)):
                     deepspeed_plugin = [deepspeed_plugin]
                 self.deepspeed_plugins = deepspeed_plugin

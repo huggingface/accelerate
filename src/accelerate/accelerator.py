@@ -1715,6 +1715,7 @@ class Accelerator:
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
+        # This is skipped when preparing just a model
         if batch_size_per_device is not None:
             config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
             config_kwargs["train_batch_size"] = (
