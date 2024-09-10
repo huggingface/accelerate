@@ -31,7 +31,11 @@ def get_active_deepspeed_plugin(state: AcceleratorState) -> DeepSpeedPlugin:
         ValueError: If DeepSpeed was not enabled and this function is called.
     """
     if state.distributed_type != DistributedType.DEEPSPEED:
-        raise ValueError("DeepSpeed was not enabled. This function should not be called.")
+        raise ValueError(
+            "Couldn't retrieve the active `DeepSpeedPlugin` as none were enabled. "
+            "Please make sure that either `Accelerator` is configured for `deepspeed` "
+            "and make sure that a `DeepSpeedPlugin` has been enabled (`plugin.enable()`) before calling this."
+        )
     return next(plugin for plugin in state.deepspeed_plugins if plugin.enabled)
 
 
