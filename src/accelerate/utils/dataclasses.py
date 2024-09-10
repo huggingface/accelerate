@@ -980,13 +980,6 @@ class DeepSpeedPlugin:
             " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
         },
     )
-    name_to_model: dict = field(
-        default=None,
-        metadata={
-            "help": "A dictionary that maps model instances to their reference names. This is used during multiple-model support. Model names can then be referenced later such as during `accelerator.backward()`. "
-            "This is an experimental API and may change in the future."
-        },
-    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
