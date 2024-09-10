@@ -1401,7 +1401,7 @@ class Accelerator:
                 model_forward_func = model.forward
                 model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
             else:
-                model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
+                model_forward_func = model.forward.__func__
                 new_forward = autocast_context(model_forward_func)
                 model.forward = MethodType(new_forward, model)
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
