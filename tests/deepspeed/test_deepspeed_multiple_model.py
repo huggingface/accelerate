@@ -36,7 +36,7 @@ from accelerate.utils import patch_environment
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler, get_active_deepspeed_plugin
 
 
-GPT2_TINY = "sshleifer/tiny-gpt2"
+GPT2_TINY = "hf-internal-testing/tiny-random-gpt2"
 
 
 @require_deepspeed
@@ -65,7 +65,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3=f"{self.test_file_dir_str}/ds_config_zero3_model_only.json",
         )
 
-        # use self.get_config_dict(stage) to use these to ensure the original is not modified
         with open(self.ds_config_file["zero2"], encoding="utf-8") as f:
             self.config_zero2 = json.load(f)
         with open(self.ds_config_file["zero3"], encoding="utf-8") as f:
@@ -92,14 +91,17 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert ds_zero2.enabled
         assert not ds_zero3.enabled
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
+        assert accelerator.deepspeed_plugin == ds_zero2
         ds_zero3.enable()
         assert not ds_zero2.enabled
         assert ds_zero3.enabled
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero3
+        assert accelerator.deepspeed_plugin == ds_zero3
         ds_zero2.enable()
         assert not ds_zero3.enabled
         assert ds_zero2.enabled
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
+        assert accelerator.deepspeed_plugin == ds_zero2
 
     def test_enable_disable_manually_set(self):
         ds_zero2, _ = self.get_ds_plugins()
