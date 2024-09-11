@@ -1726,7 +1726,6 @@ class Accelerator:
             config_kwargs["train_batch_size"] = (
                 batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes
             )
-            
 
         model = None
         optimizer = None

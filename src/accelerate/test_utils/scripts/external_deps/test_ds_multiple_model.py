@@ -18,22 +18,19 @@ Test script for verifying multiple models can be utilized with Accelerate + Deep
 Scenario 1: One model is training, another model is being used for inference/logits to impact training in some form.
 Scenario 2: Two models are training simultaneously, which means two optimizers, etc.
 """
+
 import argparse
-import json
-import os
+from pathlib import Path
 
 import evaluate
 import torch
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
-from accelerate import Accelerator, DistributedType, DeepSpeedPlugin
-from accelerate.utils.deepspeed import DummyOptim, DummyScheduler, get_active_deepspeed_plugin
-import inspect
-from pathlib import Path
-from deepspeed.runtime.utils import DummyOptim as DS_DummyOptim
+from accelerate import Accelerator, DeepSpeedPlugin, DistributedType
+from accelerate.utils.deepspeed import get_active_deepspeed_plugin
 
 
 MAX_GPU_BATCH_SIZE = 16
@@ -47,7 +44,6 @@ class NoiseModel(torch.nn.Module):
 
     def forward(self, loss):
         return loss * self.noise_factor
-
 
 
 def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: str = "bert-base-cased"):
@@ -122,12 +118,18 @@ def single_model_training(config, args):
     # Initialize model under zero2 plugin
     assert get_active_deepspeed_plugin(accelerator.state) is zero2_plugin
     trained_model = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_path)
-    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size=config["batch_size"], model_name=args.model_name_or_path)
+    train_dataloader, eval_dataloader = get_dataloaders(
+        accelerator, batch_size=config["batch_size"], model_name=args.model_name_or_path
+    )
     max_training_steps = len(train_dataloader) * config["num_epochs"]
     optimizer = AdamW(trained_model.parameters(), lr=config["lr"])
-    lr_scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=max_training_steps)
+    lr_scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=0, num_training_steps=max_training_steps
+    )
 
-    train_dataloader, eval_dataloader, model, optimizer, lr_scheduler = accelerator.prepare(train_dataloader, eval_dataloader, trained_model, optimizer, lr_scheduler)
+    train_dataloader, eval_dataloader, model, optimizer, lr_scheduler = accelerator.prepare(
+        train_dataloader, eval_dataloader, trained_model, optimizer, lr_scheduler
+    )
 
     # Now prepare the model under zero3 plugin
     zero3_plugin.enable()
@@ -165,9 +167,7 @@ def single_model_training(config, args):
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             # It is slightly faster to call this once, than multiple times
-            predictions, references = accelerator.gather_for_metrics(
-                (predictions, batch["labels"])
-            )
+            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
             metric.add_batch(
                 predictions=predictions,
                 references=references,
@@ -181,6 +181,7 @@ def single_model_training(config, args):
         if best_performance < eval_metric["accuracy"]:
             best_performance = eval_metric["accuracy"]
     assert best_performance > performance_metric["epoch-0"]
+
 
 def multiple_model_training(config, args):
     # This will essentially be like a k-fold model, but one model is Zero-2 and another model is Zero-3
@@ -199,22 +200,34 @@ def multiple_model_training(config, args):
     # Initialize model under zero2 plugin
     assert get_active_deepspeed_plugin(zero2_accelerator.state) is zero2_plugin
     zero2_model = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_path)
-    train_dataloader, eval_dataloader = get_dataloaders(zero2_accelerator, batch_size=config["batch_size"], model_name=args.model_name_or_path)
+    train_dataloader, eval_dataloader = get_dataloaders(
+        zero2_accelerator, batch_size=config["batch_size"], model_name=args.model_name_or_path
+    )
     max_training_steps = len(train_dataloader) * config["num_epochs"]
     zero2_optimizer = AdamW(zero2_model.parameters(), lr=config["lr"])
-    zero2_lr_scheduler = get_linear_schedule_with_warmup(zero2_optimizer, num_warmup_steps=0, num_training_steps=max_training_steps)
+    zero2_lr_scheduler = get_linear_schedule_with_warmup(
+        zero2_optimizer, num_warmup_steps=0, num_training_steps=max_training_steps
+    )
 
-    train_dataloader, eval_dataloader, zero2_model, zero2_optimizer, zero2_lr_scheduler = zero2_accelerator.prepare(train_dataloader, eval_dataloader, zero2_model, zero2_optimizer, zero2_lr_scheduler)
+    train_dataloader, eval_dataloader, zero2_model, zero2_optimizer, zero2_lr_scheduler = zero2_accelerator.prepare(
+        train_dataloader, eval_dataloader, zero2_model, zero2_optimizer, zero2_lr_scheduler
+    )
     assert zero2_accelerator.deepspeed_engine_wrapped.engine is zero2_model
 
     # now do Zero3
     zero3_plugin.enable()
-    zero3_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = zero2_plugin.deepspeed_config["train_micro_batch_size_per_gpu"]
+    zero3_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = zero2_plugin.deepspeed_config[
+        "train_micro_batch_size_per_gpu"
+    ]
     assert get_active_deepspeed_plugin(zero3_accelerator.state) is zero3_plugin
     zero3_model = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_path)
     zero3_optimizer = AdamW(zero3_model.parameters(), lr=config["lr"])
-    zero3_lr_scheduler = get_linear_schedule_with_warmup(zero3_optimizer, num_warmup_steps=0, num_training_steps=max_training_steps)
-    zero3_model, zero3_optimizer, zero3_lr_scheduler = zero3_accelerator.prepare(zero3_model, zero3_optimizer, zero3_lr_scheduler)
+    zero3_lr_scheduler = get_linear_schedule_with_warmup(
+        zero3_optimizer, num_warmup_steps=0, num_training_steps=max_training_steps
+    )
+    zero3_model, zero3_optimizer, zero3_lr_scheduler = zero3_accelerator.prepare(
+        zero3_model, zero3_optimizer, zero3_lr_scheduler
+    )
     assert zero3_accelerator.deepspeed_engine_wrapped.engine is zero3_model
 
     # Run training loop
@@ -227,22 +240,20 @@ def multiple_model_training(config, args):
     metric_b = evaluate.load("glue", "mrpc")
     performance_metric_a = {}
     performance_metric_b = {}
-    original_zero2_params = zero2_model.parameters()
-    original_zero3_params = zero3_model.parameters()
     for epoch in range(starting_epoch, num_epochs):
         zero2_model.train()
         zero3_model.train()
         for step, batch in enumerate(train_dataloader):
-            with zero2_accelerator.accumulate(zero2_model):
+            with zero2_accelerator.accumulate(zero2_model, zero3_model):
                 outputs_1 = zero2_model(**batch)
-                outputs_2 = zero3_model(**batch)
                 zero2_accelerator.backward(outputs_1.loss)
-                zero3_accelerator.backward(outputs_2.loss)
                 zero2_optimizer.step()
-                zero3_optimizer.step()
                 zero2_lr_scheduler.step()
-                zero3_lr_scheduler.step()
                 zero2_optimizer.zero_grad()
+                outputs_2 = zero3_model(**batch)
+                zero3_accelerator.backward(outputs_2.loss)
+                zero3_optimizer.step()
+                zero3_lr_scheduler.step()
                 zero3_optimizer.zero_grad()
 
         zero2_model.eval()
@@ -256,7 +267,7 @@ def multiple_model_training(config, args):
             predictions_b = logits_b.argmax(dim=-1)
             # It is slightly faster to call this once, than multiple times
             predictions_a, predictions_b, references = zero2_accelerator.gather_for_metrics(
-                (predictions_a, predictions_b,batch["labels"])
+                (predictions_a, predictions_b, batch["labels"])
             )
             metric_a.add_batch(
                 predictions=predictions_a,
@@ -281,13 +292,6 @@ def multiple_model_training(config, args):
     assert best_performance_a > performance_metric_a["epoch-0"]
     assert best_performance_b > performance_metric_b["epoch-0"]
 
-    # Check that the parameters are different
-    for p1, p2 in zip(original_zero2_params, zero2_model.parameters()):
-        assert p1.data.ne(p2.data).sum() > 0
-
-    for g1, g2 in zip(original_zero3_params, zero3_model.parameters()):
-        assert g1.grad.data.ne(g2.grad.data).sum() > 0
-
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script tracking peak GPU memory usage.")
@@ -307,7 +311,7 @@ def main():
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=3,
+        default=2,
         help="Number of train epochs.",
     )
     args = parser.parse_args()

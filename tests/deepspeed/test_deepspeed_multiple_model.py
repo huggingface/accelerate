@@ -21,8 +21,18 @@ import torch
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator, DeepSpeedPlugin
-from accelerate.test_utils.testing import AccelerateTestCase, require_deepspeed, require_non_cpu
+from accelerate.test_utils.testing import (
+    AccelerateTestCase,
+    execute_subprocess_async,
+    path_in_accelerate_package,
+    require_deepspeed,
+    require_huggingface_suite,
+    require_multi_device,
+    require_non_cpu,
+    slow,
+)
 from accelerate.test_utils.training import RegressionDataset
+from accelerate.utils import patch_environment
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler, get_active_deepspeed_plugin
 
 
@@ -32,6 +42,8 @@ GPT2_TINY = "sshleifer/tiny-gpt2"
 @require_deepspeed
 @require_non_cpu
 class DeepSpeedConfigIntegration(AccelerateTestCase):
+    test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
+
     def setUp(self):
         super().setUp()
 
@@ -111,4 +123,11 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
         assert accelerator.deepspeed_engine_wrapped.engine is model1
 
+    @require_huggingface_suite
+    @require_multi_device
+    @slow
     def test_train_multiple_models(self):
+        self.test_file_path = self.test_scripts_folder / "test_ds_multiple_model.py"
+        cmd = ["accelerate", "launch", "--num_processes=2", "--num_machines=1", self.test_file_path]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd)
