@@ -109,7 +109,7 @@
   - local: package_reference/big_modeling
     title: Working with large models
   - local: package_reference/inference
-    title: PiPPy
+    title: Pipeline parallelism
   - local: package_reference/kwargs
     title: Kwargs handlers
   - local: package_reference/fp8

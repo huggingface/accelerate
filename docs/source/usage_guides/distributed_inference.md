@@ -144,7 +144,7 @@ You can find more complex examples [here](https://github.com/huggingface/acceler
 
 ## Memory-efficient pipeline parallelism (experimental)
 
-This next part will discuss using *pipeline parallelism*. This is an **experimental** API utilizing the [PiPPy library by PyTorch](https://github.com/pytorch/PiPPy/) as a native solution. 
+This next part will discuss using *pipeline parallelism*. This is an **experimental** API that utilizes [torch.distributed.pipelining](https://pytorch.org/docs/stable/distributed.pipelining.html#) as a native solution. 
 
 The general idea with pipeline parallelism is: say you have 4 GPUs and a model big enough it can be *split* on four GPUs using `device_map="auto"`. With this method you can send in 4 inputs at a time (for example here, any amount works) and each model chunk will work on an input, then receive the next input once the prior chunk finished, making it *much* more efficient **and faster** than the method described earlier. Here's a visual taken from the PyTorch repository:
 
@@ -152,13 +152,11 @@ The general idea with pipeline parallelism is: say you have 4 GPUs and a model b
 
 To illustrate how you can use this with Accelerate, we have created an [example zoo](https://github.com/huggingface/accelerate/tree/main/examples/inference) showcasing a number of different models and situations. In this tutorial, we'll show this method for GPT2 across two GPUs.
 
-Before you proceed, please make sure you have the latest pippy installed by running the following:
+Before you proceed, please make sure you have the latest PyTorch version installed by running the following:
 
 ```bash
-pip install torchpippy
+pip install torch
 ```
-
-We require at least version 0.2.0. To confirm that you have the correct version, run `pip show torchpippy`.
 
 Start by creating the model on the CPU:
 

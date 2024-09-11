@@ -41,7 +41,7 @@ with init_empty_weights():
 
 Next, the weights are loaded into the model for inference.
 
-The [`load_checkpoint_and_dispatch`] method loads a checkpoint inside your empty model and dispatches the weights for each layer across all available devices (GPU/MPS and CPU).
+The [`load_checkpoint_and_dispatch`] method loads a checkpoint inside your empty model and dispatches the weights for each layer across all available devices, starting with the fastest devices (GPU, MPS, XPU, NPU, MLU, MUSA) first before moving to the slower ones (CPU and hard drive).
 
 Setting `device_map="auto"` automatically fills all available space on the GPU(s) first, then the CPU, and finally, the hard drive (the absolute slowest option) if there is still not enough memory.
 
@@ -71,6 +71,9 @@ output = model(input)
 Each time an input is passed through a layer, it is sent from the CPU to the GPU (or disk to CPU to GPU), the output is calculated, and the layer is removed from the GPU going back down the line. While this adds some overhead to inference, it enables you to run any size model on your system, as long as the largest layer fits on your GPU.
 
 Multiple GPUs, or "model parallelism", can be utilized but only one GPU will be active at any given moment. This forces the GPU to wait for the previous GPU to send it the output. You should launch your script normally with Python instead of other tools like torchrun and accelerate launch.
+
+> [!TIP]
+> You may also be interested in *pipeline parallelism* which utilizes all available GPUs at once, instead of only having one GPU active at a time. This approach is less flexbile though. For more details, refer to the [Memory-efficient pipeline parallelism](./distributed_inference#memory-efficient-pipeline-parallelism-experimental) guide.
 
 <Youtube id="MWCSGj9jEAo"/>
 
