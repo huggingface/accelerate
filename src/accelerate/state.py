@@ -950,10 +950,7 @@ class AcceleratorState:
     def __repr__(self):
         repr = PartialState().__repr__() + f"\nMixed precision type: {self.mixed_precision}\n"
         if self.distributed_type == DistributedType.DEEPSPEED:
-            from accelerate.utils.deepspeed import get_active_deepspeed_plugin
-
-            active_plugin = get_active_deepspeed_plugin(self)
-            repr += f"ds_config: {active_plugin.deepspeed_config}\n"
+            repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
         return repr
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
@@ -982,10 +979,7 @@ class AcceleratorState:
     @property
     def mixed_precision(self):
         if self.distributed_type == DistributedType.DEEPSPEED:
-            from accelerate.utils.deepspeed import get_active_deepspeed_plugin
-
-            active_plugin = get_active_deepspeed_plugin(self)
-            config = active_plugin.deepspeed_config
+            config = self.deepspeed_plugin.deepspeed_config
             if config.get("fp16", {}).get("enabled", False):
                 mixed_precision = "fp16"
             elif config.get("bf16", {}).get("enabled", False):
@@ -1109,6 +1103,8 @@ class AcceleratorState:
 
         If using multiple plugins, the first one will be the active one by default. Manually call `plugin.enable()` to
         activate a different plugin.
+
+        If deepspeed is not enabled, this will return `None`.
         """
         if self.distributed_type != DistributedType.DEEPSPEED:
             return None

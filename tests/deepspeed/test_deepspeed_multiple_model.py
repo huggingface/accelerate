@@ -101,6 +101,17 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert ds_zero2.enabled
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
 
+    def test_enable_disable_manually_set(self):
+        ds_zero2, _ = self.get_ds_plugins()
+        ds_zero2.enable()
+        with self.assertRaises(NotImplementedError):
+            ds_zero2.enabled = False
+        assert ds_zero2.enabled
+        ds_zero2.disable()
+        assert not ds_zero2.enabled
+        with self.assertRaises(NotImplementedError):
+            ds_zero2.enabled = True
+
     def test_prepare_multiple_models(self):
         ds_zero2, ds_zero3 = self.get_ds_plugins()
         accelerator = Accelerator(deepspeed_plugin=[ds_zero2, ds_zero3])

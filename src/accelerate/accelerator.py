@@ -116,7 +116,6 @@ if is_deepspeed_available():
         DeepSpeedSchedulerWrapper,
         DummyOptim,
         DummyScheduler,
-        get_active_deepspeed_plugin,
     )
 
 if is_megatron_lm_available():
@@ -251,7 +250,7 @@ class Accelerator:
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
         dataloader_config: DataLoaderConfiguration | None = None,
-        deepspeed_plugin: DeepSpeedPlugin | None = None,
+        deepspeed_plugin: DeepSpeedPlugin | list[DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
@@ -564,6 +563,8 @@ class Accelerator:
 
         If using multiple plugins, the first one will be the active one by default. Manually call `plugin.enable()` to
         activate a different plugin.
+
+        If deepspeed is not enabled, this will return `None`.
         """
         return self.state.deepspeed_plugin
 
@@ -1673,7 +1674,7 @@ class Accelerator:
 
             ds_initialize = msamp_deepspeed.initialize
 
-        deepspeed_plugin = get_active_deepspeed_plugin(self.state)
+        deepspeed_plugin = self.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         result = [

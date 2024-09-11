@@ -1100,7 +1100,7 @@ class DeepSpeedPlugin:
             self.zero3_init_flag = False
         # NOTE: Set to False by default, will be set to `True` automatically if it's the first plugin passed
         # to the `Accelerator`'s `deepspeed_plugin` param, *or* `plugin.enable()` is manually called
-        self.enabled = False
+        self._set_enabled(False)
 
         # Ignore if it's already set
         if self.enable_msamp and "msamp" not in self.deepspeed_config:
@@ -1298,10 +1298,24 @@ class DeepSpeedPlugin:
             for plugin in AcceleratorState().deepspeed_plugins:
                 if plugin is not self:
                     plugin.disable()
-        self.enabled = True
+        self._set_enabled(True)
 
     def disable(self):
-        self.enabled = False
+        self._set_enabled(False)
+
+    def _set_enabled(self, value: bool):
+        """
+        Private setter for the 'enabled' attribute.
+        """
+        self._enabled = value
+
+    @property
+    def enabled(self):
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, value):
+        raise NotImplementedError("'enabled' can only be set through the 'enable()' method.")
 
 
 @dataclass
