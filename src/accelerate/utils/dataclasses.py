@@ -1301,10 +1301,10 @@ class DeepSpeedPlugin:
         if AcceleratorState._shared_state != {}:
             for plugin in AcceleratorState().deepspeed_plugins.values():
                 if plugin is not self:
-                    plugin.disable()
+                    plugin._disable()
         self._set_enabled(True)
 
-    def disable(self):
+    def _disable(self):
         self._set_enabled(False)
 
     def _set_enabled(self, value: bool):

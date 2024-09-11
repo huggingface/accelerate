@@ -114,10 +114,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         with self.assertRaises(NotImplementedError):
             ds_zero2.enabled = False
         assert ds_zero2.enabled
-        ds_zero2.disable()
-        assert not ds_zero2.enabled
-        with self.assertRaises(NotImplementedError):
-            ds_zero2.enabled = True
 
     def test_prepare_multiple_models(self):
         ds_zero2, ds_zero3 = self.get_ds_plugins()
