@@ -13,15 +13,15 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Moving between FSDP And DeepSpeed
+# FSDP vs DeepSpeed
 
-🤗 Accelerate offers flexibilty of training frameworks, by integrating two extremely powerful tools for distributed training, namely [Pytorch FSDP](../usage_guides/fsdp) and [Microsoft DeepSpeed](../usage_guides/deepspeed). The aim of this tutorial is to draw parallels, as well as to outline potential differences, to empower the user to switch seamlessly between these two frameworks.
+Accelerate offers flexibilty of training frameworks, by integrating two extremely powerful tools for distributed training, namely [Pytorch FSDP](../usage_guides/fsdp) and [Microsoft DeepSpeed](../usage_guides/deepspeed). The aim of this tutorial is to draw parallels, as well as to outline potential differences, to empower the user to switch seamlessly between these two frameworks.
 
 <Tip>
 
-  To switch between the frameworks, we recommend launching code 🤗 `accelerate launch` passing in the correct config file with `--config_file`, or passing in the respective arguments directly for [FSDP and DeepSpeed](../package_reference/cli#accelerate-launch) .
+  To switch between the frameworks, we recommend launching code `accelerate launch` passing in the correct config file with `--config_file`, or passing in the respective arguments directly for [FSDP and DeepSpeed](../package_reference/cli#accelerate-launch) .
 
-  Example 🤗 Accelerate configurations can be found here for [DeepSpeed](../usage_guides/deepspeed#accelerate-deepspeed-plugin) and [FSDP](../usage_guides/fsdp#how-it-works-out-of-the-box), or in the [example zoo under "Launch Configurations"](../usage_guides/explore)
+  Example Accelerate configurations can be found here for [DeepSpeed](../usage_guides/deepspeed#accelerate-deepspeed-plugin) and [FSDP](../usage_guides/fsdp#how-it-works-out-of-the-box), or in the [example zoo under "Launch Configurations"](../usage_guides/explore)
  
 </Tip>
 
@@ -47,7 +47,7 @@ parameters summoning | FSDP<br>DeepSpeed | `--fsdp_use_orig_params`<br>None | `t
 parameters syncing | FSDP<br>DeepSpeed | `--fsdp_sync_module_states`<br>None | `true` | 
 training | FSDP<br>DeepSpeed | None<br>`--gradient_accumulation_steps`<br>`--gradient_clipping` | <br>`auto`<br>`auto` | Transparent to user
 
-For detailed descriptions of the above, refer to [🤗 `Accelerate` launch documentation](../package_reference/cli#accelerate-launch).
+For detailed descriptions of the above, refer to [`Accelerate` launch documentation](../package_reference/cli#accelerate-launch).
 
 <Tip>
 
@@ -94,7 +94,7 @@ FSDP only allows *all-or-nothing* offload (i.e., either offload parameters, grad
 ### Prefetching
 
 FSDP allows two prefetching configurations `--fsdp_forward_prefetch` and `--fsdp_backward_prefetch` to improve overlap of comms / computation at a cost of extra memory, see [FSDP documentation](https://pytorch.org/docs/stable/fsdp.html). 
-For DeepSpeed, the prefetching will be turned on when needed, and it turns on depending on certain hyper-params like `stage3_param_persistence_threshold`, `stage3_max_reuse_distance`, etc, [that can be configured for Zero3](https://www.deepspeed.ai/docs/config-json/#parameter-offloading); 🤗 `accelerate` may set these hyper-params automatically if you don't set those explicitly in the deepspeed config file.
+For DeepSpeed, the prefetching will be turned on when needed, and it turns on depending on certain hyper-params like `stage3_param_persistence_threshold`, `stage3_max_reuse_distance`, etc, [that can be configured for Zero3](https://www.deepspeed.ai/docs/config-json/#parameter-offloading); `accelerate` may set these hyper-params automatically if you don't set those explicitly in the deepspeed config file.
 
 <Tip>
 
@@ -104,11 +104,11 @@ For DeepSpeed, the prefetching will be turned on when needed, and it turns on de
 
 ### Model Loading
 
-While FSDP require an explicit `--fsdp_cpu_ram_efficient_loading true` to activate efficient model loading, 🤗 `transformers` will activate the similar feature whenever DeepSpeed Zero3 is used.
+While FSDP require an explicit `--fsdp_cpu_ram_efficient_loading true` to activate efficient model loading, `transformers` will activate the similar feature whenever DeepSpeed Zero3 is used.
 
 <Tip>
 
-    For FSDP, whenever setting `--fsdp_cpu_ram_efficient_loading true`, 🤗 `accelerate` will automatically set `sync_module_states` to true. 
+    For FSDP, whenever setting `--fsdp_cpu_ram_efficient_loading true`, `accelerate` will automatically set `sync_module_states` to true. 
     For RAM efficient loading the weights will be loaded only in a singe rank, and thus requires `sync_module_states` to broadcast weights to other ranks.
 
 </Tip>

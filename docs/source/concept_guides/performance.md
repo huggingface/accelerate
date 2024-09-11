@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Comparing performance between different device setups
+# Comparing performance across distributed setups
 
 Evaluating and comparing the performance from different setups can be quite tricky if you don't know what to look for.
 For example, you cannot run the same script with the same batch size across TPU, multi-GPU, and single-GPU with Accelerate 

@@ -15,33 +15,78 @@ rendered properly in your Markdown viewer.
 
 # Working with large models
 
-## Dispatching and Offloading Models
+## Dispatch and offload
+
+### init_empty_weights
 
 [[autodoc]] big_modeling.init_empty_weights
+
+### cpu_offload
+
 [[autodoc]] big_modeling.cpu_offload
+
+### cpu_offload_with_hook
+
 [[autodoc]] big_modeling.cpu_offload_with_hook
+
+### disk_offload
+
 [[autodoc]] big_modeling.disk_offload
+
+### dispatch_model
+
 [[autodoc]] big_modeling.dispatch_model
+
+### load_checkpoint_and_dispatch
+
 [[autodoc]] big_modeling.load_checkpoint_and_dispatch
+
+### load_checkpoint_in_model
+
 [[autodoc]] big_modeling.load_checkpoint_in_model
+
+### infer_auto_device_map
+
 [[autodoc]] utils.infer_auto_device_map
 
-## Model Hooks
+## Hooks
 
-### Hook Classes
+### ModelHook
 
 [[autodoc]] hooks.ModelHook
+
+### AlignDevicesHook
+
 [[autodoc]] hooks.AlignDevicesHook
+
+### SequentialHook
+
 [[autodoc]] hooks.SequentialHook
 
-### Adding Hooks
+## Adding Hooks
+
+### add_hook_to_module
 
 [[autodoc]] hooks.add_hook_to_module
+
+### attach_execution_device_hook
+
 [[autodoc]] hooks.attach_execution_device_hook
+
+### attach_align_device_hook
+
 [[autodoc]] hooks.attach_align_device_hook
+
+### attach_align_device_hook_on_blocks
+
 [[autodoc]] hooks.attach_align_device_hook_on_blocks
 
-### Removing Hooks
+## Removing Hooks
+
+### remove_hook_from_module
 
 [[autodoc]] hooks.remove_hook_from_module
+
+### remove_hook_from_submodules
+
 [[autodoc]] hooks.remove_hook_from_submodules

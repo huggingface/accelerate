@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Low Precision Training Methods
+# Low precision training methods
 
 The release of new kinds of hardware led to the emergence of new training paradigms that better utilize them. Currently, this is in the form of training
 in 8-bit precision using packages such as [TransformersEngine](https://github.com/NVIDIA/TransformerEngine) (TE) or [MS-AMP](https://github.com/Azure/MS-AMP/tree/main).
@@ -36,7 +36,7 @@ MS-AMP O3 | FP8 | FP8 | FP8 | FP16 | FP8 | FP8+FP16
 
 `TransformersEngine` is the first solution to trying to train in 8-bit floating point. It works by using drop-in replacement layers for certain ones in a model that utilizes their FP8-engine to reduce the number of bits (such as 32 to 8) without degrading the final accuracy of the model. 
 
-Specifically, 🤗 Accelerate will find and replace the following layers with `TransformersEngine` versions:
+Specifically, Accelerate will find and replace the following layers with `TransformersEngine` versions:
 
 * `nn.LayerNorm` for `te.LayerNorm`
 * `nn.Linear` for `te.Linear`
@@ -67,7 +67,7 @@ MS-AMP takes a different approach to `TransformersEngine` by providing three dif
 
 * The second optimization level (`O2`) improves upon this by also reducing the precision of the optimizer states. One is in FP8 while the other is in FP16. Generally it's been shown that this will only provide a net-gain of no degraded end accuracy, increased training speed, and reduced memory as now every state is either in FP16 or FP8. 
 
-* Finally, MS-AMP has a third optimization level (`O3`) which helps during DDP scenarios such as DeepSpeed. The weights of the model in memory are fully cast to FP8, and the master weights are now stored in FP16. This fully reduces memory by the highest factor as now not only is almost everything in FP8, only two states are left in FP16. Currently, only DeepSpeed versions up through 0.9.2 are supported, so this capability is not included in the 🤗 Accelerate integration
+* Finally, MS-AMP has a third optimization level (`O3`) which helps during DDP scenarios such as DeepSpeed. The weights of the model in memory are fully cast to FP8, and the master weights are now stored in FP16. This fully reduces memory by the highest factor as now not only is almost everything in FP8, only two states are left in FP16. Currently, only DeepSpeed versions up through 0.9.2 are supported, so this capability is not included in the Accelerate integration
 
 ## Combining the two
 

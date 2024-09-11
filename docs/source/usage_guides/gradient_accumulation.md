@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Performing gradient accumulation with 🤗 Accelerate
+# Performing gradient accumulation with Accelerate
 
 Gradient accumulation is a technique where you can train on bigger batch sizes than 
 your machine would normally be able to fit into memory. This is done by accumulating gradients over
@@ -22,7 +22,7 @@ several batches, and only stepping the optimizer after a certain number of batch
 While technically standard gradient accumulation code would work fine in a distributed setup, it is not the most efficient
 method for doing so and you may experience considerable slowdowns!
 
-In this tutorial you will see how to quickly setup gradient accumulation and perform it with the utilities provided in 🤗 Accelerate,
+In this tutorial you will see how to quickly setup gradient accumulation and perform it with the utilities provided in Accelerate,
 which can total to adding just one new line of code!
 
 This example will use a very simplistic PyTorch training loop that performs gradient accumulation every two batches:
@@ -47,9 +47,9 @@ for index, batch in enumerate(training_dataloader):
         optimizer.zero_grad()
 ```
 
-## Converting it to 🤗 Accelerate
+## Converting it to Accelerate
 
-First the code shown earlier will be converted to utilize 🤗 Accelerate without the special gradient accumulation helper:
+First the code shown earlier will be converted to utilize Accelerate without the special gradient accumulation helper:
 
 ```diff
 + from accelerate import Accelerator
@@ -79,9 +79,9 @@ First the code shown earlier will be converted to utilize 🤗 Accelerate withou
 
 </Tip>
 
-## Letting 🤗 Accelerate handle gradient accumulation
+## Letting Accelerate handle gradient accumulation
 
-All that is left now is to let 🤗 Accelerate handle the gradient accumulation for us. To do so you should pass in a `gradient_accumulation_steps` parameter to [`Accelerator`], dictating the number 
+All that is left now is to let Accelerate handle the gradient accumulation for us. To do so you should pass in a `gradient_accumulation_steps` parameter to [`Accelerator`], dictating the number 
 of steps to perform before each call to `step()` and how to automatically adjust the loss during the call to [`~Accelerator.backward`]:
 
 ```diff
@@ -120,7 +120,7 @@ As you can see the [`Accelerator`] is able to keep track of the batch number you
 <Tip>
 
 Typically with gradient accumulation, you would need to adjust the number of steps to reflect the change in total batches you are 
-training on. 🤗 Accelerate automagically does this for you by default. Behind the scenes we instantiate a [`GradientAccumulationPlugin`] configured to do this.
+training on. Accelerate automagically does this for you by default. Behind the scenes we instantiate a [`GradientAccumulationPlugin`] configured to do this.
 
 </Tip>
 
@@ -140,7 +140,7 @@ accelerator = Accelerator(..., gradient_accumulation_plugin=plugin)
 
 ## The finished code
 
-Below is the finished implementation for performing gradient accumulation with 🤗 Accelerate
+Below is the finished implementation for performing gradient accumulation with Accelerate
 
 ```python
 from accelerate import Accelerator
@@ -171,7 +171,7 @@ To learn more about what magic this wraps around, read the [Gradient Synchroniza
 
 ## Self-contained example
 
-Here is a self-contained example that you can run to see gradient accumulation in action with 🤗 Accelerate:
+Here is a self-contained example that you can run to see gradient accumulation in action with Accelerate:
 
 ```python
 import torch

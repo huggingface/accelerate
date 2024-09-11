@@ -13,8 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# The inference API
+# Pipeline parallelism
 
-These docs refer to the [PiPPy](https://github.com/PyTorch/PiPPy) integration.
+Accelerate supports pipeline parallelism for large-scale training with the PyTorch [torch.distributed.pipelining](https://pytorch.org/docs/stable/distributed.pipelining.html) API.
+
+## prepare_pippy
 
 [[autodoc]] inference.prepare_pippy

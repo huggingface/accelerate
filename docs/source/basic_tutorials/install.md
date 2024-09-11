@@ -13,31 +13,29 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Installation and Configuration
+# Installation
 
-Before you start, you will need to setup your environment, install the appropriate packages, and configure 🤗 Accelerate. 🤗 Accelerate is tested on **Python 3.8+**.
+Before you start, you will need to setup your environment, install the appropriate packages, and configure Accelerate. Accelerate is tested on **Python 3.8+**.
 
-## Installing 🤗 Accelerate
+Accelerate is available on pypi and conda, as well as on GitHub. Details to install from each are below:
 
-🤗 Accelerate is available on pypi and conda, as well as on GitHub. Details to install from each are below:
+## pip
 
-### pip 
-
-To install 🤗 Accelerate from pypi, perform:
+To install Accelerate from pypi, perform:
 
 ```bash
 pip install accelerate
 ```
 
-### conda
+## conda
 
-🤗 Accelerate can also be installed with conda with:
+Accelerate can also be installed with conda with:
 
 ```bash
 conda install -c conda-forge accelerate
 ```
 
-### Source
+## Source
 
 New features are added every day that haven't been released yet. To try them out yourself, install
 from the GitHub repository:
@@ -56,9 +54,9 @@ cd accelerate
 pip install -e .
 ```
 
-## Configuring 🤗 Accelerate
+## Configuration
 
-After installing, you need to configure 🤗 Accelerate for how the current system is setup for training. 
+After installing, you need to configure Accelerate for how the current system is setup for training. 
 To do so run the following and answer the questions prompted to you:
 
 ```bash
@@ -70,7 +68,8 @@ To write a barebones configuration that doesn't include options such as DeepSpee
 ```bash
 python -c "from accelerate.utils import write_basic_config; write_basic_config(mixed_precision='fp16')"
 ```
-🤗 Accelerate will automatically utilize the maximum number of GPUs available and set the mixed precision mode.
+
+Accelerate will automatically utilize the maximum number of GPUs available and set the mixed precision mode.
 
 To check that your configuration looks fine, run:
 

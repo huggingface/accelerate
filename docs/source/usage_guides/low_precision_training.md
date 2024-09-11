@@ -15,11 +15,11 @@ rendered properly in your Markdown viewer.
 
 # Low Precision Training Methods
 
-🤗 Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine` and `MS-AMP` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training. 
+Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine` and `MS-AMP` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training. 
 
 ## What training on FP8 means
 
-To explore more of the nitty-gritty in training in FP8 with PyTorch and 🤗 Accelerate, check out the [concept_guide](../concept_guides/low_precision_training) on why this can be difficult. But essentially rather than training in BF16, some (or all) aspects of training a model can be performed using 8 bits instead of 16. The challenge is doing so without degrading final performance. 
+To explore more of the nitty-gritty in training in FP8 with PyTorch and Accelerate, check out the [concept_guide](../concept_guides/low_precision_training) on why this can be difficult. But essentially rather than training in BF16, some (or all) aspects of training a model can be performed using 8 bits instead of 16. The challenge is doing so without degrading final performance. 
 
 This is only enabled on specific NVIDIA hardware, namely:
 
@@ -39,7 +39,7 @@ from accelerate import Accelerator
 accelerator = Accelerator(mixed_precision="fp8")
 ```
 
-By default, if `MS-AMP` is available in your environment, 🤗 Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize the [`utils.FP8RecipeKwargs`] or clarify it in your config `yaml`/during `accelerate launch`:
+By default, if `MS-AMP` is available in your environment, Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize the [`utils.FP8RecipeKwargs`] or clarify it in your config `yaml`/during `accelerate launch`:
 
 ```{python}
 from accelerate import Accelerator
@@ -67,7 +67,7 @@ fp8_config:
 
 Of the two, `MS-AMP` is traditionally the easier one to configure as there is only a single argument: the optimization level. 
 
-Currently two levels of optimization are supported in the 🤗 Accelerate integration, `"O1"` and `"O2"` (using the letter 'o', not zero). 
+Currently two levels of optimization are supported in the Accelerate integration, `"O1"` and `"O2"` (using the letter 'o', not zero). 
 
 * `"O1"` will cast the weight gradients and `all_reduce` communications to happen in 8-bit, while the rest are done in 16 bit. This reduces the general GPU memory usage and speeds up communication bandwidths.
 * `"O2"` will also cast first-order optimizer states into 8 bit, while the second order states are in FP16. (Currently just the `Adam` optimizer is supported). This tries its best to minimize final accuracy degradation and will save the highest potential memory.
@@ -96,7 +96,7 @@ fp8_config:
 
 TransformersEngine has much more available for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
 
-🤗 Accelerate tries to set sensible defaults, but exploring and tweaking the various parameters yourself can lead to better performance potentially.
+Accelerate tries to set sensible defaults, but exploring and tweaking the various parameters yourself can lead to better performance potentially.
 
 To use it, specify `backend="te"` and modify any of the arguments you want as part of your kwarg handler:
 

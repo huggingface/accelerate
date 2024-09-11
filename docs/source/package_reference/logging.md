@@ -13,9 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Logging with Accelerate
+# Logging
 
 Refer to the [Troubleshooting guide](../usage_guides/troubleshooting#logging) or to the example below to learn 
-how to use 🤗 Accelerate's logger. 
+how to use Accelerate's logger. 
 
 [[autodoc]] logging.get_logger

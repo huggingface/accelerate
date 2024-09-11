@@ -15,8 +15,8 @@ rendered properly in your Markdown viewer.
 
 # Checkpointing
 
-When training a PyTorch model with 🤗 Accelerate, you may often want to save and continue a state of training. Doing so requires
-saving and loading the model, optimizer, RNG generators, and the GradScaler. Inside 🤗 Accelerate are two convenience functions to achieve this quickly:
+When training a PyTorch model with Accelerate, you may often want to save and continue a state of training. Doing so requires
+saving and loading the model, optimizer, RNG generators, and the GradScaler. Inside Accelerate are two convenience functions to achieve this quickly:
 - Use [`~Accelerator.save_state`] for saving everything mentioned above to a folder location
 - Use [`~Accelerator.load_state`] for loading everything stored from an earlier `save_state`
 

@@ -13,12 +13,20 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Utilities for Fully Sharded Data Parallelism
+# Fully Sharded Data Parallel utilities
+
+## enable_fsdp_ram_efficient_loading
 
 [[autodoc]] utils.enable_fsdp_ram_efficient_loading
 
+## disable_fsdp_ram_efficient_loading
+
 [[autodoc]] utils.disable_fsdp_ram_efficient_loading
 
+## merge_fsdp_weights
+
 [[autodoc]] utils.merge_fsdp_weights
+
+## FullyShardedDataParallelPlugin
 
 [[autodoc]] utils.FullyShardedDataParallelPlugin
