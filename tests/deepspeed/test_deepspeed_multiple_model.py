@@ -110,3 +110,5 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             )
 
         assert accelerator.deepspeed_engine_wrapped.engine is model1
+
+    def test_train_multiple_models(self):

@@ -10,23 +10,6 @@
     "bf16": {
         "enabled": "auto"
     },
-    "optimizer": {
-        "type": "AdamW",
-        "params": {
-            "lr": "auto",
-            "weight_decay": "auto",
-            "torch_adam": true,
-            "adam_w_mode": true
-        }
-    },
-    "scheduler": {
-        "type": "WarmupLR",
-        "params": {
-            "warmup_min_lr": "auto",
-            "warmup_max_lr": "auto",
-            "warmup_num_steps": "auto"
-        }
-    },
     "zero_optimization": {
         "stage": 2,
         "offload_optimizer": {

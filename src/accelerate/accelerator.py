@@ -282,10 +282,15 @@ class Accelerator:
 
         dynamo_plugin = TorchDynamoPlugin() if dynamo_backend is None else TorchDynamoPlugin(backend=dynamo_backend)
 
-        if deepspeed_plugin is None:  # init from env variables
-            deepspeed_plugin = (
-                DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
-            )
+        if deepspeed_plugin is None:
+            # First check if we're creating another `Accelerator` w/o setting `deepspeed_plugin`
+            if PartialState().distributed_type == DistributedType.DEEPSPEED:
+                deepspeed_plugin = AcceleratorState().deepspeed_plugins
+            else:
+                # init from env variables
+                deepspeed_plugin = (
+                    DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
+                )
         else:
             if isinstance(deepspeed_plugin, (tuple, list)):
                 for plugin in deepspeed_plugin:
@@ -1721,6 +1726,7 @@ class Accelerator:
             config_kwargs["train_batch_size"] = (
                 batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes
             )
+            
 
         model = None
         optimizer = None
