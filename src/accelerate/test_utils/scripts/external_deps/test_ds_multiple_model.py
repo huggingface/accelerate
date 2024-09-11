@@ -236,10 +236,8 @@ def multiple_model_training(config, args):
             with zero2_accelerator.accumulate(zero2_model):
                 outputs_1 = zero2_model(**batch)
                 outputs_2 = zero3_model(**batch)
-                # Combine the losses
-                loss = outputs_1.loss + outputs_2.loss / 2
-                zero2_accelerator.backward(loss, retain_graph=True)
-                zero3_accelerator.backward(loss, retain_graph=True)
+                zero2_accelerator.backward(outputs_1.loss)
+                zero3_accelerator.backward(outputs_2.loss)
                 zero2_optimizer.step()
                 zero3_optimizer.step()
                 zero2_lr_scheduler.step()
