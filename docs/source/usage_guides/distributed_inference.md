@@ -168,7 +168,7 @@ model = GPT2ForSequenceClassification(config)
 model.eval()
 ```
 
-Next you'll need to create some example inputs to use. These help PiPPy trace the model.
+Next you'll need to create some example inputs to use. These help `torch.distributed.pipelining` trace the model.
 
 <Tip warning={true}>
     However you make this example will determine the relative batch size that will be used/passed
