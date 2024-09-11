@@ -106,8 +106,8 @@ ds_config_file = dict(
 def single_model_training(config, args):
     # Training a single model, we have a `noise` model that is untrainable used to inject some noise into the training process
     num_epochs = config["num_epochs"]
-    zero2_plugin = DeepSpeedPlugin(hf_ds_config=ds_config_file["zero2"])
-    zero3_plugin = DeepSpeedPlugin(hf_ds_config=ds_config_file["zero3_inference"])
+    zero2_plugin = DeepSpeedPlugin(hf_ds_config=ds_config_file["zero2"], plugin_key="training")
+    zero3_plugin = DeepSpeedPlugin(hf_ds_config=ds_config_file["zero3_inference"], plugin_key="inference")
 
     # Initialize accelerator
     accelerator = Accelerator(
@@ -132,14 +132,14 @@ def single_model_training(config, args):
     )
 
     # Now prepare the model under zero3 plugin
-    zero3_plugin.enable()
+    accelerator.state.get_deepspeed_plugin("inference").enable()
     assert get_active_deepspeed_plugin(accelerator.state) is zero3_plugin
     inference_model = NoiseModel()
     inference_model = accelerator.prepare(inference_model)
     inference_model.eval()
 
-    # # Run training loop
-    zero2_plugin.enable()
+    # Run training loop
+    accelerator.state.get_deepspeed_plugin("training").enable()
     # We also need to keep track of the stating epoch so files are named properly
     starting_epoch = 0
 
@@ -186,8 +186,8 @@ def single_model_training(config, args):
 def multiple_model_training(config, args):
     # This will essentially be like a k-fold model, but one model is Zero-2 and another model is Zero-3
     num_epochs = config["num_epochs"]
-    zero2_plugin = DeepSpeedPlugin(hf_ds_config=ds_config_file["zero2"])
-    zero3_plugin = DeepSpeedPlugin(hf_ds_config=ds_config_file["zero3_training"])
+    zero2_plugin = DeepSpeedPlugin(hf_ds_config=ds_config_file["zero2"], plugin_key="zero2")
+    zero3_plugin = DeepSpeedPlugin(hf_ds_config=ds_config_file["zero3_training"], plugin_key="zero3")
 
     # Initialize accelerator
     zero2_accelerator = Accelerator(
@@ -215,7 +215,7 @@ def multiple_model_training(config, args):
     assert zero2_accelerator.deepspeed_engine_wrapped.engine is zero2_model
 
     # now do Zero3
-    zero3_plugin.enable()
+    zero3_accelerator.state.get_deepspeed_plugin("zero3").enable()
     zero3_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = zero2_plugin.deepspeed_config[
         "train_micro_batch_size_per_gpu"
     ]

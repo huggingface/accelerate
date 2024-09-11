@@ -36,7 +36,7 @@ def get_active_deepspeed_plugin(state: AcceleratorState) -> DeepSpeedPlugin:
             "Please make sure that either `Accelerator` is configured for `deepspeed` "
             "or make sure that the desired `DeepSpeedPlugin` has been enabled (`plugin.enable()`) before calling this function."
         )
-    return next(plugin for plugin in state.deepspeed_plugins if plugin.enabled)
+    return next(plugin for plugin in state.deepspeed_plugins.values() if plugin.enabled)
 
 
 class HfDeepSpeedConfig:

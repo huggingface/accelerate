@@ -861,7 +861,7 @@ class AcceleratorState:
         self.__dict__.update(PartialState._shared_state)
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
-            self.deepspeed_plugins = []
+            self.deepspeed_plugins = None
             self.use_ipex = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
@@ -900,9 +900,6 @@ class AcceleratorState:
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
-                # Just incase a user manually creates an `AcceleratorState`/bypasses the `Accelerator`
-                if not isinstance(deepspeed_plugin, (list, tuple)):
-                    deepspeed_plugin = [deepspeed_plugin]
                 self.deepspeed_plugins = deepspeed_plugin
                 self.distributed_type = DistributedType.DEEPSPEED
             elif self.distributed_type in [
@@ -1112,20 +1109,28 @@ class AcceleratorState:
 
         return get_active_deepspeed_plugin(self)
 
+    def get_deepspeed_plugin(self, plugin_key: str):
+        """
+        Returns the DeepSpeedPlugin with the given plugin_key.
+        """
+        if self.distributed_type != DistributedType.DEEPSPEED:
+            return None
+        return self.deepspeed_plugins[plugin_key]
+
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
 
-    def __getattr__(self, name: str):
-        # By this point we know that no attributes of `self` contain `name`,
-        # so we just modify the error message
-        if name in self._known_attrs:
-            raise AttributeError(
-                f"`AcceleratorState` object has no attribute `{name}`. "
-                "This happens if `AcceleratorState._reset_state()` was called and "
-                "an `Accelerator` or `PartialState` was not reinitialized."
-            )
-        # Raise a typical AttributeError
-        raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
+    # def __getattr__(self, name: str):
+    #     # By this point we know that no attributes of `self` contain `name`,
+    #     # so we just modify the error message
+    #     if name in self._known_attrs:
+    #         raise AttributeError(
+    #             f"`AcceleratorState` object has no attribute `{name}`. "
+    #             "This happens if `AcceleratorState._reset_state()` was called and "
+    #             "an `Accelerator` or `PartialState` was not reinitialized."
+    #         )
+    #     # Raise a typical AttributeError
+    #     raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
 
 
 class GradientState:

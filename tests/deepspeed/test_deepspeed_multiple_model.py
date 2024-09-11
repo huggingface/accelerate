@@ -76,9 +76,11 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         return [
             DeepSpeedPlugin(
                 hf_ds_config=self.config_zero2,
+                plugin_key="zero2",
             ),
             DeepSpeedPlugin(
                 hf_ds_config=self.config_zero3,
+                plugin_key="zero3",
             ),
         ]
 
@@ -92,16 +94,19 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert not ds_zero3.enabled
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
         assert accelerator.deepspeed_plugin == ds_zero2
+        assert accelerator.state.get_deepspeed_plugin("zero2") == ds_zero2
         ds_zero3.enable()
         assert not ds_zero2.enabled
         assert ds_zero3.enabled
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero3
         assert accelerator.deepspeed_plugin == ds_zero3
+        assert accelerator.state.get_deepspeed_plugin("zero3") == ds_zero3
         ds_zero2.enable()
         assert not ds_zero3.enabled
         assert ds_zero2.enabled
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
         assert accelerator.deepspeed_plugin == ds_zero2
+        assert accelerator.state.get_deepspeed_plugin("zero2") == ds_zero2
 
     def test_enable_disable_manually_set(self):
         ds_zero2, _ = self.get_ds_plugins()

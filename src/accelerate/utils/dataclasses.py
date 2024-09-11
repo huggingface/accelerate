@@ -931,6 +931,10 @@ class DeepSpeedPlugin:
             "help": "path to DeepSpeed config file or dict or an object of class `accelerate.utils.deepspeed.HfDeepSpeedConfig`."
         },
     )
+    plugin_key: str = field(
+        default=None,
+        metadata={"help": "The key to use when accessing this plugin from the `AcceleratorState` or `Accelerator`."},
+    )
     gradient_accumulation_steps: int = field(
         default=None,
         metadata={
@@ -1295,7 +1299,7 @@ class DeepSpeedPlugin:
         from accelerate.state import AcceleratorState
 
         if AcceleratorState._shared_state != {}:
-            for plugin in AcceleratorState().deepspeed_plugins:
+            for plugin in AcceleratorState().deepspeed_plugins.values():
                 if plugin is not self:
                     plugin.disable()
         self._set_enabled(True)
