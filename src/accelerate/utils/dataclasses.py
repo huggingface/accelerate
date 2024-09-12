@@ -1291,17 +1291,15 @@ class DeepSpeedPlugin:
                     transformer_moe_cls.append(transformer_cls)
             set_z3_leaf_modules(model, transformer_moe_cls)  # z3_leaf
 
-    def enable(self):
+    def enable(self, _from_accelerator_state: bool = False):
         """
         Sets the HfDeepSpeedWeakref to use the current deepspeed plugin configuration
         """
+        if not _from_accelerator_state:
+            raise ValueError(
+                "A `DeepSpeedPlugin` object must be enabled manually by calling `AcceleratorState().enable_deepspeed_plugin(plugin_key)`."
+            )
         self.set_deepspeed_weakref()
-        from accelerate.state import AcceleratorState
-
-        if AcceleratorState._shared_state != {}:
-            for plugin in AcceleratorState().deepspeed_plugins.values():
-                if plugin is not self:
-                    plugin._disable()
         self._set_enabled(True)
 
     def _disable(self):
@@ -1319,7 +1317,9 @@ class DeepSpeedPlugin:
 
     @enabled.setter
     def enabled(self, value):
-        raise NotImplementedError("'enabled' can only be set through the 'enable()' method.")
+        raise NotImplementedError(
+            "'enabled' can only be set through calling 'AcceleratorState().enable_deepspeed_plugin(key)'."
+        )
 
 
 @dataclass

@@ -16,14 +16,14 @@ import base64
 import json
 import os
 from copy import deepcopy
+from functools import wraps
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
-from ..state import AcceleratorState
 from .dataclasses import DeepSpeedPlugin, DistributedType
 
 
-def get_active_deepspeed_plugin(state: AcceleratorState) -> DeepSpeedPlugin:
+def get_active_deepspeed_plugin(state) -> DeepSpeedPlugin:
     """
     Returns the currently active DeepSpeedPlugin.
 
@@ -287,3 +287,22 @@ class DummyScheduler:
         self.warmup_num_steps = warmup_num_steps
         self.lr_scheduler_callable = lr_scheduler_callable
         self.kwargs = kwargs
+
+
+def deepspeed_required(func):
+    """
+    A decorator that ensures the decorated function is only called when deepspeed is enabled.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        from accelerate.state import AcceleratorState
+
+        if AcceleratorState._shared_state != {} or AcceleratorState().distributed_type != DistributedType.DEEPSPEED:
+            raise ValueError(
+                "DeepSpeed is not enabled, please make sure that an `Accelerator` is configured for `deepspeed` "
+                "before calling this function."
+            )
+        return func(*args, **kwargs)
+
+    return wrapper

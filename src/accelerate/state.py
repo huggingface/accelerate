@@ -30,6 +30,8 @@ from .utils import (
     GradientAccumulationPlugin,
     check_cuda_p2p_ib_support,
     check_fp8_capability,
+    deepspeed_required,
+    get_active_deepspeed_plugin,
     get_ccl_version,
     get_cpu_distributed_information,
     get_int_from_env,
@@ -1098,24 +1100,30 @@ class AcceleratorState:
         """
         Returns the currently active DeepSpeedPlugin.
 
-        If using multiple plugins, the first one will be the active one by default. Manually call `plugin.enable()` to
-        activate a different plugin.
-
-        If deepspeed is not enabled, this will return `None`.
+        If not using deepspeed, returns `None`.
         """
+        # To maintain original behavior, return None if not using deepspeed.
         if self.distributed_type != DistributedType.DEEPSPEED:
             return None
-        from accelerate.utils.deepspeed import get_active_deepspeed_plugin
 
         return get_active_deepspeed_plugin(self)
 
+    @deepspeed_required
     def get_deepspeed_plugin(self, plugin_key: str):
         """
         Returns the DeepSpeedPlugin with the given plugin_key.
         """
-        if self.distributed_type != DistributedType.DEEPSPEED:
-            return None
         return self.deepspeed_plugins[plugin_key]
+
+    @deepspeed_required
+    def enable_deepspeed_plugin(self, plugin_key: str = None):
+        """
+        Enables the DeepSpeedPlugin with the given plugin_key, and will disable all other plugins.
+        """
+        for key, plugin in self.deepspeed_plugins.items():
+            if key != plugin_key:
+                plugin._disable()
+        self.deepspeed_plugins[plugin_key].enable()
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)

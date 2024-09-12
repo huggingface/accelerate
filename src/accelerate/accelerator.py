@@ -179,7 +179,7 @@ class Accelerator:
             the execution on one process only.
         dataloader_config (`DataLoaderConfiguration`, *optional*):
             A configuration for how the dataloaders should be handled in distributed scenarios.
-        deepspeed_plugin ([`~utils.DeepSpeedPlugin`] or list of [`~utils.DeepSpeedPlugin`], *optional*):
+        deepspeed_plugin ([`~utils.DeepSpeedPlugin`] or dict of `str`: [`~utils.DeepSpeedPlugin`], *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*. If using multiple plugins, use the configured `key` property of each
             plugin to access them from `self.deepspeed_plugins`.
@@ -250,7 +250,7 @@ class Accelerator:
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
         dataloader_config: DataLoaderConfiguration | None = None,
-        deepspeed_plugin: DeepSpeedPlugin | list[DeepSpeedPlugin] | None = None,
+        deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
@@ -291,8 +291,8 @@ class Accelerator:
                     DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
                 )
         else:
-            if isinstance(deepspeed_plugin, list):
-                for plugin in deepspeed_plugin:
+            if isinstance(deepspeed_plugin, dict):
+                for plugin in deepspeed_plugin.values():
                     if not isinstance(plugin, DeepSpeedPlugin):
                         raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
 
@@ -312,24 +312,15 @@ class Accelerator:
             mixed_precision = (
                 os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
             )
-            if not isinstance(deepspeed_plugin, (tuple, list, dict)):
+            if not isinstance(deepspeed_plugin, dict):
                 deepspeed_plugin.set_mixed_precision(mixed_precision)
                 deepspeed_plugin.enable()
             else:
-                # Can either be a list or a dict at this point:
-                # list if we haven't initialized the plugins yet
-                # dict if we have
-                for plugin in deepspeed_plugin:
-                    if not isinstance(plugin, DeepSpeedPlugin):
-                        plugin = deepspeed_plugin[plugin]
+                for plugin in deepspeed_plugin.values():
                     plugin.set_mixed_precision(mixed_precision)
-                if isinstance(deepspeed_plugin, (list, tuple)):
-                    # The first plugin is always the active one
-                    deepspeed_plugin[0].enable()
-
-                # Then they are stored as a dict to access later:
-                if not isinstance(deepspeed_plugin, dict):
-                    deepspeed_plugin = {plugin.plugin_key: plugin for plugin in deepspeed_plugin}
+                # The first plugin passed in is always the active one
+                first_plugin = next(iter(deepspeed_plugin.values()))
+                first_plugin.enable()
             self.deepspeed_engine_wrapped = None
 
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
