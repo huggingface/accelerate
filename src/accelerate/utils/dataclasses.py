@@ -933,6 +933,7 @@ class TorchDynamoPlugin(KwargsHandler):
 
     Args:
         backend (`DynamoBackend`, defaults to `None`):
+            A valid Dynamo backend. See https://pytorch.org/docs/stable/torch.compiler.html for more details.
         mode (`str`, defaults to `None`):
             Possible options are 'default', 'reduce-overhead' or 'max-autotune'.
         fullgraph (`bool`, defaults to `None`):
