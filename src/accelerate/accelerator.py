@@ -291,6 +291,15 @@ class Accelerator:
                     DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
                 )
         else:
+            # If we're creating a second `Accelerator`, users shouldn't be passing in a `deepspeed_plugin`
+            if (
+                PartialState().distributed_type == DistributedType.DEEPSPEED
+                and AcceleratorState().deepspeed_plugins is not None
+            ):
+                raise ValueError(
+                    "You cannot pass in a `deepspeed_plugin` when creating a second `Accelerator`. "
+                    "Please make sure the first `Accelerator` is initialized with all the plugins you want to use."
+                )
             if isinstance(deepspeed_plugin, dict):
                 for plugin in deepspeed_plugin.values():
                     if not isinstance(plugin, DeepSpeedPlugin):
