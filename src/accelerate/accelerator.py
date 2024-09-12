@@ -182,7 +182,7 @@ class Accelerator:
         deepspeed_plugin ([`~utils.DeepSpeedPlugin`] or dict of `str`: [`~utils.DeepSpeedPlugin`], *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*. If using multiple plugins, use the configured `key` property of each
-            plugin to access them from `self.deepspeed_plugins`.
+            plugin to access them from `accelerator.state.get_deepspeed_plugin(key)`.
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
