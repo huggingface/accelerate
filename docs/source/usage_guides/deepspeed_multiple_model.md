@@ -49,8 +49,8 @@ zero3_plugin = DeepSpeedPlugin(hf_ds_config="zero3_config.json")
 deepspeed_plugins = {"student": zero2_plugin, "teacher": zero3_plugin, }
 ```
 
-When doing so,  `zero2_config.json` should be configured for full training (so specifying `scheduler` and `optimizer` if not utilizing your own) while `zero3_config.json` should *only* be configured for the model,
-such as:
+When doing so,  `zero2_config.json` should be configured for full training (so specifying `scheduler` and `optimizer` if not utilizing your own) while `zero3_config.json` should *only* be configured for the inference model,
+such as the following example for a `zero3_config.json`:
 
 ```json
 {
@@ -59,20 +59,60 @@ such as:
     },
     "zero_optimization": {
         "stage": 3,
-        "offload_param": {
+        "overlap_comm": true,
+        "reduce_bucket_size": "auto",
+        "stage3_prefetch_bucket_size": "auto",
+        "stage3_param_persistence_threshold": "auto",
+        "stage3_max_live_parameters": "auto",
+        "stage3_max_reuse_distance": "auto",
+    },
+    "train_micro_batch_size_per_gpu": 1
+}
+```
+
+And the zero2 counterpart:
+
+```json
+{
+    "bf16": {
+        "enabled": "auto"
+    },
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": "auto",
+            "weight_decay": "auto",
+            "torch_adam": true,
+            "adam_w_mode": true
+        }
+    },
+    "scheduler": {
+        "type": "WarmupLR",
+        "params": {
+            "warmup_min_lr": "auto",
+            "warmup_max_lr": "auto",
+            "warmup_num_steps": "auto"
+        }
+    },
+    "zero_optimization": {
+        "stage": 2,
+        "offload_optimizer": {
             "device": "cpu",
             "pin_memory": true
         },
+        "allgather_partitions": true,
+        "allgather_bucket_size": 2e8,
         "overlap_comm": true,
-        "sub_group_size": 1e9,
-        "reduce_bucket_size": 1e9,
-        "stage3_prefetch_bucket_size": 1e9,
-        "stage3_param_persistence_threshold": 1e9,
-        "stage3_max_live_parameters": 1e9,
-        "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_16bit_weights_on_model_save": true
+        "reduce_scatter": true,
+        "reduce_bucket_size": "auto",
+        "contiguous_gradients": true
     },
-    "train_micro_batch_size_per_gpu": 1
+    "gradient_accumulation_steps": 1,
+    "gradient_clipping": "auto",
+    "steps_per_print": 2000,
+    "train_batch_size": "auto",
+    "train_micro_batch_size_per_gpu": "auto",
+    "wall_clock_breakdown": false
 }
 ```
 

@@ -182,7 +182,7 @@ class Accelerator:
         deepspeed_plugin ([`~utils.DeepSpeedPlugin`] or dict of `str`: [`~utils.DeepSpeedPlugin`], *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*. If using multiple plugins, use the configured `key` property of each
-            plugin to access them from `accelerator.state.get_deepspeed_plugin(key)`.
+            plugin to access them from `accelerator.state.get_deepspeed_plugin(key)`. Alias for `deepspeed_plugins`.
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
@@ -264,6 +264,7 @@ class Accelerator:
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
+        deepspeed_plugins: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
     ):
         self.trackers = []
         if project_config is not None:
@@ -281,13 +282,18 @@ class Accelerator:
 
         dynamo_plugin = TorchDynamoPlugin() if dynamo_backend is None else TorchDynamoPlugin(backend=dynamo_backend)
 
-        if deepspeed_plugin is None:
+        if deepspeed_plugins is not None and deepspeed_plugin is not None:
+            raise ValueError("You cannot pass in both `deepspeed_plugins` and `deepspeed_plugin`.")
+        elif deepspeed_plugin is not None:
+            deepspeed_plugins = deepspeed_plugin
+
+        if deepspeed_plugins is None:
             # First check if we're creating another `Accelerator` w/o setting `deepspeed_plugin`
             if PartialState().distributed_type == DistributedType.DEEPSPEED:
-                deepspeed_plugin = AcceleratorState().deepspeed_plugins
+                deepspeed_plugins = AcceleratorState().deepspeed_plugins
             else:
                 # init from env variables
-                deepspeed_plugin = (
+                deepspeed_plugins = (
                     DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
                 )
         else:
@@ -300,12 +306,12 @@ class Accelerator:
                     "You cannot pass in a `deepspeed_plugin` when creating a second `Accelerator`. "
                     "Please make sure the first `Accelerator` is initialized with all the plugins you want to use."
                 )
-            if isinstance(deepspeed_plugin, dict):
-                for plugin in deepspeed_plugin.values():
+            if isinstance(deepspeed_plugins, dict):
+                for plugin in deepspeed_plugins.values():
                     if not isinstance(plugin, DeepSpeedPlugin):
                         raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
 
-        if deepspeed_plugin is not None:
+        if deepspeed_plugins is not None:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
@@ -321,14 +327,14 @@ class Accelerator:
             mixed_precision = (
                 os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
             )
-            if not isinstance(deepspeed_plugin, dict):
-                deepspeed_plugin.set_mixed_precision(mixed_precision)
-                deepspeed_plugin.enable()
+            if not isinstance(deepspeed_plugins, dict):
+                deepspeed_plugins.set_mixed_precision(mixed_precision)
+                deepspeed_plugins.enable()
             else:
-                for plugin in deepspeed_plugin.values():
+                for plugin in deepspeed_plugins.values():
                     plugin.set_mixed_precision(mixed_precision)
                 # The first plugin passed in is always the active one
-                first_plugin = next(iter(deepspeed_plugin.values()))
+                first_plugin = next(iter(deepspeed_plugins.values()))
                 first_plugin.enable(_from_accelerator_state=True)
             self.deepspeed_engine_wrapped = None
 
@@ -410,7 +416,7 @@ class Accelerator:
             mixed_precision=mixed_precision,
             cpu=cpu,
             dynamo_plugin=dynamo_plugin,
-            deepspeed_plugin=deepspeed_plugin,
+            deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
