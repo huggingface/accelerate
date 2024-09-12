@@ -17,30 +17,28 @@ rendered properly in your Markdown viewer.
 
 <Tip warning={true}>
 
-    This guide assumes that you have read and understand the [DeepSpeed usage guide](./deepspeed.md).
+    This guide assumes that you have read and understood the [DeepSpeed usage guide](./deepspeed.md).
 
 </Tip>
 
-## Use cases
-
-There are a few use cases where one may want to run multiple models when using `accelerate` and `DeepSpeed`:
+Running multiple models with Accelerate and DeepSpeed is useful for:
 
 * Knowledge distillation
-* RLHF techniques (see the `trl` repo for [more examples](https://github.com/huggingface/trl))
-* Training multiple models at once.
+* RLHF techniques (see the [TRL](https://github.com/huggingface/trl) library for more examples)
+* Training multiple models at once
 
-As it stands, Accelerate has a **very experimental API** to help you accomplish this.
+Currently, Accelerate has a **very experimental API** to help you use multiple models.
 
 This tutorial will focus on two common use cases:
 
-1. Using `zero2` to train a model, and `zero3` to perform inference for assisting of the training for the `zero2` model (as `zero2` is faster to train on if the model fits onto a single GPU), which is shown in the RLHF example
-2. Training multiple *disjoint* models at once, shown later
+1. An RLHF use case, using ZeRO2 to train a model and ZeRO3 for inference to assist in training the ZeRO2 model. ZeRO2 is faster to train with if the model fits on a single GPU.
+2. Training multiple *disjoint* models at once.
 
-## Multiple models, only one is trained
+## RLHF
 
-RLHF is a good example of such use-case
+RLHF is a good example of using multiple models, but only training one of them.
 
-Normally, you would use a single [`utils.DeepSpeedPlugin`] at a time, however in this case we have two separate configurations. Accelerate allows you to create and use multiple plugins **if and only if** they are in a `dict` so that we can reference/enable the proper plugin when needed:
+Normally, you would use a single [`utils.DeepSpeedPlugin`] at a time. However, in this case, there are two separate configurations. Accelerate allows you to create and use multiple plugins **if and only if** they are in a `dict` so that you can reference and enable the proper plugin when needed.
 
 ```python
 from accelerate.utils import DeepSpeedPlugin
@@ -51,8 +49,7 @@ zero3_plugin = DeepSpeedPlugin(hf_ds_config="zero3_config.json")
 deepspeed_plugins = {"student": zero2_plugin, "teacher": zero3_plugin}
 ```
 
-When doing so,  `zero2_config.json` should be configured for full training (so specifying `scheduler` and `optimizer` if not utilizing your own) while `zero3_config.json` should *only* be configured for the inference model,
-such as the following example for a `zero3_config.json`:
+The `zero2_config.json` should be configured for full training (so specify `scheduler` and `optimizer` if you are not utilizing your own), while `zero3_config.json` should only be configured for the inference model, as shown in the example below.
 
 ```json
 {
@@ -72,7 +69,7 @@ such as the following example for a `zero3_config.json`:
 }
 ```
 
-And the zero2 counterpart:
+An example `zero2_config.json` configuration is shown below.
 
 ```json
 {
@@ -112,12 +109,11 @@ And the zero2 counterpart:
 
 <Tip>
 
-    DeepSpeed will raise an error if we don't specify a `train_micro_batch_size_per_gpu`, despite not really 
-    training this particular model
+    DeepSpeed will raise an error if `train_micro_batch_size_per_gpu` isn't specified, even if this particular model isn't being trained.
 
 </Tip>
 
-From here, we can create a single [`Accelerator`] and pass in both configurations:
+From here, create a single [`Accelerator`] and pass in both configurations.
 
 ```python
 from accelerate import Accelerator
@@ -127,47 +123,47 @@ accelerator = Accelerator(deepspeed_plugins=deepspeed_plugins)
 
 Now let's see how to use them.
 
-### The student model
+### Student model
 
-By default, `accelerate` will set the first item in the `dict` as the default/enabled plugin (so here our `"student"` plugin). We can verify this by using the [`utils.deepspeed.get_active_deepspeed_plugin]` function to see which one is being used:
+By default, Accelerate sets the first item in the `dict` as the default or enabled plugin (`"student"` plugin). Verify this by using the [`utils.deepspeed.get_active_deepspeed_plugin]` function to see which plugin is enabled.
 
 ```python
 active_plugin = get_active_deepspeed_plugin(accelerator.state)
 assert active_plugin is deepspeed_plugins["student"]
 ```
 
-Also the `AcceleratorState` will keep the active DeepSpeed plugin saved in `state.deepspeed_plugin`:
+[`AcceleratorState`] also keeps the active DeepSpeed plugin saved in `state.deepspeed_plugin`.
 ```python
 assert active_plugin is accelerator.deepspeed_plugin
 ```
 
-Since the `student` is the currently active plugin, let's go ahead and prepare our model, optimizer, and scheduler like normal:
+Since `student` is the currently active plugin, let's go ahead and prepare the model, optimizer, and scheduler.
 
 ```python
 student_model, optimizer, scheduler = ...
 student_model, optimizer, scheduler, train_dataloader = accelerator.prepare(student_model, optimizer, scheduler, train_dataloader)
 ```
 
-From here, we need to deal with the teacher model.
+Now it's time to deal with the teacher model.
 
-### The teacher model
+### Teacher model
 
-First we need to tell the `Accelerator` that the zero3/teacher ZeRO configuration should be used:
+First, you need to specify in [`Accelerator`] that the `zero3_config.json` configuration should be used.
 
 ```python
 accelerator.state.select_deepspeed_plugin("teacher")
 ```
 
-Doing so will disable the `"student"` plugin and enable the `"teacher"` one instead. This will update the
-DeepSpeed stateful config inside of `transformers`, and change which plugin configuration gets called when using
-`deepspeed.initialize()`, allowing us to use the no-code `deepspeed.zero.Init`  context manager `transformers` provides:
+This disables the `"student"` plugin and enables the `"teacher"` plugin instead. The
+DeepSpeed stateful config inside of Transformers is updated, and it changes which plugin configuration gets called when using
+`deepspeed.initialize()`. This allows you to use the no-code `deepspeed.zero.Init`  context manager Transformers provides.
 
 ```python
 teacher_model = AutoModel.from_pretrained(...)
 teacher_model = accelerator.prepare(teacher_model)
 ```
 
-Otherwise you should manually initialize them under `deepspeed.zero.Init`:
+Otherwise, you should manually initialize the model with `deepspeed.zero.Init`.
 ```python
 with deepspeed.zero.Init(accelerator.deepspeed_plugin.config):
     model = MyModel(...)
@@ -175,7 +171,7 @@ with deepspeed.zero.Init(accelerator.deepspeed_plugin.config):
 
 ### Training
 
-From here, your training loop can be whatever you like, making sure that `teacher_model` is never being trained on:
+From here, your training loop can be whatever you like, as long as `teacher_model` is never being trained on.
 
 ```python
 teacher_model.eval()
@@ -192,25 +188,22 @@ for batch in train_dataloader:
     optimizer.zero_grad()
 ```
 
-## Multiple models all being trained
+## Train multiple disjoint models
 
-Multiple models being trained is a more complicated scenario and is actively being looked upon by the team.
-In its current state, we assume that each model is **completely disjoint** from the other during training.
+Training multiple models is a more complicated scenario.
+In its current state, we assume each model is **completely disjointed** from the other during training.
 
-With this situation, we still require two [`utils.DeepSpeedPlugin`]'s to be made, however we also further
-require a second `Accelerator`, since we need to call different `deepspeed` engines at different times, and a single `Accelerator` only
-carries one instance of it at a time.
+This scenario still requires two [`utils.DeepSpeedPlugin`]'s to be made. However, you also need a second [`Accelerator`], since different `deepspeed` engines are being called at different times. A single [`Accelerator`] can only carry one instance at a time.
 
-Since the [`state.AcceleratorState`] is a stateful object though, it is already aware of both `DeepSpeedPlugin`'s available,
-meaning you can just instantiate a second `Accelerator` with no extra arguments:
+Since the [`state.AcceleratorState`] is a stateful object though, it is already aware of both [`utils.DeepSpeedPlugin`]'s available. You can just instantiate a second [`Accelerator`] with no extra arguments.
 
 ```python
 first_accelerator = Accelerator(deepspeed_plugins=deepspeed_plugins)
 second_accelerator = Accelerator()
 ```
 
-Similar to before, we can call either `first_accelerator.state.select_deepspeed_plugin()` to enable/disable
-a particular plugin, and call `.prepare` like normal:
+You can call either `first_accelerator.state.select_deepspeed_plugin()` to enable or disable
+a particular plugin, and then call [`prepare`].
 
 ```python
 # can be `accelerator_0`, `accelerator_1`, or by calling `AcceleratorState().select_deepspeed_plugin(...)`
@@ -248,7 +241,6 @@ for batch in dl:
     second_optimizer.zero_grad()
 ```
 
-## More Resources
+## Resources
 
-To see more examples, please check out the [related tests](https://github.com/huggingface/accelerate/blob/main/src/accelerate/test_utils/scripts/external_deps/test_ds_multiple_model.py) we currently have in `Accelerate`, and we will be improving this further
-with better examples, documentation, and functionality as we continue to flesh out this API
+To see more examples, please check out the [related tests](https://github.com/huggingface/accelerate/blob/main/src/accelerate/test_utils/scripts/external_deps/test_ds_multiple_model.py) currently in [Accelerate].
