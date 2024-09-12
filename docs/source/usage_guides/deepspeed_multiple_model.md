@@ -46,10 +46,10 @@ from accelerate.utils import DeepSpeedPlugin
 zero2_plugin = DeepSpeedPlugin(hf_ds_config="zero2_config.json")
 zero3_plugin = DeepSpeedPlugin(hf_ds_config="zero3_config.json")
 
-deepspeed_plugins = {"student": zero2_plugin, "teacher": zero3_plugin, }
+deepspeed_plugins = {"student": zero2_plugin, "teacher": zero3_plugin}
 ```
 
-When doing so,  `zero2_config.json` should be configured for full training (so specifying `scheduler` and `optimizer` if not utilizing your own) while `zero3_config.json` should *only* be configured for the model,
+When doing so, `zero2_config.json` should be configured for full training (so specifying `scheduler` and `optimizer` if not utilizing your own) while `zero3_config.json` should *only* be configured for the model,
 such as:
 
 ```json
