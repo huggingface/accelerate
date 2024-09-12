@@ -15,6 +15,8 @@ rendered properly in your Markdown viewer.
 
 # Utilities for DeepSpeed
 
+## get_active_deepspeed_plugin
+
 [[autodoc]] utils.get_active_deepspeed_plugin
 
 [[autodoc]] utils.DeepSpeedPlugin
