@@ -1109,11 +1109,11 @@ class AcceleratorState:
         return get_active_deepspeed_plugin(self)
 
     @deepspeed_required
-    def get_deepspeed_plugin(self, plugin_key: str):
+    def get_deepspeed_plugin(self, name: str):
         """
         Returns the DeepSpeedPlugin with the given plugin_key.
         """
-        return self.deepspeed_plugins[plugin_key]
+        return self.deepspeed_plugins[name]
 
     @deepspeed_required
     def enable_deepspeed_plugin(self, plugin_key: str = None):
