@@ -562,8 +562,8 @@ class Accelerator:
         """
         Returns the currently active DeepSpeedPlugin.
 
-        If using multiple plugins, the first one will be the active one by default.
-        Manually call `accelerator.state.enable_deepspeed_plugin(key)` to activate a different plugin.
+        If using multiple plugins, the first one will be the active one by default. Manually call
+        `accelerator.state.enable_deepspeed_plugin(key)` to activate a different plugin.
 
         If deepspeed is not enabled, this will return `None`.
         """
