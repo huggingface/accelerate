@@ -29,11 +29,12 @@ There are a few use cases where one may want to run multiple models when using `
 * RLHF techniques (see the `trl` repo for [more examples](https://github.com/huggingface/trl))
 * Training multiple models at once.
 
-As it stands, Accelerate has a **very experimental API** to help you accomplish this. 
+As it stands, Accelerate has a **very experimental API** to help you accomplish this.
 
 This tutorial will focus on two common use cases:
-1. Using `zero2` to train a model, and `zero3` to perform inference for assisting of the training for the `zero2` model (as `zero2` is faster to train on)
-2. Training multiple *disjoint* models at once
+
+1. Using `zero2` to train a model, and `zero3` to perform inference for assisting of the training for the `zero2` model (as `zero2` is faster to train on), which is shown in the RLHF example
+2. Training multiple *disjoint* models at once, shown later
 
 ## RLHF (multiple models, only one is trained)
 
