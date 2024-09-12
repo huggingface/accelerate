@@ -120,11 +120,17 @@ accelerator.state.enable_deepspeed_plugin("teacher")
 
 Doing so will disable the `"student"` plugin and enable the `"teacher"` one instead. This will update the
 DeepSpeed stateful config inside of `transformers`, and change which plugin configuration gets called when using
-`deepspeed.initialize()`, allowing us to use zero-init:
+`deepspeed.initialize()`, allowing us to use the no-code `Zero3Init` `deepspeed` context manager `transformers` provides:
 
 ```python
 teacher_model = AutoModel.from_pretrained(...)
 teacher_model = accelerator.prepare(teacher_model)
+```
+
+Otherwise you should manually initialize them under `deepspeed.zero.Init`:
+```python
+with deepspeed.zero.Init(accelerator.deepspeed_plugin.config):
+    model = MyModel(...)
 ```
 
 ### Training
