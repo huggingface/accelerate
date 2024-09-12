@@ -113,7 +113,7 @@ def single_model_training(config, args):
 
     # Initialize accelerator
     accelerator = Accelerator(
-        deepspeed_plugin=deepspeed_plugins,
+        deepspeed_plugins=deepspeed_plugins,
         mixed_precision="bf16",
     )
 
@@ -195,7 +195,7 @@ def multiple_model_training(config, args):
 
     # Initialize accelerator
     zero2_accelerator = Accelerator(
-        deepspeed_plugin=deepspeed_plugins,
+        deepspeed_plugins=deepspeed_plugins,
         mixed_precision="bf16",
     )
 

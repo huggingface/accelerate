@@ -128,7 +128,7 @@ From here, we can create a single [`Accelerator`] and pass in both configuration
 ```python
 from accelerate import Accelerator
 
-accelerator = Accelerator(deepspeed_plugin=deepspeed_plugins)
+accelerator = Accelerator(deepspeed_plugins=deepspeed_plugins)
 ```
 
 Now let's see how to use them.
@@ -211,7 +211,7 @@ Since the [`state.AcceleratorState`] is a stateful object though, it is already 
 meaning you can just instantiate a second `Accelerator` with no extra arguments:
 
 ```python
-accelerator_0 = Accelerator(deepspeed_plugin=deepspeed_plugins)
+accelerator_0 = Accelerator(deepspeed_plugins=deepspeed_plugins)
 accelerator_1 = Accelerator()
 ```
 
