@@ -101,6 +101,11 @@ active_plugin = get_active_deepspeed_plugin(accelerator.state)
 assert active_plugin is deepspeed_plugins["student"]
 ```
 
+Also the `AcceleratorState` will keep the active DeepSpeed plugin saved in `state.deepspeed_plugin`:
+```python
+assert active_plugin is accelerator.deepspeed_plugin
+```
+
 Since the `student` is the currently active plugin, let's go ahead and prepare our model, optimizer, and scheduler like normal:
 
 ```python
