@@ -313,12 +313,15 @@ def is_mlflow_available():
 
 
 def is_mps_available(min_version="1.12"):
+    "Checks if MPS device is available. The minimum version required is 1.12."
     # With torch 1.12, you can use torch.backends.mps
     # With torch 2.0.0, you can use torch.mps
     return is_torch_version(">=", min_version) and torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
 
 def is_ipex_available():
+    "Checks if ipex is installed."
+
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 

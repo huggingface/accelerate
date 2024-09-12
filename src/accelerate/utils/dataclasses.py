@@ -818,6 +818,21 @@ class DataLoaderConfiguration:
 class ProjectConfiguration:
     """
     Configuration for the Accelerator object based on inner-project needs.
+
+    Args:
+        project_dir (`str`, defaults to `None`):
+            A path to a directory for storing data.
+        logging_dir (`str`, defaults to `None`):
+            A path to a directory for storing logs of locally-compatible loggers. If None, defaults to `project_dir`.
+        automatic_checkpoint_naming (`bool`, defaults to `False`):
+            Whether saved states should be automatically iteratively named.
+        total_limit (`int`, defaults to `None`):
+            The maximum number of total saved states to keep.
+        iteration (`int`, defaults to `0`):
+            The current save iteration.
+        save_on_each_node (`bool`, defaults to `False`):
+            When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
+            the main one.
     """
 
     project_dir: str = field(default=None, metadata={"help": "A path to a directory for storing data."})
@@ -915,6 +930,19 @@ class GradientAccumulationPlugin(KwargsHandler):
 class TorchDynamoPlugin(KwargsHandler):
     """
     This plugin is used to compile a model with PyTorch 2.0
+
+    Args:
+        backend (`DynamoBackend`, defaults to `None`):
+        mode (`str`, defaults to `None`):
+            Possible options are 'default', 'reduce-overhead' or 'max-autotune'.
+        fullgraph (`bool`, defaults to `None`):
+            Whether it is ok to break model into several subgraphs.
+        dynamic (`bool`, defaults to `None`):
+            Whether to use dynamic shape for tracing.
+        options (`Any`, defaults to `None`):
+            A dictionary of options to pass to the backend.
+        disable (`bool`, defaults to `False`):
+            Turn torch.compile() into a no-op for testing
     """
 
     backend: DynamoBackend = field(
@@ -951,6 +979,39 @@ class TorchDynamoPlugin(KwargsHandler):
 class DeepSpeedPlugin:
     """
     This plugin is used to integrate DeepSpeed.
+
+    Args:
+        hf_ds_config (`Any`, defaults to `None`):
+            Path to DeepSpeed config file or dict or an object of class `accelerate.utils.deepspeed.HfDeepSpeedConfig`.
+        gradient_accumulation_steps (`int`, defaults to `None`):
+            Number of steps to accumulate gradients before updating optimizer states. If not set, will use the value
+            from the `Accelerator` directly.
+        gradient_clipping (`float`, defaults to `None`):
+            Enable gradient clipping with value.
+        zero_stage (`int`, defaults to `None`):
+            Possible options are 0, 1, 2, 3. Default will be taken from environment variable.
+        is_train_batch_min (`bool`, defaults to `True`):
+            If both train & eval dataloaders are specified, this will decide the `train_batch_size`.
+        offload_optimizer_device (`str`, defaults to `None`):
+            Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3.
+        offload_param_device (`str`, defaults to `None`):
+            Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3.
+        offload_optimizer_nvme_path (`str`, defaults to `None`):
+            Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3.
+        offload_param_nvme_path (`str`, defaults to `None`):
+            Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3.
+        zero3_init_flag (`bool`, defaults to `None`):
+            Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3.
+        zero3_save_16bit_model (`bool`, defaults to `None`):
+            Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3.
+        transformer_moe_cls_names (`str`, defaults to `None`):
+            Comma-separated list of Transformers MoE layer class names (case-sensitive). For example,
+            `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention`, `JetMoEBlock`, etc.
+        enable_msamp (`bool`, defaults to `None`):
+            Flag to indicate whether to enable MS-AMP backend for FP8 training.
+        msasmp_opt_level (`Optional[Literal["O1", "O2"]]`, defaults to `None`):
+            Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one
+            of ['O1' or 'O2'].
     """
 
     hf_ds_config: Any = field(
@@ -1317,6 +1378,62 @@ class DeepSpeedPlugin:
 class FullyShardedDataParallelPlugin:
     """
     This plugin is used to enable fully sharded data parallelism.
+
+    Args:
+        sharding_strategy (`Union[str, torch.distributed.fsdp.ShardingStrategy]`, defaults to `'FULL_SHARD'`):
+            Sharding strategy to use. Should be either a `str` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
+        backward_prefetch (`Union[str, torch.distributed.fsdp.BackwardPrefetch]`, defaults to `'NO_PREFETCH'`):
+            Backward prefetch strategy to use. Should be either a `str` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`.
+        mixed_precision_policy (`Optional[Union[dict, torch.distributed.fsdp.MixedPrecision]]`, defaults to `None`):
+            A config to enable mixed precision training with FullyShardedDataParallel. If passing in a `dict`, it
+            should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`.
+        auto_wrap_policy (`Optional(Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]), defaults to `NO_WRAP`):
+            A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one
+            of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. See
+            `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like.
+        cpu_offload (`Union[bool, torch.distributed.fsdp.CPUOffload]`, defaults to `False`):
+            Whether to offload parameters to CPU. Should be either a `bool` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`.
+        ignored_modules (`Optional[Iterable[torch.nn.Module]]`, defaults to `None`):
+            A list of modules to ignore when wrapping with FSDP.
+        state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
+            State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or
+            `sharded_state_dict`.
+        state_dict_config (`Optional[Union[torch.distributed.fsdp.FullStateDictConfig, torch.distributed.fsdp.ShardedStateDictConfig]`, defaults to `None`):
+            State dict config to use. Is determined based on the `state_dict_type` if not passed in.
+        optim_state_dict_config (`Optional[Union[torch.distributed.fsdp.FullOptimStateDictConfig, torch.distributed.fsdp.ShardedOptimStateDictConfig]`, defaults to `None`):
+            Optim state dict config to use. Is determined based on the `state_dict_type` if not passed in.
+        limit_all_gathers (`bool`, defaults to `True`):
+            Whether to have FSDP explicitly synchronizes the CPU thread to prevent too many in-flight all-gathers. This
+            bool only affects the sharded strategies that schedule all-gathers. Enabling this can help lower the number
+            of CUDA malloc retries.
+        use_orig_params (`bool`, defaults to `False`):
+            Whether to use the original parameters for the optimizer.
+        param_init_fn (`Optional[Callable[[torch.nn.Module], None]`, defaults to `None`):
+            A `Callable[torch.nn.Module] -> None` that specifies how modules that are currently on the meta device
+            should be initialized onto an actual device. Only applicable when `sync_module_states` is `True`. By
+            default is a `lambda` which calls `to_empty` on the module.
+        sync_module_states (`bool`, defaults to `False`):
+            Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 to ensure they
+            are the same across all ranks after initialization. Defaults to `False` unless `cpu_ram_efficient_loading`
+            is `True`, then will be forcibly enabled.
+        forward_prefetch (`bool`, defaults to `False`):
+            Whether to have FSDP explicitly prefetches the next upcoming all-gather while executing in the forward
+            pass. only use with Static graphs.
+        activation_checkpointing (`bool`, defaults to `False`):
+            A technique to reduce memory usage by clearing activations of certain layers and recomputing them during a
+            backward pass. Effectively, this trades extra computation time for reduced memory usage.
+        cpu_ram_efficient_loading (`bool`, defaults to `None`):
+            If True, only the first process loads the pretrained model checkoint while all other processes have empty
+            weights. Only applicable for Transformers. When using this, `sync_module_states` needs to be `True`.
+        transformer_cls_names_to_wrap (`Optional[List[str]]`, defaults to `None`):
+            A list of transformer layer class names to wrap. Only applicable when `auto_wrap_policy` is
+            `transformer_based_wrap`.
+        min_num_params (`Optional[int]`, defaults to `None`):
+            The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy`
+            is `size_based_wrap`.
     """
 
     sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
@@ -1672,6 +1789,96 @@ class MegatronLMPlugin:
     """
     Plugin for Megatron-LM to enable tensor, pipeline, sequence and data parallelism. Also to enable selective
     activation recomputation and optimized fused kernels.
+
+    Args:
+        tp_degree (`int`, defaults to `None`):
+            Tensor parallelism degree.
+        pp_degree (`int`, defaults to `None`):
+            Pipeline parallelism degree.
+        num_micro_batches (`int`, defaults to `None`):
+            Number of micro-batches.
+        gradient_clipping (`float`, defaults to `None`):
+            Gradient clipping value based on global L2 Norm (0 to disable).
+        sequence_parallelism (`bool`, defaults to `None`):
+            Enable sequence parallelism.
+        recompute_activations (`bool`, defaults to `None`):
+            Enable selective activation recomputation.
+        use_distributed_optimizr (`bool`, defaults to `None`):
+            Enable distributed optimizer.
+        pipeline_model_parallel_split_rank (`int`, defaults to `None`):
+            Rank where encoder and decoder should be split.
+        num_layers_per_virtual_pipeline_stage (`int`, defaults to `None`):
+            Number of layers per virtual pipeline stage.
+        is_train_batch_min (`str`, defaults to `True`):
+            If both tran & eval dataloaders are specified, this will decide the `micro_batch_size`.
+        train_iters (`int`, defaults to `None`):
+            Total number of samples to train over all training runs. Note that either train-iters or train-samples
+            should be provided when using `MegatronLMDummyScheduler`.
+        train_samples (`int`, defaults to `None`):
+            Total number of samples to train over all training runs. Note that either train-iters or train-samples
+            should be provided when using `MegatronLMDummyScheduler`.
+        weight_decay_incr_style (`str`, defaults to `'constant'`):
+            Weight decay increment function. choices=["constant", "linear", "cosine"].
+        start_weight_decay (`float`, defaults to `None`):
+            Initial weight decay coefficient for L2 regularization.
+        end_weight_decay (`float`, defaults to `None`):
+            End of run weight decay coefficient for L2 regularization.
+        lr_decay_style (`str`, defaults to `'linear'`):
+            Learning rate decay function. choices=['constant', 'linear', 'cosine'].
+        lr_decay_iters (`int`, defaults to `None`):
+            Number of iterations for learning rate decay. If None defaults to `train_iters`.
+        lr_decay_samples (`int`, defaults to `None`):
+            Number of samples for learning rate decay. If None defaults to `train_samples`.
+        lr_warmup_iters (`int`, defaults to `None`):
+            Number of iterations to linearly warmup learning rate over.
+        lr_warmup_samples (`int`, defaults to `None`):
+            Number of samples to linearly warmup learning rate over.
+        lr_warmup_fraction (`float`, defaults to `None`):
+            Fraction of lr-warmup-(iters/samples) to linearly warmup learning rate over.
+        min_lr (`float`, defaults to `0`):
+            Minumum value for learning rate. The scheduler clip values below this threshold.
+        consumed_samples (`List`, defaults to `None`):
+            Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call.
+        no_wd_decay_cond (`Optional`, defaults to `None`):
+            Condition to disable weight decay.
+        scale_lr_cond (`Optional`, defaults to `None`):
+            Condition to scale learning rate.
+        lr_mult (`float`, defaults to `1.0`):
+            Learning rate multiplier.
+        megatron_dataset_flag (`bool`, defaults to `False`):
+            Whether the format of dataset follows Megatron-LM Indexed/Cached/MemoryMapped format.
+        seq_length (`int`, defaults to `None`):
+            Maximum sequence length to process.
+        encoder_seq_length (`int`, defaults to `None`):
+            Maximum sequence length to process for the encoder.
+        decoder_seq_length (`int`, defaults to `None`):
+            Maximum sequence length to process for the decoder.
+        tensorboard_dir (`str`, defaults to `None`):
+            Path to save tensorboard logs.
+        set_all_logging_options (`bool`, defaults to `False`):
+            Whether to set all logging options.
+        eval_iters (`int`, defaults to `100`):
+            Number of iterations to run for evaluation validation/test for.
+        eval_interval (`int`, defaults to `1000`):
+            Interval between running evaluation on validation set.
+        return_logits (`bool`, defaults to `False`):
+            Whether to return logits from the model.
+        custom_train_step_class (`Optional`, defaults to `None`):
+            Custom train step class.
+        custom_train_step_kwargs (`Optional`, defaults to `None`):
+            Custom train step kwargs.
+        custom_model_provider_function (`Optional`, defaults to `None`):
+            Custom model provider function.
+        custom_prepare_model_function (`Optional`, defaults to `None`):
+            Custom prepare model function.
+        custom_megatron_datasets_provider_function (`Optional`, defaults to `None`):
+            Custom megatron train_valid_test datasets provider function.
+        custom_get_batch_function (`Optional`, defaults to `None`):
+            Custom get batch function.
+        custom_loss_function (`Optional`, defaults to `None`):
+            Custom loss function.
+        other_megatron_args (`Optional`, defaults to `None`):
+            Other Megatron-LM arguments. Please refer Megatron-LM.
     """
 
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
@@ -2132,6 +2339,29 @@ def parse_llama_config(megatron_lm_plugin, model, batch_data):
 class BnbQuantizationConfig:
     """
     A plugin to enable BitsAndBytes 4bit and 8bit quantization
+
+    Args:
+        load_in_8bit (`bool`, defaults to `False`):
+            Enable 8bit quantization.
+        llm_int8_threshold (`float`, defaults to `6.0`):
+            Value of the outliner threshold. Only relevant when `load_in_8bit=True`.
+        load_in_4_bit (`bool`, defaults to `False`):
+            Enable 4bit quantization.
+        bnb_4bit_quant_type (`str`, defaults to `fp4`):
+            Set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','np4'}.
+        bnb_4bit_use_double_quant (`bool`, defaults to `False`):
+            Enable nested quantization where the quantization constants from the first quantization are quantized
+            again.
+        bnb_4bit_compute_dtype (`bool`, defaults to `fp16`):
+            This sets the computational type which might be different than the input time. For example, inputs might be
+            fp32, but computation can be set to bf16 for speedups. Options are {'fp32','fp16','bf16'}.
+        torch_dtype (`torch.dtype`, defaults to `None`):
+            This sets the dtype of the remaining non quantized layers. `bitsandbytes` library suggests to set the value
+            to `torch.float16` for 8 bit model and use the same dtype as the compute dtype for 4 bit model.
+        skip_modules (`List[str]`, defaults to `None`):
+            An explicit list of the modules that we don't quantize. The dtype of these modules will be `torch_dtype`.
+        keep_in_fp32_modules (`List`, defaults to `None`):
+            An explicit list of the modules that we don't quantize. We keep them in `torch.float32`.
     """
 
     load_in_8bit: bool = field(default=False, metadata={"help": "enable 8bit quantization."})
