@@ -199,6 +199,7 @@ def multiple_model_training(config, args):
         mixed_precision="bf16",
     )
 
+    # Since an `AcceleratorState` has already been made, we can just reuse it here
     zero3_accelerator = Accelerator()
 
     # Initialize model under zero2 plugin

@@ -296,7 +296,7 @@ class Accelerator:
                 PartialState().distributed_type == DistributedType.DEEPSPEED
                 and AcceleratorState().deepspeed_plugins is not None
             ):
-                raise ValueError(
+                raise NotImplementedError(
                     "You cannot pass in a `deepspeed_plugin` when creating a second `Accelerator`. "
                     "Please make sure the first `Accelerator` is initialized with all the plugins you want to use."
                 )
