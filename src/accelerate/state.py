@@ -1128,17 +1128,17 @@ class AcceleratorState:
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
 
-    # def __getattr__(self, name: str):
-    #     # By this point we know that no attributes of `self` contain `name`,
-    #     # so we just modify the error message
-    #     if name in self._known_attrs:
-    #         raise AttributeError(
-    #             f"`AcceleratorState` object has no attribute `{name}`. "
-    #             "This happens if `AcceleratorState._reset_state()` was called and "
-    #             "an `Accelerator` or `PartialState` was not reinitialized."
-    #         )
-    #     # Raise a typical AttributeError
-    #     raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
+    def __getattr__(self, name: str):
+        # By this point we know that no attributes of `self` contain `name`,
+        # so we just modify the error message
+        if name in self._known_attrs:
+            raise AttributeError(
+                f"`AcceleratorState` object has no attribute `{name}`. "
+                "This happens if `AcceleratorState._reset_state()` was called and "
+                "an `Accelerator` or `PartialState` was not reinitialized."
+            )
+        # Raise a typical AttributeError
+        raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
 
 
 class GradientState:

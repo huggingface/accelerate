@@ -1217,10 +1217,11 @@ class DeepSpeedPlugin:
                 del ds_config["train_batch_size"]
 
         if compare_versions("transformers", "<", "4.33"):
-            from transformers.deepspeed import HfDeepSpeedConfig
+            from transformers.deepspeed import HfDeepSpeedConfig, unset_hf_deepspeed_config
         else:
-            from transformers.integrations import HfDeepSpeedConfig
+            from transformers.integrations import HfDeepSpeedConfig, unset_hf_deepspeed_config
 
+        unset_hf_deepspeed_config()
         self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
     def is_zero3_init_enabled(self):

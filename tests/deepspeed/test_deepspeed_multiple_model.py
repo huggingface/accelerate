@@ -109,6 +109,21 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert accelerator.deepspeed_plugin == ds_zero2
         assert accelerator.state.get_deepspeed_plugin("zero2") == ds_zero2
 
+    @require_huggingface_suite
+    def test_config_reference_update(self):
+        # Make sure that the transformers weakref is updating when we update the config
+        ds_plugins = self.get_ds_plugins(zero3_inference=True)
+        zero2, zero3 = ds_plugins.values()
+        accelerator = Accelerator(deepspeed_plugin=ds_plugins)
+        from transformers.integrations.deepspeed import deepspeed_config
+
+        assert accelerator.deepspeed_plugin is zero2
+        assert deepspeed_config() == accelerator.deepspeed_plugin.hf_ds_config.config
+
+        accelerator.state.select_deepspeed_plugin("zero3")
+        assert accelerator.deepspeed_plugin is zero3
+        assert deepspeed_config() == accelerator.deepspeed_plugin.hf_ds_config.config
+
     def test_enable_disable_manually_set(self):
         ds_plugins = self.get_ds_plugins()
         ds_zero2, _ = ds_plugins.values()
