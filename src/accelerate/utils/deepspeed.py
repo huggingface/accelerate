@@ -33,9 +33,12 @@ def get_active_deepspeed_plugin(state):
         raise ValueError(
             "Couldn't retrieve the active `DeepSpeedPlugin` as none were enabled. "
             "Please make sure that either `Accelerator` is configured for `deepspeed` "
-            "or make sure that the desired `DeepSpeedPlugin` has been enabled (`plugin.enable()`) before calling this function."
+            "or make sure that the desired `DeepSpeedPlugin` has been enabled (`AcceleratorState().select_deepspeed_plugin(name)`) "
+            "before calling this function."
         )
-    return next(plugin for plugin in state.deepspeed_plugins.values() if plugin.enabled)
+    if not isinstance(state.deepspeed_plugins, dict):
+        return state.deepspeed_plugins
+    return next(plugin for plugin in state.deepspeed_plugins.values() if plugin.selected)
 
 
 class HfDeepSpeedConfig:

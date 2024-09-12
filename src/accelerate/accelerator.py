@@ -300,6 +300,7 @@ class Accelerator:
             # If we're creating a second `Accelerator`, users shouldn't be passing in a `deepspeed_plugin`
             if (
                 PartialState().distributed_type == DistributedType.DEEPSPEED
+                and AcceleratorState._shared_state != {}
                 and AcceleratorState().deepspeed_plugins is not None
             ):
                 raise NotImplementedError(
@@ -329,13 +330,13 @@ class Accelerator:
             )
             if not isinstance(deepspeed_plugins, dict):
                 deepspeed_plugins.set_mixed_precision(mixed_precision)
-                deepspeed_plugins.enable()
+                deepspeed_plugins.select(_from_accelerator_state=True)
             else:
                 for plugin in deepspeed_plugins.values():
                     plugin.set_mixed_precision(mixed_precision)
                 # The first plugin passed in is always the active one
                 first_plugin = next(iter(deepspeed_plugins.values()))
-                first_plugin.enable(_from_accelerator_state=True)
+                first_plugin.select(_from_accelerator_state=True)
             self.deepspeed_engine_wrapped = None
 
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
@@ -578,7 +579,7 @@ class Accelerator:
         Returns the currently active DeepSpeedPlugin.
 
         If using multiple plugins, the first one will be the active one by default. Manually call
-        `accelerator.state.enable_deepspeed_plugin(key)` to activate a different plugin.
+        `accelerator.state.select_deepspeed_plugin(key)` to activate a different plugin.
 
         If deepspeed is not enabled, this will return `None`.
         """

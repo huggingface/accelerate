@@ -161,7 +161,7 @@ From here, we need to deal with the teacher model.
 First we need to tell the `Accelerator` that the zero3/teacher ZeRO configuration should be used:
 
 ```python
-accelerator.state.enable_deepspeed_plugin("teacher")
+accelerator.state.select_deepspeed_plugin("teacher")
 ```
 
 Doing so will disable the `"student"` plugin and enable the `"teacher"` one instead. This will update the
@@ -215,18 +215,18 @@ accelerator_0 = Accelerator(deepspeed_plugins=deepspeed_plugins)
 accelerator_1 = Accelerator()
 ```
 
-Similar to before, we can call either `accelerator_0.state.enable_deepspeed_plugin()` to enable/disable
+Similar to before, we can call either `accelerator_0.state.select_deepspeed_plugin()` to enable/disable
 a particular plugin, and call `.prepare` like normal:
 
 ```python
-# can be `accelerator_0`, `accelerator_1`, or by calling `AcceleratorState().enable_deepspeed_plugin(...)`
-accelerator_0.state.enable_deepspeed_plugin("model1")
+# can be `accelerator_0`, `accelerator_1`, or by calling `AcceleratorState().select_deepspeed_plugin(...)`
+accelerator_0.state.select_deepspeed_plugin("model1")
 model_0 = AutoModel.from_pretrained(...)
 # For this example, `get_training_items` is a nonexistent function that gets the setup we need for training
 optimizer_0, scheduler_0, train_dl, eval_dl = get_training_items(model_0)
 model_0, optimizer_0, scheduler_0, train_dl, eval_dl = accelerator.prepare(model_0, optimizer_0, scheduler_0, train_dl, eval_dl)
 
-accelerator_1.state.enable_deepspeed_plugin("model2")
+accelerator_1.state.select_deepspeed_plugin("model2")
 model_1 = AutoModel.from_pretrained(...)
 # For this example, `get_training_items` is a nonexistent function that gets the setup we need for training
 optimizer_1, scheduler_1, _, _ = get_training_items(model1)

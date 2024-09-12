@@ -84,27 +84,27 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
         return {"zero2": ds_zero2, "zero3": ds_zero3}
 
-    def test_enable_disable(self):
+    def test_select_plugin(self):
         ds_plugins = self.get_ds_plugins()
         ds_zero2, ds_zero3 = ds_plugins.values()
         accelerator = Accelerator(
             deepspeed_plugin=ds_plugins,
         )
         # Accelerator's constructor should automatically enable the first plugin
-        assert ds_zero2.enabled
-        assert not ds_zero3.enabled
+        assert ds_zero2.selected
+        assert not ds_zero3.selected
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
         assert accelerator.deepspeed_plugin == ds_zero2
         assert accelerator.state.get_deepspeed_plugin("zero2") == ds_zero2
-        accelerator.state.enable_deepspeed_plugin("zero3")
-        assert not ds_zero2.enabled
-        assert ds_zero3.enabled
+        accelerator.state.select_deepspeed_plugin("zero3")
+        assert not ds_zero2.selected
+        assert ds_zero3.selected
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero3
         assert accelerator.deepspeed_plugin == ds_zero3
         assert accelerator.state.get_deepspeed_plugin("zero3") == ds_zero3
-        accelerator.state.enable_deepspeed_plugin("zero2")
-        assert not ds_zero3.enabled
-        assert ds_zero2.enabled
+        accelerator.state.select_deepspeed_plugin("zero2")
+        assert not ds_zero3.selected
+        assert ds_zero2.selected
         assert get_active_deepspeed_plugin(accelerator.state) == ds_zero2
         assert accelerator.deepspeed_plugin == ds_zero2
         assert accelerator.state.get_deepspeed_plugin("zero2") == ds_zero2
@@ -113,12 +113,21 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         ds_plugins = self.get_ds_plugins()
         ds_zero2, _ = ds_plugins.values()
         with self.assertRaises(ValueError):
-            ds_zero2.enable()
+            ds_zero2.select()
         accelerator = Accelerator(deepspeed_plugin=ds_plugins)
-        accelerator.state.enable_deepspeed_plugin("zero2")
+        accelerator.state.select_deepspeed_plugin("zero2")
         with self.assertRaises(NotImplementedError):
-            ds_zero2.enabled = False
-        assert ds_zero2.enabled
+            ds_zero2.selected = False
+        assert ds_zero2.selected
+
+    def test_multiple_accelerators(self):
+        ds_plugins = self.get_ds_plugins()
+        ds_zero2, ds_zero3 = ds_plugins.values()
+        _ = Accelerator(
+            deepspeed_plugin=ds_zero2,
+        )
+        with self.assertRaises(NotImplementedError):
+            _ = Accelerator(deepspeed_plugin=ds_zero3)
 
     def test_prepare_multiple_models_zero3_inference(self):
         ds_plugins = self.get_ds_plugins(zero3_inference=True)
@@ -131,7 +140,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         dataset = RegressionDataset()
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=1)
         model1, optimizer, scheduler, dataloader = accelerator.prepare(model1, optimizer, scheduler, dataloader)
-        accelerator.state.enable_deepspeed_plugin("zero3")
+        accelerator.state.select_deepspeed_plugin("zero3")
         model2 = self.model_init()
         with self.assertLogs(level="WARNING") as captured:
             model2 = accelerator.prepare(model2)

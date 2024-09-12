@@ -134,14 +134,14 @@ def single_model_training(config, args):
     )
 
     # Now prepare the model under zero3 plugin
-    accelerator.state.enable_deepspeed_plugin("inference")
+    accelerator.state.select_deepspeed_plugin("inference")
     assert get_active_deepspeed_plugin(accelerator.state) is zero3_plugin
     inference_model = NoiseModel()
     inference_model = accelerator.prepare(inference_model)
     inference_model.eval()
 
     # Run training loop
-    accelerator.state.enable_deepspeed_plugin("training")
+    accelerator.state.select_deepspeed_plugin("training")
     # We also need to keep track of the stating epoch so files are named properly
     starting_epoch = 0
 
@@ -220,7 +220,7 @@ def multiple_model_training(config, args):
     assert zero2_accelerator.deepspeed_engine_wrapped.engine is zero2_model
 
     # now do Zero3
-    zero3_accelerator.state.enable_deepspeed_plugin("zero3")
+    zero3_accelerator.state.select_deepspeed_plugin("zero3")
     zero3_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = zero2_plugin.deepspeed_config[
         "train_micro_batch_size_per_gpu"
     ]

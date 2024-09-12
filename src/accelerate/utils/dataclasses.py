@@ -1099,8 +1099,8 @@ class DeepSpeedPlugin:
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
         # NOTE: Set to False by default, will be set to `True` automatically if it's the first plugin passed
-        # to the `Accelerator`'s `deepspeed_plugin` param, *or* `plugin.enable()` is manually called
-        self._set_enabled(False)
+        # to the `Accelerator`'s `deepspeed_plugin` param, *or* `AcceleratorState().enable_deepspeed_plugin(plugin_key)` is manually called
+        self._set_selected(False)
 
         # Ignore if it's already set
         if self.enable_msamp and "msamp" not in self.deepspeed_config:
@@ -1287,7 +1287,7 @@ class DeepSpeedPlugin:
                     transformer_moe_cls.append(transformer_cls)
             set_z3_leaf_modules(model, transformer_moe_cls)  # z3_leaf
 
-    def enable(self, _from_accelerator_state: bool = False):
+    def select(self, _from_accelerator_state: bool = False):
         """
         Sets the HfDeepSpeedWeakref to use the current deepspeed plugin configuration
         """
@@ -1296,23 +1296,23 @@ class DeepSpeedPlugin:
                 "A `DeepSpeedPlugin` object must be enabled manually by calling `AcceleratorState().enable_deepspeed_plugin(plugin_key)`."
             )
         self.set_deepspeed_weakref()
-        self._set_enabled(True)
+        self._set_selected(True)
 
-    def _disable(self):
-        self._set_enabled(False)
+    def _unselect(self):
+        self._set_selected(False)
 
-    def _set_enabled(self, value: bool):
+    def _set_selected(self, value: bool):
         """
         Private setter for the 'enabled' attribute.
         """
-        self._enabled = value
+        self._selected = value
 
     @property
-    def enabled(self):
-        return self._enabled
+    def selected(self):
+        return self._selected
 
-    @enabled.setter
-    def enabled(self, value):
+    @selected.setter
+    def selected(self, value):
         raise NotImplementedError(
             "'enabled' can only be set through calling 'AcceleratorState().enable_deepspeed_plugin(key)'."
         )

@@ -1116,29 +1116,29 @@ class AcceleratorState:
         return self.deepspeed_plugins[name]
 
     @deepspeed_required
-    def enable_deepspeed_plugin(self, plugin_key: str = None):
+    def select_deepspeed_plugin(self, name: str = None):
         """
-        Enables the DeepSpeedPlugin with the given plugin_key, and will disable all other plugins.
+        Activates the DeepSpeedPlugin with the given `name`, and will disable all other plugins.
         """
         for key, plugin in self.deepspeed_plugins.items():
-            if key != plugin_key:
-                plugin._disable()
-        self.deepspeed_plugins[plugin_key].enable(_from_accelerator_state=True)
+            if key != name:
+                plugin._unselect()
+        self.deepspeed_plugins[name].select(_from_accelerator_state=True)
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
 
-    def __getattr__(self, name: str):
-        # By this point we know that no attributes of `self` contain `name`,
-        # so we just modify the error message
-        if name in self._known_attrs:
-            raise AttributeError(
-                f"`AcceleratorState` object has no attribute `{name}`. "
-                "This happens if `AcceleratorState._reset_state()` was called and "
-                "an `Accelerator` or `PartialState` was not reinitialized."
-            )
-        # Raise a typical AttributeError
-        raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
+    # def __getattr__(self, name: str):
+    #     # By this point we know that no attributes of `self` contain `name`,
+    #     # so we just modify the error message
+    #     if name in self._known_attrs:
+    #         raise AttributeError(
+    #             f"`AcceleratorState` object has no attribute `{name}`. "
+    #             "This happens if `AcceleratorState._reset_state()` was called and "
+    #             "an `Accelerator` or `PartialState` was not reinitialized."
+    #         )
+    #     # Raise a typical AttributeError
+    #     raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
 
 
 class GradientState:
