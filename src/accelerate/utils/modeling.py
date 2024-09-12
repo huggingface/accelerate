@@ -472,7 +472,10 @@ class FindTiedParametersResult(list):
         super().__init__(*args, **kwargs)
 
     def values(self):
-        # TODO: at the next Transformers release (4.28.0) issue a deprecation warning here.
+        warnings.warn(
+            "The 'values' method of FindTiedParametersResult is deprecated and will be removed in Accelerate v1.3.0. ",
+            FutureWarning,
+        )
         return sum([x[1:] for x in self], [])
 
 
