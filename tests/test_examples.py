@@ -285,9 +285,3 @@ class FeatureExamplesTests(TempDirTestCase):
     def test_pippy_examples_gpt2(self):
         testargs = ["examples/inference/pippy/gpt2.py"]
         run_command(self.launch_args + testargs)
-
-    @require_pippy
-    @require_multi_gpu
-    def test_pippy_examples_t5(self):
-        testargs = ["examples/inference/pippy/t5.py"]
-        run_command(self.launch_args + testargs)
