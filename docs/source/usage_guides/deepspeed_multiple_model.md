@@ -94,7 +94,7 @@ Now let's see how to use them.
 
 ### The student model
 
-By default, `accelerate` will set the first item in the `dict` as the default/enabled plugin (so here our `"student"` plugin). We can verify this by using the [`accelerate.utils.deepspeed.get_active_deepspeed_plugin]` function to see which one is being used:
+By default, `accelerate` will set the first item in the `dict` as the default/enabled plugin (so here our `"student"` plugin). We can verify this by using the [`utils.deepspeed.get_active_deepspeed_plugin]` function to see which one is being used:
 
 ```python
 active_plugin = get_active_deepspeed_plugin(accelerator.state)
