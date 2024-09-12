@@ -102,19 +102,11 @@ And the zero2 counterpart:
             "device": "cpu",
             "pin_memory": true
         },
-        "allgather_partitions": true,
-        "allgather_bucket_size": 2e8,
-        "overlap_comm": true,
-        "reduce_scatter": true,
-        "reduce_bucket_size": "auto",
-        "contiguous_gradients": true
     },
     "gradient_accumulation_steps": 1,
     "gradient_clipping": "auto",
-    "steps_per_print": 2000,
     "train_batch_size": "auto",
     "train_micro_batch_size_per_gpu": "auto",
-    "wall_clock_breakdown": false
 }
 ```
 
