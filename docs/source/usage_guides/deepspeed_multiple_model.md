@@ -213,42 +213,42 @@ Since the [`state.AcceleratorState`] is a stateful object though, it is already 
 meaning you can just instantiate a second `Accelerator` with no extra arguments:
 
 ```python
-accelerator_0 = Accelerator(deepspeed_plugins=deepspeed_plugins)
-accelerator_1 = Accelerator()
+accelerator1 = Accelerator(deepspeed_plugins=deepspeed_plugins)
+accelerator2 = Accelerator()
 ```
 
-Similar to before, we can call either `accelerator_0.state.select_deepspeed_plugin()` to enable/disable
+Similar to before, we can call either `accelerator_1.state.select_deepspeed_plugin()` to enable/disable
 a particular plugin, and call `.prepare` like normal:
 
 ```python
 # can be `accelerator_0`, `accelerator_1`, or by calling `AcceleratorState().select_deepspeed_plugin(...)`
-accelerator_0.state.select_deepspeed_plugin("model1")
-model_0 = AutoModel.from_pretrained(...)
+accelerator1.state.select_deepspeed_plugin("model1")
+model1 = AutoModel.from_pretrained(...)
 # For this example, `get_training_items` is a nonexistent function that gets the setup we need for training
-optimizer_0, scheduler_0, train_dl, eval_dl = get_training_items(model_0)
-model_0, optimizer_0, scheduler_0, train_dl, eval_dl = accelerator.prepare(model_0, optimizer_0, scheduler_0, train_dl, eval_dl)
+optimizer1, scheduler1, train_dl, eval_dl = get_training_items(model1)
+model1, optimizer1, scheduler1, train_dl, eval_dl = accelerator.prepare(model1, optimizer1, scheduler1, train_dl, eval_dl)
 
-accelerator_1.state.select_deepspeed_plugin("model2")
-model_1 = AutoModel.from_pretrained(...)
+accelerator2.state.select_deepspeed_plugin("model2")
+model2 = AutoModel.from_pretrained(...)
 # For this example, `get_training_items` is a nonexistent function that gets the setup we need for training
-optimizer_1, scheduler_1, _, _ = get_training_items(model1)
-model_1, optimizer_1, scheduler_1 = accelerator.prepare(model1, optimizer1, scheduler1)
+optimizer2, scheduler2, _, _ = get_training_items(model2)
+model2, optimizer2, scheduler2 = accelerator.prepare(model2, optimizer2, scheduler2)
 ```
 
 And now you can train:
 
 ```python
 for batch in dl:
-    outputs_1 = model_0(**batch)
-    accelerator_0.backward(outputs_1.loss)
-    optimizer_0.step()
-    scheduler_0.step()
-    optimizer_0.zero_grad()
-    outputs_2 = model_1(**batch)
-    accelerator_1.backward(outputs_2.loss)
-    optimizer_1.step()
-    scheduler_1.step()
-    optimizer_1.zero_grad()
+    outputs1 = model1(**batch)
+    accelerator1.backward(outputs1.loss)
+    optimizer1.step()
+    scheduler1.step()
+    optimizer1.zero_grad()
+    outputs2 = model2(**batch)
+    accelerator2.backward(outputs1.loss)
+    optimizer2.step()
+    scheduler2.step()
+    optimizer2.zero_grad()
 ```
 
 ## More Resources

@@ -119,18 +119,18 @@ def single_model_training(config, args):
 
     # Initialize model under zero2 plugin
     assert get_active_deepspeed_plugin(accelerator.state) is zero2_plugin
-    trained_model = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_path)
+    train_model = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_path)
     train_dataloader, eval_dataloader = get_dataloaders(
         accelerator, batch_size=config["batch_size"], model_name=args.model_name_or_path
     )
     max_training_steps = len(train_dataloader) * config["num_epochs"]
-    optimizer = AdamW(trained_model.parameters(), lr=config["lr"])
+    optimizer = AdamW(train_model.parameters(), lr=config["lr"])
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=0, num_training_steps=max_training_steps
     )
 
-    train_dataloader, eval_dataloader, model, optimizer, lr_scheduler = accelerator.prepare(
-        train_dataloader, eval_dataloader, trained_model, optimizer, lr_scheduler
+    train_dataloader, eval_dataloader, train_model, optimizer, lr_scheduler = accelerator.prepare(
+        train_dataloader, eval_dataloader, train_model, optimizer, lr_scheduler
     )
 
     # Now prepare the model under zero3 plugin
@@ -150,12 +150,13 @@ def single_model_training(config, args):
     metric = evaluate.load("glue", "mrpc")
     performance_metric = {}
     for epoch in range(starting_epoch, num_epochs):
-        model.train()
+        train_model.train()
         inference_model.train()
         for step, batch in enumerate(train_dataloader):
-            with accelerator.accumulate(model):
-                outputs_1 = model(**batch)
-                outputs_2 = inference_model(outputs_1.loss)
+            with accelerator.accumulate(train_model):
+                outputs_1 = train_model(**batch)
+                with torch.no_grad():
+                    outputs_2 = inference_model(outputs_1.loss)
                 # Combine the losses
                 loss = outputs_1.loss + outputs_2
                 accelerator.backward(loss)
@@ -163,10 +164,10 @@ def single_model_training(config, args):
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
-        model.eval()
+        train_model.eval()
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
-                outputs = model(**batch)
+                outputs = train_model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             # It is slightly faster to call this once, than multiple times
             predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
