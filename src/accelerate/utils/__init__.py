@@ -57,10 +57,6 @@ from .dataclasses import (
     TorchDynamoPlugin,
     add_model_config_to_megatron_parser,
 )
-from .deepspeed import (
-    deepspeed_required,
-    get_active_deepspeed_plugin,
-)
 from .environment import (
     are_libraries_initialized,
     check_cuda_p2p_ib_support,
@@ -75,6 +71,7 @@ from .environment import (
     str_to_bool,
 )
 from .imports import (
+    deepspeed_required,
     get_ccl_version,
     is_4bit_bnb_available,
     is_8bit_bnb_available,
@@ -192,6 +189,7 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
         HfDeepSpeedConfig,
+        get_active_deepspeed_plugin,
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model

@@ -16,7 +16,7 @@ import importlib
 import importlib.metadata
 import os
 import warnings
-from functools import lru_cache
+from functools import lru_cache, wraps
 
 import torch
 from packaging import version
@@ -440,3 +440,24 @@ def is_torchdata_stateful_dataloader_available():
         torchdata_version = version.parse(importlib.metadata.version("torchdata"))
         return compare_versions(torchdata_version, ">=", "0.8.0")
     return False
+
+
+# TODO: Rework this into `utils.deepspeed` and migrate the "core" chunks into `accelerate.deepspeed`
+def deepspeed_required(func):
+    """
+    A decorator that ensures the decorated function is only called when deepspeed is enabled.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        from accelerate.state import AcceleratorState
+        from accelerate.utils.dataclasses import DistributedType
+
+        if AcceleratorState._shared_state != {} and AcceleratorState().distributed_type != DistributedType.DEEPSPEED:
+            raise ValueError(
+                "DeepSpeed is not enabled, please make sure that an `Accelerator` is configured for `deepspeed` "
+                "before calling this function."
+            )
+        return func(*args, **kwargs)
+
+    return wrapper

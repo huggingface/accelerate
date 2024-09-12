@@ -320,7 +320,7 @@ class Accelerator:
                     plugin.set_mixed_precision(mixed_precision)
                 # The first plugin passed in is always the active one
                 first_plugin = next(iter(deepspeed_plugin.values()))
-                first_plugin.enable()
+                first_plugin.enable(_from_accelerator_state=True)
             self.deepspeed_engine_wrapped = None
 
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(

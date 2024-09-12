@@ -31,7 +31,6 @@ from .utils import (
     check_cuda_p2p_ib_support,
     check_fp8_capability,
     deepspeed_required,
-    get_active_deepspeed_plugin,
     get_ccl_version,
     get_cpu_distributed_information,
     get_int_from_env,
@@ -1105,6 +1104,7 @@ class AcceleratorState:
         # To maintain original behavior, return None if not using deepspeed.
         if self.distributed_type != DistributedType.DEEPSPEED:
             return None
+        from accelerate.utils.deepspeed import get_active_deepspeed_plugin
 
         return get_active_deepspeed_plugin(self)
 
@@ -1123,7 +1123,7 @@ class AcceleratorState:
         for key, plugin in self.deepspeed_plugins.items():
             if key != plugin_key:
                 plugin._disable()
-        self.deepspeed_plugins[plugin_key].enable()
+        self.deepspeed_plugins[plugin_key].enable(_from_accelerator_state=True)
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
