@@ -179,9 +179,10 @@ class Accelerator:
             the execution on one process only.
         dataloader_config (`DataLoaderConfiguration`, *optional*):
             A configuration for how the dataloaders should be handled in distributed scenarios.
-        deepspeed_plugin ([`~utils.DeepSpeedPlugin`], *optional*):
+        deepspeed_plugin ([`~utils.DeepSpeedPlugin`] or dict of `str`: [`~utils.DeepSpeedPlugin`], *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
-            directly using *accelerate config*
+            directly using *accelerate config*. If using multiple plugins, use the configured `key` property of each
+            plugin to access them from `accelerator.state.get_deepspeed_plugin(key)`. Alias for `deepspeed_plugins`.
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
@@ -249,7 +250,7 @@ class Accelerator:
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
         dataloader_config: DataLoaderConfiguration | None = None,
-        deepspeed_plugin: DeepSpeedPlugin | None = None,
+        deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
@@ -263,6 +264,7 @@ class Accelerator:
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
+        deepspeed_plugins: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
     ):
         self.trackers = []
         if project_config is not None:
@@ -280,16 +282,38 @@ class Accelerator:
 
         dynamo_plugin = TorchDynamoPlugin() if dynamo_backend is None else TorchDynamoPlugin(backend=dynamo_backend)
 
-        if deepspeed_plugin is None:  # init from env variables
-            deepspeed_plugin = (
-                DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
-            )
+        if deepspeed_plugins is not None and deepspeed_plugin is not None:
+            raise ValueError("You cannot pass in both `deepspeed_plugins` and `deepspeed_plugin`.")
+        elif deepspeed_plugin is not None:
+            deepspeed_plugins = deepspeed_plugin
+
+        if deepspeed_plugins is None:
+            # First check if we're creating another `Accelerator` w/o setting `deepspeed_plugin`
+            if PartialState().distributed_type == DistributedType.DEEPSPEED:
+                deepspeed_plugins = AcceleratorState().deepspeed_plugins
+            else:
+                # init from env variables
+                deepspeed_plugins = (
+                    DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
+                )
         else:
-            assert isinstance(
-                deepspeed_plugin, DeepSpeedPlugin
-            ), "`deepspeed_plugin` must be an `accelerate.utils.DeepSpeedPlugin` object."
+            # If we're creating a second `Accelerator`, users shouldn't be passing in a `deepspeed_plugin`
+            if (
+                PartialState().distributed_type == DistributedType.DEEPSPEED
+                and AcceleratorState._shared_state != {}
+                and AcceleratorState().deepspeed_plugins is not None
+            ):
+                raise NotImplementedError(
+                    "You cannot pass in a `deepspeed_plugin` when creating a second `Accelerator`. "
+                    "Please make sure the first `Accelerator` is initialized with all the plugins you want to use."
+                )
+            if isinstance(deepspeed_plugins, dict):
+                for plugin in deepspeed_plugins.values():
+                    if not isinstance(plugin, DeepSpeedPlugin):
+                        raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
+
+        if deepspeed_plugins is not None:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
-        if deepspeed_plugin:
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
             if is_mlu_available():
@@ -304,8 +328,16 @@ class Accelerator:
             mixed_precision = (
                 os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
             )
-            deepspeed_plugin.set_mixed_precision(mixed_precision)
-            deepspeed_plugin.set_deepspeed_weakref()
+            if not isinstance(deepspeed_plugins, dict):
+                deepspeed_plugins.set_mixed_precision(mixed_precision)
+                deepspeed_plugins.select(_from_accelerator_state=True)
+            else:
+                for plugin in deepspeed_plugins.values():
+                    plugin.set_mixed_precision(mixed_precision)
+                # The first plugin passed in is always the active one
+                first_plugin = next(iter(deepspeed_plugins.values()))
+                first_plugin.select(_from_accelerator_state=True)
+            self.deepspeed_engine_wrapped = None
 
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
@@ -385,7 +417,7 @@ class Accelerator:
             mixed_precision=mixed_precision,
             cpu=cpu,
             dynamo_plugin=dynamo_plugin,
-            deepspeed_plugin=deepspeed_plugin,
+            deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
@@ -517,6 +549,18 @@ class Accelerator:
         self.flag_tensor = None
 
         check_os_kernel()
+
+    @property
+    def deepspeed_plugin(self):
+        """
+        Returns the currently active DeepSpeedPlugin.
+
+        If using multiple plugins, the first one will be the active one by default. Manually call
+        `accelerator.state.select_deepspeed_plugin(key)` to activate a different plugin.
+
+        If deepspeed is not enabled, this will return `None`.
+        """
+        return self.state.deepspeed_plugin
 
     @property
     def use_distributed(self):
@@ -1608,7 +1652,7 @@ class Accelerator:
 
             ds_initialize = msamp_deepspeed.initialize
 
-        deepspeed_plugin = self.state.deepspeed_plugin
+        deepspeed_plugin = self.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         result = [
@@ -1652,13 +1696,15 @@ class Accelerator:
         )
 
         config_kwargs = {
-            "train_micro_batch_size_per_gpu": batch_size_per_device,
-            "train_batch_size": batch_size_per_device
-            * deepspeed_plugin.get_value("gradient_accumulation_steps")
-            * self.num_processes,
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
+        # This is skipped when preparing just a model
+        if batch_size_per_device is not None:
+            config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
+            config_kwargs["train_batch_size"] = (
+                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes
+            )
 
         model = None
         optimizer = None
@@ -1820,16 +1866,19 @@ class Accelerator:
                 ):
                     result[i] = scheduler
             # pointing for deepspeed_engine_wrapped.backward()
-            self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
+            if self.deepspeed_engine_wrapped is None:
+                self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
+            else:
+                logger.warning(
+                    "A wrapped DeepSpeed engine reference is currently tied for this `Accelerator()` instance. "
+                    "If you want to call `accelerator.backward()` referencing a new model/engine, "
+                    "please create a separate `Accelerator()` instance and call `accelerator.prepare()` on it."
+                )
             self._models.append(engine)
             if optimizer is not None:
                 self._optimizers.append(optimizer)
             if scheduler is not None:
                 self._schedulers.append(scheduler)
-            if len(self._models) > 1:
-                raise AssertionError(
-                    "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
-                )
         return tuple(result)
 
     def _prepare_megatron_lm(self, *args):

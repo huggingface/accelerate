@@ -17,6 +17,10 @@ rendered properly in your Markdown viewer.
 
 ## DeepSpeedPlugin
 
+## get_active_deepspeed_plugin
+
+[[autodoc]] utils.get_active_deepspeed_plugin
+
 [[autodoc]] utils.DeepSpeedPlugin
 
 [[autodoc]] utils.deepspeed.DummyScheduler
