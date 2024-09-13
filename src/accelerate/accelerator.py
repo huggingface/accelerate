@@ -497,7 +497,7 @@ class Accelerator:
             elif is_xpu_available():
                 self.scaler = torch.amp.GradScaler("xpu", **kwargs)
             else:
-                self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+                self.scaler = torch.amp.GradScaler("cuda", **kwargs)
 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
