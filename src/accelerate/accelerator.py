@@ -258,9 +258,6 @@ class Accelerator:
         project_dir: str | os.PathLike | None = None,
         project_config: ProjectConfiguration | None = None,
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
-        dispatch_batches: bool | None = _dispatch_batches,
-        even_batches: bool = _even_batches,
-        use_seedable_sampler: bool = _use_seedable_sampler,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
@@ -289,7 +286,7 @@ class Accelerator:
 
         if deepspeed_plugins is None:
             # First check if we're creating another `Accelerator` w/o setting `deepspeed_plugin`
-            if PartialState().distributed_type == DistributedType.DEEPSPEED:
+            if PartialState._shared_state != {} and PartialState().distributed_type == DistributedType.DEEPSPEED:
                 deepspeed_plugins = AcceleratorState().deepspeed_plugins
             else:
                 # init from env variables
