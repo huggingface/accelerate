@@ -437,29 +437,6 @@ class Accelerator:
         if dataloader_config is None:
             dataloader_config = DataLoaderConfiguration()
         self.dataloader_config = dataloader_config
-        # Deal with deprecated args
-        # TODO: Remove in v1.0.0
-        deprecated_dl_args = {}
-        if dispatch_batches is not _dispatch_batches:
-            deprecated_dl_args["dispatch_batches"] = dispatch_batches
-            self.dataloader_config.dispatch_batches = dispatch_batches
-        if split_batches is not _split_batches:
-            deprecated_dl_args["split_batches"] = split_batches
-            self.dataloader_config.split_batches = split_batches
-        if even_batches is not _even_batches:
-            deprecated_dl_args["even_batches"] = even_batches
-            self.dataloader_config.even_batches = even_batches
-        if use_seedable_sampler is not _use_seedable_sampler:
-            deprecated_dl_args["use_seedable_sampler"] = use_seedable_sampler
-            self.dataloader_config.use_seedable_sampler = use_seedable_sampler
-        if len(deprecated_dl_args) > 0:
-            values = ", ".join([f"{k}={v}" for k, v in deprecated_dl_args.items()])
-            warnings.warn(
-                f"Passing the following arguments to `Accelerator` is deprecated and will be removed in version 1.0 of Accelerate: {deprecated_dl_args.keys()}. "
-                "Please pass an `accelerate.DataLoaderConfiguration` instead: \n"
-                f"dataloader_config = DataLoaderConfiguration({values})",
-                FutureWarning,
-            )
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
@@ -619,15 +596,6 @@ class Accelerator:
     def is_local_main_process(self):
         """True for one process per server."""
         return self.state.is_local_main_process
-
-    @property
-    def use_fp16(self):
-        warnings.warn(
-            "The `use_fp16` property is deprecated and will be removed in version 1.0 of Accelerate use "
-            "`Accelerator.mixed_precision == 'fp16'` instead.",
-            FutureWarning,
-        )
-        return self.mixed_precision != "no"
 
     @property
     def is_last_process(self):
@@ -3408,7 +3376,7 @@ class Accelerator:
         self._custom_objects.extend(objects)
 
     @contextmanager
-    def autocast(self, cache_enabled: bool = False, autocast_handler: AutocastKwargs = None):
+    def autocast(self, autocast_handler: AutocastKwargs = None):
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
@@ -3426,16 +3394,6 @@ class Accelerator:
         ...     train()
         ```
         """
-        if cache_enabled:
-            warnings.warn(
-                "Passing `cache_enabled=True` to `accelerator.autocast` is deprecated and will be removed in v0.23.0. "
-                "Please use the `AutocastKwargs` class instead and pass it to the `Accelerator` as a `kwarg_handler`.",
-                FutureWarning,
-            )
-            if self.autocast_handler is not None:
-                self.autocast_handler.cache_enabled = True
-            else:
-                self.autocast_handler = AutocastKwargs(cache_enabled=True)
         if autocast_handler is None:
             autocast_handler = self.autocast_handler
         autocast_context = get_mixed_precision_context_manager(self.native_amp, autocast_handler)

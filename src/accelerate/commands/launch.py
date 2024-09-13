@@ -542,12 +542,6 @@ def launch_command_parser(subparsers=None):
         "(useful only when `use_fsdp` flag is passed).",
     )
     fsdp_args.add_argument(
-        "--fsdp_backward_prefetch_policy",
-        default=None,
-        type=str,
-        help="This argument is deprecated and will be removed in version 0.27.0 of 🤗 Accelerate. Use `fsdp_backward_prefetch` instead.",
-    )
-    fsdp_args.add_argument(
         "--fsdp_backward_prefetch",
         default=None,
         type=str,

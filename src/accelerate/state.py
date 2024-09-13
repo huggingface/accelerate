@@ -962,16 +962,6 @@ class AcceleratorState:
             ):
                 raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
 
-    # For backward compatibility
-    @property
-    def use_fp16(self):
-        warnings.warn(
-            "The `use_fp16` property is deprecated and will be removed in version 1.0 of Accelerate use "
-            "`AcceleratorState.mixed_precision == 'fp16'` instead.",
-            FutureWarning,
-        )
-        return self._mixed_precision != "no"
-
     @property
     def mixed_precision(self):
         if self.distributed_type == DistributedType.DEEPSPEED:

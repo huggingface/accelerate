@@ -542,7 +542,6 @@ class DistributedType(str, enum.Enum):
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **XLA** -- Using TorchXLA.
-        - **TPU** -- This field will be deprecated in v0.27.0. Use XLA instead.
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.

@@ -56,7 +56,7 @@ class KwargsHandlerTester(unittest.TestCase):
         scaler_handler = GradScalerKwargs(init_scale=1024, growth_factor=2)
         AcceleratorState._reset_state()
         accelerator = Accelerator(mixed_precision="fp16", kwargs_handlers=[scaler_handler])
-        print(accelerator.use_fp16)
+        assert accelerator.mixed_precision == "fp16"
         scaler = accelerator.scaler
 
         # Check the kwargs have been applied
