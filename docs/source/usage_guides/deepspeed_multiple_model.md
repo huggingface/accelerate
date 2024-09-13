@@ -24,21 +24,21 @@ rendered properly in your Markdown viewer.
 Running multiple models with Accelerate and DeepSpeed is useful for:
 
 * Knowledge distillation
-* RLHF techniques (see the [TRL](https://github.com/huggingface/trl) library for more examples)
+* Post-training techniques like RLHF (see the [TRL](https://github.com/huggingface/trl) library for more examples)
 * Training multiple models at once
 
 Currently, Accelerate has a **very experimental API** to help you use multiple models.
 
 This tutorial will focus on two common use cases:
 
-1. An RLHF use case, using ZeRO2 to train a model and ZeRO3 for inference to assist in training the ZeRO2 model. ZeRO2 is faster to train with if the model fits on a single GPU.
+1. Knowledge distillation, where a smaller student model is trained to mimic a larger, better-performing teacher.  If the student model fits on a single GPU, we can use ZeRO-2 for training and ZeRO-3 to shard the teacher for inference. This is significantly faster than using ZeRO-3 for both models.
 2. Training multiple *disjoint* models at once.
 
-## RLHF
+## Knowledge distillation
 
-RLHF is a good example of using multiple models, but only training one of them.
+Knowledge distillation is a good example of using multiple models, but only training one of them.
 
-Normally, you would use a single [`utils.DeepSpeedPlugin`] at a time. However, in this case, there are two separate configurations. Accelerate allows you to create and use multiple plugins **if and only if** they are in a `dict` so that you can reference and enable the proper plugin when needed.
+Normally, you would use a single [`utils.DeepSpeedPlugin`] for both models. However, in this case, there are two separate configurations. Accelerate allows you to create and use multiple plugins **if and only if** they are in a `dict` so that you can reference and enable the proper plugin when needed.
 
 ```python
 from accelerate.utils import DeepSpeedPlugin
@@ -125,7 +125,7 @@ Now let's see how to use them.
 
 ### Student model
 
-By default, Accelerate sets the first item in the `dict` as the default or enabled plugin (`"student"` plugin). Verify this by using the [`utils.deepspeed.get_active_deepspeed_plugin]` function to see which plugin is enabled.
+By default, Accelerate sets the first item in the `dict` as the default or enabled plugin (`"student"` plugin). Verify this by using the [`utils.deepspeed.get_active_deepspeed_plugin`] function to see which plugin is enabled.
 
 ```python
 active_plugin = get_active_deepspeed_plugin(accelerator.state)
@@ -156,7 +156,7 @@ accelerator.state.select_deepspeed_plugin("teacher")
 
 This disables the `"student"` plugin and enables the `"teacher"` plugin instead. The
 DeepSpeed stateful config inside of Transformers is updated, and it changes which plugin configuration gets called when using
-`deepspeed.initialize()`. This allows you to use the no-code `deepspeed.zero.Init`  context manager Transformers provides.
+`deepspeed.initialize()`. This allows you to use the automatic `deepspeed.zero.Init`  context manager integration Transformers provides.
 
 ```python
 teacher_model = AutoModel.from_pretrained(...)
