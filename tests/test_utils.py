@@ -304,6 +304,15 @@ class UtilsTester(unittest.TestCase):
             nt2 = pad_across_processes(nt)
         assert nt is nt2
 
+        # Basic functionality
+        tensor = torch.randn(4, 3, 100)
+        padded_tensor = pad_across_processes(tensor, dim=-1)
+        assert padded_tensor.shape[-1] == 100
+
+        # dim = -4 is out of bounds
+        padded_tensor = pad_across_processes(tensor, dim=-4)
+        assert padded_tensor is tensor
+
     def test_slice_and_concatenate(self):
         # First base case: 2 processes, batch size of 1
         num_processes = 2
