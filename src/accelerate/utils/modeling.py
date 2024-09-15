@@ -1249,7 +1249,7 @@ def fallback_allocate(
     current_names = [n for n, _ in modules]
     dot_idx = [i for i, c in enumerate(name) if c == '.']
 
-    for dot_index in dot_idx[:-1]:
+    for dot_index in dot_idx:
         parent_name = name[:dot_index]
         if parent_name in current_names:
             parent_module_idx = current_names.index(parent_name)
