@@ -503,30 +503,6 @@ class ProfileKwargs(KwargsHandler):
         )
 
 
-class DeprecatedFieldDescriptor:
-    """
-    Descriptor for deprecated fields in an enum class.
-
-    Args:
-        field_name (`str`):
-            The name of the deprecated field.
-        replaced_with (`str`):
-            The name of the field that replaces the deprecated one.
-    """
-
-    def __init__(self, field_name, replaced_with):
-        self.field_name = field_name
-        self.replaced_with = replaced_with
-
-    def __get__(self, instance, owner):
-        warnings.warn(
-            f"The `{self.field_name}` of `{owner}` is deprecated and will be removed in v1.0.0. "
-            f"Please use the `{self.replaced_with}` instead.",
-            FutureWarning,
-        )
-        return getattr(owner, self.replaced_with)
-
-
 class DistributedType(str, enum.Enum):
     """
     Represents a type of distributed environment.
@@ -556,7 +532,6 @@ class DistributedType(str, enum.Enum):
     FSDP = "FSDP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
-    TPU = DeprecatedFieldDescriptor("TPU", "XLA")
 
 
 class SageMakerDistributedType(str, enum.Enum):
