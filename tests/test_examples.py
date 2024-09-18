@@ -30,6 +30,7 @@ from accelerate.test_utils.testing import (
     require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
+    require_non_xpu,
     require_pippy,
     require_schedulefree,
     require_trackers,
@@ -274,12 +275,14 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/inference/distributed/phi2.py"]
         run_command(self.launch_args + testargs)
 
+    @require_non_xpu
     @require_pippy
     @require_multi_gpu
     def test_pippy_examples_bert(self):
         testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
+    @require_non_xpu
     @require_pippy
     @require_multi_gpu
     def test_pippy_examples_gpt2(self):
