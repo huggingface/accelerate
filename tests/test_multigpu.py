@@ -30,6 +30,7 @@ from accelerate.test_utils import (
     require_multi_device,
     require_multi_gpu,
     require_non_torch_xla,
+    require_non_xpu,
     require_pippy,
     require_torchvision,
     torch_device,
@@ -93,6 +94,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
+    @require_non_xpu
     @require_multi_gpu
     @require_pippy
     @require_torchvision
