@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Using Local SGD with 🤗 Accelerate
+# Using Local SGD with Accelerate
 
 Local SGD is a technique for distributed training where gradients are not synchronized every step. Thus, each process updates its own version of the model weights and after a given number of steps these weights are synchronized by averaging across all processes. This improves communication efficiency and can lead to substantial training speed up especially when a computer lacks a faster interconnect such as NVLink.
 Unlike gradient accumulation (where improving communication efficiency requires increasing the effective batch size), Local SGD does not require changing a batch size or a learning rate / schedule. However, if necessary, Local SGD can be combined with gradient accumulation as well.
 
-In this tutorial you will see how to quickly setup  Local SGD 🤗 Accelerate. Compared to a standard Accelerate setup, this requires only two extra lines of code.
+In this tutorial you will see how to quickly setup  Local SGD Accelerate. Compared to a standard Accelerate setup, this requires only two extra lines of code.
 
 This example will use a very simplistic PyTorch training loop that performs gradient accumulation every two batches:
 
@@ -42,9 +42,9 @@ for index, batch in enumerate(training_dataloader):
         optimizer.zero_grad()
 ```
 
-## Converting it to 🤗 Accelerate
+## Converting it to Accelerate
 
-First the code shown earlier will be converted to use 🤗 Accelerate  with neither a LocalSGD or a gradient accumulation helper:
+First the code shown earlier will be converted to use Accelerate  with neither a LocalSGD or a gradient accumulation helper:
 
 ```diff
 + from accelerate import Accelerator
@@ -67,9 +67,9 @@ First the code shown earlier will be converted to use 🤗 Accelerate  with neit
           scheduler.step()
 ```
 
-## Letting 🤗 Accelerate handle model synchronization 
+## Letting Accelerate handle model synchronization 
 
-All that is left now is to let 🤗 Accelerate handle model parameter synchronization **and** the gradient accumulation for us. For simplicity let us assume we need to synchronize every 8 steps. This is
+All that is left now is to let Accelerate handle model parameter synchronization **and** the gradient accumulation for us. For simplicity let us assume we need to synchronize every 8 steps. This is
 achieved by adding one `with LocalSGD` statement and one call `local_sgd.step()` after every optimizer step:
 
 ```diff

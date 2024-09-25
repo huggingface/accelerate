@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Handling big models for inference
+# Loading big models into memory
 
 When loading a pre-trained model in PyTorch, the usual workflow looks like this:
 
@@ -46,7 +46,7 @@ This API is quite new and still in its experimental stage. While we strive to pr
 
 ### Instantiating an empty model
 
-The first tool 🤗 Accelerate introduces to help with big models is a context manager [`init_empty_weights`] that helps you initialize a model without using any RAM so that step 1 can be done on models of any size. Here is how it works:
+The first tool Accelerate introduces to help with big models is a context manager [`init_empty_weights`] that helps you initialize a model without using any RAM so that step 1 can be done on models of any size. Here is how it works:
 
 ```py
 from accelerate import init_empty_weights
@@ -74,7 +74,7 @@ initializes an empty model with a bit more than 100B parameters. Behind the scen
 
 It's possible your model is so big that even a single copy won't fit in RAM. That doesn't mean it can't be loaded: if you have one or several GPUs, this is more memory available to store your model. In this case, it's better if your checkpoint is split into several smaller files that we call checkpoint shards.
 
-🤗 Accelerate will handle sharded checkpoints as long as you follow the following format: your checkpoint should be in a folder, with several files containing the partial state dicts, and there should be an index in the JSON format that contains a dictionary mapping parameter names to the file containing their weights. You can easily shard your model with [`~Accelerator.save_model`]. For instance, we could have a folder containing:
+Accelerate will handle sharded checkpoints as long as you follow the following format: your checkpoint should be in a folder, with several files containing the partial state dicts, and there should be an index in the JSON format that contains a dictionary mapping parameter names to the file containing their weights. You can easily shard your model with [`~Accelerator.save_model`]. For instance, we could have a folder containing:
 
 ```bash
 first_state_dict.bin
@@ -97,9 +97,9 @@ and `first_state_dict.bin` containing the weights for `"linear1.weight"` and `"l
 
 ### Loading weights
 
-The second tool 🤗 Accelerate introduces is a function [`load_checkpoint_and_dispatch`], that will allow you to load a checkpoint inside your empty model. This supports full checkpoints (a single file containing the whole state dict) as well as sharded checkpoints. It will also automatically dispatch those weights across the devices you have available (GPUs, CPU RAM), so if you are loading a sharded checkpoint, the maximum RAM usage will be the size of the biggest shard.
+The second tool Accelerate introduces is a function [`load_checkpoint_and_dispatch`], that will allow you to load a checkpoint inside your empty model. This supports full checkpoints (a single file containing the whole state dict) as well as sharded checkpoints. It will also automatically dispatch those weights across the devices you have available (GPUs, CPU RAM), so if you are loading a sharded checkpoint, the maximum RAM usage will be the size of the biggest shard.
 
-If you want to use big model inference with 🤗 Transformers models, check out this [documentation](https://huggingface.co/docs/transformers/main/en/main_classes/model#large-model-loading).
+If you want to use big model inference with Transformers models, check out this [documentation](https://huggingface.co/docs/transformers/main/en/main_classes/model#large-model-loading).
 
 Here is how we can use this to load the [GPT2-1.5B](https://huggingface.co/marcsun13/gpt2-xl-linear-sharded) model.
 
@@ -145,7 +145,7 @@ model = load_checkpoint_and_dispatch(
 )
 ```
 
-By passing `device_map="auto"`, we tell 🤗 Accelerate to determine automatically where to put each layer of the model depending on the available resources:
+By passing `device_map="auto"`, we tell Accelerate to determine automatically where to put each layer of the model depending on the available resources:
 - first, we use the maximum space available on the GPU(s)
 - if we still need space, we store the remaining weights on the CPU
 - if there is not enough RAM, we store the remaining weights on the hard drive as memory-mapped tensors
@@ -159,7 +159,7 @@ include a residual connection of some kind.
 
 #### The `device_map`
 
-You can see the `device_map` that 🤗 Accelerate picked by accessing the `hf_device_map` attribute of your model:
+You can see the `device_map` that Accelerate picked by accessing the `hf_device_map` attribute of your model:
 
 ```py
 model.hf_device_map
@@ -210,7 +210,7 @@ outputs = model.generate(x1, max_new_tokens=10, do_sample=False)[0]
 tokenizer.decode(outputs.cpu().squeeze())
 ```
 
-Behind the scenes, 🤗 Accelerate added hooks to the model, so that:
+Behind the scenes, Accelerate added hooks to the model, so that:
 - at each layer, the inputs are put on the right device (so even if your model is spread across several GPUs, it works)
 - for the weights offloaded on the CPU, they are put on a GPU just before the forward pass and cleaned up just after
 - for the weights offloaded on the hard drive, they are loaded in RAM then put on a GPU just before the forward pass and cleaned up just after
@@ -225,7 +225,7 @@ This way, your model can run for inference even if it doesn't fit on one of the 
 
 ### Designing a device map
 
-You can let 🤗 Accelerate handle the device map computation by setting `device_map` to one of the supported options (`"auto"`, `"balanced"`, `"balanced_low_0"`, `"sequential"`) or create one yourself if you want more control over where each layer should go.
+You can let Accelerate handle the device map computation by setting `device_map` to one of the supported options (`"auto"`, `"balanced"`, `"balanced_low_0"`, `"sequential"`) or create one yourself if you want more control over where each layer should go.
 
 <Tip>
 

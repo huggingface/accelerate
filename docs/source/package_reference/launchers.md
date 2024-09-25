@@ -17,6 +17,10 @@ rendered properly in your Markdown viewer.
 
 Functions for launching training on distributed processes.
 
+## notebook_launcher
 
 [[autodoc]] accelerate.notebook_launcher
+
+## debug_launcher
+
 [[autodoc]] accelerate.debug_launcher

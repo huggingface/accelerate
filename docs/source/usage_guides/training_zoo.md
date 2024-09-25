@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Example Zoo
 
-Below contains a non-exhaustive list of tutorials and scripts showcasing 🤗 Accelerate
+Below contains a non-exhaustive list of tutorials and scripts showcasing Accelerate.
 
 ## Official Accelerate Examples:
 
@@ -68,7 +68,7 @@ These examples showcase every feature in Accelerate at once that was shown in "F
 
 ## Integration Examples 
 
-These are tutorials from libraries that integrate with 🤗 Accelerate: 
+These are tutorials from libraries that integrate with Accelerate: 
 
 > Don't find your integration here? Make a PR to include it!
 
@@ -85,7 +85,7 @@ These are tutorials from libraries that integrate with 🤗 Accelerate:
 
 - [Fine-tuning DALLE2](https://github.com/lucidrains/DALLE2-pytorch#usage)
 
-### 🤗 diffusers
+### Diffusers
 
 - [Performing textual inversion with diffusers](https://github.com/huggingface/diffusers/tree/main/examples/textual_inversion)
 - [Training DreamBooth with diffusers](https://github.com/huggingface/diffusers/tree/main/examples/dreambooth)
@@ -134,7 +134,7 @@ These are tutorials from libraries that integrate with 🤗 Accelerate:
 
 ## In Science
 
-Below contains a non-exhaustive list of papers utilizing 🤗 Accelerate. 
+Below contains a non-exhaustive list of papers utilizing Accelerate. 
 
 > Don't find your paper here? Make a PR to include it!
 

@@ -49,6 +49,7 @@ from accelerate.utils.other import patch_environment
 set_seed(42)
 
 BERT_BASE_CASED = "bert-base-cased"
+LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 FP16 = "fp16"
 BF16 = "bf16"
 dtypes = [FP16, BF16]
@@ -135,39 +136,49 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert fsdp_plugin.state_dict_config.offload_to_cpu
                 assert fsdp_plugin.state_dict_config.rank0_only
 
-    def test_auto_wrap_policy(self):
-        model = AutoModel.from_pretrained(BERT_BASE_CASED)
-        for policy in FSDP_AUTO_WRAP_POLICY:
-            env = self.fsdp_env.copy()
-            env["FSDP_AUTO_WRAP_POLICY"] = policy
-            transformer_cls_to_wrap = None
-            min_num_params = None
-            if policy == "TRANSFORMER_BASED_WRAP":
-                env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = "BertLayer"
-                transformer_cls_to_wrap = "BertLayer"
-            elif policy == "SIZE_BASED_WRAP":
-                env["FSDP_MIN_NUM_PARAMS"] = "2000"
-                min_num_params = 2000
-            # First test via env
-            with mockenv_context(**env):
-                fsdp_plugin = FullyShardedDataParallelPlugin()
-                fsdp_plugin.set_auto_wrap_policy(model)
-            if policy == "NO_WRAP":
-                assert fsdp_plugin.auto_wrap_policy is None
-            else:
-                assert isinstance(fsdp_plugin.auto_wrap_policy, functools.partial)
+        # We can also override the state_dict_type,
+        # typical case: user trains with sharded, but final save is with full
+        fsdp_plugin = FullyShardedDataParallelPlugin(state_dict_type="FULL_STATE_DICT")
+        fsdp_plugin.set_state_dict_type("SHARDED_STATE_DICT")
+        assert fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT
 
-            # Then manually set the policy
-            fsdp_plugin = FullyShardedDataParallelPlugin(
-                auto_wrap_policy=policy,
-                transformer_cls_names_to_wrap=transformer_cls_to_wrap,
-                min_num_params=min_num_params,
-            )
-            fsdp_plugin.set_auto_wrap_policy(model)
-            if policy == "NO_WRAP":
-                assert fsdp_plugin.auto_wrap_policy is None
-            else:
-                assert isinstance(fsdp_plugin.auto_wrap_policy, functools.partial)
+    def test_auto_wrap_policy(self):
+        for model_name in [LLAMA_TESTING, BERT_BASE_CASED]:
+            model = AutoModel.from_pretrained(model_name)
+            layer_to_wrap = "LlamaDecoderLayer" if model_name == LLAMA_TESTING else "BertLayer"
+            for policy in FSDP_AUTO_WRAP_POLICY:
+                env = self.fsdp_env.copy()
+                env["FSDP_AUTO_WRAP_POLICY"] = policy
+                transformer_cls_to_wrap = None
+                min_num_params = None
+                env.pop("FSDP_TRANSFORMER_CLS_TO_WRAP", None)
+                env.pop("FSDP_MIN_NUM_PARAMS", None)
+                if policy == "TRANSFORMER_BASED_WRAP":
+                    env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = layer_to_wrap
+                    transformer_cls_to_wrap = layer_to_wrap
+                elif policy == "SIZE_BASED_WRAP":
+                    env["FSDP_MIN_NUM_PARAMS"] = "2000"
+                    min_num_params = 2000
+                # First test via env
+                with mockenv_context(**env):
+                    fsdp_plugin = FullyShardedDataParallelPlugin()
+                    fsdp_plugin.set_auto_wrap_policy(model)
+                if policy == "NO_WRAP":
+                    assert fsdp_plugin.auto_wrap_policy is None
+                else:
+                    assert isinstance(fsdp_plugin.auto_wrap_policy, functools.partial)
+
+                # Then manually set the policy
+                fsdp_plugin = FullyShardedDataParallelPlugin(
+                    auto_wrap_policy=policy,
+                    transformer_cls_names_to_wrap=transformer_cls_to_wrap,
+                    min_num_params=min_num_params,
+                )
+                fsdp_plugin.set_auto_wrap_policy(model)
+                if policy == "NO_WRAP":
+                    assert fsdp_plugin.auto_wrap_policy is None
+                else:
+                    assert isinstance(fsdp_plugin.auto_wrap_policy, functools.partial)
 
         env = self.fsdp_env.copy()
         env["FSDP_AUTO_WRAP_POLICY"] = "TRANSFORMER_BASED_WRAP"

@@ -166,8 +166,8 @@ class Accelerator:
             Whether or not the accelerator should put objects on device (tensors yielded by the dataloader, model,
             etc...).
         mixed_precision (`str`, *optional*):
-            Whether or not to use mixed precision training. Choose from 'no','fp16','bf16 or 'fp8'. Will default to the
-            value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
+            Whether or not to use mixed precision training. Choose from 'no','fp16','bf16' or 'fp8'. Will default to
+            the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
             accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp8'
             requires the installation of transformers-engine.
         gradient_accumulation_steps (`int`, *optional*, default to 1):
@@ -179,9 +179,10 @@ class Accelerator:
             the execution on one process only.
         dataloader_config (`DataLoaderConfiguration`, *optional*):
             A configuration for how the dataloaders should be handled in distributed scenarios.
-        deepspeed_plugin ([`~utils.DeepSpeedPlugin`], *optional*):
+        deepspeed_plugin ([`~utils.DeepSpeedPlugin`] or dict of `str`: [`~utils.DeepSpeedPlugin`], *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
-            directly using *accelerate config*
+            directly using *accelerate config*. If using multiple plugins, use the configured `key` property of each
+            plugin to access them from `accelerator.state.get_deepspeed_plugin(key)`. Alias for `deepspeed_plugins`.
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
@@ -249,7 +250,7 @@ class Accelerator:
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
         dataloader_config: DataLoaderConfiguration | None = None,
-        deepspeed_plugin: DeepSpeedPlugin | None = None,
+        deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
@@ -257,12 +258,10 @@ class Accelerator:
         project_dir: str | os.PathLike | None = None,
         project_config: ProjectConfiguration | None = None,
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
-        dispatch_batches: bool | None = _dispatch_batches,
-        even_batches: bool = _even_batches,
-        use_seedable_sampler: bool = _use_seedable_sampler,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
+        deepspeed_plugins: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
     ):
         self.trackers = []
         if project_config is not None:
@@ -280,16 +279,38 @@ class Accelerator:
 
         dynamo_plugin = TorchDynamoPlugin() if dynamo_backend is None else TorchDynamoPlugin(backend=dynamo_backend)
 
-        if deepspeed_plugin is None:  # init from env variables
-            deepspeed_plugin = (
-                DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
-            )
+        if deepspeed_plugins is not None and deepspeed_plugin is not None:
+            raise ValueError("You cannot pass in both `deepspeed_plugins` and `deepspeed_plugin`.")
+        elif deepspeed_plugin is not None:
+            deepspeed_plugins = deepspeed_plugin
+
+        if deepspeed_plugins is None:
+            # First check if we're creating another `Accelerator` w/o setting `deepspeed_plugin`
+            if PartialState._shared_state != {} and PartialState().distributed_type == DistributedType.DEEPSPEED:
+                deepspeed_plugins = AcceleratorState().deepspeed_plugins
+            else:
+                # init from env variables
+                deepspeed_plugins = (
+                    DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
+                )
         else:
-            assert isinstance(
-                deepspeed_plugin, DeepSpeedPlugin
-            ), "`deepspeed_plugin` must be an `accelerate.utils.DeepSpeedPlugin` object."
+            # If we're creating a second `Accelerator`, users shouldn't be passing in a `deepspeed_plugin`
+            if (
+                PartialState().distributed_type == DistributedType.DEEPSPEED
+                and AcceleratorState._shared_state != {}
+                and AcceleratorState().deepspeed_plugins is not None
+            ):
+                raise NotImplementedError(
+                    "You cannot pass in a `deepspeed_plugin` when creating a second `Accelerator`. "
+                    "Please make sure the first `Accelerator` is initialized with all the plugins you want to use."
+                )
+            if isinstance(deepspeed_plugins, dict):
+                for plugin in deepspeed_plugins.values():
+                    if not isinstance(plugin, DeepSpeedPlugin):
+                        raise TypeError("`deepspeed_plugin` must be a DeepSpeedPlugin object.")
+
+        if deepspeed_plugins is not None:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
-        if deepspeed_plugin:
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
             if is_mlu_available():
@@ -304,8 +325,16 @@ class Accelerator:
             mixed_precision = (
                 os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
             )
-            deepspeed_plugin.set_mixed_precision(mixed_precision)
-            deepspeed_plugin.set_deepspeed_weakref()
+            if not isinstance(deepspeed_plugins, dict):
+                deepspeed_plugins.set_mixed_precision(mixed_precision)
+                deepspeed_plugins.select(_from_accelerator_state=True)
+            else:
+                for plugin in deepspeed_plugins.values():
+                    plugin.set_mixed_precision(mixed_precision)
+                # The first plugin passed in is always the active one
+                first_plugin = next(iter(deepspeed_plugins.values()))
+                first_plugin.select(_from_accelerator_state=True)
+            self.deepspeed_engine_wrapped = None
 
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
@@ -385,7 +414,7 @@ class Accelerator:
             mixed_precision=mixed_precision,
             cpu=cpu,
             dynamo_plugin=dynamo_plugin,
-            deepspeed_plugin=deepspeed_plugin,
+            deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
@@ -437,29 +466,6 @@ class Accelerator:
         if dataloader_config is None:
             dataloader_config = DataLoaderConfiguration()
         self.dataloader_config = dataloader_config
-        # Deal with deprecated args
-        # TODO: Remove in v1.0.0
-        deprecated_dl_args = {}
-        if dispatch_batches is not _dispatch_batches:
-            deprecated_dl_args["dispatch_batches"] = dispatch_batches
-            self.dataloader_config.dispatch_batches = dispatch_batches
-        if split_batches is not _split_batches:
-            deprecated_dl_args["split_batches"] = split_batches
-            self.dataloader_config.split_batches = split_batches
-        if even_batches is not _even_batches:
-            deprecated_dl_args["even_batches"] = even_batches
-            self.dataloader_config.even_batches = even_batches
-        if use_seedable_sampler is not _use_seedable_sampler:
-            deprecated_dl_args["use_seedable_sampler"] = use_seedable_sampler
-            self.dataloader_config.use_seedable_sampler = use_seedable_sampler
-        if len(deprecated_dl_args) > 0:
-            values = ", ".join([f"{k}={v}" for k, v in deprecated_dl_args.items()])
-            warnings.warn(
-                f"Passing the following arguments to `Accelerator` is deprecated and will be removed in version 1.0 of Accelerate: {deprecated_dl_args.keys()}. "
-                "Please pass an `accelerate.DataLoaderConfiguration` instead: \n"
-                f"dataloader_config = DataLoaderConfiguration({values})",
-                FutureWarning,
-            )
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
@@ -507,6 +513,15 @@ class Accelerator:
         elif self.state.mixed_precision == "fp8":
             # We always enable `native_amp` for FP8
             self.native_amp = True
+            if self.fp8_backend == "MSAMP":
+                if self.distributed_type == DistributedType.FSDP:
+                    raise NotImplementedError(
+                        "`accelerate` + `MS-AMP` + `FSDP` is not supported at this time. "
+                        "Please consider using deepspeed, which is supported."
+                    )
+                elif self.distributed_type != DistributedType.DEEPSPEED:
+                    # MS-AMP requires `GradScaler` even with bf16 autocast w/ single GPU or DDP:
+                    self.scaler = torch.cuda.amp.GradScaler()
 
         # Start of internal step tracking
         self.step = 0
@@ -531,6 +546,18 @@ class Accelerator:
         self.flag_tensor = None
 
         check_os_kernel()
+
+    @property
+    def deepspeed_plugin(self):
+        """
+        Returns the currently active DeepSpeedPlugin.
+
+        If using multiple plugins, the first one will be the active one by default. Manually call
+        `accelerator.state.select_deepspeed_plugin(key)` to activate a different plugin.
+
+        If deepspeed is not enabled, this will return `None`.
+        """
+        return self.state.deepspeed_plugin
 
     @property
     def use_distributed(self):
@@ -610,15 +637,6 @@ class Accelerator:
     def is_local_main_process(self):
         """True for one process per server."""
         return self.state.is_local_main_process
-
-    @property
-    def use_fp16(self):
-        warnings.warn(
-            "The `use_fp16` property is deprecated and will be removed in version 1.0 of Accelerate use "
-            "`Accelerator.mixed_precision == 'fp16'` instead.",
-            FutureWarning,
-        )
-        return self.mixed_precision != "no"
 
     @property
     def is_last_process(self):
@@ -1312,17 +1330,15 @@ class Accelerator:
                 args = self._prepare_ipex_or_xpu(*args)
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex_or_xpu(*args)
-        if self.fp8_recipe_handler is not None and self.fp8_recipe_handler.backend == "TE":
+        if self.fp8_backend == "TE":
             args = self._prepare_te(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
         else:
-            if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP":
-                args = self._prepare_msamp(*args)
-                # MS-AMP will handle the device placement
-                device_placement = [False for _ in args]
+            if self.fp8_backend == "MSAMP":
+                args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
@@ -1388,17 +1404,19 @@ class Accelerator:
 
         if self.native_amp:
             model._original_forward = model.forward
-            model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
-            new_forward = autocast_context(model_forward_func)
-            if hasattr(model.forward, "__func__"):
+            # NOTE: MS-AMP adds `__func__` already to `model.forward`, so we should always use `model.forward`
+            if self.fp8_backend == "MSAMP" or not hasattr(model.forward, "__func__"):
+                model_forward_func = model.forward
+                model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
+            else:
+                model_forward_func = model.forward.__func__
+                new_forward = autocast_context(model_forward_func)
                 model.forward = MethodType(new_forward, model)
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
-            else:
-                model.forward = convert_outputs_to_fp32(new_forward)
 
-        # We prepare fp8 after, allowing for bf16 autocast to happen first
-        if getattr(self.fp8_recipe_handler, "backend", None) == "TE" and not self.delayed_fp8_autocast:
+        # We prepare TE after, allowing for bf16 autocast to happen first
+        if self.fp8_backend == "TE" and not self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
@@ -1624,7 +1642,14 @@ class Accelerator:
     def _prepare_deepspeed(self, *args):
         import deepspeed
 
-        deepspeed_plugin = self.state.deepspeed_plugin
+        ds_initialize = deepspeed.initialize
+        if self.fp8_backend == "MSAMP":
+            # MS-AMP requires DeepSpeed patches
+            from msamp import deepspeed as msamp_deepspeed
+
+            ds_initialize = msamp_deepspeed.initialize
+
+        deepspeed_plugin = self.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         result = [
@@ -1668,13 +1693,15 @@ class Accelerator:
         )
 
         config_kwargs = {
-            "train_micro_batch_size_per_gpu": batch_size_per_device,
-            "train_batch_size": batch_size_per_device
-            * deepspeed_plugin.get_value("gradient_accumulation_steps")
-            * self.num_processes,
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
+        # This is skipped when preparing just a model
+        if batch_size_per_device is not None:
+            config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
+            config_kwargs["train_batch_size"] = (
+                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes
+            )
 
         model = None
         optimizer = None
@@ -1812,7 +1839,7 @@ class Accelerator:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
 
-            engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
+            engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
             if optimizer is not None:
                 optimizer = DeepSpeedOptimizerWrapper(optimizer)
             if scheduler is not None:
@@ -1836,16 +1863,19 @@ class Accelerator:
                 ):
                     result[i] = scheduler
             # pointing for deepspeed_engine_wrapped.backward()
-            self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
+            if self.deepspeed_engine_wrapped is None:
+                self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
+            else:
+                logger.warning(
+                    "A wrapped DeepSpeed engine reference is currently tied for this `Accelerator()` instance. "
+                    "If you want to call `accelerator.backward()` referencing a new model/engine, "
+                    "please create a separate `Accelerator()` instance and call `accelerator.prepare()` on it."
+                )
             self._models.append(engine)
             if optimizer is not None:
                 self._optimizers.append(optimizer)
             if scheduler is not None:
                 self._schedulers.append(scheduler)
-            if len(self._models) > 1:
-                raise AssertionError(
-                    "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
-                )
         return tuple(result)
 
     def _prepare_megatron_lm(self, *args):
@@ -1989,26 +2019,31 @@ class Accelerator:
                 result[i] = optimizer
         return tuple(result)
 
-    def _prepare_msamp(self, *args):
+    def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
             raise ImportError(
                 "MS-AMP was not found on your system. Please ensure that MS-AMP is available "
                 " or choose `'te'` as the backend for FP8 mixed precision training."
             )
-        else:
-            import msamp
+        # We've already checked for FSDP + MS-AMP during `__init__`
+        import msamp
 
         model, optimizer = None, None
+        optimizer_index = None
         num_models, num_optimizers = 0, 0
         result = [obj for obj in args]
-        for obj in result:
+        for i, obj in enumerate(result):
             if isinstance(obj, torch.nn.Module):
                 model = obj
                 num_models += 1
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
+                optimizer_index = i
                 num_optimizers += 1
-        if optimizer is None or model is None:
+        # DataLoader/Scheduler case
+        if optimizer is None and model is None:
+            return result, device_placement
+        elif optimizer is None or model is None:
             raise ValueError(
                 "You must pass a model and an optimizer together to `accelerate.prepare()` when using MS-AMP."
             )
@@ -2023,7 +2058,10 @@ class Accelerator:
                 result[i] = model
             elif isinstance(result[i], (torch.optim.Optimizer)):
                 result[i] = optimizer
-        return tuple(result)
+        if optimizer_index is not None:
+            # NOTE: MS-AMP moves the optimizer, but *not* the model to the right device
+            device_placement[optimizer_index] = False
+        return tuple(result), device_placement
 
     def prepare_data_loader(
         self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
@@ -2116,7 +2154,10 @@ class Accelerator:
             return optimizer
         if device_placement is None:
             device_placement = self.device_placement
-        optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=self.scaler)
+        # NOTE: Special case with MS-AMP we do *not* pass in the scaler explicitly to the `AcceleratedOptimizer`,
+        # Their optimizer handles it for us.
+        scaler = None if self.fp8_backend == "MSAMP" else self.scaler
+        optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=scaler)
         self._optimizers.append(optimizer)
         return optimizer
 
@@ -3334,8 +3375,6 @@ class Accelerator:
             from torch.distributed.fsdp import FullStateDictConfig, StateDictType
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
-            if unwrap:
-                model = self.unwrap_model(model)
             full_state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
             with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT, full_state_dict_config):
                 state_dict = model.state_dict()
@@ -3383,7 +3422,7 @@ class Accelerator:
         self._custom_objects.extend(objects)
 
     @contextmanager
-    def autocast(self, cache_enabled: bool = False, autocast_handler: AutocastKwargs = None):
+    def autocast(self, autocast_handler: AutocastKwargs = None):
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
@@ -3401,16 +3440,6 @@ class Accelerator:
         ...     train()
         ```
         """
-        if cache_enabled:
-            warnings.warn(
-                "Passing `cache_enabled=True` to `accelerator.autocast` is deprecated and will be removed in v0.23.0. "
-                "Please use the `AutocastKwargs` class instead and pass it to the `Accelerator` as a `kwarg_handler`.",
-                FutureWarning,
-            )
-            if self.autocast_handler is not None:
-                self.autocast_handler.cache_enabled = True
-            else:
-                self.autocast_handler = AutocastKwargs(cache_enabled=True)
         if autocast_handler is None:
             autocast_handler = self.autocast_handler
         autocast_context = get_mixed_precision_context_manager(self.native_amp, autocast_handler)
@@ -3560,3 +3589,12 @@ class Accelerator:
             raise ValueError(
                 "Backward pass not properly called on LOMO optimizers. Are you sure you passed a LOMO optimizer in accelerator.prepare()?"
             )
+
+    @property
+    def fp8_backend(self):
+        "Returns the configured backend for training in FP8"
+        if self.mixed_precision == "fp8" and self.fp8_recipe_handler is not None:
+            return self.fp8_recipe_handler.backend
+        elif self.state.deepspeed_plugin is not None and self.state.deepspeed_plugin.enable_msamp:
+            return "MSAMP"
+        return None

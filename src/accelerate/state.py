@@ -30,6 +30,7 @@ from .utils import (
     GradientAccumulationPlugin,
     check_cuda_p2p_ib_support,
     check_fp8_capability,
+    deepspeed_required,
     get_ccl_version,
     get_cpu_distributed_information,
     get_int_from_env,
@@ -861,7 +862,7 @@ class AcceleratorState:
         self.__dict__.update(PartialState._shared_state)
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
-            self.deepspeed_plugin = None
+            self.deepspeed_plugins = None
             self.use_ipex = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
@@ -900,7 +901,8 @@ class AcceleratorState:
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
-                self.deepspeed_plugin = deepspeed_plugin
+                self.deepspeed_plugins = deepspeed_plugin
+                self.distributed_type = DistributedType.DEEPSPEED
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
@@ -961,16 +963,6 @@ class AcceleratorState:
                 and self.distributed_type != DistributedType.DEEPSPEED
             ):
                 raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
-
-    # For backward compatibility
-    @property
-    def use_fp16(self):
-        warnings.warn(
-            "The `use_fp16` property is deprecated and will be removed in version 1.0 of Accelerate use "
-            "`AcceleratorState.mixed_precision == 'fp16'` instead.",
-            FutureWarning,
-        )
-        return self._mixed_precision != "no"
 
     @property
     def mixed_precision(self):
@@ -1091,6 +1083,37 @@ class AcceleratorState:
         """
         with PartialState().local_main_process_first():
             yield
+
+    @property
+    def deepspeed_plugin(self):
+        """
+        Returns the currently active DeepSpeedPlugin.
+
+        If not using deepspeed, returns `None`.
+        """
+        # To maintain original behavior, return None if not using deepspeed.
+        if self.distributed_type != DistributedType.DEEPSPEED:
+            return None
+        from accelerate.utils.deepspeed import get_active_deepspeed_plugin
+
+        return get_active_deepspeed_plugin(self)
+
+    @deepspeed_required
+    def get_deepspeed_plugin(self, name: str):
+        """
+        Returns the DeepSpeedPlugin with the given plugin_key.
+        """
+        return self.deepspeed_plugins[name]
+
+    @deepspeed_required
+    def select_deepspeed_plugin(self, name: str = None):
+        """
+        Activates the DeepSpeedPlugin with the given `name`, and will disable all other plugins.
+        """
+        for key, plugin in self.deepspeed_plugins.items():
+            if key != name:
+                plugin._unselect()
+        self.deepspeed_plugins[name].select(_from_accelerator_state=True)
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)

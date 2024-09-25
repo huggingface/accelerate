@@ -206,9 +206,9 @@ def test_distributed_sync_multiple_fwd(accelerator):
 
 def test_gradient_accumulation(split_batches=False, dispatch_batches=False, sync_each_batch=False):
     gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=2, sync_each_batch=sync_each_batch)
+    dataloader_config = DataLoaderConfiguration(split_batches=split_batches, dispatch_batches=dispatch_batches)
     accelerator = Accelerator(
-        split_batches=split_batches,
-        dispatch_batches=dispatch_batches,
+        dataloader_config=dataloader_config,
         gradient_accumulation_plugin=gradient_accumulation_plugin,
     )
     # Test that context manager behaves properly

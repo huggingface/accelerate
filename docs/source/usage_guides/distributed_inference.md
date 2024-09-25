@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Distributed Inference with 🤗 Accelerate
+# Distributed inference
 
 Distributed inference can fall into three brackets:
 
@@ -56,13 +56,13 @@ def run_inference(rank, world_size):
 ```
 One will notice how we have to check the rank to know what prompt to send, which can be a bit tedious.
 
-A user might then also think that with 🤗 Accelerate, using the `Accelerator` to prepare a dataloader for such a task might also be 
+A user might then also think that with Accelerate, using the `Accelerator` to prepare a dataloader for such a task might also be 
 a simple way to manage this. (To learn more, check out the relevant section in the [Quick Tour](../quicktour#distributed-evaluation))
 
 Can it manage it? Yes. Does it add unneeded extra code however: also yes.
 
 
-With 🤗 Accelerate, we can simplify this process by using the [`Accelerator.split_between_processes`] context manager (which also exists in `PartialState` and `AcceleratorState`). 
+With Accelerate, we can simplify this process by using the [`Accelerator.split_between_processes`] context manager (which also exists in `PartialState` and `AcceleratorState`). 
 This function will automatically split whatever data you pass to it (be it a prompt, a set of tensors, a dictionary of the prior data, etc.) across all the processes (with a potential
 to be padded) for you to use right away.
 
@@ -82,7 +82,7 @@ with distributed_state.split_between_processes(["a dog", "a cat"]) as prompt:
     result.save(f"result_{distributed_state.process_index}.png")
 ```
 
-And then to launch the code, we can use the 🤗 Accelerate:
+And then to launch the code, we can use the Accelerate:
 
 If you have generated a config file to be used using `accelerate config`:
 
@@ -144,21 +144,19 @@ You can find more complex examples [here](https://github.com/huggingface/acceler
 
 ## Memory-efficient pipeline parallelism (experimental)
 
-This next part will discuss using *pipeline parallelism*. This is an **experimental** API utilizing the [PiPPy library by PyTorch](https://github.com/pytorch/PiPPy/) as a native solution. 
+This next part will discuss using *pipeline parallelism*. This is an **experimental** API that utilizes [torch.distributed.pipelining](https://pytorch.org/docs/stable/distributed.pipelining.html#) as a native solution. 
 
 The general idea with pipeline parallelism is: say you have 4 GPUs and a model big enough it can be *split* on four GPUs using `device_map="auto"`. With this method you can send in 4 inputs at a time (for example here, any amount works) and each model chunk will work on an input, then receive the next input once the prior chunk finished, making it *much* more efficient **and faster** than the method described earlier. Here's a visual taken from the PyTorch repository:
 
-![PiPPy example](https://camo.githubusercontent.com/681d7f415d6142face9dd1b837bdb2e340e5e01a58c3a4b119dea6c0d99e2ce0/68747470733a2f2f692e696d6775722e636f6d2f657955633934372e706e67)
+![Pipeline parallelism example](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/pipeline_parallel.png)
 
 To illustrate how you can use this with Accelerate, we have created an [example zoo](https://github.com/huggingface/accelerate/tree/main/examples/inference) showcasing a number of different models and situations. In this tutorial, we'll show this method for GPT2 across two GPUs.
 
-Before you proceed, please make sure you have the latest pippy installed by running the following:
+Before you proceed, please make sure you have the latest PyTorch version installed by running the following:
 
 ```bash
-pip install torchpippy
+pip install torch
 ```
-
-We require at least version 0.2.0. To confirm that you have the correct version, run `pip show torchpippy`.
 
 Start by creating the model on the CPU:
 
@@ -170,7 +168,7 @@ model = GPT2ForSequenceClassification(config)
 model.eval()
 ```
 
-Next you'll need to create some example inputs to use. These help PiPPy trace the model.
+Next you'll need to create some example inputs to use. These help `torch.distributed.pipelining` trace the model.
 
 <Tip warning={true}>
     However you make this example will determine the relative batch size that will be used/passed

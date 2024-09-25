@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import mock, skip
 
 import torch
 
@@ -30,6 +30,7 @@ from accelerate.test_utils.testing import (
     require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
+    require_non_xpu,
     require_pippy,
     require_schedulefree,
     require_trackers,
@@ -261,6 +262,9 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/ddp_comm_hook.py", "--ddp_comm_hook", "fp16"]
         run_command(self.launch_args + testargs)
 
+    @skip(
+        reason="stable-diffusion-v1-5 is no longer available. Potentially `Comfy-Org/stable-diffusion-v1-5-archive` once diffusers support is added."
+    )
     @require_multi_device
     def test_distributed_inference_examples_stable_diffusion(self):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
@@ -271,20 +275,16 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/inference/distributed/phi2.py"]
         run_command(self.launch_args + testargs)
 
+    @require_non_xpu
     @require_pippy
     @require_multi_gpu
     def test_pippy_examples_bert(self):
         testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
+    @require_non_xpu
     @require_pippy
     @require_multi_gpu
     def test_pippy_examples_gpt2(self):
         testargs = ["examples/inference/pippy/gpt2.py"]
-        run_command(self.launch_args + testargs)
-
-    @require_pippy
-    @require_multi_gpu
-    def test_pippy_examples_t5(self):
-        testargs = ["examples/inference/pippy/t5.py"]
         run_command(self.launch_args + testargs)

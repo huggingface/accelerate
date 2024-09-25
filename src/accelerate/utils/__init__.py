@@ -71,6 +71,7 @@ from .environment import (
     str_to_bool,
 )
 from .imports import (
+    deepspeed_required,
     get_ccl_version,
     is_4bit_bnb_available,
     is_8bit_bnb_available,
@@ -138,7 +139,6 @@ from .modeling import (
     named_module_tensors,
     retie_parameters,
     set_module_tensor_to_device,
-    shard_checkpoint,
 )
 from .offload import (
     OffloadedWeightsLoader,
@@ -188,6 +188,7 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
         HfDeepSpeedConfig,
+        get_active_deepspeed_plugin,
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model

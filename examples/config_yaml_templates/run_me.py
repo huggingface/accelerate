@@ -15,6 +15,7 @@
 """
 A base script which outputs the accelerate config for the given environment
 """
+
 from accelerate import Accelerator
 
 

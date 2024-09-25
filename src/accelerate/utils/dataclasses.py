@@ -503,30 +503,6 @@ class ProfileKwargs(KwargsHandler):
         )
 
 
-class DeprecatedFieldDescriptor:
-    """
-    Descriptor for deprecated fields in an enum class.
-
-    Args:
-        field_name (`str`):
-            The name of the deprecated field.
-        replaced_with (`str`):
-            The name of the field that replaces the deprecated one.
-    """
-
-    def __init__(self, field_name, replaced_with):
-        self.field_name = field_name
-        self.replaced_with = replaced_with
-
-    def __get__(self, instance, owner):
-        warnings.warn(
-            f"The `{self.field_name}` of `{owner}` is deprecated and will be removed in v1.0.0. "
-            f"Please use the `{self.replaced_with}` instead.",
-            FutureWarning,
-        )
-        return getattr(owner, self.replaced_with)
-
-
 class DistributedType(str, enum.Enum):
     """
     Represents a type of distributed environment.
@@ -542,7 +518,6 @@ class DistributedType(str, enum.Enum):
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **XLA** -- Using TorchXLA.
-        - **TPU** -- This field will be deprecated in v0.27.0. Use XLA instead.
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
@@ -557,7 +532,6 @@ class DistributedType(str, enum.Enum):
     FSDP = "FSDP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
-    TPU = DeprecatedFieldDescriptor("TPU", "XLA")
 
 
 class SageMakerDistributedType(str, enum.Enum):
@@ -733,6 +707,34 @@ class TensorInformation:
 class DataLoaderConfiguration:
     """
     Configuration for dataloader-related items when calling `accelerator.prepare`.
+
+    Args:
+        split_batches (`bool`, defaults to `False`):
+            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
+            `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a
+            round multiple of `num_processes` you are using. If `False`, actual batch size used will be the one set in
+            your script multiplied by the number of processes.
+        dispatch_batches (`bool`, defaults to `None`):
+            If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
+            and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
+            underlying dataset is an `IterableDataset`, `False` otherwise.
+        even_batches (`bool`, defaults to `True`):
+            If set to `True`, in cases where the total batch size across all processes does not exactly divide the
+            dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
+            all workers.
+        use_seedable_sampler (`bool`, defaults to `False`):
+            Whether or not use a fully seedable random sampler ([`data_loader.SeedableRandomSampler`]). Ensures
+            training results are fully reproducable using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            also be ran with [`~utils.set_seed`] for the best results.
+        non_blocking (`bool`, defaults to `False`):
+            If set to `True`, the dataloader prepared by the Accelerator will utilize non-blocking host-to-device
+            transfers, allowing for better overlap between dataloader communication and computation. Recommended that
+            the prepared dataloader has `pin_memory` set to `True` to work properly.
+        use_stateful_dataloader (`bool`, defaults to `False`):
+            If set to `True`, the dataloader prepared by the Accelerator will be backed by
+            [torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
+            This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed.
     """
 
     split_batches: bool = field(
@@ -790,6 +792,21 @@ class DataLoaderConfiguration:
 class ProjectConfiguration:
     """
     Configuration for the Accelerator object based on inner-project needs.
+
+    Args:
+        project_dir (`str`, defaults to `None`):
+            A path to a directory for storing data.
+        logging_dir (`str`, defaults to `None`):
+            A path to a directory for storing logs of locally-compatible loggers. If None, defaults to `project_dir`.
+        automatic_checkpoint_naming (`bool`, defaults to `False`):
+            Whether saved states should be automatically iteratively named.
+        total_limit (`int`, defaults to `None`):
+            The maximum number of total saved states to keep.
+        iteration (`int`, defaults to `0`):
+            The current save iteration.
+        save_on_each_node (`bool`, defaults to `False`):
+            When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
+            the main one.
     """
 
     project_dir: str = field(default=None, metadata={"help": "A path to a directory for storing data."})
@@ -887,6 +904,20 @@ class GradientAccumulationPlugin(KwargsHandler):
 class TorchDynamoPlugin(KwargsHandler):
     """
     This plugin is used to compile a model with PyTorch 2.0
+
+    Args:
+        backend (`DynamoBackend`, defaults to `None`):
+            A valid Dynamo backend. See https://pytorch.org/docs/stable/torch.compiler.html for more details.
+        mode (`str`, defaults to `None`):
+            Possible options are 'default', 'reduce-overhead' or 'max-autotune'.
+        fullgraph (`bool`, defaults to `None`):
+            Whether it is ok to break model into several subgraphs.
+        dynamic (`bool`, defaults to `None`):
+            Whether to use dynamic shape for tracing.
+        options (`Any`, defaults to `None`):
+            A dictionary of options to pass to the backend.
+        disable (`bool`, defaults to `False`):
+            Turn torch.compile() into a no-op for testing
     """
 
     backend: DynamoBackend = field(
@@ -923,6 +954,39 @@ class TorchDynamoPlugin(KwargsHandler):
 class DeepSpeedPlugin:
     """
     This plugin is used to integrate DeepSpeed.
+
+    Args:
+        hf_ds_config (`Any`, defaults to `None`):
+            Path to DeepSpeed config file or dict or an object of class `accelerate.utils.deepspeed.HfDeepSpeedConfig`.
+        gradient_accumulation_steps (`int`, defaults to `None`):
+            Number of steps to accumulate gradients before updating optimizer states. If not set, will use the value
+            from the `Accelerator` directly.
+        gradient_clipping (`float`, defaults to `None`):
+            Enable gradient clipping with value.
+        zero_stage (`int`, defaults to `None`):
+            Possible options are 0, 1, 2, 3. Default will be taken from environment variable.
+        is_train_batch_min (`bool`, defaults to `True`):
+            If both train & eval dataloaders are specified, this will decide the `train_batch_size`.
+        offload_optimizer_device (`str`, defaults to `None`):
+            Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3.
+        offload_param_device (`str`, defaults to `None`):
+            Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3.
+        offload_optimizer_nvme_path (`str`, defaults to `None`):
+            Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3.
+        offload_param_nvme_path (`str`, defaults to `None`):
+            Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3.
+        zero3_init_flag (`bool`, defaults to `None`):
+            Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3.
+        zero3_save_16bit_model (`bool`, defaults to `None`):
+            Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3.
+        transformer_moe_cls_names (`str`, defaults to `None`):
+            Comma-separated list of Transformers MoE layer class names (case-sensitive). For example,
+            `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention`, `JetMoEBlock`, etc.
+        enable_msamp (`bool`, defaults to `None`):
+            Flag to indicate whether to enable MS-AMP backend for FP8 training.
+        msasmp_opt_level (`Optional[Literal["O1", "O2"]]`, defaults to `None`):
+            Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one
+            of ['O1' or 'O2'].
     """
 
     hf_ds_config: Any = field(
@@ -980,6 +1044,16 @@ class DeepSpeedPlugin:
             " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
         },
     )
+    enable_msamp: bool = field(
+        default=None,
+        metadata={"help": "Flag to indicate whether to enable MS-AMP backend for FP8 training."},
+    )
+    msamp_opt_level: Optional[Literal["O1", "O2"]] = field(
+        default=None,
+        metadata={
+            "help": "Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one of ['O1' or 'O2']."
+        },
+    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -1013,6 +1087,11 @@ class DeepSpeedPlugin:
             self.zero3_save_16bit_model = (
                 os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
             )
+        if self.enable_msamp is None:
+            self.enable_msamp = os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"
+
+        if self.msamp_opt_level is None:
+            self.msamp_opt_level = os.environ.get("ACCELERATE_FP8_OPT_LEVEL", "O1")
 
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
@@ -1083,6 +1162,19 @@ class DeepSpeedPlugin:
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
+        # NOTE: Set to False by default, will be set to `True` automatically if it's the first plugin passed
+        # to the `Accelerator`'s `deepspeed_plugin` param, *or* `AcceleratorState().enable_deepspeed_plugin(plugin_key)` is manually called
+        self._set_selected(False)
+
+        # Ignore if it's already set
+        if self.enable_msamp and "msamp" not in self.deepspeed_config:
+            if self.zero_stage == 3:
+                raise NotImplementedError(
+                    "MS-AMP is not supported for ZeRO Stage 3. Please use ZeRO Stage 0, 1, or 2 instead."
+                )
+            if self.msamp_opt_level not in ["O1", "O2"]:
+                raise ValueError("Invalid optimization level for MS-AMP. Please use one of ['O1' or'O2'].")
+            self.deepspeed_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
 
     def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
         mismatches = [] if mismatches is None else mismatches
@@ -1152,6 +1244,10 @@ class DeepSpeedPlugin:
             if "bf16" not in ds_config:
                 ds_config["bf16"] = {"enabled": True}
 
+        if mixed_precision == "fp8" and self.enable_msamp:
+            if "msamp" not in ds_config:
+                ds_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
+
         if mixed_precision != "no":
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
             if str(ds_config.get(diff_dtype, {}).get("enabled", "False")).lower() == "true":
@@ -1167,13 +1263,13 @@ class DeepSpeedPlugin:
     def set_deepspeed_weakref(self):
         from .imports import is_transformers_available
 
+        ds_config = copy.deepcopy(self.deepspeed_config)
         if self.zero3_init_flag:
             if not is_transformers_available():
                 raise Exception(
                     "When `zero3_init_flag` is set, it requires Transformers to be installed. "
                     "Please run `pip install transformers`."
                 )
-            ds_config = copy.deepcopy(self.deepspeed_config)
             if "gradient_accumulation_steps" not in ds_config or ds_config["gradient_accumulation_steps"] == "auto":
                 ds_config["gradient_accumulation_steps"] = 1
             if (
@@ -1184,12 +1280,13 @@ class DeepSpeedPlugin:
             if ds_config.get("train_batch_size", None) == "auto":
                 del ds_config["train_batch_size"]
 
-            if compare_versions("transformers", "<", "4.33"):
-                from transformers.deepspeed import HfDeepSpeedConfig
-            else:
-                from transformers.integrations import HfDeepSpeedConfig
+        if compare_versions("transformers", "<", "4.33"):
+            from transformers.deepspeed import HfDeepSpeedConfig, unset_hf_deepspeed_config
+        else:
+            from transformers.integrations import HfDeepSpeedConfig, unset_hf_deepspeed_config
 
-            self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
+        unset_hf_deepspeed_config()
+        self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
     def is_zero3_init_enabled(self):
         return self.zero3_init_flag
@@ -1255,11 +1352,97 @@ class DeepSpeedPlugin:
                     transformer_moe_cls.append(transformer_cls)
             set_z3_leaf_modules(model, transformer_moe_cls)  # z3_leaf
 
+    def select(self, _from_accelerator_state: bool = False):
+        """
+        Sets the HfDeepSpeedWeakref to use the current deepspeed plugin configuration
+        """
+        if not _from_accelerator_state:
+            raise ValueError(
+                "A `DeepSpeedPlugin` object must be enabled manually by calling `AcceleratorState().enable_deepspeed_plugin(plugin_key)`."
+            )
+        self.set_deepspeed_weakref()
+        self._set_selected(True)
+
+    def _unselect(self):
+        self._set_selected(False)
+
+    def _set_selected(self, value: bool):
+        """
+        Private setter for the 'enabled' attribute.
+        """
+        self._selected = value
+
+    @property
+    def selected(self):
+        return self._selected
+
+    @selected.setter
+    def selected(self, value):
+        raise NotImplementedError(
+            "'enabled' can only be set through calling 'AcceleratorState().enable_deepspeed_plugin(key)'."
+        )
+
 
 @dataclass
 class FullyShardedDataParallelPlugin:
     """
     This plugin is used to enable fully sharded data parallelism.
+
+    Args:
+        sharding_strategy (`Union[str, torch.distributed.fsdp.ShardingStrategy]`, defaults to `'FULL_SHARD'`):
+            Sharding strategy to use. Should be either a `str` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
+        backward_prefetch (`Union[str, torch.distributed.fsdp.BackwardPrefetch]`, defaults to `'NO_PREFETCH'`):
+            Backward prefetch strategy to use. Should be either a `str` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`.
+        mixed_precision_policy (`Optional[Union[dict, torch.distributed.fsdp.MixedPrecision]]`, defaults to `None`):
+            A config to enable mixed precision training with FullyShardedDataParallel. If passing in a `dict`, it
+            should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`.
+        auto_wrap_policy (`Optional(Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]), defaults to `NO_WRAP`):
+            A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one
+            of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. See
+            `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like.
+        cpu_offload (`Union[bool, torch.distributed.fsdp.CPUOffload]`, defaults to `False`):
+            Whether to offload parameters to CPU. Should be either a `bool` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`.
+        ignored_modules (`Optional[Iterable[torch.nn.Module]]`, defaults to `None`):
+            A list of modules to ignore when wrapping with FSDP.
+        state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
+            State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or
+            `sharded_state_dict`.
+        state_dict_config (`Optional[Union[torch.distributed.fsdp.FullStateDictConfig, torch.distributed.fsdp.ShardedStateDictConfig]`, defaults to `None`):
+            State dict config to use. Is determined based on the `state_dict_type` if not passed in.
+        optim_state_dict_config (`Optional[Union[torch.distributed.fsdp.FullOptimStateDictConfig, torch.distributed.fsdp.ShardedOptimStateDictConfig]`, defaults to `None`):
+            Optim state dict config to use. Is determined based on the `state_dict_type` if not passed in.
+        limit_all_gathers (`bool`, defaults to `True`):
+            Whether to have FSDP explicitly synchronizes the CPU thread to prevent too many in-flight all-gathers. This
+            bool only affects the sharded strategies that schedule all-gathers. Enabling this can help lower the number
+            of CUDA malloc retries.
+        use_orig_params (`bool`, defaults to `False`):
+            Whether to use the original parameters for the optimizer.
+        param_init_fn (`Optional[Callable[[torch.nn.Module], None]`, defaults to `None`):
+            A `Callable[torch.nn.Module] -> None` that specifies how modules that are currently on the meta device
+            should be initialized onto an actual device. Only applicable when `sync_module_states` is `True`. By
+            default is a `lambda` which calls `to_empty` on the module.
+        sync_module_states (`bool`, defaults to `False`):
+            Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 to ensure they
+            are the same across all ranks after initialization. Defaults to `False` unless `cpu_ram_efficient_loading`
+            is `True`, then will be forcibly enabled.
+        forward_prefetch (`bool`, defaults to `False`):
+            Whether to have FSDP explicitly prefetches the next upcoming all-gather while executing in the forward
+            pass. only use with Static graphs.
+        activation_checkpointing (`bool`, defaults to `False`):
+            A technique to reduce memory usage by clearing activations of certain layers and recomputing them during a
+            backward pass. Effectively, this trades extra computation time for reduced memory usage.
+        cpu_ram_efficient_loading (`bool`, defaults to `None`):
+            If True, only the first process loads the pretrained model checkoint while all other processes have empty
+            weights. Only applicable for Transformers. When using this, `sync_module_states` needs to be `True`.
+        transformer_cls_names_to_wrap (`Optional[List[str]]`, defaults to `None`):
+            A list of transformer layer class names to wrap. Only applicable when `auto_wrap_policy` is
+            `transformer_based_wrap`.
+        min_num_params (`Optional[int]`, defaults to `None`):
+            The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy`
+            is `size_based_wrap`.
     """
 
     sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
@@ -1281,14 +1464,14 @@ class FullyShardedDataParallelPlugin:
             "If passing in a `dict`, it should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`."
         },
     )
-    auto_wrap_policy: Optional[
-        Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]
-    ] = field(
-        default=None,
-        metadata={
-            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
-            "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
-        },
+    auto_wrap_policy: Optional[Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]] = (
+        field(
+            default=None,
+            metadata={
+                "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
+                "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
+            },
+        )
     )
     cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload"] = field(
         default=None,
@@ -1498,9 +1681,9 @@ class FullyShardedDataParallelPlugin:
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
-    def set_state_dict_type(self):
+    def set_state_dict_type(self, state_dict_type=None):
         """
-        Set the state dict config based on the `StateDictType.
+        Set the state dict config based on the `StateDictType`.
         """
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             FullOptimStateDictConfig,
@@ -1509,6 +1692,11 @@ class FullyShardedDataParallelPlugin:
             ShardedStateDictConfig,
             StateDictType,
         )
+
+        # Override the state_dict_type if provided, typical use case:
+        # user trains with sharded, but final save is with full
+        if state_dict_type is not None:
+            self.state_dict_type = state_dict_type
 
         if self.state_dict_type is None:
             self.state_dict_type = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
@@ -1538,9 +1726,7 @@ class FullyShardedDataParallelPlugin:
 
         # First base off of `_no_split_modules`
         no_split_modules = getattr(model, "_no_split_modules", None)
-        default_transformer_cls_names_to_wrap = (
-            ",".join(model._no_split_modules) if no_split_modules is not None else ""
-        )
+        default_transformer_cls_names_to_wrap = list(no_split_modules) if no_split_modules is not None else []
         if self.auto_wrap_policy == transformer_auto_wrap_policy:
             if self.transformer_cls_names_to_wrap is None:
                 self.transformer_cls_names_to_wrap = default_transformer_cls_names_to_wrap
@@ -1612,6 +1798,96 @@ class MegatronLMPlugin:
     """
     Plugin for Megatron-LM to enable tensor, pipeline, sequence and data parallelism. Also to enable selective
     activation recomputation and optimized fused kernels.
+
+    Args:
+        tp_degree (`int`, defaults to `None`):
+            Tensor parallelism degree.
+        pp_degree (`int`, defaults to `None`):
+            Pipeline parallelism degree.
+        num_micro_batches (`int`, defaults to `None`):
+            Number of micro-batches.
+        gradient_clipping (`float`, defaults to `None`):
+            Gradient clipping value based on global L2 Norm (0 to disable).
+        sequence_parallelism (`bool`, defaults to `None`):
+            Enable sequence parallelism.
+        recompute_activations (`bool`, defaults to `None`):
+            Enable selective activation recomputation.
+        use_distributed_optimizr (`bool`, defaults to `None`):
+            Enable distributed optimizer.
+        pipeline_model_parallel_split_rank (`int`, defaults to `None`):
+            Rank where encoder and decoder should be split.
+        num_layers_per_virtual_pipeline_stage (`int`, defaults to `None`):
+            Number of layers per virtual pipeline stage.
+        is_train_batch_min (`str`, defaults to `True`):
+            If both tran & eval dataloaders are specified, this will decide the `micro_batch_size`.
+        train_iters (`int`, defaults to `None`):
+            Total number of samples to train over all training runs. Note that either train-iters or train-samples
+            should be provided when using `MegatronLMDummyScheduler`.
+        train_samples (`int`, defaults to `None`):
+            Total number of samples to train over all training runs. Note that either train-iters or train-samples
+            should be provided when using `MegatronLMDummyScheduler`.
+        weight_decay_incr_style (`str`, defaults to `'constant'`):
+            Weight decay increment function. choices=["constant", "linear", "cosine"].
+        start_weight_decay (`float`, defaults to `None`):
+            Initial weight decay coefficient for L2 regularization.
+        end_weight_decay (`float`, defaults to `None`):
+            End of run weight decay coefficient for L2 regularization.
+        lr_decay_style (`str`, defaults to `'linear'`):
+            Learning rate decay function. choices=['constant', 'linear', 'cosine'].
+        lr_decay_iters (`int`, defaults to `None`):
+            Number of iterations for learning rate decay. If None defaults to `train_iters`.
+        lr_decay_samples (`int`, defaults to `None`):
+            Number of samples for learning rate decay. If None defaults to `train_samples`.
+        lr_warmup_iters (`int`, defaults to `None`):
+            Number of iterations to linearly warmup learning rate over.
+        lr_warmup_samples (`int`, defaults to `None`):
+            Number of samples to linearly warmup learning rate over.
+        lr_warmup_fraction (`float`, defaults to `None`):
+            Fraction of lr-warmup-(iters/samples) to linearly warmup learning rate over.
+        min_lr (`float`, defaults to `0`):
+            Minumum value for learning rate. The scheduler clip values below this threshold.
+        consumed_samples (`List`, defaults to `None`):
+            Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call.
+        no_wd_decay_cond (`Optional`, defaults to `None`):
+            Condition to disable weight decay.
+        scale_lr_cond (`Optional`, defaults to `None`):
+            Condition to scale learning rate.
+        lr_mult (`float`, defaults to `1.0`):
+            Learning rate multiplier.
+        megatron_dataset_flag (`bool`, defaults to `False`):
+            Whether the format of dataset follows Megatron-LM Indexed/Cached/MemoryMapped format.
+        seq_length (`int`, defaults to `None`):
+            Maximum sequence length to process.
+        encoder_seq_length (`int`, defaults to `None`):
+            Maximum sequence length to process for the encoder.
+        decoder_seq_length (`int`, defaults to `None`):
+            Maximum sequence length to process for the decoder.
+        tensorboard_dir (`str`, defaults to `None`):
+            Path to save tensorboard logs.
+        set_all_logging_options (`bool`, defaults to `False`):
+            Whether to set all logging options.
+        eval_iters (`int`, defaults to `100`):
+            Number of iterations to run for evaluation validation/test for.
+        eval_interval (`int`, defaults to `1000`):
+            Interval between running evaluation on validation set.
+        return_logits (`bool`, defaults to `False`):
+            Whether to return logits from the model.
+        custom_train_step_class (`Optional`, defaults to `None`):
+            Custom train step class.
+        custom_train_step_kwargs (`Optional`, defaults to `None`):
+            Custom train step kwargs.
+        custom_model_provider_function (`Optional`, defaults to `None`):
+            Custom model provider function.
+        custom_prepare_model_function (`Optional`, defaults to `None`):
+            Custom prepare model function.
+        custom_megatron_datasets_provider_function (`Optional`, defaults to `None`):
+            Custom megatron train_valid_test datasets provider function.
+        custom_get_batch_function (`Optional`, defaults to `None`):
+            Custom get batch function.
+        custom_loss_function (`Optional`, defaults to `None`):
+            Custom loss function.
+        other_megatron_args (`Optional`, defaults to `None`):
+            Other Megatron-LM arguments. Please refer Megatron-LM.
     """
 
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
@@ -2072,6 +2348,29 @@ def parse_llama_config(megatron_lm_plugin, model, batch_data):
 class BnbQuantizationConfig:
     """
     A plugin to enable BitsAndBytes 4bit and 8bit quantization
+
+    Args:
+        load_in_8bit (`bool`, defaults to `False`):
+            Enable 8bit quantization.
+        llm_int8_threshold (`float`, defaults to `6.0`):
+            Value of the outliner threshold. Only relevant when `load_in_8bit=True`.
+        load_in_4_bit (`bool`, defaults to `False`):
+            Enable 4bit quantization.
+        bnb_4bit_quant_type (`str`, defaults to `fp4`):
+            Set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','np4'}.
+        bnb_4bit_use_double_quant (`bool`, defaults to `False`):
+            Enable nested quantization where the quantization constants from the first quantization are quantized
+            again.
+        bnb_4bit_compute_dtype (`bool`, defaults to `fp16`):
+            This sets the computational type which might be different than the input time. For example, inputs might be
+            fp32, but computation can be set to bf16 for speedups. Options are {'fp32','fp16','bf16'}.
+        torch_dtype (`torch.dtype`, defaults to `None`):
+            This sets the dtype of the remaining non quantized layers. `bitsandbytes` library suggests to set the value
+            to `torch.float16` for 8 bit model and use the same dtype as the compute dtype for 4 bit model.
+        skip_modules (`List[str]`, defaults to `None`):
+            An explicit list of the modules that we don't quantize. The dtype of these modules will be `torch_dtype`.
+        keep_in_fp32_modules (`List`, defaults to `None`):
+            An explicit list of the modules that we don't quantize. We keep them in `torch.float32`.
     """
 
     load_in_8bit: bool = field(default=False, metadata={"help": "enable 8bit quantization."})

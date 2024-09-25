@@ -13,9 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Training on TPUs with 🤗 Accelerate
+# Training on TPUs
 
-Training on TPUs can be slightly different from training on multi-gpu, even with 🤗 Accelerate. This guide aims to show you 
+Training on TPUs can be slightly different from training on multi-gpu, even with Accelerate. This guide aims to show you 
 where you should be careful and why, as well as the best practices in general.
 
 ## Training in a Notebook
@@ -81,7 +81,7 @@ notebook_launcher(training_function)
 
 <Tip>
 
-    The `notebook_launcher` will default to 8 processes if 🤗 Accelerate has been configured for a TPU
+    The `notebook_launcher` will default to 8 processes if Accelerate has been configured for a TPU
 
 </Tip>
 
@@ -128,10 +128,10 @@ And finally calling the training function with:
 
 ## Mixed Precision and Global Variables 
 
-As mentioned in the [mixed precision tutorial](../usage_guides/mixed_precision), 🤗 Accelerate supports fp16 and bf16, both of which can be used on TPUs.
+As mentioned in the [mixed precision tutorial](../usage_guides/mixed_precision), Accelerate supports fp16 and bf16, both of which can be used on TPUs.
 That being said, ideally `bf16` should be utilized as it is extremely efficient to use.
 
-There are two "layers" when using `bf16` and 🤗 Accelerate on TPUs, at the base level and at the operation level. 
+There are two "layers" when using `bf16` and Accelerate on TPUs, at the base level and at the operation level. 
 
 At the base level, this is enabled when passing `mixed_precision="bf16"` to `Accelerator`, such as:
 ```python

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Helpful Utilities
+# Utility functions and classes
 
 Below are a variety of utility functions that 🤗 Accelerate provides, broken down by use-case. 
 
@@ -201,8 +201,6 @@ These utilities relate to interacting with PyTorch models
 [[autodoc]] utils.retie_parameters
 
 [[autodoc]] utils.set_module_tensor_to_device
-
-[[autodoc]] utils.shard_checkpoint
 
 
 ## Parallel

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-__version__ = "0.34.0.dev0"
+__version__ = "0.35.0.dev0"
 
 from .accelerator import Accelerator
 from .big_modeling import (

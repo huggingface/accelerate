@@ -13,68 +13,52 @@
 # limitations under the License.
 
 """
-This script tests to ensure that `accelerate` performs at the same level as raw `TransformersEngine`.
+This script tests to ensure that `accelerate` performs at the same level as raw `MS-AMP`.
 
 This particular script verifies this for DDP training.
 """
+
 import evaluate
+import msamp
 import torch
-import transformer_engine.common.recipe as te_recipe
-import transformer_engine.pytorch as te
-from fp8_utils import evaluate_model, get_named_parameters, get_training_utilities
+from fp8_utils import evaluate_model, get_training_utilities
 from torch.nn.parallel import DistributedDataParallel as DDP
-from transformer_engine.common.recipe import DelayedScaling
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.utils import FP8RecipeKwargs, set_seed
-from accelerate.utils.transformer_engine import convert_model
 
 
 MODEL_NAME = "bert-base-cased"
 METRIC = evaluate.load("glue", "mrpc")
 
 
-def train_baseline():
+def train_baseline(opt_level="O2"):
     set_seed(42)
+    scaler = torch.cuda.amp.GradScaler()
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME)
     accelerator = Accelerator()
     device = accelerator.device
+
+    model, optimizer = msamp.initialize(model, optimizer, opt_level=opt_level)
+
     model.to(device)
-
-    # Convert the model to TE
-    old_named_params = get_named_parameters(model)
-
-    with torch.no_grad():
-        convert_model(model)
-
-    FP8_RECIPE_KWARGS = {"fp8_format": te_recipe.Format.HYBRID, "amax_history_len": 32, "amax_compute_algo": "max"}
-    fp8_recipe = DelayedScaling(**FP8_RECIPE_KWARGS)
-
-    new_named_params = get_named_parameters(model)
 
     # Convert the model to DDP
     device_ids, output_device = [accelerator.local_process_index], accelerator.local_process_index
     model = DDP(model, device_ids=device_ids, output_device=output_device)
 
-    mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
-    for param_group in optimizer.param_groups:
-        param_group["params"] = [mapping[p] for p in param_group["params"]]
-
     base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
 
-    for _ in range(2):
-        for batch in train_dataloader:
-            with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    batch = batch.to(device)
-                    outputs = model(**batch)
+    for i, batch in enumerate(train_dataloader):
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            outputs = model(**batch)
             loss = outputs.loss
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            lr_scheduler.step()
+        scaler.scale(loss).backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        lr_scheduler.step()
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
@@ -88,9 +72,8 @@ def train_baseline():
     return base_model_results, trained_model_results
 
 
-def train_integration():
-    FP8_RECIPE_KWARGS = {"fp8_format": "HYBRID", "amax_history_len": 32, "amax_compute_algo": "max"}
-    kwargs_handlers = [FP8RecipeKwargs(backend="TE", **FP8_RECIPE_KWARGS)]
+def train_integration(opt_level="O2"):
+    kwargs_handlers = [FP8RecipeKwargs(backend="msamp", opt_level=opt_level)]
     AcceleratorState()._reset_state(True)
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=kwargs_handlers)
     set_seed(42)
@@ -101,15 +84,14 @@ def train_integration():
     model, optimizer = accelerator.prepare(model, optimizer)
     base_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.train()
-
-    for _ in range(2):
-        for batch in train_dataloader:
+    for i, batch in enumerate(train_dataloader):
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
             outputs = model(**batch)
             loss = outputs.loss
-            accelerator.backward(loss)
-            optimizer.step()
-            optimizer.zero_grad()
-            lr_scheduler.step()
+        accelerator.backward(loss)
+        optimizer.step()
+        optimizer.zero_grad()
+        lr_scheduler.step()
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
@@ -124,20 +106,18 @@ def train_integration():
 
 
 if __name__ == "__main__":
-    baseline_not_trained, baseline_trained = train_baseline()
-    accelerator_not_trained, accelerator_trained = train_integration()
-
-    assert (
-        baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
-    ), f'Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
-    assert (
-        baseline_not_trained["f1"] == accelerator_not_trained["f1"]
-    ), f'F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
-    assert (
-        baseline_trained["accuracy"] == accelerator_trained["accuracy"]
-    ), f'Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
-    assert (
-        baseline_trained["f1"] == accelerator_trained["f1"]
-    ), f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
-
-    torch.distributed.destroy_process_group()
+    for opt_level in ["O1", "O2"]:
+        baseline_not_trained, baseline_trained = train_baseline(opt_level)
+        accelerator_not_trained, accelerator_trained = train_integration(opt_level)
+        assert (
+            baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
+        ), f'Accuracy not the same for untrained baseline and accelerator using opt_level={opt_level}: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
+        assert (
+            baseline_not_trained["f1"] == accelerator_not_trained["f1"]
+        ), f'F1 not the same for untrained baseline and accelerator using opt_level={opt_level}: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
+        assert (
+            baseline_trained["accuracy"] == accelerator_trained["accuracy"]
+        ), f'Accuracy not the same for trained baseline and accelerator using opt_level={opt_level}: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
+        assert (
+            baseline_trained["f1"] == accelerator_trained["f1"]
+        ), f'F1 not the same for trained baseline and accelerator using opt_level={opt_level}: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
