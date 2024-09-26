@@ -30,6 +30,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator, DeepSpeedPlugin, DistributedType
+from accelerate.state import AcceleratorState
 from accelerate.utils.deepspeed import get_active_deepspeed_plugin
 
 
@@ -323,6 +324,7 @@ def main():
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}
     single_model_training(config, args)
+    AcceleratorState._reset_state(True)
     multiple_model_training(config, args)
 
 
