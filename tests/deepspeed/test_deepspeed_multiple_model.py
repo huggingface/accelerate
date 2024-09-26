@@ -21,9 +21,9 @@ import torch
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator, DeepSpeedPlugin
+from accelerate.commands.launch import launch_command, launch_command_parser
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
-    execute_subprocess_async,
     path_in_accelerate_package,
     require_deepspeed,
     require_huggingface_suite,
@@ -32,7 +32,6 @@ from accelerate.test_utils.testing import (
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset
-from accelerate.utils import patch_environment
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler, get_active_deepspeed_plugin
 
 
@@ -42,6 +41,7 @@ GPT2_TINY = "hf-internal-testing/tiny-random-gpt2"
 @require_deepspeed
 @require_non_cpu
 class DeepSpeedConfigIntegration(AccelerateTestCase):
+    parser = launch_command_parser()
     test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
 
     def setUp(self):
@@ -171,6 +171,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
     @slow
     def test_train_multiple_models(self):
         self.test_file_path = self.test_scripts_folder / "test_ds_multiple_model.py"
-        cmd = ["accelerate", "launch", "--num_processes=2", "--num_machines=1", self.test_file_path]
-        with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd)
+        args = ["--num_processes=2", "--num_machines=1", "--main_process_port=10999", str(self.test_file_path)]
+        args = self.parser.parse_args(args)
+        launch_command(args)
