@@ -77,6 +77,7 @@ from .imports import (
     is_8bit_bnb_available,
     is_aim_available,
     is_bf16_available,
+    is_bitsandbytes_multi_backend_available,
     is_bnb_available,
     is_boto3_available,
     is_ccl_available,

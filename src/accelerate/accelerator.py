@@ -80,6 +80,7 @@ from .utils import (
     get_mixed_precision_context_manager,
     get_pretty_name,
     is_bf16_available,
+    is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
     is_ipex_available,
     is_lomo_available,
@@ -1443,13 +1444,7 @@ class Accelerator:
                             "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}` or `device_map={'':torch.xpu.current_device()}`"
                         )
 
-            bnb_multi_backends = False
-            try:
-                from transformers.utils import is_bitsandbytes_multi_backend_available
-                bnb_multi_backends = is_bitsandbytes_multi_backend_available()
-            except ImportError:
-                bnb_multi_backends = False
-            if ("cpu" in model_devices and not bnb_multi_backends) or "disk" in model_devices:
+            if ("cpu" in model_devices and not is_bitsandbytes_multi_backend_available()) or "disk" in model_devices:
                 raise ValueError(
                     "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload. "
                     "If you want train the 8-bit model in CPU, please install bitsandbytes with multi-backend, see https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
