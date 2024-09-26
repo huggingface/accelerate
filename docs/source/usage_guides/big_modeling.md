@@ -45,7 +45,7 @@ The [`load_checkpoint_and_dispatch`] method loads a checkpoint inside your empty
 
 Setting `device_map="auto"` automatically fills all available space on the GPU(s) first, then the CPU, and finally, the hard drive (the absolute slowest option) if there is still not enough memory.
 
-> [!TIP}
+> [!TIP]
 > Refer to the [Designing a device map](../concept_guides/big_model_inference#designing-a-device-map) guide for more details on how to design your own device map.
 
 ```py
