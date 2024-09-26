@@ -81,11 +81,13 @@ class SeedableRandomSampler(RandomSampler):
         self.epoch = 0
         self.initial_seed = torch.random.initial_seed()
 
-    def __iter__(self):
         if self.generator is None:
             self.generator = torch.Generator()
-            self.generator.manual_seed(self.initial_seed)
+            self.initial_seed = torch.random.initial_seed()
+        else:
+            self.initial_seed = self.generator.initial_seed()
 
+    def __iter__(self):
         # Allow `self.epoch` to modify the seed of the generator
         seed = self.epoch + self.initial_seed
         # print("Setting seed at epoch", self.epoch, seed)
