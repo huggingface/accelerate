@@ -1277,6 +1277,7 @@ def infer_auto_device_map(
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
+    fallback_allocation: bool = False,
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -1351,6 +1352,7 @@ def infer_auto_device_map(
     device_memory_used = {}
     device_buffer_sizes = {}
     device_minimum_assignment_memory = {}
+    fallback_attempted = False
 
     # Direct submodules and parameters
     modules_to_treat = (
@@ -1422,8 +1424,27 @@ def infer_auto_device_map(
                 # -> no split, we go to the next device
                 if verbose:
                     print("This module cannot be split, going to the next device.")
+
+                if fallback_allocation and devices[current_device] in main_devices and \
+                        current_memory_used == 0 and not fallback_attempted:
+                    fallback_module_name, fallback_module, remaining_modules = fallback_allocate(
+                        modules_to_treat,
+                        module_sizes,
+                        current_max_size - current_memory_used,
+                        no_split_module_classes,
+                        tied_parameters,
+                    )
+
+                    # use the next iteration to put the fallback module on the next device to avoid code duplication
+                    if fallback_module is not None:
+                        modules_to_treat = [(fallback_module_name, fallback_module)]\
+                                           + [(name, module)]\
+                                           + remaining_modules
+                        continue
+
                 if current_memory_used == 0:
                     device_minimum_assignment_memory[device] = module_size + current_memory_reserved
+
                 device_memory_used[device] = current_memory_used + current_memory_reserved
                 current_device += 1
                 modules_to_treat = [(name, module)] + modules_to_treat
@@ -1522,6 +1543,24 @@ def infer_auto_device_map(
                     # If the tied module is not split, we go to the next device
                     if verbose:
                         print("None of the tied module can be split, going to the next device.")
+
+                    if fallback_allocation and devices[current_device] in main_devices and \
+                            current_memory_used == 0 and not fallback_attempted:
+                        fallback_module_name, fallback_module, remaining_modules = fallback_allocate(
+                            modules_to_treat,
+                            module_sizes,
+                            current_max_size - current_memory_used,
+                            no_split_module_classes,
+                            tied_parameters,
+                        )
+
+                        # use the next iteration to put the fallback module on the next device to avoid code duplication
+                        if fallback_module is not None:
+                            modules_to_treat = [(fallback_module_name, fallback_module)] \
+                                               + [(name, module)] \
+                                               + remaining_modules
+                            continue
+
                     if current_memory_used == 0:
                         device_minimum_assignment_memory[device] = module_size_with_ties + current_memory_reserved
 
