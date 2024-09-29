@@ -35,7 +35,7 @@ METRIC = evaluate.load("glue", "mrpc")
 
 def train_baseline(opt_level="O2"):
     set_seed(42)
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler('cuda')
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME)
     accelerator = Accelerator()
     device = accelerator.device
