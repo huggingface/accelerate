@@ -80,6 +80,7 @@ from .utils import (
     get_mixed_precision_context_manager,
     get_pretty_name,
     is_bf16_available,
+    is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
     is_ipex_available,
     is_lomo_available,
@@ -1425,8 +1426,8 @@ class Accelerator:
             model_devices = set(model.hf_device_map.values())
             if len(model_devices) > 1 and self.distributed_type != DistributedType.NO:
                 raise ValueError(
-                    "You can't train a model that has been loaded in 8-bit precision on multiple devices in any distributed mode."
-                    " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
+                    "You can't train a model that has been loaded in 8-bit or 4-bit precision on multiple devices in any distributed mode."
+                    " In order to use 8-bit or 4-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
                     " Therefore you should not specify that you are under any distributed regime in your accelerate config."
                 )
             elif len(model_devices) == 1:
@@ -1439,13 +1440,14 @@ class Accelerator:
                     # if on the first device (GPU 0) we don't care
                     if (self.device.index is not None) or (current_device_index != 0):
                         raise ValueError(
-                            "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
+                            "You can't train a model that has been loaded in 8-bit or 4-bit precision on a different device than the one "
                             "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}` or `device_map={'':torch.xpu.current_device()}`"
                         )
 
-            if "cpu" in model_devices or "disk" in model_devices:
+            if ("cpu" in model_devices and not is_bitsandbytes_multi_backend_available()) or "disk" in model_devices:
                 raise ValueError(
-                    "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
+                    "You can't train a model that has been loaded in 8-bit or 4-bit precision with CPU or disk offload. "
+                    "If you want train the 8-bit or 4-bit model in CPU, please install bitsandbytes with multi-backend, see https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
                 )
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
