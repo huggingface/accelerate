@@ -190,6 +190,14 @@ def is_bnb_available():
     return _is_package_available("bitsandbytes")
 
 
+def is_bitsandbytes_multi_backend_available():
+    if not is_bnb_available():
+        return False
+    import bitsandbytes as bnb
+
+    return "multi_backend" in getattr(bnb, "features", set())
+
+
 def is_torchvision_available():
     return _is_package_available("torchvision")
 
