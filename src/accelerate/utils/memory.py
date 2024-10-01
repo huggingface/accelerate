@@ -127,10 +127,10 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
 
 
     >>> @find_executable_batch_size(starting_batch_size=128)
-    ... def train(batch_size, model, optimizer): ...
+    ... def train(batch_size, model, optimizer):
+    ...     ...
 
-
-    ... train(model, optimizer)
+    >>> train(model, optimizer)
     ```
     """
     if function is None:
