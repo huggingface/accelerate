@@ -41,7 +41,7 @@ def train_baseline(opt_level="O2"):
 
     base_model_results = evaluate_model(model, eval_dataloader, METRIC)
     model.train()
-    scaler = torch.amp.GradScaler('cuda')
+    scaler = torch.amp.GradScaler("cuda")
 
     for batch in train_dataloader:
         batch = batch.to("cuda")

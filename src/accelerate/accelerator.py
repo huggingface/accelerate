@@ -521,7 +521,7 @@ class Accelerator:
                     )
                 elif self.distributed_type != DistributedType.DEEPSPEED:
                     # MS-AMP requires `GradScaler` even with bf16 autocast w/ single GPU or DDP:
-                    self.scaler = torch.amp.GradScaler('cuda')
+                    self.scaler = torch.amp.GradScaler("cuda")
 
         # Start of internal step tracking
         self.step = 0
