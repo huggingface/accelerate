@@ -495,7 +495,10 @@ class Accelerator:
             elif is_musa_available():
                 self.scalar = torch.musa.amp.GradScaler(**kwargs)
             elif is_npu_available():
-                self.scaler = torch.npu.amp.GradScaler(**kwargs)
+                if version.parse(torch.__version__) > version.parse("2.3"):
+                    self.scaler = torch.amp.GradScaler("npu", **kwargs)
+                else:
+                    self.scaler = torch.npu.amp.GradScaler(**kwargs)
             elif is_xpu_available():
                 self.scaler = torch.amp.GradScaler("xpu", **kwargs)
             else:

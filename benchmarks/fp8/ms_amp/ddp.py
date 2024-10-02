@@ -40,7 +40,6 @@ def train_baseline(opt_level="O2"):
         scaler = torch.amp.GradScaler("cuda")
     else:
         scaler = torch.cuda.amp.GradScaler()
-
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME)
     accelerator = Accelerator()
     device = accelerator.device
