@@ -209,9 +209,8 @@ class DistributedDataParallelKwargs(KwargsHandler):
 class GradScalerKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the behavior of mixed precision, specifically how the
-    `torch.amp.GradScaler` used is created for pytoch>2.3 or `torch.cuda.amp.GradScaler` for lower version. Please
-    refer to the documentation of this [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more
-    information on each argument.
+    `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this
+    [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument.
 
     <Tip warning={true}>
 

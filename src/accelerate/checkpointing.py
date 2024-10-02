@@ -86,8 +86,8 @@ def save_accelerator_state(
             The current process index in the Accelerator state
         step (`int`):
             The current step in the internal step tracker
-        scaler (`torch.amp.GradScaler`, *optional*) for pytorch>2.3:
-            An optional gradient scaler instance to save; for lower version, check `torch.cuda.amp.GradScaler`
+        scaler (`torch.amp.GradScaler`, *optional*):
+            An optional gradient scaler instance to save;
         save_on_each_node (`bool`, *optional*):
             Whether to save on every node, or only the main node.
         safe_serialization (`bool`, *optional*, defaults to `True`):
