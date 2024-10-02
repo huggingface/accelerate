@@ -22,6 +22,7 @@ import evaluate
 import msamp
 import torch
 from fp8_utils import evaluate_model, get_training_utilities
+from packaging import version
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
@@ -41,7 +42,10 @@ def train_baseline(opt_level="O2"):
 
     base_model_results = evaluate_model(model, eval_dataloader, METRIC)
     model.train()
-    scaler = torch.amp.GradScaler("cuda")
+    if version.parse(torch.__version__) > version.parse("2.3"):
+        scaler = torch.amp.GradScaler("cuda")
+    else:
+        scaler = torch.cuda.amp.GradScaler()
 
     for batch in train_dataloader:
         batch = batch.to("cuda")

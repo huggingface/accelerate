@@ -32,6 +32,7 @@ from typing import Any, Callable, Union
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
+from packaging import version
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -498,7 +499,10 @@ class Accelerator:
             elif is_xpu_available():
                 self.scaler = torch.amp.GradScaler("xpu", **kwargs)
             else:
-                self.scaler = torch.amp.GradScaler("cuda", **kwargs)
+                if version.parse(torch.__version__) > version.parse("2.3"):
+                    self.scaler = torch.amp.GradScaler("cuda", **kwargs)
+                else:
+                    self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
@@ -522,7 +526,10 @@ class Accelerator:
                     )
                 elif self.distributed_type != DistributedType.DEEPSPEED:
                     # MS-AMP requires `GradScaler` even with bf16 autocast w/ single GPU or DDP:
-                    self.scaler = torch.amp.GradScaler("cuda")
+                    if version.parse(torch.__version__) > version.parse("2.3"):
+                        self.scaler = torch.amp.GradScaler("cuda")
+                    else:
+                        self.scaler = torch.cuda.amp.GradScaler()
 
         # Start of internal step tracking
         self.step = 0
