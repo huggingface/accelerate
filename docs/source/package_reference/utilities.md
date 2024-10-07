@@ -126,6 +126,10 @@ These include data operations that mimic the same `torch` ops but can be used on
 
 [[autodoc]] utils.gather_object
 
+[[autodoc]] utils.get_grad_scaler
+
+[[autodoc]] utils.get_mixed_precision_context_manager
+
 [[autodoc]] utils.listify
 
 [[autodoc]] utils.pad_across_processes
