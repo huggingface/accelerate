@@ -86,8 +86,8 @@ def save_accelerator_state(
             The current process index in the Accelerator state
         step (`int`):
             The current step in the internal step tracker
-        scaler (`torch.cuda.amp.GradScaler`, *optional*):
-            An optional gradient scaler instance to save
+        scaler (`torch.amp.GradScaler`, *optional*):
+            An optional gradient scaler instance to save;
         save_on_each_node (`bool`, *optional*):
             Whether to save on every node, or only the main node.
         safe_serialization (`bool`, *optional*, defaults to `True`):
@@ -186,7 +186,7 @@ def load_accelerator_state(
             A list of learning rate schedulers
         process_index (`int`):
             The current process index in the Accelerator state
-        scaler (`torch.cuda.amp.GradScaler`, *optional*):
+        scaler (`torch.amp.GradScaler`, *optional*):
             An optional *GradScaler* instance to load
         map_location (`str`, *optional*):
             What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
