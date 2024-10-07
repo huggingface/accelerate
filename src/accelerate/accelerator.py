@@ -2014,7 +2014,7 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
-            if self.device.type == "xpu":
+            if self.device.type == "xpu" and model.device.type == "cpu":
                 model = model.to(self.device)
             # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
             if is_ipex_available():

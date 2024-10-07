@@ -703,7 +703,7 @@ class PartialState:
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
-            return torch.device("xpu:0")
+            return torch.device("xpu")
         else:
             return torch.device("cpu")
 
