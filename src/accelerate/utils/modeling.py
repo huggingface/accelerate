@@ -1871,3 +1871,31 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             return torch.autocast(device_type=device_type, **autocast_kwargs)
     else:
         return contextlib.nullcontext()
+
+
+def get_grad_scaler(use_fsdp=False, **kwargs):
+    """
+    A generic helper which will initialize the correct `GradScaler` implementation based on the environment and return
+    it.
+    """
+    if use_fsdp:
+        from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+
+        return ShardedGradScaler(**kwargs)
+    if is_torch_xla_available(check_is_gpu=True):
+        import torch_xla.amp as xamp
+
+        return xamp.GradScaler(**kwargs)
+    elif is_mlu_available():
+        return torch.mlu.amp.GradScaler(**kwargs)
+    elif is_musa_available():
+        return torch.musa.amp.GradScaler(**kwargs)
+    elif is_npu_available():
+        return torch.npu.amp.GradScaler(**kwargs)
+    elif is_xpu_available():
+        return torch.amp.GradScaler("xpu", **kwargs)
+    else:
+        if is_torch_version(">=", "2.3"):
+            return torch.amp.GradScaler("cuda", **kwargs)
+        else:
+            return torch.cuda.amp.GradScaler(**kwargs)

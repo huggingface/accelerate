@@ -32,7 +32,6 @@ from typing import Any, Callable, Union
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
-from packaging import version
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -78,6 +77,7 @@ from .utils import (
     extract_model_from_parallel,
     gather,
     gather_object,
+    get_grad_scaler,
     get_mixed_precision_context_manager,
     get_pretty_name,
     is_bf16_available,
@@ -136,7 +136,6 @@ from torch.distributed.algorithms.join import Join
 
 
 if is_torch_xla_available():
-    import torch_xla.amp as xamp
     import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
 
@@ -484,25 +483,7 @@ class Accelerator:
             ):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-            if self.distributed_type == DistributedType.FSDP:
-                from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
-
-                self.scaler = ShardedGradScaler(**kwargs)
-            elif is_torch_xla_available(check_is_gpu=True):
-                self.scaler = xamp.GradScaler(**kwargs)
-            elif is_mlu_available():
-                self.scaler = torch.mlu.amp.GradScaler(**kwargs)
-            elif is_musa_available():
-                self.scaler = torch.musa.amp.GradScaler(**kwargs)
-            elif is_npu_available():
-                self.scaler = torch.npu.amp.GradScaler(**kwargs)
-            elif is_xpu_available():
-                self.scaler = torch.amp.GradScaler("xpu", **kwargs)
-            else:
-                if version.parse(torch.__version__) > version.parse("2.3"):
-                    self.scaler = torch.amp.GradScaler("cuda", **kwargs)
-                else:
-                    self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+            self.scaler = get_grad_scaler(self.distributed_type == DistributedType.FSDP, **kwargs)
 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
@@ -526,10 +507,7 @@ class Accelerator:
                     )
                 elif self.distributed_type != DistributedType.DEEPSPEED:
                     # MS-AMP requires `GradScaler` even with bf16 autocast w/ single GPU or DDP:
-                    if version.parse(torch.__version__) > version.parse("2.3"):
-                        self.scaler = torch.amp.GradScaler("cuda")
-                    else:
-                        self.scaler = torch.cuda.amp.GradScaler()
+                    self.scaler = get_grad_scaler(**kwargs)
 
         # Start of internal step tracking
         self.step = 0
