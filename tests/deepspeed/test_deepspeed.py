@@ -805,6 +805,42 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 in str(cm.exception)
             )
 
+    def test_ds_zero3_no_init_autofill(self):
+        ds_config = {
+            "bf16": {
+                "enabled": True
+                },
+                "zero_optimization": {
+                    "stage": 3,
+                    "allgather_partitions": True,
+                    "allgather_bucket_size": 5e8,
+                    "overlap_comm": True,
+                    "reduce_scatter": True,
+                    "reduce_bucket_size": "auto",
+                    "contiguous_gradients": True,
+                    "stage3_gather_16bit_weights_on_model_save": False,
+
+                    "offload_optimizer": {
+                        "device": "none"
+                    },
+                    "offload_param": {
+                        "device": "none"
+                    }
+                },
+                "gradient_clipping": 1.0,
+                "gradient_accumulation_steps": 1,
+                "train_batch_size": "auto",
+                "train_micro_batch_size_per_gpu": "auto",
+                "steps_per_print": 2000000
+            }
+        deepspeed_plugin = DeepSpeedPlugin(
+            hf_ds_config=ds_config,
+            zero3_init_flag=False,
+        )
+        with mockenv_context(**self.dist_env):
+            _ = Accelerator(deepspeed_plugin=deepspeed_plugin)
+            _ = AutoModelForCausalLM.from_pretrained("gpt2")
+
     @parameterized.expand(stages, name_func=parameterized_custom_name_func)
     def test_ds_config(self, stage):
         deepspeed_plugin = DeepSpeedPlugin(
