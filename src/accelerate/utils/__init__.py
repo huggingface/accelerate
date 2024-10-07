@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .constants import (
+    MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
     MODEL_NAME,
     OPTIMIZER_NAME,
     PROFILE_PATTERN_NAME,
@@ -28,6 +29,7 @@ from .constants import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     WEIGHTS_PATTERN_NAME,
+    XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .dataclasses import (
     AutocastKwargs,

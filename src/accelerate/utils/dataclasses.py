@@ -29,7 +29,13 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 
 import torch
 
-from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY
+from .constants import (
+    FSDP_AUTO_WRAP_POLICY,
+    FSDP_BACKWARD_PREFETCH,
+    FSDP_SHARDING_STRATEGY,
+    MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
+    XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
+)
 from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
     is_cuda_available,
@@ -39,7 +45,7 @@ from .imports import (
     is_transformer_engine_available,
     is_xpu_available,
 )
-from .versions import compare_versions
+from .versions import compare_versions, is_torch_version
 
 
 class KwargsHandler:
@@ -468,10 +474,14 @@ class ProfileKwargs(KwargsHandler):
 
         profiler_activity_map: dict[str, torch.profiler.ProfilerActivity] = {
             "cpu": torch.profiler.ProfilerActivity.CPU,
-            "xpu": torch.profiler.ProfilerActivity.XPU,
-            "mita": torch.profiler.ProfilerActivity.MTIA,
             "cuda": torch.profiler.ProfilerActivity.CUDA,
         }
+
+        if is_torch_version(">=", XPU_PROFILING_AVAILABLE_PYTORCH_VERSION):
+            profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
+
+        if is_torch_version(">=", MITA_PROFILING_AVAILABLE_PYTORCH_VERSION):
+            profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
 
         if activity not in profiler_activity_map:
             raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
