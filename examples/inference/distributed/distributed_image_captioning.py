@@ -101,7 +101,6 @@ def main(
         # Load dataset
         logger.info(f"Process {process_idx}: Loading dataset {dataset_name}")
         ds = load_dataset(dataset_name, split=dataset_split)
-        ds = ds.select(range(1000))    
         # Create properly sized batches
         data_loader = get_batches(ds["img"], batch_size, world_size)
     
