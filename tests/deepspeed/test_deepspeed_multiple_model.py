@@ -118,7 +118,10 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         accelerator = Accelerator(deepspeed_plugin=ds_plugins)
         from transformers.integrations.deepspeed import deepspeed_config
 
+        # Note that these have `auto` values being set so we need to adjust
         assert accelerator.deepspeed_plugin is zero2
+        zero2.deepspeed_config["train_micro_batch_size_per_gpu"] = 1
+        zero2.deepspeed_config.pop("train_batch_size")
         assert deepspeed_config() == accelerator.deepspeed_plugin.hf_ds_config.config
 
         accelerator.state.select_deepspeed_plugin("zero3")
@@ -173,6 +176,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
     @slow
     def test_train_multiple_models(self):
         self.test_file_path = self.test_scripts_folder / "test_ds_multiple_model.py"
-        args = ["--num_processes=2", "--num_machines=1", "--main_process_port=10999", str(self.test_file_path)]
+        args = ["--num_processes=2", "--num_machines=1", "--main_process_port=0", str(self.test_file_path)]
         args = self.parser.parse_args(args)
         launch_command(args)
