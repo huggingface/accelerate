@@ -65,6 +65,7 @@ def main(
     set_seed(seed)
     
     try:
+        logger.info(f"Process {process_idx}: Loading tokenizer and model")
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = VitsModel.from_pretrained(
             model_id,
@@ -88,7 +89,10 @@ def main(
             save_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created output directory: {save_dir}")
 
-        distributed_state.wait_for_everyone()
+        logger.info(f"Process {process_idx}: Waiting for all processes")
+        distributed_state.wait_for_everyone(timeout=300)  # 5 minutes timeout
+        logger.info(f"Process {process_idx}: All processes ready")
+
         pbar = tqdm(
             total=total_batches,
             disable=not distributed_state.is_main_process,
@@ -100,18 +104,28 @@ def main(
             generated_audio = []
             
             try:
+                logger.info(f"Process {process_idx}: Processing batch {batch_idx}")
                 with distributed_state.split_between_processes(texts_raw) as texts:
                     for text in texts:
                         inputs = tokenizer(text, return_tensors="pt").to(distributed_state.device)
-                        with torch.no_grad():
-                            output = model(**inputs).waveform
-                        
-                        generated_audio.append({
-                            'text': text,
-                            'waveform': output.cpu(),
-                        })
+                        try:
+                            with torch.no_grad():
+                                output = model(**inputs).waveform
+                            
+                            generated_audio.append({
+                                'text': text,
+                                'waveform': output.cpu(),
+                            })
+                        except RuntimeError as e:
+                            if "out of memory" in str(e):
+                                logger.warning(f"CUDA out of memory in process {process_idx}. Skipping this sample.")
+                                torch.cuda.empty_cache()
+                            else:
+                                raise
 
-                distributed_state.wait_for_everyone()
+                logger.info(f"Process {process_idx}: Waiting for all processes after batch {batch_idx}")
+                distributed_state.wait_for_everyone(timeout=300)  # 5 minutes timeout
+                logger.info(f"Process {process_idx}: All processes finished batch {batch_idx}")
 
                 all_generated = gather_object(generated_audio)
 
@@ -134,12 +148,14 @@ def main(
                             f.write(audio_data['text'])
 
                     pbar.update(1)
+                    logger.info(f"Main process: Completed batch {batch_idx}")
                     
             except Exception as e:
-                logger.error(f"Error processing batch {batch_idx}: {str(e)}")
+                logger.error(f"Error processing batch {batch_idx} in process {process_idx}: {str(e)}")
                 continue
 
-        distributed_state.wait_for_everyone()
+        logger.info(f"Process {process_idx}: Finished all batches. Waiting for other processes.")
+        distributed_state.wait_for_everyone(timeout=300)  # 5 minutes timeout
         if distributed_state.is_main_process:
             pbar.close()
             logger.info(f"Speech Generation Finished. Saved {count} files in {save_dir}")
