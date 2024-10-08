@@ -90,7 +90,8 @@ def main(
             logger.info(f"Created output directory: {save_dir}")
 
         logger.info(f"Process {process_idx}: Waiting for all processes")
-        distributed_state.wait_for_everyone(timeout=300)  # 5 minutes timeout
+        
+        distributed_state.wait_for_everyone()  # 5 minutes timeout
         logger.info(f"Process {process_idx}: All processes ready")
 
         pbar = tqdm(
