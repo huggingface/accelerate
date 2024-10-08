@@ -57,11 +57,8 @@ def save_audio(waveform: torch.Tensor, filepath: str, sampling_rate: int):
     Save a waveform as a WAV file
     """
     try:
-        # Convert to numpy and ensure proper scaling
         audio_data = waveform.float().numpy()
-        # Normalize audio to prevent clipping
         audio_data = audio_data / max(abs(audio_data.min()), abs(audio_data.max()))
-        # Save as WAV file
         scipy.io.wavfile.write(filepath, sampling_rate, audio_data)
     except Exception as e:
         logger.error(f"Error saving audio file {filepath}: {str(e)}")
@@ -78,18 +75,15 @@ def serialize_and_save(queue: Queue, save_dir: Path, sampling_rate: int):
         
         count, audio_data = item
         
-        # Create audio file path
         audio_path = save_dir / f"audio_{count:04d}.wav"
         text_path = save_dir / f"text_{count:04d}.txt"
         
-        # Save audio file
         save_audio(
-            audio_data['waveform'][0],  # Remove batch dimension
+            audio_data['waveform'][0], 
             str(audio_path),
             sampling_rate
         )
         
-        # Save corresponding text
         with open(text_path, 'w', encoding='utf-8') as f:
             f.write(audio_data['text'])
         
@@ -106,14 +100,12 @@ def main(
 ):
     model_id = f"facebook/mms-tts-eng"
     
-    # Initialize distributed state
     distributed_state = PartialState()
     world_size = distributed_state.num_processes
     process_idx = distributed_state.process_index
     
     logger.info(f"Process {process_idx}/{world_size} initialized on {distributed_state.device}")
     
-    # Set seeds for reproducibility
     set_seed(seed)
     
     try:
@@ -122,25 +114,20 @@ def main(
         
         save_dir = Path(save_dir)/f"eng_{START_TIME}"
 
-        # Load dataset with text samples
         logger.info(f"Process {process_idx}: Loading dataset {dataset_name}")
         ds = load_dataset(dataset_name,split=dataset_split)
         
-        # Get text samples from dataset
         text_samples = ds["en_text"][:max_samples]
         
-        # Create properly sized batches
         data_loader = get_batches(text_samples, batch_size, world_size)
         total_batches = len(data_loader)
         
         logger.info(f"Process {process_idx}: Created {total_batches} batches")
 
-        # Create output directory on main process
         if distributed_state.is_main_process:
             save_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created output directory: {save_dir}")
 
-            # Initialize queue and start serialization thread
             save_queue = Queue()
             save_thread = threading.Thread(
                 target=serialize_and_save, 
@@ -148,10 +135,8 @@ def main(
             )
             save_thread.start()
 
-        # Synchronize processes
         distributed_state.wait_for_everyone()
         
-        # Initialize progress bar only on main process
         pbar = tqdm(
             total=total_batches,
             disable=not distributed_state.is_main_process,
@@ -170,10 +155,10 @@ def main(
                             with torch.no_grad():
                                 output = model(**inputs).waveform
                         
-                        generated_audio.append({
+                            generated_audio.append({
                             'text': text,
                             'waveform': output.cpu(),
-                        })
+                            })
 
                 # Synchronize processes
                 distributed_state.wait_for_everyone()
@@ -196,11 +181,8 @@ def main(
         # Clean up
         distributed_state.wait_for_everyone()
         if distributed_state.is_main_process:
-            # Signal the serialization thread to finish
             save_queue.put(None)
-            # Wait for all tasks to be processed
             save_queue.join()
-            # Wait for the thread to complete
             save_thread.join()
             
             pbar.close()
