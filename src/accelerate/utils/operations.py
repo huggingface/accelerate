@@ -29,10 +29,10 @@ from .dataclasses import DistributedType, TensorInformation
 from .imports import (
     is_npu_available,
     is_torch_distributed_available,
-    is_torch_version,
     is_torch_xla_available,
     is_xpu_available,
 )
+from .versions import is_torch_version
 
 
 if is_torch_xla_available():

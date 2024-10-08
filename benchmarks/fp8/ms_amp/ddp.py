@@ -22,12 +22,11 @@ import evaluate
 import msamp
 import torch
 from fp8_utils import evaluate_model, get_training_utilities
-from packaging import version
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, set_seed
+from accelerate.utils import FP8RecipeKwargs, get_grad_scaler, set_seed
 
 
 MODEL_NAME = "bert-base-cased"
@@ -36,10 +35,7 @@ METRIC = evaluate.load("glue", "mrpc")
 
 def train_baseline(opt_level="O2"):
     set_seed(42)
-    if version.parse(torch.__version__) > version.parse("2.3"):
-        scaler = torch.amp.GradScaler("cuda")
-    else:
-        scaler = torch.cuda.amp.GradScaler()
+    scaler = get_grad_scaler()
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME)
     accelerator = Accelerator()
     device = accelerator.device
