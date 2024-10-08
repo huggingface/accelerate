@@ -165,7 +165,7 @@ def main(
                         with open(text_path, 'w', encoding='utf-8') as f:
                             f.write(audio_data['text'])
                     
-                    pbar.update(1)
+                pbar.update(1)
                     
             except Exception as e:
                 logger.error(f"Error processing batch {batch_idx}: {str(e)}")
