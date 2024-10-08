@@ -118,7 +118,7 @@ def main(
         pbar = tqdm(
             total=total_batches,
             disable=not distributed_state.is_main_process,
-            desc=f"Generating {["eng"]} speech"
+            desc=f"Generating eng speech"
         )
 
         count = 0
