@@ -2854,6 +2854,10 @@ class Accelerator:
                 raise RuntimeError("You can't save the model since some parameters are on the meta device.")
             state_dict = self.get_state_dict(model)
 
+        # Case: DeepSpeed zero3 gets gathered and `state_dict` is empty
+        if state_dict is None:
+            return
+
         if safe_serialization:
             state_dict = clean_state_dict_for_safetensors(state_dict)
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
