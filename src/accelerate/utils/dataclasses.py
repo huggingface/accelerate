@@ -1282,10 +1282,7 @@ class DeepSpeedPlugin:
                 )
         if "gradient_accumulation_steps" not in ds_config or ds_config["gradient_accumulation_steps"] == "auto":
             ds_config["gradient_accumulation_steps"] = 1
-        if (
-            "train_micro_batch_size_per_gpu" not in ds_config
-            or ds_config["train_micro_batch_size_per_gpu"] == "auto"
-        ):
+        if "train_micro_batch_size_per_gpu" not in ds_config or ds_config["train_micro_batch_size_per_gpu"] == "auto":
             ds_config["train_micro_batch_size_per_gpu"] = 1
         if ds_config.get("train_batch_size", None) == "auto":
             del ds_config["train_batch_size"]
