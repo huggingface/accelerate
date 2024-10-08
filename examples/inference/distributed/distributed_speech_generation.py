@@ -95,7 +95,7 @@ def main(
 
         # Load dataset with text samples
         logger.info(f"Process {process_idx}: Loading dataset {dataset_name}")
-        ds = load_dataset(dataset_name, "eng", split=dataset_split)
+        ds = load_dataset(dataset_name, split=dataset_split)
         
         # Get text samples from dataset
         text_samples = ds["en_text"][:max_samples]
