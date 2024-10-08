@@ -13,10 +13,6 @@
 # limitations under the License.
 
 """
-
-Additional requirements: flash_attn einops 
-pip install flash_attn einops 
-
 Originally by jiwooya1000, put together together by sayakpaul.
 Documentation: https://huggingface.co/docs/diffusers/main/en/training/distributed_inference
 
@@ -27,7 +23,6 @@ accelerate launch distributed_image_generation.py --batch_size 8
 # Enable memory optimizations for large models like SD3
 accelerate launch distributed_image_generation.py --batch_size 8 --low_mem
 """
-
 import os
 import time
 

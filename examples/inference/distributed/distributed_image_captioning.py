@@ -13,15 +13,16 @@
 # limitations under the License.
 
 """
-Originally by jiwooya1000, put together together by sayakpaul.
+Additional requirements: einops 
+pip install  einops 
+
+put together together by damerajee.
 Documentation: https://huggingface.co/docs/diffusers/main/en/training/distributed_inference
 
 Run:
 
 accelerate launch distributed_image_generation.py --batch_size 8
 
-# Enable memory optimizations for large models like SD3
-accelerate launch distributed_image_generation.py --batch_size 8 --low_mem
 """
 
 import os
@@ -70,7 +71,7 @@ def main(
     data_loader = get_batches(items=ds["img"], batch_size=batch_size)  # Ensure your dataset has an 'image' key
 
     distributed_state = PartialState()
-    
+    print("partial state:",distributed_state)
     if distributed_state.is_main_process:
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
