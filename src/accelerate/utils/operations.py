@@ -652,8 +652,11 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
                 CannotPadNestedTensorWarning,
             )
             return tensor
-        if dim >= len(tensor.shape):
+        if dim >= len(tensor.shape) or dim < -len(tensor.shape):
             return tensor
+        # Convert negative dimensions to non-negative
+        if dim < 0:
+            dim += len(tensor.shape)
 
         # Gather all sizes
         size = torch.tensor(tensor.shape, device=tensor.device)[None]
