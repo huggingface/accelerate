@@ -1,7 +1,4 @@
-"""
-Distributed Speech Generation Script using Facebook's MMS-TTS model.
-Run with: accelerate launch --multi_gpu distributed_speech_generation.py --batch_size 8 --language eng
-"""
+
 
 import os
 import time
@@ -18,6 +15,17 @@ from transformers import VitsModel, AutoTokenizer
 from accelerate import PartialState
 from accelerate.utils import gather_object, set_seed
 from datasets import load_dataset
+
+
+"""
+put together together by damerajee.
+Documentation: https://huggingface.co/docs/diffusers/main/en/training/distributed_inference
+
+Run:
+
+accelerate launch distributed_speech_generation.py --batch_size 8
+
+"""
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -60,14 +68,13 @@ def main(
     save_dir: str = "./generated_speech",
     seed: int = 1,
     batch_size: int = 4,
-    language: str = "eng",
     dataset_name: str = "svjack/pokemon-blip-captions-en-zh",
     dataset_split: str = "train",
     max_samples: int = 100,
 ):
 
-    
-    model_id = f"facebook/mms-tts-{language}"
+
+    model_id = f"facebook/mms-tts-eng"
     
     # Initialize distributed state
     distributed_state = PartialState()
@@ -84,11 +91,11 @@ def main(
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = VitsModel.from_pretrained(model_id).to(distributed_state.device)
         
-        save_dir = Path(save_dir) / f"{language}_{START_TIME}"
+        save_dir = Path(save_dir) / f"eng_{START_TIME}"
 
         # Load dataset with text samples
         logger.info(f"Process {process_idx}: Loading dataset {dataset_name}")
-        ds = load_dataset(dataset_name, language, split=dataset_split)
+        ds = load_dataset(dataset_name, "eng", split=dataset_split)
         
         # Get text samples from dataset
         text_samples = ds["en_text"][:max_samples]
@@ -111,7 +118,7 @@ def main(
         pbar = tqdm(
             total=total_batches,
             disable=not distributed_state.is_main_process,
-            desc=f"Generating {LANGUAGE_CODES[language]} speech"
+            desc=f"Generating {["eng"]} speech"
         )
 
         count = 0
