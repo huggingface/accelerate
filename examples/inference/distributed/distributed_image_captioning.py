@@ -13,10 +13,6 @@
 # limitations under the License.
 
 """
-
-Additional requirements: flash_attn einops 
-pip install flash_attn einops 
-
 Originally by jiwooya1000, put together together by sayakpaul.
 Documentation: https://huggingface.co/docs/diffusers/main/en/training/distributed_inference
 
@@ -34,7 +30,7 @@ import time
 import fire
 import torch
 from datasets import load_dataset
-from diffusers import DiffusionPipeline
+from transformers import BlipForConditionalGeneration, BlipProcessor
 from tqdm import tqdm
 
 from accelerate import PartialState
@@ -43,7 +39,6 @@ from accelerate.utils import gather_object
 
 START_TIME = time.strftime("%Y%m%d_%H%M%S")
 DTYPE_MAP = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
-
 
 def get_batches(items, batch_size):
     num_batches = (len(items) + batch_size - 1) // batch_size
@@ -57,30 +52,25 @@ def get_batches(items, batch_size):
 
     return batches
 
-
 def main(
-    ckpt_id: str = "PixArt-alpha/PixArt-Sigma-XL-2-1024-MS",
-    save_dir: str = "./evaluation/examples",
+    model_id: str = "Salesforce/blip-image-captioning-base",  # Choose your captioning model
+    save_dir: str = "./evaluation/captions",
     seed: int = 1,
     batch_size: int = 4,
-    num_inference_steps: int = 20,
-    guidance_scale: float = 4.5,
     dtype: str = "fp16",
-    low_mem: bool = False,
 ):
-    pipeline = DiffusionPipeline.from_pretrained(ckpt_id, torch_dtype=DTYPE_MAP[dtype])
+    # Load processor and model for captioning
+    processor = BlipProcessor.from_pretrained(model_id)
+    model = BlipForConditionalGeneration.from_pretrained(model_id).to(dtype=DTYPE_MAP[dtype])
 
     save_dir = save_dir + f"_{START_TIME}"
 
-    parti_prompts = load_dataset("nateraw/parti-prompts", split="train")
-    data_loader = get_batches(items=parti_prompts["Prompt"], batch_size=batch_size)
+    # Load your image dataset; this is an example using a dummy dataset
+    ds = load_dataset("uoft-cs/cifar10", split="train")
+    data_loader = get_batches(items=ds["img"], batch_size=batch_size)  # Ensure your dataset has an 'image' key
 
     distributed_state = PartialState()
-    if low_mem:
-        pipeline.enable_model_cpu_offload(gpu_id=distributed_state.device.index)
-    else:
-        pipeline = pipeline.to(distributed_state.device)
-
+    
     if distributed_state.is_main_process:
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
@@ -89,33 +79,35 @@ def main(
             print(f"Directory '{save_dir}' already exists.")
 
     count = 0
-    for _, prompts_raw in tqdm(enumerate(data_loader), total=len(data_loader)):
-        input_prompts = []
+    for _, images_raw in tqdm(enumerate(data_loader), total=len(data_loader)):
+        input_images = []
 
-        with distributed_state.split_between_processes(prompts_raw) as prompts:
+        with distributed_state.split_between_processes(images_raw) as images:
             generator = torch.manual_seed(seed)
-            images = pipeline(
-                prompts, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale, generator=generator
-            ).images
-            input_prompts.extend(prompts)
+            # Process images and generate captions
+            inputs = processor(images, return_tensors="pt", padding=True).to(dtype=DTYPE_MAP[dtype])
+            outputs = model.generate(**inputs)
+            captions = processor.batch_decode(outputs, skip_special_tokens=True)
+
+            input_images.extend(images)
 
         distributed_state.wait_for_everyone()
 
-        images = gather_object(images)
-        input_prompts = gather_object(input_prompts)
+        captions = gather_object(captions)
+        input_images = gather_object(input_images)
 
         if distributed_state.is_main_process:
-            for image, prompt in zip(images, input_prompts):
+            for caption, img in zip(captions, input_images):
                 count += 1
                 temp_dir = os.path.join(save_dir, f"example_{count}")
 
-                os.makedirs(temp_dir)
-                prompt = "_".join(prompt.split())
-                image.save(f"image_{prompt}.png")
+                os.makedirs(temp_dir, exist_ok=True)
+                img.save(os.path.join(temp_dir, f"image_{count}.png"))
+                with open(os.path.join(temp_dir, "caption.txt"), "w") as f:
+                    f.write(caption)
 
     if distributed_state.is_main_process:
-        print(f">>> Image Generation Finished. Saved in {save_dir}")
-
+        print(f">>> Caption Generation Finished. Saved in {save_dir}")
 
 if __name__ == "__main__":
     fire.Fire(main)
