@@ -90,8 +90,8 @@ def main(
             logger.info(f"Created output directory: {save_dir}")
 
         logger.info(f"Process {process_idx}: Waiting for all processes")
-        
-        distributed_state.wait_for_everyone()  # 5 minutes timeout
+
+        distributed_state.wait_for_everyone()  
         logger.info(f"Process {process_idx}: All processes ready")
 
         pbar = tqdm(
@@ -125,7 +125,7 @@ def main(
                                 raise
 
                 logger.info(f"Process {process_idx}: Waiting for all processes after batch {batch_idx}")
-                distributed_state.wait_for_everyone(timeout=300)  # 5 minutes timeout
+                distributed_state.wait_for_everyone()  
                 logger.info(f"Process {process_idx}: All processes finished batch {batch_idx}")
 
                 all_generated = gather_object(generated_audio)
@@ -140,7 +140,7 @@ def main(
                         text_path = temp_dir / f"text_{count}.txt"
 
                         save_audio(
-                            audio_data['waveform'][0],  # Remove batch dimension
+                            audio_data['waveform'][0],  
                             str(audio_path),
                             model.config.sampling_rate
                         )
@@ -156,7 +156,7 @@ def main(
                 continue
 
         logger.info(f"Process {process_idx}: Finished all batches. Waiting for other processes.")
-        distributed_state.wait_for_everyone(timeout=300)  # 5 minutes timeout
+        distributed_state.wait_for_everyone()  
         if distributed_state.is_main_process:
             pbar.close()
             logger.info(f"Speech Generation Finished. Saved {count} files in {save_dir}")
