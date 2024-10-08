@@ -483,7 +483,7 @@ class Accelerator:
             ):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-            self.scaler = get_grad_scaler(self.distributed_type == DistributedType.FSDP, **kwargs)
+            self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,

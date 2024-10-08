@@ -1873,18 +1873,18 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
         return contextlib.nullcontext()
 
 
-def get_grad_scaler(use_fsdp: bool = False, **kwargs):
+def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
     """
     A generic helper which will initialize the correct `GradScaler` implementation based on the environment and return
     it.
 
     Args:
-        use_fsdp (`bool`, *optional*, defaults to False):
-            Whether FSDP is enabled.
+        distributed_type (`DistributedType`, *optional*, defaults to None):
+            The type of distributed environment.
         kwargs:
             Additional arguments for the utilized `GradScaler` constructor.
     """
-    if use_fsdp:
+    if distributed_type == DistributedType.FSDP:
         from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
 
         return ShardedGradScaler(**kwargs)
