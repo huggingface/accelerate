@@ -34,9 +34,10 @@ from datasets import load_dataset
 from transformers import BlipForConditionalGeneration, BlipProcessor
 from tqdm import tqdm
 import logging 
+from typing import List 
 
 from accelerate import PartialState
-from accelerate.utils import gather_object
+from accelerate.utils import gather_object, set_seed
 
 
 # Setup basic logging
