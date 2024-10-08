@@ -1,41 +1,24 @@
 import os
 import time
-from typing import List, Dict
+from typing import List
 from pathlib import Path
-import threading
-from queue import Queue
 
 import fire
 import torch
 import scipy.io.wavfile
 import logging
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 from transformers import VitsModel, AutoTokenizer
 from accelerate import PartialState
 from accelerate.utils import gather_object, set_seed
 from datasets import load_dataset
 
-"""
-put together together by damerajee.
-Documentation: https://huggingface.co/docs/diffusers/main/en/training/distributed_inference
-
-Run:
-
-accelerate launch distributed_speech_generation.py --batch_size 8
-
-"""
-
-# Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-DTYPE_MAP = {
-    "fp32": torch.float32,
-    "fp16": torch.float16,
-    "bf16": torch.bfloat16
-}
 START_TIME = time.strftime("%Y%m%d_%H%M%S")
+DTYPE_MAP = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
 
 def get_batches(items: List, batch_size: int, world_size: int) -> List:
     """
@@ -44,13 +27,12 @@ def get_batches(items: List, batch_size: int, world_size: int) -> List:
     effective_batch_size = batch_size * world_size
     num_items = len(items)
     num_complete_batches = num_items // effective_batch_size
-    
     items = items[:num_complete_batches * effective_batch_size]
-    
-    return [
+    batches = [
         items[i:i + effective_batch_size] 
         for i in range(0, len(items), effective_batch_size)
     ]
+    return batches
 
 def save_audio(waveform: torch.Tensor, filepath: str, sampling_rate: int):
     """
@@ -64,42 +46,16 @@ def save_audio(waveform: torch.Tensor, filepath: str, sampling_rate: int):
         logger.error(f"Error saving audio file {filepath}: {str(e)}")
         raise
 
-def serialize_and_save(queue: Queue, save_dir: Path, sampling_rate: int):
-    """
-    Function to run in a separate thread for artifact serialization
-    """
-    while True:
-        item = queue.get()
-        if item is None:
-            break
-        
-        count, audio_data = item
-        
-        audio_path = save_dir / f"audio_{count:04d}.wav"
-        text_path = save_dir / f"text_{count:04d}.txt"
-        
-        save_audio(
-            audio_data['waveform'][0], 
-            str(audio_path),
-            sampling_rate
-        )
-        
-        with open(text_path, 'w', encoding='utf-8') as f:
-            f.write(audio_data['text'])
-        
-        queue.task_done()
-
 def main(
+    model_id: str = "facebook/mms-tts-eng",
     save_dir: str = "./generated_speech",
     seed: int = 1,
     batch_size: int = 4,
     dataset_name: str = "svjack/pokemon-blip-captions-en-zh",
     dataset_split: str = "train",
     max_samples: int = 100,
-     dtype: str = "fp16"
+    dtype: str = "fp16"
 ):
-    model_id = f"facebook/mms-tts-eng"
-    
     distributed_state = PartialState()
     world_size = distributed_state.num_processes
     process_idx = distributed_state.process_index
@@ -110,12 +66,16 @@ def main(
     
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = VitsModel.from_pretrained(model_id, torch_dtype=DTYPE_MAP[dtype]).to(distributed_state.device)
+        model = VitsModel.from_pretrained(
+            model_id,
+            device_map=distributed_state.device,
+            torch_dtype=DTYPE_MAP[dtype]
+        )
         
-        save_dir = Path(save_dir)/f"eng_{START_TIME}"
+        save_dir = Path(save_dir) / f"eng_{START_TIME}"
 
         logger.info(f"Process {process_idx}: Loading dataset {dataset_name}")
-        ds = load_dataset(dataset_name,split=dataset_split)
+        ds = load_dataset(dataset_name, split=dataset_split)
         
         text_samples = ds["en_text"][:max_samples]
         
@@ -128,19 +88,11 @@ def main(
             save_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created output directory: {save_dir}")
 
-            save_queue = Queue()
-            save_thread = threading.Thread(
-                target=serialize_and_save, 
-                args=(save_queue, save_dir, model.config.sampling_rate)
-            )
-            save_thread.start()
-
         distributed_state.wait_for_everyone()
-        
         pbar = tqdm(
             total=total_batches,
             disable=not distributed_state.is_main_process,
-            desc=f"Generating eng speech"
+            desc="Generating eng speech"
         )
 
         count = 0
@@ -150,41 +102,45 @@ def main(
             try:
                 with distributed_state.split_between_processes(texts_raw) as texts:
                     for text in texts:
-                        # Tokenize and generate speech
-                            inputs = tokenizer(text, return_tensors="pt").to(distributed_state.device, dtype=DTYPE_MAP[dtype])                        
-                            with torch.no_grad():
-                                output = model(**inputs).waveform
+                        inputs = tokenizer(text, return_tensors="pt").to(distributed_state.device)
+                        with torch.no_grad():
+                            output = model(**inputs).waveform
                         
-                            generated_audio.append({
+                        generated_audio.append({
                             'text': text,
                             'waveform': output.cpu(),
-                            })
+                        })
 
-                # Synchronize processes
                 distributed_state.wait_for_everyone()
 
-                # Gather results from all processes
                 all_generated = gather_object(generated_audio)
 
-                # Queue results for saving on main process
                 if distributed_state.is_main_process:
                     for audio_data in all_generated:
                         count += 1
-                        save_queue.put((count, audio_data))
-                    
+                        temp_dir = save_dir / f"example_{count}"
+                        temp_dir.mkdir(parents=True, exist_ok=True)
+
+                        audio_path = temp_dir / f"audio_{count}.wav"
+                        text_path = temp_dir / f"text_{count}.txt"
+
+                        save_audio(
+                            audio_data['waveform'][0],  # Remove batch dimension
+                            str(audio_path),
+                            model.config.sampling_rate
+                        )
+
+                        with open(text_path, 'w', encoding='utf-8') as f:
+                            f.write(audio_data['text'])
+
                     pbar.update(1)
                     
             except Exception as e:
                 logger.error(f"Error processing batch {batch_idx}: {str(e)}")
                 continue
 
-        # Clean up
         distributed_state.wait_for_everyone()
         if distributed_state.is_main_process:
-            save_queue.put(None)
-            save_queue.join()
-            save_thread.join()
-            
             pbar.close()
             logger.info(f"Speech Generation Finished. Saved {count} files in {save_dir}")
 
