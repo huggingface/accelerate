@@ -77,9 +77,12 @@ class SeedableRandomSampler(RandomSampler):
     """
 
     def __init__(self, *args, **kwargs):
+        self.initial_seed = kwargs.pop("initial_seed", None)
+        if self.initial_seed is None:
+            self.initial_seed = torch.random.initial_seed()
+
         super().__init__(*args, **kwargs)
         self.epoch = 0
-        self.initial_seed = torch.random.initial_seed()
 
     def __iter__(self):
         if self.generator is None:
@@ -939,6 +942,7 @@ def prepare_data_loader(
     use_seedable_sampler: bool = False,
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
+    data_seed: Optional[int] = None,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -1069,6 +1073,7 @@ def prepare_data_loader(
             replacement=sampler.replacement,
             num_samples=sampler._num_samples,
             generator=getattr(sampler, "generator", torch.Generator()),
+            initial_seed=data_seed,
         )
 
     if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
