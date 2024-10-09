@@ -84,6 +84,7 @@ class SeedableRandomSampler(RandomSampler):
         if self.generator is None:
             self.generator = torch.Generator()
             self.initial_seed = torch.random.initial_seed()
+            self.generator.manual_seed(self.initial_seed)
         else:
             self.initial_seed = self.generator.initial_seed()
 
