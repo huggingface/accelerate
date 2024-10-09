@@ -828,6 +828,7 @@ def main():
         central_dl_preparation_check()
         custom_sampler_check()
         check_seedable_sampler()
+        check_seedable_sampler_with_data_seed()
 
     if state.num_processes > 1:
         check_seedable_sampler_in_batch_sampler_shard()
@@ -849,8 +850,6 @@ def main():
         if state.local_process_index == 0:
             print("\n**Test reinstantiated state**")
         test_reinstantiated_state()
-
-    check_seedable_sampler_with_data_seed()
 
     state.destroy_process_group()
 
