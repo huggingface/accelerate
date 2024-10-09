@@ -1,186 +1,224 @@
-
+import json
 import os
-import time
-from typing import List, Dict
-from pathlib import Path
+import pathlib
+import queue
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from typing import Union
 
 import fire
 import torch
 import scipy.io.wavfile
-import logging
-from tqdm.auto import tqdm
-
+from tqdm import tqdm
 from transformers import VitsModel, AutoTokenizer
-from accelerate import PartialState
-from accelerate.utils import gather_object, set_seed
 from datasets import load_dataset
-
-
-"""
-put together together by damerajee.
-Documentation: https://huggingface.co/docs/diffusers/main/en/training/distributed_inference
-
-Run:
-
-accelerate launch distributed_speech_generation.py --batch_size 8
+from accelerate import PartialState
 
 """
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+Requirements: transformers accelerate fire tqdm scipy datasets
+Example usage:
 
-START_TIME = time.strftime("%Y%m%d_%H%M%S")
-DTYPE_MAP = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
+accelerate launch --num_processes=2 pokemon_speech.py --output_path outputs --batch_size 8 --num_workers 2 --dataset_split train
+"""
 
-def get_batches(items: List, batch_size: int, world_size: int) -> List:
-    """
-    Create batches that are evenly divisible by world_size to prevent hanging
-    """
-    effective_batch_size = batch_size * world_size
-    num_items = len(items)
-    num_complete_batches = num_items // effective_batch_size
-    
-    items = items[:num_complete_batches * effective_batch_size]
-    
-    return [
-        items[i:i + effective_batch_size] 
-        for i in range(0, len(items), effective_batch_size)
-    ]
-
-def save_audio(waveform: torch.Tensor, filepath: str, sampling_rate: int):
-    """
-    Save a waveform as a WAV file
-    """
-    try:
-        # Convert to numpy and ensure proper scaling
-        audio_data = waveform.float().numpy()
-        # Normalize audio to prevent clipping
-        audio_data = audio_data / max(abs(audio_data.min()), abs(audio_data.max()))
-        # Save as WAV file
-        scipy.io.wavfile.write(filepath, sampling_rate, audio_data)
-    except Exception as e:
-        logger.error(f"Error saving audio file {filepath}: {str(e)}")
-        raise
 
 def main(
-    save_dir: str = "./generated_speech",
-    model_id :str = "facebook/mms-tts-eng",
-    seed: int = 1,
-    batch_size: int = 4,
-    dataset_name: str = "svjack/pokemon-blip-captions-en-zh",
+    output_path: str="speech_data",
+    batch_size: int=8,
+    num_workers:int=2,
     dataset_split: str = "train",
-    max_samples: int = 100,
-    dtype: str = "fp16"
-
+    model_name: str = "facebook/mms-tts-eng",
+    max_text_length: int = 200,
 ):
-
-
-    
-    # Initialize distributed state
+    output_dir = pathlib.Path(output_path)
     distributed_state = PartialState()
-    world_size = distributed_state.num_processes
-    process_idx = distributed_state.process_index
-    
-    logger.info(f"Process {process_idx}/{world_size} initialized on {distributed_state.device}")
-    
-    # Set seeds for reproducibility
-    set_seed(seed)
-    
-    try:
-        # Load model and tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = VitsModel.from_pretrained(model_id, torch_dtype=DTYPE_MAP[dtype]).to(distributed_state.device)
-        
-        save_dir = Path(save_dir) / f"eng_{START_TIME}"
 
-        # Load dataset with text samples
-        logger.info(f"Process {process_idx}: Loading dataset {dataset_name}")
-        ds = load_dataset(dataset_name, split=dataset_split)
-        
-        # Get text samples from dataset
-        text_samples = ds["en_text"][:max_samples]
-        
-        # Create properly sized batches
-        data_loader = get_batches(text_samples, batch_size, world_size)
-        total_batches = len(data_loader)
-        
-        logger.info(f"Process {process_idx}: Created {total_batches} batches")
+    if distributed_state.is_main_process:
+        output_dir.mkdir(exist_ok=True)
 
-        # Create output directory on main process
-        if distributed_state.is_main_process:
-            save_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Created output directory: {save_dir}")
+    # Load model and tokenizer
+    model = VitsModel.from_pretrained(
+        model_name,
+        device_map=distributed_state.device,
+        torch_dtype=torch.float32,
+    )
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        # Synchronize processes
-        distributed_state.wait_for_everyone()
+    class ExistsFilter:
+        def __init__(self, output_dir: Union[pathlib.Path, str]):
+            current_files = [f.split(".wav")[0] for f in os.listdir(output_dir) if f.endswith(".wav")]
+            self.processed_files = set(current_files)
+            if distributed_state.is_main_process:
+                print(f"Existing audio files found: {len(self.processed_files)}.")
+
+        def __call__(self, x):
+            return x["id"] not in self.processed_files
+
+    def load_pokemon_data(split: str):
+        """Load Pokemon descriptions from the dataset"""
+        ds = load_dataset("svjack/pokemon-blip-captions-en-zh", split=split)
         
-        # Initialize progress bar only on main process
-        pbar = tqdm(
-            total=total_batches,
-            disable=not distributed_state.is_main_process,
-            desc=f"Generating eng speech"
+        # Create dataset of dictionaries
+        dataset = []
+        for idx, text in enumerate(ds["en_text"]):
+            if len(text.strip()) > 0:  # Skip empty descriptions
+                dataset.append({
+                    "id": f"pokemon_{idx:06d}",
+                    "text": text.strip()[:max_text_length],  # Truncate long descriptions
+                    "original_text": text.strip()  # Keep original for metadata
+                })
+        return dataset
+
+    def preprocess_fn(sample, tokenizer):
+        inputs = tokenizer(
+            sample["text"],
+            padding=False,
+            truncation=True,
+            max_length=max_text_length,
+            return_tensors="pt"
         )
 
-        count = 0
-        for batch_idx, texts_raw in enumerate(data_loader):
-            generated_audio = []
-            
+        return {
+            "input_ids": inputs["input_ids"][0].tolist(),
+            "attention_mask": inputs["attention_mask"][0].tolist(),
+            "id": sample["id"],
+            "text": sample["text"],
+            "original_text": sample["original_text"]
+        }
+
+    def collate_fn(examples):
+        """Collate batch of examples with proper padding"""
+        # Find max length in this batch
+        max_length = max(len(example["input_ids"]) for example in examples)
+
+        # Pad sequences to max_length
+        input_ids_list = []
+        attention_mask_list = []
+
+        for example in examples:
+            # Get current lengths
+            curr_len = len(example["input_ids"])
+            padding_length = max_length - curr_len
+
+            # Pad sequences
+            padded_input_ids = example["input_ids"] + [tokenizer.pad_token_id] * padding_length
+            padded_attention_mask = example["attention_mask"] + [0] * padding_length
+
+            input_ids_list.append(padded_input_ids)
+            attention_mask_list.append(padded_attention_mask)
+
+        # Convert to tensors
+        input_ids = torch.tensor(input_ids_list,dtype=torch.long)
+        attention_mask = torch.tensor(attention_mask_list,dtype=torch.long)
+
+        ids = [example["id"] for example in examples]
+        texts = [example["text"] for example in examples]
+        original_texts = [example["original_text"] for example in examples]
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "ids": ids,
+            "texts": texts,
+            "original_texts": original_texts
+        }
+    def create_dataloader(dataset, batch_size):
+        """Create dataloader with preprocessing"""
+        processed_dataset = [preprocess_fn(item, tokenizer) for item in dataset]
+
+        # Split dataset for distributed processing
+        if distributed_state.num_processes > 1:
+            chunk_size = len(processed_dataset) // distributed_state.num_processes
+            start_idx = distributed_state.process_index * chunk_size
+            end_idx = start_idx + chunk_size if distributed_state.process_index < distributed_state.num_processes - 1 else len(processed_dataset)
+            processed_dataset = processed_dataset[start_idx:end_idx]
+
+        # Create batches
+        batches = []
+        for i in range(0, len(processed_dataset), batch_size):
+            batch = processed_dataset[i:i + batch_size]
+            batches.append(collate_fn(batch))
+        return batches
+
+
+    def save_results(output_queue: queue.Queue, output_dir: pathlib.Path, sampling_rate: int):
+        while True:
             try:
-                with distributed_state.split_between_processes(texts_raw) as texts:
-                    for text in texts:
-                        # Tokenize and generate speech
-                        inputs = tokenizer(text, return_tensors="pt").to(distributed_state.device)
-                        with torch.no_grad():
-                            output = model(**inputs).waveform
-                        
-                        generated_audio.append({
-                            'text': text,
-                            'waveform': output.cpu(),
-                        })
-
-                # Synchronize processes
-                distributed_state.wait_for_everyone()
-
-                # Gather results from all processes
-                all_generated = gather_object(generated_audio)
-
-                # Save results on main process
-                if distributed_state.is_main_process:
-                    for audio_data in all_generated:
-                        count += 1
-                        
-                        # Create audio file path
-                        audio_path = save_dir / f"audio_{count:04d}.wav"
-                        text_path = save_dir / f"text_{count:04d}.txt"
-                        
-                        # Save audio file
-                        save_audio(
-                            audio_data['waveform'][0],  # Remove batch dimension
-                            str(audio_path),
-                            model.config.sampling_rate
-                        )
-                        
-                        # Save corresponding text
-                        with open(text_path, 'w', encoding='utf-8') as f:
-                            f.write(audio_data['text'])
+                item = output_queue.get(timeout=5)
+                if item is None:
+                    break
+                waveforms, ids, texts, original_texts = item
+                
+                # Save each audio file and its metadata
+                for waveform, file_id, text, original_text in zip(waveforms, ids, texts, original_texts):
+                    # Save audio
+                    wav_path = output_dir / f"{file_id}.wav"
+                    scipy.io.wavfile.write(
+                        wav_path,
+                        rate=sampling_rate,
+                        data=waveform.cpu().float().numpy()
+                    )
                     
-                pbar.update(1)
-                    
-            except Exception as e:
-                logger.error(f"Error processing batch {batch_idx}: {str(e)}")
+                    # Save metadata with both truncated and original text
+                    metadata = {
+                        "text_used": text,
+                        "original_text": original_text,
+                        "model": model_name,
+                        "sampling_rate": sampling_rate
+                    }
+                    metadata_path = output_dir / f"{file_id}_metadata.json"
+                    with metadata_path.open("w") as f:
+                        json.dump(metadata, f, indent=4)
+                        
+            except queue.Empty:
                 continue
 
-        # Clean up
-        distributed_state.wait_for_everyone()
-        if distributed_state.is_main_process:
-            pbar.close()
-            logger.info(f"Speech Generation Finished. Saved {count} files in {save_dir}")
+    # Load and filter data
+    dataset = load_pokemon_data(dataset_split)
+    exist_filter = ExistsFilter(output_dir)
+    dataset = [item for item in dataset if exist_filter(item)]
+    
+    if distributed_state.is_main_process:
+        print(f"Processing {len(dataset)} Pokemon descriptions")
+    
+    # Create dataloader
+    batches = create_dataloader(dataset, batch_size)
 
-    except Exception as e:
-        logger.error(f"Critical error in process {process_idx}: {str(e)}")
-        raise
+    # Setup output queue and save thread
+    output_queue = queue.Queue()
+    save_thread = ThreadPoolExecutor(max_workers=num_workers)
+    save_future = save_thread.submit(
+        save_results,
+        output_queue,
+        output_dir,
+        model.config.sampling_rate
+    )
 
+    try:
+        for batch in tqdm(
+            batches,
+            disable=not distributed_state.is_main_process,
+            desc="Generating Pokemon descriptions"
+        ):
+            with torch.no_grad():
+                outputs = model(
+                    input_ids=batch["input_ids"].to(distributed_state.device, dtype=torch.long),
+                    attention_mask=batch["attention_mask"].to(distributed_state.device, dtype=torch.long)
+                        ).waveform
+
+                output_queue.put((
+                    outputs,
+                    batch["ids"],
+                    batch["texts"],
+                    batch["original_texts"]
+                ))
+    finally:
+        output_queue.put(None)
+        save_thread.shutdown(wait=True)
+
+    save_future.result()
 
 if __name__ == "__main__":
     fire.Fire(main)
