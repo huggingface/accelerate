@@ -737,6 +737,9 @@ class DataLoaderConfiguration:
             training results are fully reproducable using a different sampling technique. While seed-to-seed results
             may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
+        data_seed (`int`, defaults to `None`):
+            The seed to use for the underlying generator when using `use_seedable_sampler`. If `None`, the generator
+            will use the current default seed from torch.
         non_blocking (`bool`, defaults to `False`):
             If set to `True`, the dataloader prepared by the Accelerator will utilize non-blocking host-to-device
             transfers, allowing for better overlap between dataloader communication and computation. Recommended that
@@ -779,6 +782,13 @@ class DataLoaderConfiguration:
             "Ensures training results are fully reproducable using a different sampling technique. "
             "While seed-to-seed results may differ, on average the differences are neglible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
+        },
+    )
+    data_seed: int = field(
+        default=None,
+        metadata={
+            "help": "The seed to use for the underlying generator when using `use_seedable_sampler`. If `None`, the generator"
+            " will use the current default seed from torch."
         },
     )
     non_blocking: bool = field(
