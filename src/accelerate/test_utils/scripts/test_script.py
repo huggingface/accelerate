@@ -419,7 +419,7 @@ def check_seedable_sampler_with_data_seed():
     # Set new data seed
     config.data_seed = 43
     accelerator = Accelerator(dataloader_config=config)
-    train_dl = accelerator.prepare(train_dl)
+    prepared_dl = accelerator.prepare(train_dl)
     new_items = []
     for _ in range(3):
         for batch in prepared_dl:
