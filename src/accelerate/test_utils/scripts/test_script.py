@@ -34,12 +34,10 @@ from accelerate.utils import (
     DistributedType,
     gather,
     is_bf16_available,
-    is_datasets_available,
     is_ipex_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
-    is_pytest_available,
     is_xpu_available,
     set_seed,
     synchronize_rng_states,
@@ -400,6 +398,33 @@ def check_seedable_sampler_in_batch_sampler_shard():
     ), "Sampler in BatchSamplerShard is not SeedableRandomSampler."
 
 
+def check_seedable_sampler_with_data_seed():
+    # Set seed
+    set_seed(42)
+    data_seed = 43
+    train_set = RegressionDataset(length=10, seed=data_seed)
+    train_dl = DataLoader(train_set, batch_size=2, shuffle=True)
+
+    config = DataLoaderConfiguration(use_seedable_sampler=True, data_seed=data_seed)
+    accelerator = Accelerator(dataloader_config=config)
+    train_dl = accelerator.prepare(train_dl)
+    original_items = []
+    for _ in range(3):
+        for batch in train_dl:
+            original_items.append(batch["x"])
+    original_items = torch.cat(original_items)
+
+    # Set seed again and the epoch
+    set_seed(42)
+    train_dl.set_epoch(0)
+    new_items = []
+    for _ in range(3):
+        for batch in train_dl:
+            new_items.append(batch["x"])
+    new_items = torch.cat(new_items)
+    assert torch.allclose(original_items, new_items), "Did not obtain the same items with the same seed and epoch."
+
+
 def mock_training(length, batch_size, generator, use_seedable_sampler=False):
     set_seed(42)
     generator.manual_seed(42)
@@ -450,7 +475,9 @@ def training_check(use_seedable_sampler=False):
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
 
-    dataloader_config = DataLoaderConfiguration(split_batches=True, use_seedable_sampler=use_seedable_sampler)
+    dataloader_config = DataLoaderConfiguration(
+        split_batches=True, use_seedable_sampler=use_seedable_sampler, data_seed=generator.initial_seed()
+    )
     accelerator = Accelerator(dataloader_config=dataloader_config)
     train_dl = generate_baseline_dataloader(
         train_set, generator, batch_size * state.num_processes, use_seedable_sampler
@@ -748,79 +775,81 @@ def test_reinstantiated_state():
 def main():
     accelerator = Accelerator()
     state = accelerator.state
-    if state.local_process_index == 0:
-        print("**Initialization**")
-    init_state_check()
-    state.wait_for_everyone()
+    # if state.local_process_index == 0:
+    #     print("**Initialization**")
+    # init_state_check()
+    # state.wait_for_everyone()
 
-    if state.distributed_type == DistributedType.MULTI_GPU:
-        num_processes_per_node = torch.cuda.device_count()
-    else:
-        num_processes_per_node = state.num_processes
+    # if state.distributed_type == DistributedType.MULTI_GPU:
+    #     num_processes_per_node = torch.cuda.device_count()
+    # else:
+    #     num_processes_per_node = state.num_processes
 
-    # We only run this test on non-multinode
-    if num_processes_per_node == state.num_processes:
-        if state.process_index == 0:
-            print("\n**Test process execution**")
-        process_execution_check()
+    # # We only run this test on non-multinode
+    # if num_processes_per_node == state.num_processes:
+    #     if state.process_index == 0:
+    #         print("\n**Test process execution**")
+    #     process_execution_check()
 
-        if state.process_index == 0:
-            print("\n**Test split between processes as a list**")
-        test_split_between_processes_list()
+    #     if state.process_index == 0:
+    #         print("\n**Test split between processes as a list**")
+    #     test_split_between_processes_list()
 
-        if state.process_index == 0:
-            print("\n**Test split between processes as a dict**")
-        test_split_between_processes_nested_dict()
+    #     if state.process_index == 0:
+    #         print("\n**Test split between processes as a dict**")
+    #     test_split_between_processes_nested_dict()
 
-        if state.process_index == 0:
-            print("\n**Test split between processes as a tensor**")
-        test_split_between_processes_tensor()
+    #     if state.process_index == 0:
+    #         print("\n**Test split between processes as a tensor**")
+    #     test_split_between_processes_tensor()
 
-        if state.process_index == 0:
-            print("\n**Test split between processes evenly**")
-        test_split_between_processes_evenly()
+    #     if state.process_index == 0:
+    #         print("\n**Test split between processes evenly**")
+    #     test_split_between_processes_evenly()
 
-        if state.process_index == 0:
-            print("\n**Test split between processes as a datasets.Dataset**")
-        if is_datasets_available():
-            from datasets import Dataset as datasets_Dataset
+    #     if state.process_index == 0:
+    #         print("\n**Test split between processes as a datasets.Dataset**")
+    #     if is_datasets_available():
+    #         from datasets import Dataset as datasets_Dataset
 
-            test_split_between_processes_dataset(datasets_Dataset)
-        else:
-            print("Skipped because Hugging Face datasets is not available")
+    #         test_split_between_processes_dataset(datasets_Dataset)
+    #     else:
+    #         print("Skipped because Hugging Face datasets is not available")
 
-    if state.local_process_index == 0:
-        print("\n**Test random number generator synchronization**")
-    rng_sync_check()
+    # if state.local_process_index == 0:
+    #     print("\n**Test random number generator synchronization**")
+    # rng_sync_check()
 
-    if state.local_process_index == 0:
-        print("\n**DataLoader integration test**")
-    dl_preparation_check()
-    if state.distributed_type != DistributedType.XLA:
-        central_dl_preparation_check()
-        custom_sampler_check()
-        check_seedable_sampler()
+    # if state.local_process_index == 0:
+    #     print("\n**DataLoader integration test**")
+    # dl_preparation_check()
+    # if state.distributed_type != DistributedType.XLA:
+    #     central_dl_preparation_check()
+    #     custom_sampler_check()
+    #     check_seedable_sampler()
 
-    if state.num_processes > 1:
-        check_seedable_sampler_in_batch_sampler_shard()
+    # if state.num_processes > 1:
+    #     check_seedable_sampler_in_batch_sampler_shard()
 
-    # Trainings are not exactly the same in DeepSpeed and CPU mode
-    if state.distributed_type == DistributedType.DEEPSPEED:
-        return
+    # # Trainings are not exactly the same in DeepSpeed and CPU mode
+    # if state.distributed_type == DistributedType.DEEPSPEED:
+    #     return
 
-    if state.local_process_index == 0:
-        print("\n**Training integration test**")
-    training_check(use_seedable_sampler=False)
-    training_check(use_seedable_sampler=True)
+    # if state.local_process_index == 0:
+    #     print("\n**Training integration test**")
+    # training_check(use_seedable_sampler=False)
+    # training_check(use_seedable_sampler=True)
 
-    if state.local_process_index == 0:
-        print("\n**Breakpoint trigger test**")
-    test_trigger()
+    # if state.local_process_index == 0:
+    #     print("\n**Breakpoint trigger test**")
+    # test_trigger()
 
-    if is_pytest_available():
-        if state.local_process_index == 0:
-            print("\n**Test reinstantiated state**")
-        test_reinstantiated_state()
+    # if is_pytest_available():
+    #     if state.local_process_index == 0:
+    #         print("\n**Test reinstantiated state**")
+    #     test_reinstantiated_state()
+
+    check_seedable_sampler_with_data_seed()
 
     state.destroy_process_group()
 

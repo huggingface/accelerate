@@ -77,11 +77,10 @@ class SeedableRandomSampler(RandomSampler):
     """
 
     def __init__(self, *args, **kwargs):
-        self.initial_seed = kwargs.pop("initial_seed", None)
-        if self.initial_seed is None:
-            self.initial_seed = torch.random.initial_seed()
-
+        data_seed = kwargs.pop("data_seed", None)
         super().__init__(*args, **kwargs)
+
+        self.initial_seed = data_seed if data_seed is not None else torch.random.initial_seed()
         self.epoch = 0
 
     def __iter__(self):
@@ -1073,7 +1072,7 @@ def prepare_data_loader(
             replacement=sampler.replacement,
             num_samples=sampler._num_samples,
             generator=getattr(sampler, "generator", torch.Generator()),
-            initial_seed=data_seed,
+            data_seed=data_seed,
         )
 
     if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:

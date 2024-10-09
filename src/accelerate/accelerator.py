@@ -2100,6 +2100,7 @@ class Accelerator:
             use_seedable_sampler=self.use_seedable_sampler,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
+            data_seed=self.dataloader_config.data_seed,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader

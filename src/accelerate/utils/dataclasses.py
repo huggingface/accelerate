@@ -796,6 +796,10 @@ class DataLoaderConfiguration:
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
         },
     )
+    data_seed: int = field(
+        default=None,
+        metadata={"help": "The seed to use for the dataloader. If not set, will use the seed of the main process."},
+    )
 
 
 @dataclass
