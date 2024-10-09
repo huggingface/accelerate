@@ -15,8 +15,8 @@ from datasets import load_dataset
 from accelerate import PartialState
 
 """
-
-Requirements: transformers accelerate fire tqdm scipy datasets
+Requirements: transformers accelerate fire  scipy datasets
+pip install transformers accelerate fire scipy datasets 
 Example usage:
 
 accelerate launch --num_processes=2 pokemon_speech.py --output_path outputs --batch_size 8 --num_workers 2 --dataset_split train
@@ -222,3 +222,17 @@ def main(
 
 if __name__ == "__main__":
     fire.Fire(main)
+
+
+"""
+To run the speech generation 
+
+import scipy.io.wavfile
+import numpy as np
+from IPython.display import Audio
+
+sample_rate, audio_data = scipy.io.wavfile.read('path_to_you_wav_file.wav')
+
+audio_data = audio_data.astype(np.float32) / 32762.0
+Audio(audio_data, rate=sample_rate)
+"""
