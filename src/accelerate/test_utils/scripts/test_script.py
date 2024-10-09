@@ -477,9 +477,7 @@ def training_check(use_seedable_sampler=False):
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
 
-    dataloader_config = DataLoaderConfiguration(
-        split_batches=True, use_seedable_sampler=use_seedable_sampler, data_seed=generator.initial_seed()
-    )
+    dataloader_config = DataLoaderConfiguration(split_batches=True, use_seedable_sampler=use_seedable_sampler)
     accelerator = Accelerator(dataloader_config=dataloader_config)
     train_dl = generate_baseline_dataloader(
         train_set, generator, batch_size * state.num_processes, use_seedable_sampler
