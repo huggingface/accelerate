@@ -32,16 +32,12 @@ from accelerate import PartialState
 
 
 """
-Additional requirements: flash_attn einops timm
-pip install flash_attn einops timm
+Additional requirements: flash_attn einops timm webdataset fire tqdm huggingface_hub
+pip install flash_attn einops timm webdataset fire tqdm huggingface_hub
 
 Example:
 
 accelerate launch --num_processes=2 florence2.py --data_path "https://huggingface.co/datasets/pixparse/cc3m-wds/resolve/main/cc3m-train-0000.tar" --output_path outputs --batch_size 12 --num_workers 1 --prompt "<CAPTION>"
-
-On 2x4090: 420it [03:15,  2.15it/s] (~25.8 images/s)
-
-With --prompt "<DETAILED_CAPTION>": 420it [08:16,  1.18s/it] (~10.17 images/s)
 """
 
 
