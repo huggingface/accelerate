@@ -781,6 +781,13 @@ class DataLoaderConfiguration:
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
+    data_seed: int = field(
+        default=None,
+        metadata={
+            "help": "The seed to use for the underlying generator when using `use_seedable_sampler`. If `None`, the generator"
+            " will use the current default seed from torch."
+        },
+    )
     non_blocking: bool = field(
         default=False,
         metadata={
@@ -795,10 +802,6 @@ class DataLoaderConfiguration:
             "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
         },
-    )
-    data_seed: int = field(
-        default=None,
-        metadata={"help": "The seed to use for the dataloader. If not set, will use the seed of the main process."},
     )
 
 

@@ -939,9 +939,9 @@ def prepare_data_loader(
     even_batches: bool = True,
     slice_fn_for_dispatch: Optional[Callable] = None,
     use_seedable_sampler: bool = False,
+    data_seed: Optional[int] = None,
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
-    data_seed: Optional[int] = None,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -999,6 +999,9 @@ def prepare_data_loader(
             reproducability. Comes at a cost of potentially different performances due to different shuffling
             algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
             `self.set_epoch`
+        data_seed (`int`, *optional*, defaults to `None`):
+            The seed to use for the underlying generator when using `use_seedable_sampler`. If `None`, the generator
+            will use the current default seed from torch.
         non_blocking (`bool`, *optional*, defaults to `False`):
             If set to `True`, dataloader will utilize non-blocking host-to-device transfers. If the dataloader has
             `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
