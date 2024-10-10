@@ -43,7 +43,6 @@ from .utils import (
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
-
 from .logging import get_logger
 from .state import PartialState
 
@@ -219,7 +218,7 @@ def load_accelerator_state(
         else:
             # Load with torch
             input_model_file = input_dir.joinpath(f"{MODEL_NAME}{ending}.bin")
-            state_dict = load(input_model_file, map_location=map_location, weights_only=True)
+            state_dict = load(input_model_file, map_location=map_location)
             model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
@@ -227,7 +226,7 @@ def load_accelerator_state(
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = input_dir.joinpath(optimizer_name)
-        optimizer_state = load(input_optimizer_file, map_location=map_location, weights_only=True)
+        optimizer_state = load(input_optimizer_file, map_location=map_location)
         optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
@@ -235,7 +234,7 @@ def load_accelerator_state(
     for i, scheduler in enumerate(schedulers):
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         input_scheduler_file = input_dir.joinpath(scheduler_name)
-        scheduler_state = load(input_scheduler_file, weights_only=True)
+        scheduler_state = load(input_scheduler_file)
         scheduler.load_state_dict(scheduler_state)
     logger.info("All scheduler states loaded successfully")
 
@@ -262,13 +261,13 @@ def load_accelerator_state(
     # GradScaler state
     if scaler is not None:
         input_scaler_file = input_dir.joinpath(SCALER_NAME)
-        scaler_state = load(input_scaler_file, weights_only=True)
+        scaler_state = load(input_scaler_file)
         scaler.load_state_dict(scaler_state)
         logger.info("GradScaler state loaded successfully")
 
     # Random states
     try:
-        states = load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"), weights_only=True)
+        states = load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
         if "step" in states:
             override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
