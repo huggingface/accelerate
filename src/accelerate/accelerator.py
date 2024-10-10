@@ -2838,8 +2838,6 @@ class Accelerator:
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
-        os.makedirs(save_directory, exist_ok=True)
-
         # get the state_dict of the model
         if any(
             [
@@ -2857,6 +2855,7 @@ class Accelerator:
         # Case: DeepSpeed zero3 gets gathered and `state_dict` is empty
         if state_dict is None:
             return
+        os.makedirs(save_directory, exist_ok=True)
 
         if safe_serialization:
             state_dict = clean_state_dict_for_safetensors(state_dict)
