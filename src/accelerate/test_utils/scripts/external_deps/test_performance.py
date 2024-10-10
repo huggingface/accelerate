@@ -14,6 +14,7 @@
 import argparse
 import json
 import os
+from pathlib import Path
 
 import evaluate
 import torch
@@ -205,6 +206,13 @@ def training_function(config, args):
     if accelerator.is_main_process:
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
             json.dump(performance_metric, f)
+
+    # Finally try saving the model
+    accelerator.save_model(model, args.output_dir)
+    accelerator.wait_for_everyone()
+    assert Path(
+        args.output_dir, "model.safetensors"
+    ).exists(), "Model was not saved when calling `Accelerator.save_model`"
     accelerator.end_training()
 
 
