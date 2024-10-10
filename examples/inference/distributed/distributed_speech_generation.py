@@ -19,7 +19,7 @@ Requirements: transformers accelerate fire  scipy datasets
 pip install transformers accelerate fire scipy datasets 
 Example usage:
 
-accelerate launch --num_processes=2 pokemon_speech.py --output_path outputs --batch_size 8 --num_workers 2 --dataset_split train
+accelerate launch distributed_speech_generation.py --output_path outputs --batch_size 8 --num_workers 2 --dataset_split train
 """
 
 
