@@ -45,6 +45,9 @@ jobs:
       with:
         version: "0.4.20"
         enable-cache: true
+    
+    - name: Install python 3.10
+      run: uv python install 3.10
 
     - name: Install the library
       run: |
