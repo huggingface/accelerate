@@ -227,7 +227,7 @@ TORCH_SAFE_GLOBALS = [
 ]
 
 
-def torch_load_maybe_weights_only(f, map_location=None, **kwargs):
+def load(f, map_location=None, **kwargs):
     """
     Compatible drop-in replacement of `torch.load()` which allows for `weights_only` to be used if `torch` version is
     2.4.0 or higher. Otherwise will ignore the kwarg.

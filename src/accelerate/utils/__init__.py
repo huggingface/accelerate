@@ -249,15 +249,13 @@ from .other import (
     extract_model_from_parallel,
     get_pretty_name,
     is_port_in_use,
+    load,
     merge_dicts,
     patch_environment,
     recursive_getattr,
     save,
     wait_for_everyone,
     write_basic_config,
-)
-from .other import (
-    torch_load_maybe_weights_only as load,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
 from .torch_xla import install_xla
