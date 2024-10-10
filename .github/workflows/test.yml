@@ -18,6 +18,8 @@ env:
 
 jobs:
   run-tests:
+    env:
+      UV_HTTP_TIMEOUT: 600 # max 10min to install deps
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -40,22 +42,21 @@ jobs:
         ]
     steps:
     - uses: actions/checkout@v3.1.0
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
+    - name: Set up python 3.8
+      uses: actions/setup-python@v3
       with:
-        version: "0.4.20"
-        enable-cache: true
-    
-    - name: Install python 3.10
-      run: uv python install 3.10
+        python-version: 3.8
+
+    - name: Install uv
+      run: pip install -U uv
 
     - name: Install the library
       run: |
-        if [[ ${{ matrix.test-kind }} = test_prod ]]; then uv pip install -e .[test_prod]; fi
-        if [[ ${{ matrix.test-kind }} != test_prod ]]; then uv pip install -e .[testing,test_trackers]; fi
-        if [[ ${{ matrix.test-kind }} = test_rest ]]; then uv pip uninstall comet_ml -y; fi
-        if [[ ${{ matrix.pytorch-version }} = minimum ]]; then uv pip install torchvision==0.18.1 torch==2.3.1; fi
-        uv pip install pytest-reportlog tabulate setuptools
+        if [[ ${{ matrix.test-kind }} = test_prod ]]; then uv pip install --system -e .[test_prod]; fi
+        if [[ ${{ matrix.test-kind }} != test_prod ]]; then uv pip install --system -e .[testing,test_trackers]; fi
+        if [[ ${{ matrix.test-kind }} = test_rest ]]; then uv pip uninstall --system comet_ml -y; fi
+        if [[ ${{ matrix.pytorch-version }} = minimum ]]; then uv pip install --system torchvision==0.18.1 torch==2.3.1; fi
+        uv pip install --system pytest-reportlog tabulate setuptools
 
     - name: Show installed libraries
       run: |
