@@ -223,7 +223,7 @@ TORCH_SAFE_GLOBALS = [
     # The following are needed for the RNG states
     encode,
     np.dtype,
-    np.dtypes.UInt32Dtype,
+    np.dtypes.UInt32DType,
 ]
 
 
