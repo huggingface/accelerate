@@ -254,8 +254,6 @@ def load_accelerator_state(
             if input_dataloader_state_dict_file.exists():
                 state_dict = load(input_dataloader_state_dict_file)
                 dataloader.load_state_dict(state_dict)
-                sampler_state = load(input_sampler_file)
-                sampler = dataloader.set_sampler(sampler_state)
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
