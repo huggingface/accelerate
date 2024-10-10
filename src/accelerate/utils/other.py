@@ -244,15 +244,17 @@ def torch_load_maybe_weights_only(f, map_location=None, **kwargs):
     """
     try:
         if is_weights_only_available():
+            old_safe_globals = torch.serialization.get_safe_globals()
             if "weights_only" not in kwargs:
                 kwargs["weights_only"] = True
-            torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS)
+            torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS + old_safe_globals)
         else:
             kwargs.pop("weights_only", None)
         loaded_obj = torch.load(f, map_location=map_location, **kwargs)
     finally:
         if is_weights_only_available():
             torch.serialization.clear_safe_globals()
+            torch.serialization.add_safe_globals(old_safe_globals)
     return loaded_obj
 
 

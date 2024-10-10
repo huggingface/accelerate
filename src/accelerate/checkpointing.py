@@ -248,14 +248,14 @@ def load_accelerator_state(
         if isinstance(dataloader.dataset, IterableDatasetShard):
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
-                sampler = dataloader.set_sampler(torch.load(input_sampler_file, weights_only=True))
+                sampler = dataloader.set_sampler(load(input_sampler_file))
         if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
             if input_dataloader_state_dict_file.exists():
-                state_dict = torch.load(input_dataloader_state_dict_file, weights_only=True)
+                state_dict = load(input_dataloader_state_dict_file)
                 dataloader.load_state_dict(state_dict)
-                sampler_state = load(input_sampler_file, weights_only=True)
+                sampler_state = load(input_sampler_file)
                 sampler = dataloader.set_sampler(sampler_state)
     logger.info("All dataloader sampler states loaded successfully")
 
