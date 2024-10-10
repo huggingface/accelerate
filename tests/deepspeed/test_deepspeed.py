@@ -889,6 +889,43 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd)
 
+    def test_basic_dynamo_run(self):
+        test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")
+        with tempfile.TemporaryDirectory() as dirpath:
+            cmd = [
+                "accelerate",
+                "launch",
+                "--num_processes=1",
+                "--num_machines=1",
+                "--machine_rank=0",
+                "--mixed_precision=fp16",
+                "--use_deepspeed",
+                "--gradient_accumulation_steps=1",
+                "--offload_optimizer_device=none",
+                "--offload_param_device=none",
+                test_file_path,
+                "--dynamo_backend=eager",
+                "--model_name_or_path=distilbert-base-uncased",
+                "--num_epochs=1",
+                f"--output_dir={dirpath}",
+            ]
+            with patch_environment(omp_num_threads=1):
+                with_dynamo = False
+                try:
+                    r = execute_subprocess_async(
+                        cmd,
+                        env={
+                            "TORCH_LOGS": "dynamo",
+                            **os.environ,
+                        },
+                    )
+                    with_dynamo = "torch._dynamo" in "\n".join(r.stderr)
+                except RuntimeError as e:
+                    # It's possible that the run fail, but we focus on if dynamo is enabled via deepspeed.
+                    with_dynamo = "torch._dynamo" in e.args[0]
+                finally:
+                    assert with_dynamo
+
 
 @require_deepspeed
 @require_multi_device
