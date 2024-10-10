@@ -54,7 +54,7 @@ jobs:
       run: |
         if [[ ${{ matrix.test-kind }} = test_prod ]]; then uv pip install --system -e .[test_prod]; fi
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then uv pip install --system -e .[testing,test_trackers]; fi
-        if [[ ${{ matrix.test-kind }} = test_rest ]]; then uv pip uninstall --system comet_ml -- -y; fi
+        if [[ ${{ matrix.test-kind }} = test_rest ]]; then uv pip uninstall --system comet_ml; fi
         if [[ ${{ matrix.pytorch-version }} = minimum ]]; then uv pip install --system torchvision==0.18.1 torch==2.3.1; fi
         uv pip install --system pytest-reportlog tabulate setuptools
 
