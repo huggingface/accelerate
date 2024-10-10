@@ -35,6 +35,7 @@ from .utils import (
     is_mlu_available,
     is_torch_xla_available,
     is_xpu_available,
+    load,
     save,
 )
 
@@ -217,7 +218,7 @@ def load_accelerator_state(
         else:
             # Load with torch
             input_model_file = input_dir.joinpath(f"{MODEL_NAME}{ending}.bin")
-            state_dict = torch.load(input_model_file, map_location=map_location)
+            state_dict = load(input_model_file, map_location=map_location)
             model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
@@ -225,7 +226,7 @@ def load_accelerator_state(
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = input_dir.joinpath(optimizer_name)
-        optimizer_state = torch.load(input_optimizer_file, map_location=map_location)
+        optimizer_state = load(input_optimizer_file, map_location=map_location)
         optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
@@ -233,7 +234,8 @@ def load_accelerator_state(
     for i, scheduler in enumerate(schedulers):
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         input_scheduler_file = input_dir.joinpath(scheduler_name)
-        scheduler.load_state_dict(torch.load(input_scheduler_file))
+        scheduler_state = load(input_scheduler_file)
+        scheduler.load_state_dict(scheduler_state)
     logger.info("All scheduler states loaded successfully")
 
     for i, dataloader in enumerate(dataloaders):
@@ -245,24 +247,25 @@ def load_accelerator_state(
         if isinstance(dataloader.dataset, IterableDatasetShard):
             sampler = dataloader.get_sampler()
             if isinstance(sampler, SeedableRandomSampler):
-                sampler = dataloader.set_sampler(torch.load(input_sampler_file))
+                sampler = dataloader.set_sampler(load(input_sampler_file))
         if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
             if input_dataloader_state_dict_file.exists():
-                state_dict = torch.load(input_dataloader_state_dict_file)
+                state_dict = load(input_dataloader_state_dict_file)
                 dataloader.load_state_dict(state_dict)
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
     if scaler is not None:
         input_scaler_file = input_dir.joinpath(SCALER_NAME)
-        scaler.load_state_dict(torch.load(input_scaler_file))
+        scaler_state = load(input_scaler_file)
+        scaler.load_state_dict(scaler_state)
         logger.info("GradScaler state loaded successfully")
 
     # Random states
     try:
-        states = torch.load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
+        states = load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
         if "step" in states:
             override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
@@ -295,8 +298,9 @@ def save_custom_state(obj, path, index: int = 0, save_on_each_node: bool = False
 
 def load_custom_state(obj, path, index: int = 0):
     """
-    Loads the state of `obj` at `{path}/custom_checkpoint_{index}.pkl`
+    Loads the state of `obj` at `{path}/custom_checkpoint_{index}.pkl`. Will always set `weights_only=False` when
+    loading the state.
     """
     load_location = f"{path}/custom_checkpoint_{index}.pkl"
     logger.info(f"Loading the state of {get_pretty_name(obj)} from {load_location}")
-    obj.load_state_dict(torch.load(load_location, map_location="cpu"))
+    obj.load_state_dict(load(load_location, map_location="cpu", weights_only=False))
