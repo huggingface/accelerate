@@ -451,3 +451,8 @@ def is_weights_only_available():
     # Weights only with allowlist was added in 2.4.0
     # ref: https://github.com/pytorch/pytorch/pull/124331
     return is_torch_version(">=", "2.4.0")
+
+
+def is_numpy_available(min_version="1.25.0"):
+    numpy_version = parse(importlib.metadata.version("numpy"))
+    return compare_versions(numpy_version, ">=", min_version)

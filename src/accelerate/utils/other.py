@@ -35,6 +35,7 @@ from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
 from .imports import (
     is_deepspeed_available,
+    is_numpy_available,
     is_torch_distributed_available,
     is_torch_xla_available,
     is_weights_only_available,
@@ -223,8 +224,10 @@ TORCH_SAFE_GLOBALS = [
     # The following are needed for the RNG states
     encode,
     np.dtype,
-    np.dtypes.UInt32DType,
 ]
+
+if is_numpy_available("1.25.0"):
+    TORCH_SAFE_GLOBALS.append(np.dtypes.UInt32DType)
 
 
 def load(f, map_location=None, **kwargs):
