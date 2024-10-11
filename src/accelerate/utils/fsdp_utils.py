@@ -14,8 +14,10 @@
 import os
 import shutil
 from pathlib import Path
+from collections import defaultdict
 
 import torch
+
 
 from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, OPTIMIZER_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_NAME
@@ -324,3 +326,53 @@ def merge_fsdp_weights(
             logger.info(f"Removing old checkpoint directory {checkpoint_dir}")
             shutil.rmtree(checkpoint_dir)
     state.wait_for_everyone()
+
+def build_param_init_fn(model: torch.nn.Module, device: torch.cuda.device):
+
+    # this can be used if there are no tied weights
+    init_empty_module = lambda x: x.to_empty(device=device, recurse=False)
+
+    _tied_names = model._tied_weights_keys
+    if not _tied_names:
+        # if no tied names
+        return init_empty_module
+
+    # get map of parameter instances to params. 
+    # - needed for replacement later
+    _tied_params = {}
+    for name in _tied_names:
+        name = name.split('.')
+        name, param_name = '.'.join(name[:-1]), name[-1]
+        mod = model.get_submodule(name)
+        param = getattr(mod, param_name)
+
+        _tied_params[id(param)] = None # placeholder for the param first
+    
+    # build init_empty_module for the case with tied params
+    def init_empty_module_tied_params(module: torch.nn.Module):
+
+        # track which params to tie 
+        # - usually only 1, but for completeness consider > 1
+        params_to_tie = defaultdict(list)
+        for n, param in module.named_parameters(recurse=False):
+            if id(param) in _tied_params and param.device == torch.device('meta'):
+                params_to_tie[id(param)].append(n)
+
+        # this initializes the parameters on meta device, and so
+        # thier ids will change.
+        module = init_empty_module(module)
+
+        # search the parameters again and tie them up again
+        for id_key, _param_names in params_to_tie.items():
+            for param_name in _param_names:
+                param = _tied_params[id_key]
+                if param is None:
+                    # everything will be tied to the first time the
+                    # param is observed
+                    _tied_params[id_key] = getattr(module, param_name)
+                else:
+                    setattr(module, param_name, param) # tie
+                    
+        return module
+
+    return init_empty_module_tied_params

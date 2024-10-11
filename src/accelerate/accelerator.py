@@ -1472,6 +1472,14 @@ class Accelerator:
                 if not is_type_fsdp:
                     self.state.fsdp_plugin.set_auto_wrap_policy(model)
                     fsdp_plugin = self.state.fsdp_plugin
+
+                    # need to do this here to access the model
+                    # - there is a default param_init_fn inside but we ignore it
+                    # - qlora low_mem_mode requires trl > 0.11.2
+                    # - we should make this a passthrough if there are no meta devices
+                    from .utils.fsdp_utils import build_param_init_fn
+                    fsdp_plugin.param_init_fn = build_param_init_fn(model, self.device)
+
                     kwargs = {
                         "sharding_strategy": fsdp_plugin.sharding_strategy,
                         "cpu_offload": fsdp_plugin.cpu_offload,
