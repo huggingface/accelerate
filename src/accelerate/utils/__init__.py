@@ -240,6 +240,7 @@ if is_megatron_lm_available():
     from .megatron_lm import prepare_model_optimizer_scheduler as megatron_lm_prepare_model_optimizer_scheduler
     from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
     from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
+from .deprecation import deprecated
 from .memory import find_executable_batch_size, release_memory
 from .other import (
     check_os_kernel,

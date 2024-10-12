@@ -14,6 +14,7 @@
 import os
 import pickle
 import tempfile
+import textwrap
 import unittest
 import warnings
 from collections import UserDict, namedtuple
@@ -54,6 +55,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
+from accelerate.utils.deprecation import deprecated
 from accelerate.utils.operations import is_namedtuple
 
 
@@ -413,3 +415,63 @@ class UtilsTester(unittest.TestCase):
         with self.assertLogs("accelerate.utils.environment", level="WARNING"):
             valid_env_items = convert_dict_to_env_variables(env)
         assert valid_env_items == ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
+
+    def test_deprecated(self):
+        @deprecated("0.2.0", "0.3.0", "toy instruction")
+        def deprecated_demo(arg1: int, arg2: int) -> tuple:
+            """This is a long summary. This is a long summary. This is a long
+            summary. This is a long summary.
+
+            Args:
+                arg1 (int): Long description with a line break. Long description
+                    with a line break.
+                arg2 (int): short description.
+
+            Returns:
+                Long description without a line break. Long description without
+                a line break.
+            """
+            return arg1, arg2
+
+        with pytest.warns(
+            FutureWarning, match="deprecated in version 0.2.0 and will be removed in 0.3.0. Please toy instruction."
+        ):
+            self.assertEqual((1, 2), deprecated_demo(1, 2))
+
+        # Clean up docstring for comparison
+        expected_docstring = textwrap.dedent("""
+            .. deprecated:: 0.2.0
+                Deprecated and will be removed in version 0.3.0. Please toy instruction.
+
+            This is a long summary. This is a long summary. This is a long
+            summary. This is a long summary.
+
+            Args:
+                arg1 (int): Long description with a line break. Long description
+                    with a line break.
+                arg2 (int): short description.
+
+            Returns:
+                Long description without a line break. Long description without
+                a line break.
+            """)
+        # Remove all extra whitespace for comparison
+        expected_docstring = "".join(expected_docstring.split())
+        actual_docstring = "".join(deprecated_demo.__doc__.split())
+
+        self.assertEqual(expected_docstring, actual_docstring)
+
+        @deprecated("0.2.0", "0.3.0", "toy instruction")
+        def deprecated_demo1():
+            """Short summary."""
+
+        expected_docstring1 = textwrap.dedent("""
+            .. deprecated:: 0.2.0
+                Deprecated and will be removed in version 0.3.0. Please toy instruction.
+
+            Short summary.
+            """)
+        expected_docstring1 = "".join(expected_docstring1.split())
+        actual_docstring1 = "".join(deprecated_demo1.__doc__.split())
+
+        self.assertEqual(expected_docstring1, actual_docstring1)

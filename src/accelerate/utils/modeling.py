@@ -31,6 +31,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
+from .deprecation import deprecated
 from .imports import (
     is_mlu_available,
     is_mps_available,
@@ -471,6 +472,7 @@ class FindTiedParametersResult(list):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    @deprecated(since="1.0.0rc0", removed_in="1.3.0", instructions="use another method instead")
     def values(self):
         warnings.warn(
             "The 'values' method of FindTiedParametersResult is deprecated and will be removed in Accelerate v1.3.0. ",
