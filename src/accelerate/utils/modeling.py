@@ -474,10 +474,6 @@ class FindTiedParametersResult(list):
 
     @deprecated(since="1.0.0rc0", removed_in="1.3.0", instructions="use another method instead")
     def values(self):
-        warnings.warn(
-            "The 'values' method of FindTiedParametersResult is deprecated and will be removed in Accelerate v1.3.0. ",
-            FutureWarning,
-        )
         return sum([x[1:] for x in self], [])
 
 
