@@ -25,5 +25,5 @@
     },
     "workspaceFolder": "/workspaces/accelerate",
     // Need git for VSCode to color code modifications. Only runs when building environment.
-    "onCreateCommand": "apt-get update && apt-get install -y git && pip install -e '.[dev]'"
+    "onCreateCommand": "apt-get update && apt-get install -y git make && pip install -e '.[dev]'"
 }
