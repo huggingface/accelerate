@@ -438,7 +438,6 @@ class UtilsTester(unittest.TestCase):
         ):
             self.assertEqual((1, 2), deprecated_demo(1, 2))
 
-        # Clean up docstring for comparison
         expected_docstring = textwrap.dedent("""
             .. deprecated:: 0.2.0
                 Deprecated and will be removed in version 0.3.0. Please toy instruction.
@@ -455,7 +454,7 @@ class UtilsTester(unittest.TestCase):
                 Long description without a line break. Long description without
                 a line break.
             """)
-        # Remove all extra whitespace for comparison
+
         expected_docstring = "".join(expected_docstring.split())
         actual_docstring = "".join(deprecated_demo.__doc__.split())
 
