@@ -418,7 +418,7 @@ class UtilsTester(unittest.TestCase):
 
     def test_deprecated(self):
         @deprecated("0.2.0", "0.3.0", "toy instruction")
-        def deprecated_demo(arg1: int, arg2: int) -> tuple:
+        def long_deprecated_demo(arg1: int, arg2: int) -> tuple:
             """This is a long summary. This is a long summary. This is a long
             summary. This is a long summary.
 
@@ -436,9 +436,9 @@ class UtilsTester(unittest.TestCase):
         with pytest.warns(
             FutureWarning, match="deprecated in version 0.2.0 and will be removed in 0.3.0. Please toy instruction."
         ):
-            self.assertEqual((1, 2), deprecated_demo(1, 2))
+            self.assertEqual((1, 2), long_deprecated_demo(1, 2))
 
-        expected_docstring = textwrap.dedent("""
+        long_expected_docstring = textwrap.dedent("""
             .. deprecated:: 0.2.0
                 Deprecated and will be removed in version 0.3.0. Please toy instruction.
 
@@ -455,22 +455,22 @@ class UtilsTester(unittest.TestCase):
                 a line break.
             """)
 
-        expected_docstring = "".join(expected_docstring.split())
-        actual_docstring = "".join(deprecated_demo.__doc__.split())
+        long_expected_docstring = "".join(long_expected_docstring.split())
+        long_actual_docstring = "".join(long_deprecated_demo.__doc__.split())
 
-        self.assertEqual(expected_docstring, actual_docstring)
+        self.assertEqual(long_expected_docstring, long_actual_docstring)
 
         @deprecated("0.2.0", "0.3.0", "toy instruction")
-        def deprecated_demo1():
+        def short_deprecated_demo():
             """Short summary."""
 
-        expected_docstring1 = textwrap.dedent("""
+        short_expected_docstring = textwrap.dedent("""
             .. deprecated:: 0.2.0
                 Deprecated and will be removed in version 0.3.0. Please toy instruction.
 
             Short summary.
             """)
-        expected_docstring1 = "".join(expected_docstring1.split())
-        actual_docstring1 = "".join(deprecated_demo1.__doc__.split())
+        short_expected_docstring = "".join(short_expected_docstring.split())
+        short_actual_docstring = "".join(short_deprecated_demo.__doc__.split())
 
-        self.assertEqual(expected_docstring1, actual_docstring1)
+        self.assertEqual(short_expected_docstring, short_actual_docstring)
