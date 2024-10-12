@@ -56,7 +56,6 @@ def deprecated(since: str, removed_in: str, instructions: str) -> Callable[[Call
         # Add a deprecation note to the docstring.
         docstring = function.__doc__ or ""
 
-        # Add a note to the docstring.
         deprecation_note = textwrap.dedent(
             f"""\
             .. deprecated:: {since}
@@ -66,18 +65,12 @@ def deprecated(since: str, removed_in: str, instructions: str) -> Callable[[Call
 
         # Split docstring at first occurrence of newline
         summary_and_body = docstring.split("\n\n", 1)
-
         if len(summary_and_body) > 1:
             summary, body = summary_and_body
-
-            # Dedent the body. We cannot do this with the presence of the summary because
-            # the body contains leading whitespaces when the summary does not.
             body = textwrap.dedent(body)
-
             new_docstring_parts = [deprecation_note, "\n\n", summary, body]
         else:
             summary = summary_and_body[0]
-
             new_docstring_parts = [deprecation_note, "\n\n", summary]
 
         wrapper.__doc__ = "".join(new_docstring_parts)
