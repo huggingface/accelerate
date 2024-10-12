@@ -423,13 +423,11 @@ class UtilsTester(unittest.TestCase):
             summary. This is a long summary.
 
             Args:
-                arg1 (int): Long description with a line break. Long description
-                    with a line break.
-                arg2 (int): short description.
+                arg1 (int): Description.
+                arg2 (int): Description.
 
             Returns:
-                Long description without a line break. Long description without
-                a line break.
+                Description.
             """
             return arg1, arg2
 
@@ -446,13 +444,11 @@ class UtilsTester(unittest.TestCase):
             summary. This is a long summary.
 
             Args:
-                arg1 (int): Long description with a line break. Long description
-                    with a line break.
-                arg2 (int): short description.
+                arg1 (int): Description.
+                arg2 (int): Description.
 
             Returns:
-                Long description without a line break. Long description without
-                a line break.
+                Description.
             """)
 
         long_expected_docstring = "".join(long_expected_docstring.split())
