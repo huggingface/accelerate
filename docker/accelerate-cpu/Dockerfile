@@ -27,8 +27,12 @@ RUN python3 -m pip install --no-cache-dir \
 # Stage 2
 FROM python:3.8-slim AS build-image
 COPY --from=compile-image /opt/venv /opt/venv
-RUN useradd -ms /bin/bash user
-USER user
+
+# Install make
+RUN apt-get update && \
+    apt-get install -y make && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists*
 
 # Make sure we use the virtualenv
 ENV PATH="/opt/venv/bin:$PATH"
