@@ -709,6 +709,141 @@ class ModelingUtilsTester(unittest.TestCase):
         assert len(w) == 0
         assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": "cpu", "linear3": "cpu"}
 
+    def test_infer_auto_device_map_with_fallback_allocation(self):
+        # Create a model where modules cannot be allocated without fallback_allocation
+        model = nn.Sequential(
+            OrderedDict([
+                ("module", nn.Sequential(OrderedDict([
+                    ("linear1", nn.Linear(10, 4)),
+                    ("linear2", nn.Linear(4, 4)),
+                    ("linear3", nn.Linear(4, 8))
+                ])))
+            ])
+        )
+
+        max_memory = {0: 256}
+
+        # Without fallback_allocation
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            device_map = infer_auto_device_map(model, max_memory=max_memory, fallback_allocation=False)
+            # No module should be assigned to device 0
+            assert all(device != 0 for device in device_map.values())
+            # Check for warning about insufficient memory
+            assert any("insufficient memory" in str(warn.message).lower() for warn in w)
+
+        # With fallback_allocation
+        device_map = infer_auto_device_map(model, max_memory=max_memory, fallback_allocation=True)
+        # At least one submodule should be assigned to device 0
+        assert any(device == 0 for device in device_map.values())
+
+        expected_device_map = {
+            "module.linear1": "disk",
+            "module.linear2": 0,
+            "module.linear3": "disk"
+        }
+        assert device_map == expected_device_map
+
+    def test_infer_auto_device_map_with_fallback_allocation_no_fit(self):
+        # Create a model where even the smallest submodules cannot fit
+        model = nn.Sequential(
+            OrderedDict([
+                ("module", nn.Sequential(OrderedDict([
+                    ("linear1", nn.Linear(10, 10)),
+                    ("linear2", nn.Linear(10, 10)),
+                    ("linear3", nn.Linear(10, 10))
+                ])))
+            ])
+        )
+
+        max_memory = {0: 30}
+
+        # With fallback_allocation
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            device_map = infer_auto_device_map(model, max_memory=max_memory, fallback_allocation=True)
+            # No module should be assigned to device 0
+            assert all(device != 0 for device in device_map.values())
+            # Check for warning about insufficient memory
+            assert any("insufficient memory" in str(warn.message).lower() for warn in w)
+
+    def test_infer_auto_device_map_with_fallback_allocation_partial_fit(self):
+        # Create a model with deeper hierarchy
+        class CustomModule(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.submodule1 = nn.Linear(20, 20)
+                self.submodule2 = nn.Linear(20, 20)
+
+        model = nn.Sequential(
+            OrderedDict([
+                ("module1", CustomModule()),
+                ("module2", CustomModule()),
+                ("module3", CustomModule())
+            ])
+        )
+
+        max_memory = {0: 5000}
+
+        # With fallback_allocation
+        device_map = infer_auto_device_map(model, max_memory=max_memory, fallback_allocation=True)
+        # Check that at least some parameters are assigned to device 0
+        assigned_to_device_0 = [name for name, device in device_map.items() if device == 0]
+        assert len(assigned_to_device_0) > 0
+
+    def test_infer_auto_device_map_with_fallback_allocation_tied_weights(self):
+        # Create a model with tied weights
+        class TiedWeightsModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear1 = nn.Linear(10, 10)
+                self.linear2 = nn.Linear(10, 10)
+                self.linear2.weight = self.linear1.weight
+
+        model = TiedWeightsModel()
+
+        max_memory = {0: 600}
+
+        # With fallback_allocation
+        device_map = infer_auto_device_map(model, max_memory=max_memory, fallback_allocation=True)
+        # Check that tied modules are assigned correctly
+        expected_device_map = {
+            "": 0
+        }
+        assert device_map == expected_device_map
+
+    def test_infer_auto_device_map_with_fallback_allocation_and_buffers(self):
+        # Create a model with buffers
+        model = nn.Sequential(
+            OrderedDict([
+                ("linear1", nn.Linear(10, 10)),
+                ("batchnorm", nn.BatchNorm1d(10)),
+                ("linear2", nn.Linear(10, 10))
+            ])
+        )
+        model.linear1.register_buffer("buffer1", torch.zeros(5))
+        model.batchnorm.register_buffer("buffer2", torch.zeros(5))
+        model.linear2.register_buffer("buffer3", torch.zeros(5))
+
+        max_memory = {0: 678}
+
+        # With fallback_allocation and offload_buffers=False
+        with self.assertWarns(Warning) as cm:
+            device_map = infer_auto_device_map(
+                model,
+                max_memory=max_memory,
+                fallback_allocation=True,
+                offload_buffers=False
+            )
+
+        # Check that the warning contains the expected message
+        warning_message = str(cm.warning)
+        assert "offload_buffers" in warning_message or "Current model requires" in warning_message
+
+        # Verify that the entire model is assigned to device 0
+        expected_device_map = {"batchnorm": 0, "linear1": "disk", "linear2": "disk"}
+        assert device_map == expected_device_map
+
     @require_cuda
     def test_get_balanced_memory(self):
         model = ModelForTest()
