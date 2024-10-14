@@ -519,7 +519,10 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest()
         # model has size 236: linear1 64, batchnorm 72, linear2 100
 
-        device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200})
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200})
+            assert len(w) == 0, f"Unexpected warnings: {[str(warning.message) for warning in w]}"
         # only linear1 fits on device 0 as we keep memory available for the maximum layer in case of offload
         assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": 1}
 
@@ -711,24 +714,13 @@ class ModelingUtilsTester(unittest.TestCase):
 
     def test_infer_auto_device_map_with_fallback_allocation(self):
         # Create a model where modules cannot be allocated without fallback_allocation
-        model = nn.Sequential(
-            OrderedDict(
-                [
-                    (
-                        "module",
-                        nn.Sequential(
-                            OrderedDict(
-                                [
-                                    ("linear1", nn.Linear(10, 4)),
-                                    ("linear2", nn.Linear(4, 4)),
-                                    ("linear3", nn.Linear(4, 8)),
-                                ]
-                            )
-                        ),
-                    )
-                ]
-            )
+        # Define the inner module with its layers
+        inner_module = nn.Sequential(
+            OrderedDict([("linear1", nn.Linear(10, 4)), ("linear2", nn.Linear(4, 4)), ("linear3", nn.Linear(4, 8))])
         )
+
+        # Wrap the inner module in another module
+        model = nn.Sequential(OrderedDict([("module", inner_module)]))
 
         max_memory = {0: 256}
 
@@ -742,7 +734,10 @@ class ModelingUtilsTester(unittest.TestCase):
             assert any("insufficient memory" in str(warn.message).lower() for warn in w)
 
         # With fallback_allocation
-        device_map = infer_auto_device_map(model, max_memory=max_memory, fallback_allocation=True)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            device_map = infer_auto_device_map(model, max_memory=max_memory, fallback_allocation=True)
+            assert len(w) == 0, f"Unexpected warnings: {[str(warning.message) for warning in w]}"
         # At least one submodule should be assigned to device 0
         assert any(device == 0 for device in device_map.values())
 
@@ -751,24 +746,14 @@ class ModelingUtilsTester(unittest.TestCase):
 
     def test_infer_auto_device_map_with_fallback_allocation_no_fit(self):
         # Create a model where even the smallest submodules cannot fit
-        model = nn.Sequential(
+        inner_module = nn.Sequential(
             OrderedDict(
-                [
-                    (
-                        "module",
-                        nn.Sequential(
-                            OrderedDict(
-                                [
-                                    ("linear1", nn.Linear(10, 10)),
-                                    ("linear2", nn.Linear(10, 10)),
-                                    ("linear3", nn.Linear(10, 10)),
-                                ]
-                            )
-                        ),
-                    )
-                ]
+                [("linear1", nn.Linear(10, 10)), ("linear2", nn.Linear(10, 10)), ("linear3", nn.Linear(10, 10))]
             )
         )
+
+        # Wrap the inner module in another module
+        model = nn.Sequential(OrderedDict([("module", inner_module)]))
 
         max_memory = {0: 30}
 
