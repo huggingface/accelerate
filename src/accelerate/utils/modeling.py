@@ -1171,7 +1171,15 @@ def _init_infer_auto_device_map(
     no_split_module_classes: Optional[List[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
-) -> Tuple:
+) -> Tuple[
+    List[Union[int, str]],
+    List[Union[int, str]],
+    List[int],
+    Dict[str, int],
+    List[List[str]],
+    List[str],
+    List[Tuple[str, nn.Module]],
+]:
     """
     Initialize variables required for computing the device map for model allocation.
     """
@@ -1530,8 +1538,8 @@ def infer_auto_device_map(
 
             continue
 
-        # If the current module itself fits, we try to split the tied modules.
-        elif len(tied_params) > 0 and device_memory_used[device] + module_size <= current_max_size:
+        # The current module itself fits, so we try to split the tied modules.
+        if len(tied_params) > 0 and device_memory_used[device] + module_size <= current_max_size:
             # can we split one of the tied modules to make it smaller or do we need to go on the next device?
             if verbose:
                 print(
@@ -1574,7 +1582,7 @@ def infer_auto_device_map(
                 print("None of the tied module can be split, going to the next device.")
 
         # The current module itself doesn't fit, so we have to split it or go to the next device.
-        else:
+        if device_memory_used[device] + module_size >= current_max_size:
             # Split or not split?
             modules_children = (
                 []
@@ -1603,7 +1611,6 @@ def infer_auto_device_map(
                     module_sizes,
                     no_split_module_classes,
                 )
-
                 continue
 
         #  Neither the current module nor any tied modules can be split, so we move to the next device
