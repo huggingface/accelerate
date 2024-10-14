@@ -318,7 +318,7 @@ def _tpu_gather(tensor):
     return res
 
 
-def _gpu_gather(tensor):
+def _gpu_gather(tensor, use_all_gather=True):
     state = PartialState()
     if is_torch_version(">=", "1.13"):
         gather_op = torch.distributed.all_gather_into_tensor
@@ -350,8 +350,16 @@ def _gpu_gather(tensor):
             # also gloo does not support `all_gather_into_tensor`,
             # which will result in a larger memory overhead for the op
             output_tensors = [torch.empty_like(tensor) for _ in range(state.num_processes)]
-            torch.distributed.all_gather(output_tensors, tensor)
-            return torch.cat(output_tensors, dim=0)
+            if use_all_gather:
+                torch.distributed.all_gather(output_tensors, tensor)
+                return torch.cat(output_tensors, dim=0)
+            else:
+                if state.is_main_process:
+                    torch.distributed.gather(output_tensors, tensor)
+                    return torch.cat(output_tensors, dim=0)
+                else:
+                    return []
+
 
     return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
 
@@ -420,13 +428,15 @@ def chained_operation(function):
 
 
 @verify_operation
-def gather(tensor):
+def gather(tensor, use_all_gather=True):
     """
     Recursively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
 
     Args:
         tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to gather.
+        use_all_gather(`bool`):
+            Whether to use all_gather or gather
 
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
@@ -434,25 +444,36 @@ def gather(tensor):
     if PartialState().distributed_type == DistributedType.XLA:
         return _tpu_gather(tensor)
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
-        return _gpu_gather(tensor)
+        return _gpu_gather(tensor, use_all_gather)
     else:
         return tensor
 
 
-def _gpu_gather_object(object: Any):
+def _gpu_gather_object(object: Any, use_all_gather):
     output_objects = [None for _ in range(PartialState().num_processes)]
-    torch.distributed.all_gather_object(output_objects, object)
-    # all_gather_object returns a list of lists, so we need to flatten it
-    return [x for y in output_objects for x in y]
+    if use_all_gather:
+        torch.distributed.all_gather_object(output_objects, object)
+        # all_gather_object returns a list of lists, so we need to flatten it
+        return [x for y in output_objects for x in y]
+    else:
+        if PartialState().is_main_process():
+            torch.distributed.gather_object(output_objects, object)
+            # all_gather_object returns a list of lists, so we need to flatten it
+            return [x for y in output_objects for x in y]
+        else:
+            torch.distributed.gather_object(output_objects, object)
+            return []
 
 
-def gather_object(object: Any):
+def gather_object(object: Any, use_all_gather: Bool = True):
     """
     Recursively gather object in a nested list/tuple/dictionary of objects from all devices.
 
     Args:
         object (nested list/tuple/dictionary of picklable object):
             The data to gather.
+        use_all_gather(`bool`):
+            Whether to use all_gather or gather
 
     Returns:
         The same data structure as `object` with all the objects sent to every device.
@@ -460,7 +481,7 @@ def gather_object(object: Any):
     if PartialState().distributed_type == DistributedType.XLA:
         raise NotImplementedError("gather objects in TPU is not supported")
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
-        return _gpu_gather_object(object)
+        return _gpu_gather_object(object, use_all_gather)
     else:
         return object
 

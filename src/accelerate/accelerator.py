@@ -2405,7 +2405,7 @@ class Accelerator:
         self.unscale_gradients()
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
-    def gather(self, tensor):
+    def gather(self, tensor, use_all_gather=True):
         """
         Gather the values in *tensor* across all processes and concatenate them on the first dimension. Useful to
         regroup the predictions from all processes when doing evaluation.
@@ -2416,6 +2416,8 @@ class Accelerator:
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors to gather across all processes.
+            use_all_gather(`bool`):
+                Whether to use all_gather or gather
 
         Returns:
             `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The gathered tensor(s). Note that the
@@ -2435,9 +2437,9 @@ class Accelerator:
         tensor([0, 1, 2, 3])
         ```
         """
-        return gather(tensor)
+        return gather(tensor, use_all_gather)
 
-    def gather_for_metrics(self, input_data, use_gather_object=False):
+    def gather_for_metrics(self, input_data, use_gather_object=False, use_all_gather=True):
         """
         Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system. Should be
         used for gathering the inputs and targets for metric calculation.
@@ -2450,6 +2452,11 @@ class Accelerator:
                 not contain tensors). This flag can be useful for gathering tensors with different sizes that we don't
                 want to pad and concatenate along the first dimension. Using it with GPU tensors is not well supported
                 and inefficient as it incurs GPU -> CPU transfer since tensors would be pickled.
+            use_all_gather(`bool`):
+                Whether to use all_gather instead of gather. all_gather collects a list of tensors from all processes,
+                while gather collects tensors into a single process. Using all_gather can be beneficial in scenarios 
+                where all processes need access to the complete dataset, but it may use more memory. For the evaluation purpose
+                try to use gather function.
 
         Example:
 
@@ -2477,9 +2484,9 @@ class Accelerator:
         use_gather_object = use_gather_object or not all_tensors
 
         if use_gather_object:
-            data = gather_object(input_data)
+            data = gather_object(input_data, use_all_gather)
         else:
-            data = self.gather(input_data)
+            data = self.gather(input_data, use_all_gather)
 
         try:
             if self.gradient_state.end_of_dataloader:
