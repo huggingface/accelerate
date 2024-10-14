@@ -1204,9 +1204,9 @@ def _init_infer_auto_device_map(
 
     # Direct submodules and parameters
     modules_to_treat = (
-            list(model.named_parameters(recurse=False))
-            + list(model.named_children())
-            + list(model.named_buffers(recurse=False))
+        list(model.named_parameters(recurse=False))
+        + list(model.named_children())
+        + list(model.named_buffers(recurse=False))
     )
 
     return (
@@ -1257,11 +1257,11 @@ def get_module_size_with_ties(
 
 
 def fallback_allocate(
-        modules: List[Tuple[str, nn.Module]],
-        module_sizes: Dict[str, int],
-        size_limit: Union[int, str],
-        no_split_module_classes: Optional[List[str]] = None,
-        tied_parameters: Optional[List[List[str]]] = None,
+    modules: List[Tuple[str, nn.Module]],
+    module_sizes: Dict[str, int],
+    size_limit: Union[int, str],
+    no_split_module_classes: Optional[List[str]] = None,
+    tied_parameters: Optional[List[List[str]]] = None,
 ) -> Tuple[Optional[str], Optional[nn.Module], List[Tuple[str, nn.Module]]]:
     """
     Find a module that fits in the size limit using BFS and return it with its name and the remaining modules.
@@ -1279,8 +1279,7 @@ def fallback_allocate(
             A list of lists of parameter names being all tied together.
 
     Returns:
-        `Tuple[Optional[str], Optional[nn.Module], List[Tuple[str, nn.Module]]]`:
-        A tuple containing:
+        `Tuple[Optional[str], Optional[nn.Module], List[Tuple[str, nn.Module]]]`: A tuple containing:
         - The name of the module that fits within the size limit.
         - The module itself.
         - The list of remaining modules after the found module is removed.
@@ -1348,11 +1347,14 @@ def fallback_allocate(
         if parent_name in current_names:
             parent_module_idx = current_names.index(parent_name)
             _, parent_module = modules[parent_module_idx]
-            module_children = (list(parent_module.named_parameters(recurse=False))
-                               + list(parent_module.named_children()))
-            modules = (modules[:parent_module_idx]
-                       + [(f"{parent_name}.{n}", v) for n, v in module_children]
-                       + modules[parent_module_idx + 1:])
+            module_children = list(parent_module.named_parameters(recurse=False)) + list(
+                parent_module.named_children()
+            )
+            modules = (
+                modules[:parent_module_idx]
+                + [(f"{parent_name}.{n}", v) for n, v in module_children]
+                + modules[parent_module_idx + 1 :]
+            )
             current_names = [n for n, _ in modules]
 
     # Now the target module should be directly in the list
@@ -1510,9 +1512,7 @@ def infer_auto_device_map(
             for tied_module_name in tied_module_names:
                 if tied_module_name in [m[0] for m in modules_to_treat]:
                     # Find the index of the tied module in the list
-                    tied_module_index = next(
-                        i for i, (n, _) in enumerate(modules_to_treat) if n == tied_module_name
-                    )
+                    tied_module_index = next(i for i, (n, _) in enumerate(modules_to_treat) if n == tied_module_name)
                     # Remove the tied module from the list to prevent reprocessing
                     modules_to_treat.pop(tied_module_index)
 
@@ -1552,10 +1552,10 @@ def infer_auto_device_map(
                 tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if n == tied_module_name][0]
 
                 modules_to_treat = (
-                        [(name, module)]
-                        + modules_to_treat[:tied_module_index]
-                        + tied_module_children
-                        + modules_to_treat[tied_module_index + 1:]
+                    [(name, module)]
+                    + modules_to_treat[:tied_module_index]
+                    + tied_module_children
+                    + modules_to_treat[tied_module_index + 1 :]
                 )
                 # Update the max layer size.
                 max_layer_size, max_layer_names = get_max_layer_size(
@@ -1621,9 +1621,7 @@ def infer_auto_device_map(
             )
             # use the next iteration to put the fallback module on the next device to avoid code duplication
             if fallback_module is not None:
-                modules_to_treat = [(fallback_module_name, fallback_module)] \
-                                   + [(name, module)] \
-                                   + remaining_modules
+                modules_to_treat = [(fallback_module_name, fallback_module)] + [(name, module)] + remaining_modules
                 continue
 
         if device_memory_used[device] == 0:
