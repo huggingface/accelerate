@@ -1301,32 +1301,39 @@ def fallback_allocate(
 
     while modules_to_search:
         name, module = modules_to_search.pop(0)
-        if module_sizes[name] <= size_limit:
-            tied_param_groups = [
-                tied_group
-                for tied_group in tied_parameters
-                if any(name + "." in k + "." for k in tied_group) and not all(name + "." in k + "." for k in tied_group)
-            ]
 
-            tied_params = sum(
-                [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups], []
-            )
+        tied_param_groups = [
+            tied_group
+            for tied_group in tied_parameters
+            if any(name + "." in k + "." for k in tied_group) and not all(name + "." in k + "." for k in tied_group)
+        ]
 
-            module_size_with_ties, _, _ = get_module_size_with_ties(
-                tied_params, module_sizes[name], module_sizes, modules_to_search
-            )
+        tied_params = sum(
+            [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups], []
+        )
 
-            if module_size_with_ties <= size_limit:
-                module_found = True
-                break
+        module_size_with_ties, _, _ = get_module_size_with_ties(
+            tied_params, module_sizes[name], module_sizes, modules_to_search
+        )
 
-        if not isinstance(module, nn.Module) or module.__class__.__name__ in no_split_module_classes:
+        # If the module fits in the size limit, we found it.
+        if module_size_with_ties <= size_limit:
+            module_found = True
+            break
+
+        # The module is too big, we need to split it if possible.
+        modules_children = (
+            []
+            if isinstance(module, nn.Parameter) or isinstance(module, torch.Tensor)
+            else list(module.named_children())
+        )
+
+        # Split fails, move to the next module
+        if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
             continue
 
-        modules_children = list(module.named_children())
-        if not modules_children:
-            continue
-
+        # split is possible, add the children to the list of modules to search
+        modules_children = list(module.named_parameters(recurse=False)) + modules_children
         modules_to_search = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_search
 
     if not module_found:
