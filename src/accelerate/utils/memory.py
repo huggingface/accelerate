@@ -24,6 +24,7 @@ import inspect
 import warnings
 
 import torch
+from packaging import version
 
 from .imports import (
     is_cuda_available,
@@ -167,7 +168,7 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
 
 def get_xpu_available_memory(device_index: int):
     if is_ipex_available():
-        ipex_version = importlib.metadata.version("intel_extension_for_pytorch")
+        ipex_version = version.parse(importlib.metadata.version("intel_extension_for_pytorch"))
         if compare_versions(ipex_version, ">=", "2.5"):
             from intel_extension_for_pytorch.xpu import mem_get_info
 
