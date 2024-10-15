@@ -360,7 +360,6 @@ def _gpu_gather(tensor, use_all_gather=True):
                 else:
                     return []
 
-
     return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
 
 

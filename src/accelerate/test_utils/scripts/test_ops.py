@@ -43,6 +43,7 @@ def test_gather(state):
     if state.is_main_process():
         assert gathered_tensor.tolist() == list(range(1, state.num_processes**2 + 1))
 
+
 def test_gather_object(state):
     # Gather objects in TorchXLA is not supported.
     if state.distributed_type == DistributedType.XLA:
@@ -54,8 +55,13 @@ def test_gather_object(state):
 
     gathered_obj = gather_object(obj, use_all_gather=False)
     if state.is_main_process():
-        assert len(gathered_obj) == state.num_processes, f"{gathered_obj}, {len(gathered_obj)} != {state.num_processes}"
-        assert gathered_obj == list(range(state.num_processes)), f"{gathered_obj} != {list(range(state.num_processes))}"
+        assert (
+            len(gathered_obj) == state.num_processes
+        ), f"{gathered_obj}, {len(gathered_obj)} != {state.num_processes}"
+        assert gathered_obj == list(
+            range(state.num_processes)
+        ), f"{gathered_obj} != {list(range(state.num_processes))}"
+
 
 def test_gather_non_contigous(state):
     # Skip this test because the 'is_contiguous' function of XLA tensor always returns True.

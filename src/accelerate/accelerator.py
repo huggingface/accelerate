@@ -2454,7 +2454,7 @@ class Accelerator:
                 and inefficient as it incurs GPU -> CPU transfer since tensors would be pickled.
             use_all_gather(`bool`):
                 Whether to use all_gather instead of gather. all_gather collects a list of tensors from all processes,
-                while gather collects tensors into a single process. Using all_gather can be beneficial in scenarios 
+                while gather collects tensors into a single process. Using all_gather can be beneficial in scenarios
                 where all processes need access to the complete dataset, but it may use more memory. For the evaluation purpose
                 try to use gather function.
 
