@@ -449,7 +449,7 @@ def gather(tensor, use_all_gather=True):
         return tensor
 
 
-def _gpu_gather_object(object: Any, use_all_gather):
+def _gpu_gather_object(object: Any, use_all_gather: bool):
     output_objects = [None for _ in range(PartialState().num_processes)]
     if use_all_gather:
         torch.distributed.all_gather_object(output_objects, object)
@@ -465,7 +465,7 @@ def _gpu_gather_object(object: Any, use_all_gather):
             return []
 
 
-def gather_object(object: Any, use_all_gather: Bool = True):
+def gather_object(object: Any, use_all_gather: bool = True):
     """
     Recursively gather object in a nested list/tuple/dictionary of objects from all devices.
 
