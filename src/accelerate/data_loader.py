@@ -713,6 +713,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         _drop_last: bool = False,
         _non_blocking: bool = False,
         slice_fn=None,
+        torch_device_mesh=None,
         **kwargs,
     ):
         shuffle = False
@@ -732,6 +733,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         self._drop_last = _drop_last
         self._non_blocking = _non_blocking
         self.skip_batches = skip_batches
+        self.torch_device_mesh = torch_device_mesh
 
         self.slice_fn = slice_tensors if slice_fn is None else slice_fn
         self.iteration = 0
@@ -740,7 +742,29 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         batches, batch = None, None
         # On process 0, we gather the batch to dispatch.
         if self.state.process_index == 0:
+            # if a device mesh is provided extract each dimension (tp and dp)
+            # device mesh will be used only if there is tp involved
+            # otherwise the default behavour should be sufficient
+            submesh_tp = None
+            submesh_dp = None
+            if self.torch_device_mesh and "tp" in self.torch_device_mesh.mesh_dim_names:
+                # extract torch sub device mesh objects
+                submesh_tp = self.torch_device_mesh["tp"]
+                if "dp" in self.torch_device_mesh.mesh_dim_names:
+                    submesh_dp = self.torch_device_mesh["dp"]
+
+            if submesh_tp and submesh_dp:
+                raise ValueError("TP + DDP / TP + FSDP is not yet supported")
+
+            # Procedure to support TP only is simpler
+            # since we want to dispatch the same batch of samples across all ranks
+            # this removes complexity of handling multiple tp rank groups when TP + DP
+            # combination is involved.
+
             try:
+                # for TP case avoid using split_batches
+                # since it would mean that the dataloader should be spilling out
+                # duplicates of batches.
                 if self.split_batches:
                     # One batch of the main iterator is dispatched and split.
                     self._update_state_dict()
@@ -749,9 +773,15 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
                     # num_processes batches of the main iterator are concatenated then dispatched and split.
                     # We add the batches one by one so we have the remainder available when drop_last=False.
                     batches = []
-                    for _ in range(self.state.num_processes):
+                    if submesh_tp:
+                        # when tp, extract single batch and then replicate
                         self._update_state_dict()
-                        batches.append(next(iterator))
+                        batch = next(iterator)
+                        batches = [batch] * self.state.num_processes
+                    else:
+                        for _ in range(self.state.num_processes):
+                            self._update_state_dict()
+                            batches.append(next(iterator))
                     try:
                         batch = concatenate(batches, dim=0)
                     except RuntimeError as e:
@@ -942,6 +972,7 @@ def prepare_data_loader(
     data_seed: Optional[int] = None,
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
+    torch_device_mesh=None
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -1009,6 +1040,8 @@ def prepare_data_loader(
             "If set to true, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
+        torch_device_mesh (``, *optional*, defaults to `None`):
+            PyTorch device mesh.
 
 
     Returns:
@@ -1144,6 +1177,7 @@ def prepare_data_loader(
             _non_blocking=non_blocking,
             slice_fn=slice_fn_for_dispatch,
             use_stateful_dataloader=use_stateful_dataloader,
+            torch_device_mesh=torch_device_mesh,
             **kwargs,
         )
     elif sampler_is_batch_sampler:
