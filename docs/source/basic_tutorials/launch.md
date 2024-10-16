@@ -97,7 +97,10 @@ Since this runs the various torch spawn methods, all of the expected environment
 For example, here is how to use `accelerate launch` with a single GPU:
 
 ```bash
+# for cuda device:
 CUDA_VISIBLE_DEVICES="0" accelerate launch {script_name.py} --arg1 --arg2 ...
+# for xpu device:
+ZE_AFFINITY_MASK="0" accelerate launch {script_name.py} --arg1 --arg2 ...
 ```
 
 You can also use `accelerate launch` without performing `accelerate config` first, but you may need to manually pass in the right configuration parameters.
@@ -136,7 +139,7 @@ accelerate launch -h
 For a visualization of this difference, that earlier `accelerate launch` on multi-gpu would look something like so with `torchrun`:
 
 ```bash
-MIXED_PRECISION="fp16" torchrun --nproc_per_node=2 --num_machines=1 {script_name.py} {--arg1} {--arg2} ...
+MIXED_PRECISION="fp16" torchrun --nproc_per_node=2 --nnodes=1 {script_name.py} {--arg1} {--arg2} ...
 ```
 
 You can also launch your script utilizing the launch CLI as a python module itself, enabling the ability to pass in other python-specific
