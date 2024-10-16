@@ -2202,7 +2202,7 @@ class MegatronLMPlugin:
         self.megatron_lm_default_args["min_lr"] = self.min_lr
 
     def set_tensorboard_logging_options(self):
-        from megatron.arguments import _add_logging_args
+        from megatron.training.arguments import _add_logging_args
 
         parser = argparse.ArgumentParser()
         parser = _add_logging_args(parser)
