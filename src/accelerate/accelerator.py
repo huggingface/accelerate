@@ -68,6 +68,7 @@ from .utils import (
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
+    TorchTensorParallelPlugin,
     apply_fp8_autowrap,
     check_os_kernel,
     clean_state_dict_for_safetensors,
@@ -187,6 +188,9 @@ class Accelerator:
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
+        torch_tp_plugin ([`~utils.TorchTensorParallelPlugin`], *optional*):
+            Tweak your torch tensor parallel. This argument is optional and can be configured directly
+            using *accelerate config*
         megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -253,6 +257,7 @@ class Accelerator:
         dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
+        torch_tp_plugin: TorchTensorParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
@@ -417,6 +422,7 @@ class Accelerator:
             dynamo_plugin=dynamo_plugin,
             deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
+            torch_tp_plugin=torch_tp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             **kwargs,
@@ -1460,6 +1466,8 @@ class Accelerator:
                     )
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
+            elif self.distributed_type == DistributedType.TP:
+                model.apply_tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -2107,6 +2115,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
+            torch_device_mesh=self.state.torch_tp_plugin.torch_device_mesh if self.state.torch_tp_plugin else None,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
