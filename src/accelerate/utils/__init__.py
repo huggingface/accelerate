@@ -205,6 +205,7 @@ from .fsdp_utils import (
     merge_fsdp_weights,
     save_fsdp_model,
     save_fsdp_optimizer,
+    ensure_weights_retied,
 )
 from .launch import (
     PrepareForLaunch,
