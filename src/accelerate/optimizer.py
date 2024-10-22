@@ -15,7 +15,7 @@
 import inspect
 
 import torch
-
+from collections import defaultdict
 from .state import AcceleratorState, GradientState
 from .utils import DistributedType, honor_type, is_lomo_available, is_torch_xla_available
 
@@ -195,6 +195,26 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             self._accelerate_step_called = False
             self._optimizer_original_step_method = self.optimizer.step
             self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
+
+    def multiply_grads(self, constant: float | torch.Tensor) -> None:
+        """
+        Multiplies the gradients of the parameters by a constant.
+        Needed during gradient accumulation.
+
+        Based on the implementation out of `fairseq`: https://github.com/facebookresearch/fairseq/blob/main/fairseq/optim/fairseq_optimizer.py
+        """
+        per_device_and_dtype_grads = defaultdict(lambda: defaultdict(list))
+        for param_group in self.param_groups:
+            for param in param_group["params"]:
+                if param.grad is not None:
+                    if param.grad.is_sparse:
+                        param.grad.data.mul_(constant.to(param.grad.device) if torch.is_tensor(constant) else constant)
+                    else:
+                        per_device_and_dtype_grads[param.device][param.dtype].append(param.grad.data)
+
+        for device, per_dtype_grads in per_device_and_dtype_grads.items():
+            for grads in per_dtype_grads.values():
+                torch._foreach_mul_(grads, constant.to(device) if torch.is_tensor(constant) else constant)
 
 
 def patch_optimizer_step(accelerated_optimizer: AcceleratedOptimizer, method):
