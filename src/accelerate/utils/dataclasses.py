@@ -2401,7 +2401,7 @@ class BnbQuantizationConfig:
     bnb_4bit_quant_type: str = field(
         default="fp4",
         metadata={
-            "help": "set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','np4'}."
+            "help": "set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','nf4'}."
         },
     )
 
@@ -2412,7 +2412,7 @@ class BnbQuantizationConfig:
         },
     )
 
-    bnb_4bit_compute_dtype: bool = field(
+    bnb_4bit_compute_dtype: str = field(
         default="fp16",
         metadata={
             "help": "This sets the computational type which might be different than the input time. For example, inputs might be "
