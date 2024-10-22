@@ -13,9 +13,10 @@
 # limitations under the License.
 
 import inspect
+from collections import defaultdict
 
 import torch
-from collections import defaultdict
+
 from .state import AcceleratorState, GradientState
 from .utils import DistributedType, honor_type, is_lomo_available, is_torch_xla_available
 
@@ -198,10 +199,10 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def multiply_grads(self, constant: float | torch.Tensor) -> None:
         """
-        Multiplies the gradients of the parameters by a constant.
-        Needed during gradient accumulation.
+        Multiplies the gradients of the parameters by a constant. Needed during gradient accumulation.
 
-        Based on the implementation out of `fairseq`: https://github.com/facebookresearch/fairseq/blob/main/fairseq/optim/fairseq_optimizer.py
+        Based on the implementation out of `fairseq`:
+        https://github.com/facebookresearch/fairseq/blob/main/fairseq/optim/fairseq_optimizer.py
         """
         per_device_and_dtype_grads = defaultdict(lambda: defaultdict(list))
         for param_group in self.param_groups:
