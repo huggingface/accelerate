@@ -197,7 +197,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             self._optimizer_original_step_method = self.optimizer.step
             self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
 
-    def multiply_grads(self, constant: float | torch.Tensor) -> None:
+    def multiply_grads(self, constant) -> None:
         """
         Multiplies the gradients of the parameters by a constant. Needed during gradient accumulation.
 
