@@ -1252,7 +1252,7 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> # Assume a model, optimizer, data_loader and scheduler are defined
         >>> device_placement = [True, True, False, False]
-        >>> # Will place the first to items passed in automatically to the right device but not the last two.
+        >>> # Will place the first two items passed in automatically to the right device but not the last two.
         >>> model, optimizer, data_loader, scheduler = accelerator.prepare(
         ...     model, optimizer, data_loader, scheduler, device_placement=device_placement
         ... )
