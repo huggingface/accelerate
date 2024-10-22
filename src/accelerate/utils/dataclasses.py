@@ -2451,10 +2451,10 @@ class BnbQuantizationConfig:
             raise ValueError("load_in_4bit must be a boolean")
 
         if self.load_in_4bit and self.load_in_8bit:
-            raise ValueError("load_in_4bit and load_in_8 can't be both True")
+            raise ValueError("load_in_4bit and load_in_8bit can't be both True")
 
         if not self.load_in_4bit and not self.load_in_8bit:
-            raise ValueError("load_in_4bit and load_in_8 can't be both False")
+            raise ValueError("load_in_4bit and load_in_8bit can't be both False")
 
         if not isinstance(self.llm_int8_threshold, (int, float)):
             raise ValueError("llm_int8_threshold must be a float or an int")
