@@ -29,10 +29,10 @@ from .dataclasses import DistributedType, TensorInformation
 from .imports import (
     is_npu_available,
     is_torch_distributed_available,
-    is_torch_version,
     is_torch_xla_available,
     is_xpu_available,
 )
+from .versions import is_torch_version
 
 
 if is_torch_xla_available():
@@ -652,8 +652,11 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
                 CannotPadNestedTensorWarning,
             )
             return tensor
-        if dim >= len(tensor.shape):
+        if dim >= len(tensor.shape) or dim < -len(tensor.shape):
             return tensor
+        # Convert negative dimensions to non-negative
+        if dim < 0:
+            dim += len(tensor.shape)
 
         # Gather all sizes
         size = torch.tensor(tensor.shape, device=tensor.device)[None]

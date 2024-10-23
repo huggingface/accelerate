@@ -400,6 +400,34 @@ def check_seedable_sampler_in_batch_sampler_shard():
     ), "Sampler in BatchSamplerShard is not SeedableRandomSampler."
 
 
+def check_seedable_sampler_with_data_seed():
+    # Set seed
+    set_seed(42)
+    data_seed = 42
+    train_set = RegressionDataset(length=10, seed=42)
+    train_dl = DataLoader(train_set, batch_size=2, shuffle=True)
+
+    config = DataLoaderConfiguration(use_seedable_sampler=True, data_seed=data_seed)
+    accelerator = Accelerator(dataloader_config=config)
+    prepared_dl = accelerator.prepare(train_dl)
+    original_items = []
+    for _ in range(3):
+        for batch in prepared_dl:
+            original_items.append(batch["x"])
+    original_items = torch.cat(original_items)
+
+    # Set new data seed
+    config.data_seed = 43
+    accelerator = Accelerator(dataloader_config=config)
+    prepared_dl = accelerator.prepare(train_dl)
+    new_items = []
+    for _ in range(3):
+        for batch in prepared_dl:
+            new_items.append(batch["x"])
+    new_items = torch.cat(new_items)
+    assert not torch.allclose(original_items, new_items), "Obtained the same items with different data seed."
+
+
 def mock_training(length, batch_size, generator, use_seedable_sampler=False):
     set_seed(42)
     generator.manual_seed(42)
@@ -800,6 +828,7 @@ def main():
         central_dl_preparation_check()
         custom_sampler_check()
         check_seedable_sampler()
+        check_seedable_sampler_with_data_seed()
 
     if state.num_processes > 1:
         check_seedable_sampler_in_batch_sampler_shard()

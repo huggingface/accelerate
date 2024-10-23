@@ -13,9 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Launching your 🤗 Accelerate scripts
+# Launching Accelerate scripts
 
-In the previous tutorial, you were introduced to how to modify your current training script to use 🤗 Accelerate.
+In the previous tutorial, you were introduced to how to modify your current training script to use Accelerate.
 The final version of that code is shown below:
 
 ```python
@@ -69,14 +69,14 @@ Next, you need to launch it with `accelerate launch`.
 <Tip warning={true}>
 
   It's recommended you run `accelerate config` before using `accelerate launch` to configure your environment to your liking. 
-  Otherwise 🤗 Accelerate will use very basic defaults depending on your system setup.
+  Otherwise Accelerate will use very basic defaults depending on your system setup.
 
 </Tip>
 
 
 ## Using accelerate launch
 
-🤗 Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.
+Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.
 This command wraps around all of the different commands needed to launch your script on various platforms, without you having to remember what each of them is.
 
 <Tip>
@@ -101,7 +101,7 @@ CUDA_VISIBLE_DEVICES="0" accelerate launch {script_name.py} --arg1 --arg2 ...
 ```
 
 You can also use `accelerate launch` without performing `accelerate config` first, but you may need to manually pass in the right configuration parameters.
-In this case, 🤗 Accelerate will make some hyperparameter decisions for you, e.g., if GPUs are available, it will use all of them by default without the mixed precision.
+In this case, Accelerate will make some hyperparameter decisions for you, e.g., if GPUs are available, it will use all of them by default without the mixed precision.
 Here is how you would use all GPUs and train with mixed precision disabled:
 
 ```bash
@@ -129,7 +129,7 @@ accelerate launch -h
 
 <Tip>
 
-  Even if you are not using 🤗 Accelerate in your code, you can still use the launcher for starting your scripts!
+  Even if you are not using Accelerate in your code, you can still use the launcher for starting your scripts!
 
 </Tip>
 
@@ -178,7 +178,7 @@ accelerate launch {script_name.py} {--arg1} {--arg2} ...
 ## Custom Configurations
 
 As briefly mentioned earlier, `accelerate launch` should be mostly used through combining set configurations 
-made with the `accelerate config` command. These configs are saved to a `default_config.yaml` file in your cache folder for 🤗 Accelerate. 
+made with the `accelerate config` command. These configs are saved to a `default_config.yaml` file in your cache folder for Accelerate. 
 This cache folder is located at (with decreasing order of priority):
 
 - The content of your environment variable `HF_HOME` suffixed with `accelerate`.
@@ -211,7 +211,7 @@ accelerate launch --config_file {path/to/config/my_config_file.yaml} {script_nam
 ```
 
 ## Multi-node training
-Multi-node training with 🤗Accelerate is similar to [multi-node training with torchrun](https://pytorch.org/tutorials/intermediate/ddp_series_multinode.html). The simplest way to launch a multi-node training run is to do the following:
+Multi-node training with Accelerate is similar to [multi-node training with torchrun](https://pytorch.org/tutorials/intermediate/ddp_series_multinode.html). The simplest way to launch a multi-node training run is to do the following:
 
 - Copy your codebase and data to all nodes. (or place them on a shared filesystem)
 - Setup your python packages on all nodes.

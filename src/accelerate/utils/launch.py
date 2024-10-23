@@ -16,7 +16,6 @@ import argparse
 import os
 import subprocess
 import sys
-import warnings
 from ast import literal_eval
 from shutil import which
 from typing import Any, Dict, List, Tuple
@@ -275,13 +274,6 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)
         if args.fsdp_transformer_layer_cls_to_wrap is not None:
             current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.fsdp_transformer_layer_cls_to_wrap)
-        if args.fsdp_backward_prefetch_policy is not None:
-            warnings.warn(
-                "`fsdp_backward_prefetch_policy` is deprecated and will be removed in version 0.27.0 of 🤗 Accelerate. Use"
-                " `fsdp_backward_prefetch` instead",
-                FutureWarning,
-            )
-            args.fsdp_backward_prefetch = args.fsdp_backward_prefetch_policy
         if args.fsdp_backward_prefetch is not None:
             current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch)
         if args.fsdp_state_dict_type is not None:

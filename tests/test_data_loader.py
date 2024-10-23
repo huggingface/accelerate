@@ -420,6 +420,14 @@ class DataLoaderTester(unittest.TestCase):
         skip_dl = SkipDataLoader(range(16), batch_size=4, skip_batches=2)
         dl_shard = DataLoaderShard(range(16), batch_size=4)
         dl_dispatcher = DataLoaderDispatcher(range(16), batch_size=4)
+
+        # Test dataloaders are instances of instantiated classes
+        # These asserts look redundant, but it's worth checking since we are doing magic tricks such as dynamically overriding __class__
+        assert isinstance(skip_dl, SkipDataLoader)
+        assert isinstance(dl_shard, DataLoaderShard)
+        assert isinstance(dl_dispatcher, DataLoaderDispatcher)
+
+        # Test dataloaders are instances of base classes
         assert isinstance(skip_dl, DataLoader)
         assert isinstance(dl_shard, DataLoader)
         assert isinstance(dl_dispatcher, DataLoader)
@@ -468,13 +476,6 @@ class StatefulDataLoaderTester(unittest.TestCase):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
         assert isinstance(dataloader, StatefulDataLoader)
         assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
-
-    @require_torchdata_stateful_dataloader
-    def test_skip_first_batches(self):
-        dataloader = StatefulDataLoader(list(range(16)), batch_size=4)
-        new_dataloader = skip_first_batches(dataloader, num_batches=2)
-        assert isinstance(new_dataloader, StatefulDataLoader)
-        assert [t.tolist() for t in new_dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
     @require_torchdata_stateful_dataloader
     def test_end_of_dataloader(self):
@@ -563,6 +564,13 @@ class StatefulDataLoaderTester(unittest.TestCase):
         skip_dl = SkipDataLoader(range(16), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
         dl_shard = DataLoaderShard(range(16), batch_size=4, use_stateful_dataloader=True)
         dl_dispatcher = DataLoaderDispatcher(range(16), batch_size=4, use_stateful_dataloader=True)
+
+        # Test dataloaders are instances of instantiated classes
+        # These asserts look redundant, but it's worth checking since we are doing magic tricks such as dynamically overriding __class__
+        assert isinstance(skip_dl, SkipDataLoader)
+        assert isinstance(dl_shard, DataLoaderShard)
+        assert isinstance(dl_dispatcher, DataLoaderDispatcher)
+
         assert isinstance(skip_dl, StatefulDataLoader)
         assert isinstance(dl_shard, StatefulDataLoader)
         assert isinstance(dl_dispatcher, StatefulDataLoader)

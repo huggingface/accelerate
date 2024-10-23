@@ -145,7 +145,7 @@ def notebook_launcher(
         if num_processes is None:
             num_processes = 8
 
-        launcher = PrepareForLaunch(function, distributed_type="TPU")
+        launcher = PrepareForLaunch(function, distributed_type="XLA")
         print(f"Launching a training on {num_processes} TPU cores.")
         xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
     elif in_colab and get_gpu_info()[1] < 2:

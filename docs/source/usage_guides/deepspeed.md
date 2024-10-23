@@ -33,7 +33,7 @@ DeepSpeed ZeRO-2 is primarily used only for training, as its features are of no 
 DeepSpeed ZeRO-3 can be used for inference as well since it allows huge models to be loaded on multiple GPUs, which
 won't be possible on a single GPU.
 
-🤗 Accelerate integrates [DeepSpeed](https://github.com/microsoft/DeepSpeed) via 2 options:
+Accelerate integrates [DeepSpeed](https://github.com/microsoft/DeepSpeed) via 2 options:
 
 1. Integration of the DeepSpeed features via `deepspeed config file` specification in `accelerate config` . You just supply your custom config file or use our template. Most of
    this document is focused on this feature. This supports all the core features of DeepSpeed and gives user a lot of flexibility.
@@ -45,7 +45,7 @@ won't be possible on a single GPU.
 
 Training:
 
-1. 🤗 Accelerate integrates all features of DeepSpeed ZeRO. This includes all the ZeRO stages 1, 2 and 3 as well as ZeRO-Offload, ZeRO-Infinity (which can offload to disk/NVMe) and ZeRO++.
+1. Accelerate integrates all features of DeepSpeed ZeRO. This includes all the ZeRO stages 1, 2 and 3 as well as ZeRO-Offload, ZeRO-Infinity (which can offload to disk/NVMe) and ZeRO++.
 Below is a short description of Data Parallelism using ZeRO - Zero Redundancy Optimizer along with diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
 ![ZeRO Data Parallelism](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png)
 
@@ -727,7 +727,7 @@ Papers:
 - [ZeRO++: Extremely Efficient Collective Communication for Giant Model Training](https://arxiv.org/abs/2306.10209)
 
 
-Finally, please, remember that 🤗 `Accelerate` only integrates DeepSpeed, therefore if you
+Finally, please, remember that `Accelerate` only integrates DeepSpeed, therefore if you
 have any problems or questions with regards to DeepSpeed usage, please, file an issue with [DeepSpeed GitHub](https://github.com/microsoft/DeepSpeed/issues).
 
 

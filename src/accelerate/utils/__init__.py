@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .constants import (
+    MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
     MODEL_NAME,
     OPTIMIZER_NAME,
     PROFILE_PATTERN_NAME,
@@ -28,6 +29,7 @@ from .constants import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     WEIGHTS_PATTERN_NAME,
+    XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .dataclasses import (
     AutocastKwargs,
@@ -71,11 +73,13 @@ from .environment import (
     str_to_bool,
 )
 from .imports import (
+    deepspeed_required,
     get_ccl_version,
     is_4bit_bnb_available,
     is_8bit_bnb_available,
     is_aim_available,
     is_bf16_available,
+    is_bitsandbytes_multi_backend_available,
     is_bnb_available,
     is_boto3_available,
     is_ccl_available,
@@ -114,6 +118,7 @@ from .imports import (
     is_transformers_available,
     is_triton_available,
     is_wandb_available,
+    is_weights_only_available,
     is_xpu_available,
 )
 from .modeling import (
@@ -126,6 +131,7 @@ from .modeling import (
     dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
+    get_grad_scaler,
     get_max_layer_size,
     get_max_memory,
     get_mixed_precision_context_manager,
@@ -138,7 +144,6 @@ from .modeling import (
     named_module_tensors,
     retie_parameters,
     set_module_tensor_to_device,
-    shard_checkpoint,
 )
 from .offload import (
     OffloadedWeightsLoader,
@@ -188,6 +193,7 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
         HfDeepSpeedConfig,
+        get_active_deepspeed_plugin,
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model
@@ -243,6 +249,7 @@ from .other import (
     extract_model_from_parallel,
     get_pretty_name,
     is_port_in_use,
+    load,
     merge_dicts,
     patch_environment,
     recursive_getattr,

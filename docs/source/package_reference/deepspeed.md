@@ -13,16 +13,32 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Utilities for DeepSpeed
+# DeepSpeed utilities
+
+## DeepSpeedPlugin
+
+## get_active_deepspeed_plugin
+
+[[autodoc]] utils.get_active_deepspeed_plugin
 
 [[autodoc]] utils.DeepSpeedPlugin
 
-[[autodoc]] utils.deepspeed.DummyOptim
-
 [[autodoc]] utils.deepspeed.DummyScheduler
+
+## DeepSpeedEnginerWrapper
 
 [[autodoc]] utils.deepspeed.DeepSpeedEngineWrapper
 
+## DeepSpeedOptimizerWrapper
+
 [[autodoc]] utils.deepspeed.DeepSpeedOptimizerWrapper
 
+## DeepSpeedSchedulerWrapper
+
 [[autodoc]] utils.deepspeed.DeepSpeedSchedulerWrapper
+
+## DummyOptim
+
+[[autodoc]] utils.deepspeed.DummyOptim
+
+## DummyScheduler

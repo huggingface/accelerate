@@ -19,6 +19,26 @@ from copy import deepcopy
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
+from .dataclasses import DistributedType
+
+
+def get_active_deepspeed_plugin(state):
+    """
+    Returns the currently active DeepSpeedPlugin.
+
+    Raises:
+        ValueError: If DeepSpeed was not enabled and this function is called.
+    """
+    if state.distributed_type != DistributedType.DEEPSPEED:
+        raise ValueError(
+            "Couldn't retrieve the active `DeepSpeedPlugin` as none were enabled. "
+            "Please make sure that either `Accelerator` is configured for `deepspeed` "
+            "or make sure that the desired `DeepSpeedPlugin` has been enabled (`AcceleratorState().select_deepspeed_plugin(name)`) "
+            "before calling this function."
+        )
+    if not isinstance(state.deepspeed_plugins, dict):
+        return state.deepspeed_plugins
+    return next(plugin for plugin in state.deepspeed_plugins.values() if plugin.selected)
 
 
 class HfDeepSpeedConfig:

@@ -204,8 +204,8 @@ Vastly different GPUs within the same setup can lead to performance bottlenecks.
 
 If none of the solutions and advice here helped resolve your issue, you can always reach out to the community and Accelerate team for help.
 
-- Ask for help on the Hugging Face forums by posting your question in the [🤗 Accelerate category](https://discuss.huggingface.co/c/accelerate/18). Make sure to write a descriptive post with relevant context about your setup and reproducible code to maximize the likelihood that your problem is solved!
+- Ask for help on the Hugging Face forums by posting your question in the [Accelerate category](https://discuss.huggingface.co/c/accelerate/18). Make sure to write a descriptive post with relevant context about your setup and reproducible code to maximize the likelihood that your problem is solved!
 
 - Post a question on [Discord](http://hf.co/join/discord), and let the team and the community help you.
 
-- Create an Issue on the 🤗 Accelerate [GitHub repository](https://github.com/huggingface/accelerate/issues) if you think you've found a bug related to the library. Include context regarding the bug and details about your distributed setup to help us better figure out what's wrong and how we can fix it.
+- Create an Issue on the Accelerate [GitHub repository](https://github.com/huggingface/accelerate/issues) if you think you've found a bug related to the library. Include context regarding the bug and details about your distributed setup to help us better figure out what's wrong and how we can fix it.

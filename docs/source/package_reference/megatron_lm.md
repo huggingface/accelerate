@@ -13,20 +13,36 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Utilities for Megatron-LM
+# Megatron-LM utilities
+
+## MegatronLMPlugin
 
 [[autodoc]] utils.MegatronLMPlugin
 
+## MegatronLMDummyScheduler
+
 [[autodoc]] utils.MegatronLMDummyScheduler
+
+## MegatronLMDummyDataLoader
 
 [[autodoc]] utils.MegatronLMDummyDataLoader
 
+## AbstractTrainStep
+
 [[autodoc]] utils.AbstractTrainStep
+
+## GPTTrainStep
 
 [[autodoc]] utils.GPTTrainStep
 
+## BertTrainStep
+
 [[autodoc]] utils.BertTrainStep
 
+## T5TrainStep
+
 [[autodoc]] utils.T5TrainStep
+
+## avg_losses_across_data_parallel_group
 
 [[autodoc]] utils.avg_losses_across_data_parallel_group

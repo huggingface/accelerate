@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Kwargs Handlers
+# Kwargs handlers
 
 The following objects can be passed to the main [`Accelerator`] to customize how some PyTorch objects
 related to distributed training or mixed precision are created.

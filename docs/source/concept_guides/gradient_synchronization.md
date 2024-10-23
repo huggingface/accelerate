@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Gradient Synchronization
+# Gradient synchronization
 
 PyTorch's distributed module operates by communicating back and forth between all of the GPUs in your system.
 This communication takes time, and ensuring all processes know the states of each other happens at particular triggerpoints
@@ -28,7 +28,7 @@ from torch.nn.parallel import DistributedDataParallel
 model = nn.Linear(10, 10)
 ddp_model = DistributedDataParallel(model)
 ```
-In 🤗 Accelerate this conversion happens automatically when calling [`~Accelerator.prepare`] and passing in your model.
+In Accelerate this conversion happens automatically when calling [`~Accelerator.prepare`] and passing in your model.
 
 ```diff
 + from accelerate import Accelerator
@@ -90,7 +90,7 @@ for index, batch in enumerate(dataloader):
         optimizer.step()
 ```
 
-In 🤗 Accelerate to make this an API that can be called no matter the training device (though it may not do anything if you are not in a distributed system!),
+In Accelerate to make this an API that can be called no matter the training device (though it may not do anything if you are not in a distributed system!),
 `ddp_model.no_sync` gets replaced with [`~Accelerator.no_sync`] and operates the same way:
 
 ```diff

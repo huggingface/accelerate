@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pickle
 import tempfile
 import warnings
 from typing import List
@@ -247,6 +248,16 @@ def test_join_raises_warning_for_iterable_when_overriding_even_batches():
         assert "only supported for map-style datasets" in str(w[-1].message)
 
 
+def test_pickle_accelerator():
+    accelerator = create_accelerator()
+    data_loader = create_dataloader(accelerator, dataset_size=32, batch_size=4)
+    _ = accelerator.prepare(data_loader)
+    pickled_accelerator = pickle.dumps(accelerator)
+    unpickled_accelerator = pickle.loads(pickled_accelerator)
+    # TODO: Maybe this should be implemented as __eq__ for AcceleratorState?
+    assert accelerator.state.__dict__ == unpickled_accelerator.state.__dict__
+
+
 def test_data_loader(data_loader, accelerator):
     # Prepare the DataLoader
     data_loader = accelerator.prepare(data_loader)
@@ -367,6 +378,9 @@ def main():
     accelerator.state.distributed_type = DistributedType.FSDP
     test_join_raises_warning_for_non_ddp_distributed(accelerator)
     accelerator.state.distributed_type = original_state
+
+    accelerator.print("Test pickling an accelerator")
+    test_pickle_accelerator()
 
     dataset = DummyDataset()
     # Conventional Dataloader with shuffle=False

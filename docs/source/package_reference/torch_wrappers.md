@@ -13,25 +13,36 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Wrapper classes for torch Dataloaders, Optimizers, and Schedulers
+# DataLoaders, Optimizers, and Schedulers
 
 The internal classes Accelerate uses to prepare objects for distributed training
 when calling [`~Accelerator.prepare`].
 
-## Datasets and DataLoaders
+## DataLoader utilities
 
 [[autodoc]] data_loader.prepare_data_loader
 [[autodoc]] data_loader.skip_first_batches
 
+## BatchSamplerShard
+
 [[autodoc]] data_loader.BatchSamplerShard
+
+## IterableDatasetShard
+
 [[autodoc]] data_loader.IterableDatasetShard
+
+## DataLoaderShard
+
 [[autodoc]] data_loader.DataLoaderShard
+
+## DataLoaderDispatcher
+
 [[autodoc]] data_loader.DataLoaderDispatcher
 
-## Optimizers 
+## AcceleratedOptimizer
 
 [[autodoc]] optimizer.AcceleratedOptimizer
 
-## Schedulers 
+## AcceleratedScheduler
 
 [[autodoc]] scheduler.AcceleratedScheduler

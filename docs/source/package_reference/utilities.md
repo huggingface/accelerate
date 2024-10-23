@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Helpful Utilities
+# Utility functions and classes
 
 Below are a variety of utility functions that 🤗 Accelerate provides, broken down by use-case. 
 
@@ -126,6 +126,10 @@ These include data operations that mimic the same `torch` ops but can be used on
 
 [[autodoc]] utils.gather_object
 
+[[autodoc]] utils.get_grad_scaler
+
+[[autodoc]] utils.get_mixed_precision_context_manager
+
 [[autodoc]] utils.listify
 
 [[autodoc]] utils.pad_across_processes
@@ -202,8 +206,6 @@ These utilities relate to interacting with PyTorch models
 
 [[autodoc]] utils.set_module_tensor_to_device
 
-[[autodoc]] utils.shard_checkpoint
-
 
 ## Parallel
 
@@ -212,6 +214,8 @@ These include general utilities that should be used when working in parallel.
 [[autodoc]] utils.extract_model_from_parallel
 
 [[autodoc]] utils.save
+
+[[autodoc]] utils.load
 
 [[autodoc]] utils.wait_for_everyone
 

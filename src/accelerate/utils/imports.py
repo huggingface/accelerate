@@ -16,7 +16,7 @@ import importlib
 import importlib.metadata
 import os
 import warnings
-from functools import lru_cache
+from functools import lru_cache, wraps
 
 import torch
 from packaging import version
@@ -132,28 +132,6 @@ def is_cuda_available():
 
 
 @lru_cache
-def is_tpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    warnings.warn(
-        "`is_tpu_available` is deprecated and will be removed in v0.27.0. "
-        "Please use the `is_torch_xla_available` instead.",
-        FutureWarning,
-    )
-    # Due to bugs on the amp series GPUs, we disable torch-xla on them
-    if is_cuda_available():
-        return False
-    if check_device:
-        if _tpu_available:
-            try:
-                # Will raise a RuntimeError if no XLA configuration is found
-                _ = xm.xla_device()
-                return True
-            except RuntimeError:
-                return False
-    return _tpu_available
-
-
-@lru_cache
 def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     """
     Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
@@ -210,6 +188,14 @@ def is_8bit_bnb_available():
 
 def is_bnb_available():
     return _is_package_available("bitsandbytes")
+
+
+def is_bitsandbytes_multi_backend_available():
+    if not is_bnb_available():
+        return False
+    import bitsandbytes as bnb
+
+    return "multi_backend" in getattr(bnb, "features", set())
 
 
 def is_torchvision_available():
@@ -274,11 +260,6 @@ def is_boto3_available():
 
 def is_rich_available():
     if _is_package_available("rich"):
-        if "ACCELERATE_DISABLE_RICH" in os.environ:
-            warnings.warn(
-                "`ACCELERATE_DISABLE_RICH` is deprecated and will be removed in v0.22.0 and deactivated by default. Please use `ACCELERATE_ENABLE_RICH` if you wish to use `rich`."
-            )
-            return not parse_flag_from_env("ACCELERATE_DISABLE_RICH", False)
         return parse_flag_from_env("ACCELERATE_ENABLE_RICH", False)
     return False
 
@@ -313,12 +294,15 @@ def is_mlflow_available():
 
 
 def is_mps_available(min_version="1.12"):
+    "Checks if MPS device is available. The minimum version required is 1.12."
     # With torch 1.12, you can use torch.backends.mps
     # With torch 2.0.0, you can use torch.mps
     return is_torch_version(">=", min_version) and torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
 
 def is_ipex_available():
+    "Checks if ipex is installed."
+
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 
@@ -446,3 +430,35 @@ def is_torchdata_stateful_dataloader_available():
         torchdata_version = version.parse(importlib.metadata.version("torchdata"))
         return compare_versions(torchdata_version, ">=", "0.8.0")
     return False
+
+
+# TODO: Rework this into `utils.deepspeed` and migrate the "core" chunks into `accelerate.deepspeed`
+def deepspeed_required(func):
+    """
+    A decorator that ensures the decorated function is only called when deepspeed is enabled.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        from accelerate.state import AcceleratorState
+        from accelerate.utils.dataclasses import DistributedType
+
+        if AcceleratorState._shared_state != {} and AcceleratorState().distributed_type != DistributedType.DEEPSPEED:
+            raise ValueError(
+                "DeepSpeed is not enabled, please make sure that an `Accelerator` is configured for `deepspeed` "
+                "before calling this function."
+            )
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def is_weights_only_available():
+    # Weights only with allowlist was added in 2.4.0
+    # ref: https://github.com/pytorch/pytorch/pull/124331
+    return is_torch_version(">=", "2.4.0")
+
+
+def is_numpy_available(min_version="1.25.0"):
+    numpy_version = parse(importlib.metadata.version("numpy"))
+    return compare_versions(numpy_version, ">=", min_version)

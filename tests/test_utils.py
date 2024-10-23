@@ -53,7 +53,6 @@ from accelerate.utils import (
     recursively_apply,
     save,
     send_to_device,
-    tqdm,
 )
 from accelerate.utils.operations import is_namedtuple
 
@@ -305,6 +304,15 @@ class UtilsTester(unittest.TestCase):
             nt2 = pad_across_processes(nt)
         assert nt is nt2
 
+        # Basic functionality
+        tensor = torch.randn(4, 3, 100)
+        padded_tensor = pad_across_processes(tensor, dim=-1)
+        assert padded_tensor.shape[-1] == 100
+
+        # dim = -4 is out of bounds
+        padded_tensor = pad_across_processes(tensor, dim=-4)
+        assert padded_tensor is tensor
+
     def test_slice_and_concatenate(self):
         # First base case: 2 processes, batch size of 1
         num_processes = 2
@@ -405,9 +413,3 @@ class UtilsTester(unittest.TestCase):
         with self.assertLogs("accelerate.utils.environment", level="WARNING"):
             valid_env_items = convert_dict_to_env_variables(env)
         assert valid_env_items == ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
-
-    def test_tqdm_deprecation(self):
-        with pytest.warns(FutureWarning) as cm:
-            tqdm(True, range(3), disable=True)
-        assert "Passing `True` as the first argument to" in cm.pop().message.args[0]
-        tqdm(range(3), main_process_only=True, disable=True)
