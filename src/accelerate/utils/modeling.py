@@ -1525,14 +1525,13 @@ def get_state_dict_offloaded_model(model: nn.Module):
         model (`torch.nn.Module`):
             The offloaded model we want to save
     """
-    from ..hooks import AlignDevicesHook
 
     state_dict = {}
     placeholders = set()
     for name, module in model.named_modules():
         if name == "":
             continue
-        if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+        if has_offloaded_params(module):
             original_device = module._hf_hook.execution_device
             # assign hook execution device to cpu
             module._hf_hook.execution_device = "cpu"
@@ -1585,11 +1584,10 @@ def get_state_dict_from_offload(
         device_to_put_offload (`Union[int, str, torch.device]`):
             Device to load offloaded parameters into, defaults to the cpu.
     """
-    from ..hooks import AlignDevicesHook
 
     root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
     preforward = False
-    if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+    if has_offloaded_params(module):
         # assign the device to which the offloaded parameters will be sent
         original_device = module._hf_hook.execution_device
         module._hf_hook.execution_device = device_to_put_offload
@@ -1905,3 +1903,17 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
             return torch.amp.GradScaler("cuda", **kwargs)
         else:
             return torch.cuda.amp.GradScaler(**kwargs)
+
+
+def has_offloaded_params(module: torch.nn.Module) -> bool:
+    """
+    Checks if the given module has an offload hook attached.
+
+    Args:
+        module (`torch.nn.Module`): The module to check for an offload hook.
+
+    Returns:
+        bool: `True` if the module has an offload hook and offloading is enabled, `False` otherwise.
+    """
+    from ..hooks import AlignDevicesHook  # avoid circular import
+    return hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload

@@ -35,7 +35,6 @@ from huggingface_hub import split_torch_state_dict_into_shards
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
-from .hooks import AlignDevicesHook
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -107,7 +106,7 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME
-from .utils.modeling import get_state_dict_offloaded_model
+from .utils.modeling import get_state_dict_offloaded_model, has_offloaded_params
 from .utils.other import is_compiled_module
 
 
@@ -2846,13 +2845,7 @@ class Accelerator:
             return
 
         # get the state_dict of the model
-        if any(
-            [
-                module._hf_hook.offload
-                for module in model.modules()
-                if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook)
-            ]
-        ):
+        if any(has_offloaded_params(module) for module in model.modules()):
             state_dict = get_state_dict_offloaded_model(model)
         else:
             if any(param.device == torch.device("meta") for param in model.parameters()):
