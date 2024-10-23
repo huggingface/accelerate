@@ -61,7 +61,7 @@ class KwargsHandler:
         Returns a dictionary containing the attributes with values different from the default of this class.
         """
         # import clear_environment here to avoid circular import problem
-        from .other import clear_environment
+        from .environment import clear_environment
 
         with clear_environment():
             default_dict = self.__class__().to_dict()

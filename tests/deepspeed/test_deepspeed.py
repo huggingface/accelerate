@@ -50,7 +50,7 @@ from accelerate.utils.deepspeed import (
     DummyOptim,
     DummyScheduler,
 )
-from accelerate.utils.other import patch_environment
+from accelerate.utils import patch_environment
 from accelerate.utils.versions import compare_versions
 
 

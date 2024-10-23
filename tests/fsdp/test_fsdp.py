@@ -43,7 +43,7 @@ from accelerate.utils.constants import (
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enable_fsdp_ram_efficient_loading
-from accelerate.utils.other import patch_environment
+from accelerate.utils import patch_environment
 
 
 set_seed(42)
