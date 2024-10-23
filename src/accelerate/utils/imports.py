@@ -119,7 +119,7 @@ def is_cuda_available():
     uninitialized.
     """
     with patch_environment(PYTORCH_NVML_BASED_CUDA_CHECK="1"):
-        available = torch.mlu.is_available()
+        available = torch.cuda.is_available()
 
     return available
 
