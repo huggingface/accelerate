@@ -1907,7 +1907,7 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
 
 def has_offloaded_params(module: torch.nn.Module) -> bool:
     """
-    Checks if the given module has an offload hook attached.
+    Checks if a module has offloaded parameters by checking if the given module has a AlignDevicesHook attached with offloading enabled
 
     Args:
         module (`torch.nn.Module`): The module to check for an offload hook.
