@@ -135,6 +135,7 @@ from .modeling import (
     get_max_layer_size,
     get_max_memory,
     get_mixed_precision_context_manager,
+    has_offloaded_params,
     id_tensor_storage,
     infer_auto_device_map,
     is_peft_model,
