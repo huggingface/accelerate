@@ -334,26 +334,25 @@ def _replace_with_bnb_layers(
                     break
             if proceed:
                 # Load bnb module with empty weight and replace ``nn.Linear` module
-                with torch.device(module.weight.device): # in case of meta device
-                    if bnb_quantization_config.load_in_8bit:
-                        bnb_module = bnb.nn.Linear8bitLt(
-                            module.in_features,
-                            module.out_features,
-                            module.bias is not None,
-                            has_fp16_weights=False,
-                            threshold=bnb_quantization_config.llm_int8_threshold,
-                        )
-                    elif bnb_quantization_config.load_in_4bit:
-                        bnb_module = bnb.nn.Linear4bit(
-                            module.in_features,
-                            module.out_features,
-                            module.bias is not None,
-                            bnb_quantization_config.bnb_4bit_compute_dtype,
-                            compress_statistics=bnb_quantization_config.bnb_4bit_use_double_quant,
-                            quant_type=bnb_quantization_config.bnb_4bit_quant_type,
-                        )
-                    else:
-                        raise ValueError("load_in_8bit and load_in_4bit can't be both False")
+                if bnb_quantization_config.load_in_8bit:
+                    bnb_module = bnb.nn.Linear8bitLt(
+                        module.in_features,
+                        module.out_features,
+                        module.bias is not None,
+                        has_fp16_weights=False,
+                        threshold=bnb_quantization_config.llm_int8_threshold,
+                    )
+                elif bnb_quantization_config.load_in_4bit:
+                    bnb_module = bnb.nn.Linear4bit(
+                        module.in_features,
+                        module.out_features,
+                        module.bias is not None,
+                        bnb_quantization_config.bnb_4bit_compute_dtype,
+                        compress_statistics=bnb_quantization_config.bnb_4bit_use_double_quant,
+                        quant_type=bnb_quantization_config.bnb_4bit_quant_type,
+                    )
+                else:
+                    raise ValueError("load_in_8bit and load_in_4bit can't be both False")
                 bnb_module.weight.data = module.weight.data
                 if module.bias is not None:
                     bnb_module.bias.data = module.bias.data
