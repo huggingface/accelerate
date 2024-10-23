@@ -1571,7 +1571,7 @@ def get_state_dict_from_offload(
     device_to_put_offload: Union[int, str, torch.device] = "cpu",
 ):
     """
-    Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defualts
+    Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defaults
     to cpu).
 
     Args:
