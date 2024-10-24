@@ -86,6 +86,7 @@ from .utils import (
     is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
+    is_mlu_available,
     is_msamp_available,
     is_musa_available,
     is_npu_available,
@@ -313,7 +314,10 @@ class Accelerator:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
-            if is_musa_available():
+            if is_mlu_available():
+                if compare_versions("deepspeed", "<", "0.15.2"):
+                    raise ImportError("DeepSpeed version must be >= 0.15.2. Please update DeepSpeed.")
+            elif is_musa_available():
                 if compare_versions("deepspeed", ">", "0.14.3"):
                     raise ImportError("DeepSpeed MUSA version must be <= 0.14.3. Please downgrade DeepSpeed.")
             elif compare_versions("deepspeed", "<", "0.9.3"):

@@ -150,14 +150,6 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
 
 
 def is_deepspeed_available():
-    if is_mlu_available():
-        if _is_package_available("deepspeed", metadata_name="deepspeed-mlu"):
-            if compare_versions("deepspeed-mlu", "<", "0.10.1"):
-                raise ImportError("DeepSpeed MLU version must be >= 0.10.1. Please update DeepSpeed MLU.")
-        elif _is_package_available("deepspeed"):
-            if compare_versions("deepspeed", "<", "0.15.2"):
-                raise ImportError("DeepSpeed version must be >= 0.15.2. Please update DeepSpeed.")
-        return True
     return _is_package_available("deepspeed")
 
 
