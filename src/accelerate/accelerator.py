@@ -86,7 +86,6 @@ from .utils import (
     is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
-    is_mlu_available,
     is_msamp_available,
     is_musa_available,
     is_npu_available,
