@@ -200,8 +200,8 @@ def is_megatron_lm_available():
         if importlib.util.find_spec("megatron") is not None:
             try:
                 megatron_version = parse(importlib.metadata.version("megatron-core"))
-                if compare_versions(megatron_version, "==", "0.5.0"):
-                    return importlib.util.find_spec(".data", "megatron")
+                if compare_versions(megatron_version, ">=", "0.8.0"):
+                    return importlib.util.find_spec(".training", "megatron")
             except Exception as e:
                 warnings.warn(f"Parse Megatron version failed. Exception:{e}")
                 return False
