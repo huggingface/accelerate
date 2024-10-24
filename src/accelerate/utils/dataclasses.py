@@ -1297,7 +1297,7 @@ class DeepSpeedPlugin:
         if ds_config.get("train_batch_size", None) == "auto":
             del ds_config["train_batch_size"]
 
-        if compare_versions("transformers", "<", "4.33"):
+        if compare_versions("transformers", "<", "4.46"):
             from transformers.deepspeed import HfDeepSpeedConfig, unset_hf_deepspeed_config
         else:
             from transformers.integrations import HfDeepSpeedConfig, unset_hf_deepspeed_config
