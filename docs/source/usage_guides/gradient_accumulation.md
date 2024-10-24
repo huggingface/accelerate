@@ -282,13 +282,13 @@ for update_step in range(total_updates):
         for batch in batch_samples:
             total_batched_samples += 1
 
-            # Since we performed prefetching, we need to manually set sync_gradients
-            if total_batched_samples % gradient_accumulation_steps != 0:
-                accelerator.gradient_state._set_sync_gradients(False)
-            else:
-                accelerator.gradient_state._set_sync_gradients(True)
-
             with accelerator.accumulate(model):
+                # Since we performed prefetching, we need to manually set sync_gradients
+                if total_batched_samples % gradient_accumulation_steps != 0:
+                    accelerator.gradient_state._set_sync_gradients(False)
+                else:
+                    accelerator.gradient_state._set_sync_gradients(True)
+
                 inputs, targets = batch
                 outputs = model(inputs)
                 loss = loss_function(outputs, targets) # the loss function shoud sum over samples rather than averaging
