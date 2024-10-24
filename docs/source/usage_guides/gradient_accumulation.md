@@ -187,11 +187,11 @@ set_seed(0)
 x = torch.tensor([1., 2., 3., 4., 5., 6., 7., 8.])
 y = torch.tensor([2., 4., 6., 8., 10., 12., 14., 16.])
 gradient_accumulation_steps = 4
-batch_size = len(x) // gradient_accumulation_steps
+per_device_batch_size = len(x) // gradient_accumulation_steps
 
 # define dataset and dataloader
 dataset = TensorDataset(x, y)
-dataloader = DataLoader(dataset, batch_size=batch_size)
+dataloader = DataLoader(dataset, batch_size=per_device_batch_size)
 
 # define model, optimizer and loss function
 class SimpleLinearModel(torch.nn.Module):
@@ -338,15 +338,15 @@ def collate_fn(features):
 
 # define toy inputs and labels
 gradient_accumulation_steps = 2
-batch_size = 4
+per_device_batch_size = 4
 
 # define accelerator
 accelerator = Accelerator(gradient_accumulation_steps=gradient_accumulation_steps)
 
 # define dataset and dataloader
 # for this toy example, we'll compute gradient descent over one single global batch
-dataset = MyDataset(batch_size*gradient_accumulation_steps*accelerator.num_processes)
-dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn)
+dataset = MyDataset(per_device_batch_size*gradient_accumulation_steps*accelerator.num_processes)
+dataloader = DataLoader(dataset, batch_size=per_device_batch_size, collate_fn=collate_fn)
 
 # define model, model_optimizer and loss function
 model = torch.nn.Linear(1, 2, bias=False)
