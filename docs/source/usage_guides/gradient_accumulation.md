@@ -355,8 +355,8 @@ criterion = torch.nn.CrossEntropyLoss(reduction="sum") # must sum over samples r
 model_optimizer = torch.optim.SGD(model.parameters(), lr=0.08)
 
 
-logger.warning(f"initial model weight is {model.weight.detach().cpu().squeeze()}", main_process_only=True)
-logger.warning(f"initial model clone weight is {model_clone.weight.detach().cpu().squeeze()}", main_process_only=True)
+logger.warning(f"initial model weight is {model.weight.detach().cpu().squeeze()}")
+logger.warning(f"initial model clone weight is {model_clone.weight.detach().cpu().squeeze()}")
 
 # prepare artifacts - accelerator handles device placement and dataloader splitting
 model, model_optimizer = accelerator.prepare(model, model_optimizer)
@@ -383,7 +383,7 @@ for update_step in range(total_gradient_updates):
 
         # to compute it correctly in a multi-device DDP training, we need to gather the total number of items in the full batch.
         num_items_in_batch = accelerator.gather(local_num_items_in_batch).sum().item()
-        logger.warning(f"Total num items {num_items_in_batch}", main_process_only=True)
+        logger.warning(f"Total num items {num_items_in_batch}")
 
         for batch in batch_samples:
             inputs, labels = batch["input_ids"], batch["labels"]
