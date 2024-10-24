@@ -271,7 +271,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)  # noqa: F841
-            from transformers.deepspeed import is_deepspeed_zero3_enabled
+            from transformers.integrations import is_deepspeed_zero3_enabled
 
             assert is_deepspeed_zero3_enabled()
 
