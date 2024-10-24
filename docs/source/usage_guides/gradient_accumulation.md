@@ -277,7 +277,7 @@ for update_step in range(total_updates):
         # get local num items in batch 
         num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
         # to compute it correctly in a multi-device DDP training, we need to gather the total number of items in the full batch.
-        num_items_in_batch = accelerator.gather_for_metrics(num_items_in_batch).sum().item()
+        num_items_in_batch = accelerator.gather(num_items_in_batch).sum().item()
             
         for batch in batch_samples:
             total_batched_samples += 1
@@ -382,7 +382,7 @@ for update_step in range(total_gradient_updates):
         logger.warning(f"Step {update_step} - Device {accelerator.process_index} - num items in the local batch {local_num_items_in_batch}", main_process_only=False)
 
         # to compute it correctly in a multi-device DDP training, we need to gather the total number of items in the full batch.
-        num_items_in_batch = accelerator.gather_for_metrics(local_num_items_in_batch).sum().item()
+        num_items_in_batch = accelerator.gather(local_num_items_in_batch).sum().item()
         logger.warning(f"Total num items {num_items_in_batch}", main_process_only=True)
 
         for batch in batch_samples:
