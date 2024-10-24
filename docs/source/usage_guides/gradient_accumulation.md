@@ -428,3 +428,25 @@ if accelerator.is_main_process:
     logger.warning(f"w/o accumulation, the final model weight is {model_clone.weight.detach().cpu().squeeze()}")
 
 ```
+
+Results on a single device:
+```
+initial model weight is tensor([-0.0075,  0.5364])
+initial model clone weight is tensor([-0.0075,  0.5364])
+Step 0 - Device 0 - num items in the local batch 36
+Total num items 36
+Device 0 - w/ accumulation, the final model weight is tensor([0.0953, 0.4337])
+w/o accumulation, the final model weight is tensor([0.0953, 0.4337])
+```
+
+Results on a two devices set-up:
+```
+initial model weight is tensor([-0.0075,  0.5364])
+initial model clone weight is tensor([-0.0075,  0.5364])
+Step 0 - Device 0 - num items in the local batch 52
+Step 0 - Device 1 - num items in the local batch 84
+Total num items 136
+Device 1 - w/ accumulation, the final model weight is tensor([0.2117, 0.3172])
+Device 0 - w/ accumulation, the final model weight is tensor([0.2117, 0.3172])
+w/o accumulation, the final model weight is tensor([0.2117, 0.3172])
+```
