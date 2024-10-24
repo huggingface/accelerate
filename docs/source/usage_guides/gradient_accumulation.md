@@ -194,31 +194,39 @@ dataset = TensorDataset(x, y)
 dataloader = DataLoader(dataset, batch_size=batch_size)
 
 # define model, optimizer and loss function
-model = torch.zeros((1, 1), requires_grad=True)
+class SimpleLinearModel(torch.nn.Module):
+    def __init__(self):
+        super(SimpleLinearModel, self).__init__()
+        self.weight = torch.nn.Parameter(torch.zeros((1, 1)))
+
+    def forward(self, inputs):
+        return inputs @ self.weight
+
+model = SimpleLinearModel()
 model_clone = copy.deepcopy(model)
 criterion = torch.nn.MSELoss()
-model_optimizer = torch.optim.SGD([model], lr=0.02)
+model_optimizer = torch.optim.SGD(model.parameters(), lr=0.02)
 accelerator = Accelerator(gradient_accumulation_steps=gradient_accumulation_steps)
 model, model_optimizer, dataloader = accelerator.prepare(model, model_optimizer, dataloader)
-model_clone_optimizer = torch.optim.SGD([model_clone], lr=0.02)
-print(f"initial model weight is {model.mean().item():.5f}")
-print(f"initial model weight is {model_clone.mean().item():.5f}")
+model_clone_optimizer = torch.optim.SGD(model_clone.parameters(), lr=0.02)
+print(f"initial model weight is {model.weight.mean().item():.5f}")
+print(f"initial model weight is {model_clone.weight.mean().item():.5f}")
 for i, (inputs, labels) in enumerate(dataloader):
     with accelerator.accumulate(model):
         inputs = inputs.view(-1, 1)
         print(i, inputs.flatten())
         labels = labels.view(-1, 1)
-        outputs = inputs @ model
+        outputs = model(inputs)
         loss = criterion(outputs, labels)
         accelerator.backward(loss)
         model_optimizer.step()
         model_optimizer.zero_grad()
-loss = criterion(x.view(-1, 1) @ model_clone, y.view(-1, 1))
+loss = criterion(x.view(-1, 1) @ model_clone.weight, y.view(-1, 1))
 model_clone_optimizer.zero_grad()
 loss.backward()
 model_clone_optimizer.step()
-print(f"w/ accumulation, the final model weight is {model.mean().item():.5f}")
-print(f"w/o accumulation, the final model weight is {model_clone.mean().item():.5f}")
+print(f"w/ accumulation, the final model weight is {model.weight.mean().item():.5f}")
+print(f"w/o accumulation, the final model weight is {model_clone.weight.mean().item():.5f}")
 ```
 ```
 initial model weight is 0.00000

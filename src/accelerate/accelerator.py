@@ -35,7 +35,6 @@ from huggingface_hub import split_torch_state_dict_into_shards
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
-from .hooks import AlignDevicesHook
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -80,6 +79,7 @@ from .utils import (
     get_grad_scaler,
     get_mixed_precision_context_manager,
     get_pretty_name,
+    has_offloaded_params,
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
@@ -1252,7 +1252,7 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> # Assume a model, optimizer, data_loader and scheduler are defined
         >>> device_placement = [True, True, False, False]
-        >>> # Will place the first to items passed in automatically to the right device but not the last two.
+        >>> # Will place the first two items passed in automatically to the right device but not the last two.
         >>> model, optimizer, data_loader, scheduler = accelerator.prepare(
         ...     model, optimizer, data_loader, scheduler, device_placement=device_placement
         ... )
@@ -2846,13 +2846,7 @@ class Accelerator:
             return
 
         # get the state_dict of the model
-        if any(
-            [
-                module._hf_hook.offload
-                for module in model.modules()
-                if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook)
-            ]
-        ):
+        if any(has_offloaded_params(module) for module in model.modules()):
             state_dict = get_state_dict_offloaded_model(model)
         else:
             if any(param.device == torch.device("meta") for param in model.parameters()):

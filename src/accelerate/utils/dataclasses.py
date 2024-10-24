@@ -2401,7 +2401,7 @@ class BnbQuantizationConfig:
     bnb_4bit_quant_type: str = field(
         default="fp4",
         metadata={
-            "help": "set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','np4'}."
+            "help": "set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','nf4'}."
         },
     )
 
@@ -2412,7 +2412,7 @@ class BnbQuantizationConfig:
         },
     )
 
-    bnb_4bit_compute_dtype: bool = field(
+    bnb_4bit_compute_dtype: str = field(
         default="fp16",
         metadata={
             "help": "This sets the computational type which might be different than the input time. For example, inputs might be "
@@ -2451,10 +2451,10 @@ class BnbQuantizationConfig:
             raise ValueError("load_in_4bit must be a boolean")
 
         if self.load_in_4bit and self.load_in_8bit:
-            raise ValueError("load_in_4bit and load_in_8 can't be both True")
+            raise ValueError("load_in_4bit and load_in_8bit can't be both True")
 
         if not self.load_in_4bit and not self.load_in_8bit:
-            raise ValueError("load_in_4bit and load_in_8 can't be both False")
+            raise ValueError("load_in_4bit and load_in_8bit can't be both False")
 
         if not isinstance(self.llm_int8_threshold, (int, float)):
             raise ValueError("llm_int8_threshold must be a float or an int")
