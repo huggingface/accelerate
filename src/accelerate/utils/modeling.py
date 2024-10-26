@@ -43,7 +43,7 @@ from .imports import (
 from .memory import clear_device_cache, get_xpu_available_memory
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
-from .versions import compare_versions, is_torch_version
+from .versions import is_torch_version
 
 
 if is_npu_available(check_device=False):
