@@ -316,7 +316,7 @@ class Accelerator:
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
             if is_mlu_available():
                 if compare_versions("deepspeed", "<", "0.15.2"):
-                    raise ImportError("DeepSpeed version must be >= 0.15.2. Please update DeepSpeed.")
+                    raise ImportError("Using DeepSpeed with MLU requires `deepspeed>=0.15.2`. Please update DeepSpeed.")
             elif is_musa_available():
                 if compare_versions("deepspeed", ">", "0.14.3"):
                     raise ImportError("DeepSpeed MUSA version must be <= 0.14.3. Please downgrade DeepSpeed.")
