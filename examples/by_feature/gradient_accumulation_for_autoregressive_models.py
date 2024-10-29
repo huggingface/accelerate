@@ -322,7 +322,7 @@ def main():
     parser.add_argument(
         "--per_device_batch_size",
         type=int,
-        default=16,
+        default=2,
         help="The number of minibatches to be ran before gradients are accumulated.",
     )
 
