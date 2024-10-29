@@ -241,7 +241,7 @@ w/o accumulation, the final model weight is 2.04000
 
 ## Gradient accumulation on training samples of variable size
 
-As was pointed out in this [blog-post](https://huggingface.co/blog/gradient_accumulation), which points out a common error that occurs when perfoming gradient accumulation on training samples of variable size:
+As was pointed out in this [blog-post](https://huggingface.co/blog/gradient_accumulation), which points out a common error that occurs when performing gradient accumulation on training samples of variable size:
 
 >  [...] for gradient accumulation across token-level tasks like causal LM training, the correct loss should be computed by the **total loss across all batches in a gradient accumulation step** divided by the **total number of all non padding tokens in those batches**. This is not the same as the average of the per-batch loss values. 
 
