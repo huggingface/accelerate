@@ -93,7 +93,11 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, max_training
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
-        max_length = 128 if accelerator.distributed_type == DistributedType.XLA else max([len(e["input_ids"]) for e in examples])
+        max_length = (
+            128
+            if accelerator.distributed_type == DistributedType.XLA
+            else max([len(e["input_ids"]) for e in examples])
+        )
         # When using mixed precision we want round multiples of 8/16
         if accelerator.mixed_precision == "fp8":
             pad_to_multiple_of = 16
@@ -144,9 +148,11 @@ def training_function(config, args):
     # Initialize accelerator
     if args.with_wandb_tracking:
         accelerator = Accelerator(
-        cpu=args.cpu, mixed_precision=args.mixed_precision, gradient_accumulation_steps=gradient_accumulation_steps,
-        log_with="wandb"
-    )
+            cpu=args.cpu,
+            mixed_precision=args.mixed_precision,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            log_with="wandb",
+        )
     else:
         accelerator = Accelerator(
             cpu=args.cpu, mixed_precision=args.mixed_precision, gradient_accumulation_steps=gradient_accumulation_steps
@@ -166,7 +172,11 @@ def training_function(config, args):
     if args.with_wandb_tracking:
         run = os.path.split(__file__)[-1].split(".")[0]
         run_name = f"{accelerator.num_processes}GPU-grad{gradient_accumulation_steps}-bs{batch_size}"
-        accelerator.init_trackers(run, config, init_kwargs={"wandb": {"name": run_name}},)
+        accelerator.init_trackers(
+            run,
+            config,
+            init_kwargs={"wandb": {"name": run_name}},
+        )
 
     set_seed(seed)
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
@@ -207,7 +217,9 @@ def training_function(config, args):
             # In order to correctly the total number of non-padded tokens on which we'll compute the cross-entropy loss
             # we need to pre-load the full local batch - i.e the next per_device_batch_size * accumulation_steps samples
             batch_samples = []
-            num_batches_in_step = gradient_accumulation_steps if update_step != (total_gradient_updates - 1) else remainder
+            num_batches_in_step = (
+                gradient_accumulation_steps if update_step != (total_gradient_updates - 1) else remainder
+            )
             for _ in range(num_batches_in_step):
                 batch_samples += [next(training_iterator)]
             # get local num items in batch
@@ -219,7 +231,11 @@ def training_function(config, args):
             for i, batch in enumerate(batch_samples):
                 # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unecessary communications when accumulating
                 # cf: https://muellerzr.github.io/blog/gradient_accumulation.html
-                ctx = model.no_sync if (i < len(batch_samples) - 1 and accelerator.num_processes > 1) else contextlib.nullcontext
+                ctx = (
+                    model.no_sync
+                    if (i < len(batch_samples) - 1 and accelerator.num_processes > 1)
+                    else contextlib.nullcontext
+                )
                 with ctx():
                     total_batched_samples += 1
 
@@ -229,7 +245,7 @@ def training_function(config, args):
                     # We multiply by num_processes because the DDP calculates the average gradient across all devices whereas dividing by num_items_in_batch already takes into account all devices
                     # Same reason for gradient_accumulation_steps, but this times it's Accelerate that calculate the average gradient across the accumulated steps
                     # Because the loss is already divided by `num_items_in_batch` in the `transformers` code, we don't need to do it again
-                    loss = (loss * gradient_accumulation_steps * accelerator.num_processes)
+                    loss = loss * gradient_accumulation_steps * accelerator.num_processes
                     accelerator.backward(loss)
                     losses.append(loss.detach())
 
@@ -239,10 +255,14 @@ def training_function(config, args):
             lr_scheduler.step()
             optimizer.zero_grad()
 
-            losses = accelerator.gather(sum(losses)).sum().item() / (accelerator.num_processes * gradient_accumulation_steps)
+            losses = accelerator.gather(sum(losses)).sum().item() / (
+                accelerator.num_processes * gradient_accumulation_steps
+            )
 
             grad_norm = grad_norm.detach().item() if isinstance(grad_norm, torch.Tensor) else grad_norm
-            accelerator.print(f"epoch {epoch} - update step {update_step}:: grad norm: {grad_norm} ::train loss: {losses}")
+            accelerator.print(
+                f"epoch {epoch} - update step {update_step}:: grad norm: {grad_norm} ::train loss: {losses}"
+            )
             if args.with_wandb_tracking:
                 accelerator.log(
                     {
