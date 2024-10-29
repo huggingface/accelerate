@@ -96,3 +96,7 @@ rendered properly in your Markdown viewer.
 ### has_offloaded_params
 
 [[autodoc]] utils.has_offloaded_params
+
+### align_module
+
+[[autodoc]] big_modeling.align_module
