@@ -252,6 +252,8 @@ In other words, some adjustements must be made on losses that operate on a token
 ```python
 from accelerate import Accelerator
 import math
+import contextlib
+
 gradient_accumulation_steps = 2
 accelerator = Accelerator(gradient_accumulation_steps=gradient_accumulation_steps)
 model, optimizer, training_dataloader, scheduler = accelerator.prepare(
@@ -279,16 +281,17 @@ for update_step in range(total_updates):
         # to compute it correctly in a multi-device DDP training, we need to gather the total number of items in the full batch.
         num_items_in_batch = accelerator.gather(num_items_in_batch).sum().item()
             
-        for batch in batch_samples:
+        for i, batch in enumerate(batch_samples):
+            # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unecessary communications when accumulating
+            # cf: https://muellerzr.github.io/blog/gradient_accumulation.html
+            if (i < len(batch_samples) - 1 and accelerator.num_processes > 1):
+                ctx = model.no_sync
+            else:
+                ctx = contextlib.nullcontext
+            
             total_batched_samples += 1
 
-            with accelerator.accumulate(model):
-                # Since we performed prefetching, we need to manually set sync_gradients
-                if total_batched_samples % gradient_accumulation_steps != 0:
-                    accelerator.gradient_state._set_sync_gradients(False)
-                else:
-                    accelerator.gradient_state._set_sync_gradients(True)
-
+            with ctx():
                 inputs, targets = batch
                 outputs = model(inputs)
                 loss = loss_function(outputs, targets) # the loss function shoud sum over samples rather than averaging
@@ -298,9 +301,11 @@ for update_step in range(total_updates):
                 loss = (loss * gradient_accumulation_steps * accelerator.num_processes) / num_items_in_batch
                 
                 accelerator.backward(loss)
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad()
+
+        # Sync gradients and perform optimization steps once every gradient_accumulation_steps
+        optimizer.step()
+        scheduler.step()
+        optimizer.zero_grad()
 ```
 
 ### Self-contained causal LM example
@@ -313,6 +318,7 @@ from accelerate.utils import set_seed
 from accelerate.logging import  get_logger
 from torch.utils.data import Dataset, DataLoader
 import math
+import contexlib
 
 # seed
 set_seed(0)
@@ -385,16 +391,16 @@ for update_step in range(total_gradient_updates):
         num_items_in_batch = accelerator.gather(local_num_items_in_batch).sum().item()
         logger.warning(f"Total num items {num_items_in_batch}")
 
-        for batch in batch_samples:
+        for i, batch in enumerate(batch_samples):
             inputs, labels = batch["input_ids"], batch["labels"]
             total_batched_samples += 1
-
-            with accelerator.accumulate(model):
-                # Since we performed prefetching, we need to manually set sync_gradients
-                if total_batched_samples % gradient_accumulation_steps != 0:
-                    accelerator.gradient_state._set_sync_gradients(False)
-                else:
-                    accelerator.gradient_state._set_sync_gradients(True)
+            # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unecessary communications when accumulating
+            # cf: https://muellerzr.github.io/blog/gradient_accumulation.html
+            if (i < len(batch_samples) - 1 and accelerator.num_processes > 1):
+                ctx = model.no_sync
+            else:
+                ctx = contextlib.nullcontext
+            with ctx():
 
                 outputs = model(inputs)
                 loss = criterion(outputs.view(-1, 2), labels.view(-1).to(torch.int64))
@@ -403,8 +409,8 @@ for update_step in range(total_gradient_updates):
                 # Same reason for gradient_accumulation_steps, but this times it's Accelerate that calculate the average gradient across the accumulated steps 
                 loss = (loss * gradient_accumulation_steps * accelerator.num_processes) / num_items_in_batch
                 accelerator.backward(loss)
-                model_optimizer.step()
-                model_optimizer.zero_grad()
+        model_optimizer.step()
+        model_optimizer.zero_grad()
                 
 
 logger.warning(f"Device {accelerator.process_index} - w/ accumulation, the final model weight is {accelerator.unwrap_model(model).weight.detach().cpu().squeeze()}", main_process_only=False)
@@ -429,7 +435,7 @@ if accelerator.is_main_process:
 
 ```
 
-Results on a single device:
+Results on a single device - gradient accumulation steps set to 1 and batch_size set to 8:
 ```
 initial model weight is tensor([-0.0075,  0.5364])
 initial model clone weight is tensor([-0.0075,  0.5364])
@@ -439,7 +445,7 @@ Device 0 - w/ accumulation, the final model weight is tensor([0.0953, 0.4337])
 w/o accumulation, the final model weight is tensor([0.0953, 0.4337])
 ```
 
-Results on a two devices set-up:
+Results on a two devices set-up - gradient accumulation steps set to 2 and batch_size set to 4.
 ```
 initial model weight is tensor([-0.0075,  0.5364])
 initial model clone weight is tensor([-0.0075,  0.5364])
@@ -450,3 +456,15 @@ Device 1 - w/ accumulation, the final model weight is tensor([0.2117, 0.3172])
 Device 0 - w/ accumulation, the final model weight is tensor([0.2117, 0.3172])
 w/o accumulation, the final model weight is tensor([0.2117, 0.3172])
 ```
+
+### To go further:
+
+Please find a complete example script on a real world training run in the examples folder at the path [`accelerate/examples/by_feature/gradient_accumulation_for_autoregressive_models.py`](https://github.com/huggingface/accelerate/blob/main/examples/by_feature/gradient_accumulation_for_autoregressive_models.py).
+
+Running it on several training configurations with constant global batch size equal to 32 gives the following graph:
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/hf-audio/gradient_accumulation_example/resolve/main/training_losses.png">
+</div>
+
+Note that the training losses are exactly the same up to training step 20. The small deviation after this training step occurs at the very end of the first epoch, because, by [default](https://huggingface.co/docs/accelerate/en/package_reference/torch_wrappers#accelerate.data_loader.prepare_data_loader.even_batches), the dataloader duplicates the samples at the beginning of the dataset when the total batch size doesn't exactly divide the dataset.
