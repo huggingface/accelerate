@@ -99,4 +99,4 @@ rendered properly in your Markdown viewer.
 
 ### align_module
 
-[[autodoc]] big_modeling.align_module
+[[autodoc]] utils.align_module
