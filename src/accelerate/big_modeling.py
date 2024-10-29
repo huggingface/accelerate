@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import logging
 import os
 from contextlib import contextmanager
@@ -20,6 +21,8 @@ from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
+
+from accelerate.utils.modeling import has_offloaded_params, set_module_tensor_to_device
 
 from .hooks import (
     AlignDevicesHook,
@@ -631,3 +634,51 @@ def load_checkpoint_and_dispatch(
         preload_module_classes=preload_module_classes,
         force_hooks=force_hooks,
     )
+
+
+@contextlib.contextmanager
+def align_module(module: torch.nn.Module, execution_device: Optional[torch.device] = None):
+    """
+    Moves a module's parameters to the specified execution device.
+
+    Args:
+        module (torch.nn.Module): Module with parameters to align.
+        execution_device (Optional[torch.device]): If provided, overrides the
+            module's execution device within the context.
+
+    Yields:
+        None: Yields control while the module's parameters are aligned to the execution device.
+    """
+    if has_offloaded_params(module):
+        if execution_device is not None:
+            original_device = module._hf_hook.execution_device
+            module._hf_hook.execution_device = execution_device
+
+        module._hf_hook.pre_forward(module)
+        yield
+        module._hf_hook.post_forward(module, None)
+
+        if execution_device is not None:
+            module._hf_hook.execution_device = original_device
+
+    elif execution_device is not None:
+        devices = {}
+        for name, param in module.named_parameters():
+            devices[name] = param.device
+            set_module_tensor_to_device(
+                module,
+                name,
+                execution_device,
+            )
+
+        yield
+
+        for name, param in module.named_parameters():
+            set_module_tensor_to_device(
+                module,
+                name,
+                devices[name],
+            )
+
+    else:
+        yield
