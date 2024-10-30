@@ -1920,13 +1920,14 @@ def align_module(module: torch.nn.Module, execution_device: Optional[torch.devic
         if execution_device is not None:
             original_device = module._hf_hook.execution_device
             module._hf_hook.execution_device = execution_device
-
-        module._hf_hook.pre_forward(module)
-        yield
-        module._hf_hook.post_forward(module, None)
-
-        if execution_device is not None:
-            module._hf_hook.execution_device = original_device
+        
+        try:
+            module._hf_hook.pre_forward(module)
+            yield
+        finally:
+            module._hf_hook.post_forward(module, None)
+            if execution_device is not None:
+                module._hf_hook.execution_device = original_device
 
     elif execution_device is not None:
         devices = {name: param.device for name, param in module.named_parameters()}
