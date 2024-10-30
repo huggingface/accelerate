@@ -1929,23 +1929,14 @@ def align_module(module: torch.nn.Module, execution_device: Optional[torch.devic
             module._hf_hook.execution_device = original_device
 
     elif execution_device is not None:
-        devices = {}
-        for name, param in module.named_parameters():
-            devices[name] = param.device
-            set_module_tensor_to_device(
-                module,
-                name,
-                execution_device,
-            )
-
-        yield
-
-        for name, param in module.named_parameters():
-            set_module_tensor_to_device(
-                module,
-                name,
-                devices[name],
-            )
+        devices = {name: param.device for name, param in module.named_parameters()}
+        try:
+            for name in devices:
+                set_module_tensor_to_device(module, name, execution_device)
+            yield
+        finally:
+            for name, device in devices.items():
+                set_module_tensor_to_device(module, name, device)
 
     else:
         yield
