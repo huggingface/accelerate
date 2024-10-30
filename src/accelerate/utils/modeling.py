@@ -1908,9 +1908,10 @@ def align_module(module: torch.nn.Module, execution_device: Optional[torch.devic
     Moves a module's parameters to the specified execution device.
 
     Args:
-        module (torch.nn.Module): Module with parameters to align.
-        execution_device (Optional[torch.device]): If provided, overrides the
-            module's execution device within the context.
+        module (`torch.nn.Module`): 
+            Module with parameters to align.
+        execution_device (`torch.device`, *optional*): 
+            If provided, overrides the module's execution device within the context.
 
     Yields:
         None: Yields control while the module's parameters are aligned to the execution device.
