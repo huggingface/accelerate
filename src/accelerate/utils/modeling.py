@@ -1579,8 +1579,7 @@ def get_state_dict_from_offload(
 
     # assign the device to which the offloaded parameters will be sent
     with align_module(module, device_to_put_offload):
-        for m_key in module.state_dict():
-            params = module.state_dict()[m_key]
+        for m_key, params in module.state_dict().items():
             if (root + f".{m_key}") in state_dict:
                 state_dict[root + f".{m_key}"] = params
 
