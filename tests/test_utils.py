@@ -25,6 +25,8 @@ import pytest
 import torch
 from torch import nn
 
+from accelerate.big_modeling import cpu_offload_with_hook
+from accelerate.hooks import attach_align_device_hook, remove_hook_from_module
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
     require_huggingface_suite,
@@ -45,6 +47,7 @@ from accelerate.utils import (
     convert_to_fp32,
     extract_model_from_parallel,
     find_device,
+    has_offloaded_params,
     is_torch_xla_available,
     listify,
     pad_across_processes,
@@ -413,3 +416,18 @@ class UtilsTester(unittest.TestCase):
         with self.assertLogs("accelerate.utils.environment", level="WARNING"):
             valid_env_items = convert_dict_to_env_variables(env)
         assert valid_env_items == ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
+
+    def test_has_offloaded_params(self):
+        model = RegressionModel()
+        assert not has_offloaded_params(model)
+
+        attach_align_device_hook(model, offload=False)
+        assert not has_offloaded_params(model)
+
+        remove_hook_from_module(model)
+        model, _ = cpu_offload_with_hook(model)
+        assert not has_offloaded_params(model)
+
+        remove_hook_from_module(model)
+        attach_align_device_hook(model, offload=True)
+        assert has_offloaded_params(model)

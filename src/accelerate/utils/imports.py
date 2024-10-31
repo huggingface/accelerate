@@ -22,7 +22,7 @@ import torch
 from packaging import version
 from packaging.version import parse
 
-from .environment import parse_flag_from_env, str_to_bool
+from .environment import parse_flag_from_env, patch_environment, str_to_bool
 from .versions import compare_versions, is_torch_version
 
 
@@ -118,15 +118,8 @@ def is_cuda_available():
     Checks if `cuda` is available via an `nvml-based` check which won't trigger the drivers and leave cuda
     uninitialized.
     """
-    pytorch_nvml_based_cuda_check_previous_value = os.environ.get("PYTORCH_NVML_BASED_CUDA_CHECK")
-    try:
-        os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = str(1)
+    with patch_environment(PYTORCH_NVML_BASED_CUDA_CHECK="1"):
         available = torch.cuda.is_available()
-    finally:
-        if pytorch_nvml_based_cuda_check_previous_value:
-            os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = pytorch_nvml_based_cuda_check_previous_value
-        else:
-            os.environ.pop("PYTORCH_NVML_BASED_CUDA_CHECK", None)
 
     return available
 
@@ -207,8 +200,8 @@ def is_megatron_lm_available():
         if importlib.util.find_spec("megatron") is not None:
             try:
                 megatron_version = parse(importlib.metadata.version("megatron-core"))
-                if compare_versions(megatron_version, "==", "0.5.0"):
-                    return importlib.util.find_spec(".data", "megatron")
+                if compare_versions(megatron_version, ">=", "0.8.0"):
+                    return importlib.util.find_spec(".training", "megatron")
             except Exception as e:
                 warnings.warn(f"Parse Megatron version failed. Exception:{e}")
                 return False
@@ -327,20 +320,19 @@ def is_ipex_available():
 
 @lru_cache
 def is_mlu_available(check_device=False):
-    "Checks if `torch_mlu` is installed and potentially if a MLU is in the environment"
+    """
+    Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
+    uninitialized.
+    """
     if importlib.util.find_spec("torch_mlu") is None:
         return False
 
     import torch_mlu  # noqa: F401
 
-    if check_device:
-        try:
-            # Will raise a RuntimeError if no MLU is found
-            _ = torch.mlu.device_count()
-            return torch.mlu.is_available()
-        except RuntimeError:
-            return False
-    return hasattr(torch, "mlu") and torch.mlu.is_available()
+    with patch_environment(PYTORCH_CNDEV_BASED_MLU_CHECK="1"):
+        available = torch.mlu.is_available()
+
+    return available
 
 
 @lru_cache
