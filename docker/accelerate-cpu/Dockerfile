@@ -1,7 +1,7 @@
 # Builds CPU-only Docker image of PyTorch
 # Uses multi-staged approach to reduce size
 # Stage 1
-FROM python:3.9-slim as compile-image
+FROM python:3.8-slim as compile-image
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -27,6 +27,9 @@ RUN python3 -m pip install --no-cache-dir \
 # Stage 2
 FROM python:3.9-slim AS build-image
 COPY --from=compile-image /opt/venv /opt/venv
+RUN useradd -ms /bin/bash user
+RUN echo "user ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/pip" >> /etc/sudoers
+USER user
 
 # Make sure we use the virtualenv
 ENV PATH="/opt/venv/bin:$PATH"
