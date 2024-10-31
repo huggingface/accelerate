@@ -473,7 +473,7 @@ class UtilsTester(unittest.TestCase):
         short_actual_docstring = "".join(short_deprecated_demo.__doc__.split())
 
         self.assertEqual(short_expected_docstring, short_actual_docstring)
-        
+
     def test_has_offloaded_params(self):
         model = RegressionModel()
         assert not has_offloaded_params(model)
