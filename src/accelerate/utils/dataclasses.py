@@ -61,7 +61,7 @@ class KwargsHandler:
         Returns a dictionary containing the attributes with values different from the default of this class.
         """
         # import clear_environment here to avoid circular import problem
-        from .other import clear_environment
+        from .environment import clear_environment
 
         with clear_environment():
             default_dict = self.__class__().to_dict()
@@ -1297,7 +1297,7 @@ class DeepSpeedPlugin:
         if ds_config.get("train_batch_size", None) == "auto":
             del ds_config["train_batch_size"]
 
-        if compare_versions("transformers", "<", "4.33"):
+        if compare_versions("transformers", "<", "4.46"):
             from transformers.deepspeed import HfDeepSpeedConfig, unset_hf_deepspeed_config
         else:
             from transformers.integrations import HfDeepSpeedConfig, unset_hf_deepspeed_config
@@ -2202,7 +2202,7 @@ class MegatronLMPlugin:
         self.megatron_lm_default_args["min_lr"] = self.min_lr
 
     def set_tensorboard_logging_options(self):
-        from megatron.arguments import _add_logging_args
+        from megatron.training.arguments import _add_logging_args
 
         parser = argparse.ArgumentParser()
         parser = _add_logging_args(parser)
@@ -2401,7 +2401,7 @@ class BnbQuantizationConfig:
     bnb_4bit_quant_type: str = field(
         default="fp4",
         metadata={
-            "help": "set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','np4'}."
+            "help": "set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','nf4'}."
         },
     )
 
@@ -2412,7 +2412,7 @@ class BnbQuantizationConfig:
         },
     )
 
-    bnb_4bit_compute_dtype: bool = field(
+    bnb_4bit_compute_dtype: str = field(
         default="fp16",
         metadata={
             "help": "This sets the computational type which might be different than the input time. For example, inputs might be "
@@ -2451,10 +2451,10 @@ class BnbQuantizationConfig:
             raise ValueError("load_in_4bit must be a boolean")
 
         if self.load_in_4bit and self.load_in_8bit:
-            raise ValueError("load_in_4bit and load_in_8 can't be both True")
+            raise ValueError("load_in_4bit and load_in_8bit can't be both True")
 
         if not self.load_in_4bit and not self.load_in_8bit:
-            raise ValueError("load_in_4bit and load_in_8 can't be both False")
+            raise ValueError("load_in_4bit and load_in_8bit can't be both False")
 
         if not isinstance(self.llm_int8_threshold, (int, float)):
             raise ValueError("llm_int8_threshold must be a float or an int")

@@ -42,6 +42,7 @@ from accelerate.test_utils.testing import (
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset, RegressionModel
+from accelerate.utils import patch_environment
 from accelerate.utils.dataclasses import DeepSpeedPlugin
 from accelerate.utils.deepspeed import (
     DeepSpeedEngineWrapper,
@@ -50,7 +51,6 @@ from accelerate.utils.deepspeed import (
     DummyOptim,
     DummyScheduler,
 )
-from accelerate.utils.other import patch_environment
 from accelerate.utils.versions import compare_versions
 
 
@@ -271,7 +271,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)  # noqa: F841
-            from transformers.deepspeed import is_deepspeed_zero3_enabled
+            from transformers.integrations import is_deepspeed_zero3_enabled
 
             assert is_deepspeed_zero3_enabled()
 

@@ -69,7 +69,7 @@ setup(
             "accelerate-merge-weights=accelerate.commands.merge:main",
         ]
     },
-    python_requires=">=3.8.0",
+    python_requires=">=3.9.0",
     install_requires=[
         "numpy>=1.17,<3.0.0",
         "packaging>=20.0",

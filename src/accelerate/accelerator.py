@@ -35,7 +35,6 @@ from huggingface_hub import split_torch_state_dict_into_shards
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
-from .hooks import AlignDevicesHook
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -80,6 +79,7 @@ from .utils import (
     get_grad_scaler,
     get_mixed_precision_context_manager,
     get_pretty_name,
+    has_offloaded_params,
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
@@ -1252,7 +1252,7 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> # Assume a model, optimizer, data_loader and scheduler are defined
         >>> device_placement = [True, True, False, False]
-        >>> # Will place the first to items passed in automatically to the right device but not the last two.
+        >>> # Will place the first two items passed in automatically to the right device but not the last two.
         >>> model, optimizer, data_loader, scheduler = accelerator.prepare(
         ...     model, optimizer, data_loader, scheduler, device_placement=device_placement
         ... )
@@ -1421,7 +1421,10 @@ class Accelerator:
                     current_device.index if isinstance(current_device, torch.device) else current_device
                 )
 
-                if torch.device(current_device_index) != self.device:
+                if self.device.type == "cpu" and is_bitsandbytes_multi_backend_available():
+                    # bnb with multi-backend supports CPU which don't need to check index.
+                    pass
+                elif torch.device(current_device_index) != self.device:
                     # if on the first device (GPU 0) we don't care
                     if (self.device.index is not None) or (current_device_index != 0):
                         raise ValueError(
@@ -1995,7 +1998,7 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
-            if self.device.type == "xpu" and model.device.type == "cpu":
+            if self.device.type == "xpu" and next(model.parameters()).device.type == "cpu":
                 model = model.to(self.device)
             # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
             if is_ipex_available():
@@ -2843,13 +2846,7 @@ class Accelerator:
             return
 
         # get the state_dict of the model
-        if any(
-            [
-                module._hf_hook.offload
-                for module in model.modules()
-                if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook)
-            ]
-        ):
+        if any(has_offloaded_params(module) for module in model.modules()):
             state_dict = get_state_dict_offloaded_model(model)
         else:
             if any(param.device == torch.device("meta") for param in model.parameters()):

@@ -18,6 +18,7 @@ import os
 import platform
 import subprocess
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
 from shutil import which
@@ -272,3 +273,75 @@ def set_numa_affinity(local_process_index: int, verbose: Optional[bool] = None) 
             default to True.
     """
     override_numa_affinity(local_process_index=local_process_index, verbose=verbose)
+
+
+@contextmanager
+def clear_environment():
+    """
+    A context manager that will temporarily clear environment variables.
+
+    When this context exits, the previous environment variables will be back.
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import clear_environment
+
+    >>> os.environ["FOO"] = "bar"
+    >>> with clear_environment():
+    ...     print(os.environ)
+    ...     os.environ["FOO"] = "new_bar"
+    ...     print(os.environ["FOO"])
+    {}
+    new_bar
+
+    >>> print(os.environ["FOO"])
+    bar
+    ```
+    """
+    _old_os_environ = os.environ.copy()
+    os.environ.clear()
+
+    try:
+        yield
+    finally:
+        os.environ.clear()  # clear any added keys,
+        os.environ.update(_old_os_environ)  # then restore previous environment
+
+
+@contextmanager
+def patch_environment(**kwargs):
+    """
+    A context manager that will add each keyword argument passed to `os.environ` and remove them when exiting.
+
+    Will convert the values in `kwargs` to strings and upper-case all the keys.
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import patch_environment
+
+    >>> with patch_environment(FOO="bar"):
+    ...     print(os.environ["FOO"])  # prints "bar"
+    >>> print(os.environ["FOO"])  # raises KeyError
+    ```
+    """
+    existing_vars = {}
+    for key, value in kwargs.items():
+        key = key.upper()
+        if key in os.environ:
+            existing_vars[key] = os.environ[key]
+        os.environ[key] = str(value)
+
+    try:
+        yield
+    finally:
+        for key in kwargs:
+            key = key.upper()
+            if key in existing_vars:
+                # restore previous value
+                os.environ[key] = existing_vars[key]
+            else:
+                os.environ.pop(key, None)

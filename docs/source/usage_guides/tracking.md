@@ -208,10 +208,10 @@ if accelerator.is_main_process:
 If a library has an API that does not follow a strict `.log` with an overall dictionary such as Neptune.AI, logging can be done manually under an `if accelerator.is_main_process` statement:
 ```diff
   from accelerate import Accelerator
-+ import neptune.new as neptune
++ import neptune
 
   accelerator = Accelerator()
-+ run = neptune.init(...)
++ run = neptune.init_run(...)
 
   my_model, my_optimizer, my_training_dataloader = accelerate.prepare(my_model, my_optimizer, my_training_dataloader)
   device = accelerator.device
