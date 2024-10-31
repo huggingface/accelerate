@@ -200,12 +200,12 @@ from .bnb import has_4bit_bnb_layers, load_and_quantize_model
 from .fsdp_utils import (
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
+    ensure_weights_retied,
     load_fsdp_model,
     load_fsdp_optimizer,
     merge_fsdp_weights,
     save_fsdp_model,
     save_fsdp_optimizer,
-    ensure_weights_retied,
 )
 from .launch import (
     PrepareForLaunch,

@@ -74,8 +74,8 @@ from .utils import (
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
-    extract_model_from_parallel,
     ensure_weights_retied,
+    extract_model_from_parallel,
     gather,
     gather_object,
     get_grad_scaler,
@@ -1477,7 +1477,9 @@ class Accelerator:
                     # need to ensure that params are re-tied after running
                     # param_init_fn
                     fsdp_plugin.param_init_fn = ensure_weights_retied(
-                        fsdp_plugin.param_init_fn, model, self.device, 
+                        fsdp_plugin.param_init_fn,
+                        model,
+                        self.device,
                     )
 
                     kwargs = {
