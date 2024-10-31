@@ -35,6 +35,7 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     slow,
 )
+from accelerate.utils import patch_environment
 from accelerate.utils.constants import (
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -43,7 +44,6 @@ from accelerate.utils.constants import (
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enable_fsdp_ram_efficient_loading
-from accelerate.utils.other import patch_environment
 
 
 set_seed(42)

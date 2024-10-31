@@ -90,3 +90,9 @@ rendered properly in your Markdown viewer.
 ### remove_hook_from_submodules
 
 [[autodoc]] hooks.remove_hook_from_submodules
+
+## Utilities
+
+### has_offloaded_params
+
+[[autodoc]] utils.has_offloaded_params

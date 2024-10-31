@@ -43,7 +43,7 @@ from .imports import (
 from .memory import clear_device_cache, get_xpu_available_memory
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
-from .versions import compare_versions, is_torch_version
+from .versions import is_torch_version
 
 
 if is_npu_available(check_device=False):
@@ -1460,8 +1460,6 @@ def load_state_dict(checkpoint_file, device_map=None):
                 device = list(device_map.values())[0]
                 target_device = device
                 if is_xpu_available():
-                    if compare_versions("safetensors", "<", "0.4.2"):
-                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
                     if isinstance(device, int):
                         target_device = f"xpu:{device}"
 
@@ -1496,8 +1494,6 @@ def load_state_dict(checkpoint_file, device_map=None):
             for device in devices:
                 target_device = device
                 if is_xpu_available():
-                    if compare_versions("safetensors", "<", "0.4.2"):
-                        raise ImportError("Safetensors version must be >= 0.4.2 for XPU. Please upgrade safetensors.")
                     if isinstance(device, int):
                         target_device = f"xpu:{device}"
 
@@ -1525,14 +1521,13 @@ def get_state_dict_offloaded_model(model: nn.Module):
         model (`torch.nn.Module`):
             The offloaded model we want to save
     """
-    from ..hooks import AlignDevicesHook
 
     state_dict = {}
     placeholders = set()
     for name, module in model.named_modules():
         if name == "":
             continue
-        if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+        if has_offloaded_params(module):
             original_device = module._hf_hook.execution_device
             # assign hook execution device to cpu
             module._hf_hook.execution_device = "cpu"
@@ -1572,7 +1567,7 @@ def get_state_dict_from_offload(
     device_to_put_offload: Union[int, str, torch.device] = "cpu",
 ):
     """
-    Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defualts
+    Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defaults
     to cpu).
 
     Args:
@@ -1585,11 +1580,10 @@ def get_state_dict_from_offload(
         device_to_put_offload (`Union[int, str, torch.device]`):
             Device to load offloaded parameters into, defaults to the cpu.
     """
-    from ..hooks import AlignDevicesHook
 
     root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
     preforward = False
-    if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+    if has_offloaded_params(module):
         # assign the device to which the offloaded parameters will be sent
         original_device = module._hf_hook.execution_device
         module._hf_hook.execution_device = device_to_put_offload
@@ -1905,3 +1899,19 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
             return torch.amp.GradScaler("cuda", **kwargs)
         else:
             return torch.cuda.amp.GradScaler(**kwargs)
+
+
+def has_offloaded_params(module: torch.nn.Module) -> bool:
+    """
+    Checks if a module has offloaded parameters by checking if the given module has a AlignDevicesHook attached with
+    offloading enabled
+
+    Args:
+        module (`torch.nn.Module`): The module to check for an offload hook.
+
+    Returns:
+        bool: `True` if the module has an offload hook and offloading is enabled, `False` otherwise.
+    """
+    from ..hooks import AlignDevicesHook  # avoid circular import
+
+    return hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload
