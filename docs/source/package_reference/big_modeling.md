@@ -97,6 +97,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] utils.has_offloaded_params
 
-### align_module
+### align_module_device
 
-[[autodoc]] utils.align_module
+[[autodoc]] utils.align_module_device

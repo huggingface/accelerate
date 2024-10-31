@@ -1533,7 +1533,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
             continue
 
         try:
-            with align_module(module, "cpu"):
+            with align_module_device(module, "cpu"):
                 module_state_dict = module.state_dict()
         except MemoryError:
             raise MemoryError("Offloaded module must fit in CPU memory to call save_model!") from None
@@ -1578,7 +1578,7 @@ def get_state_dict_from_offload(
     root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
 
     # assign the device to which the offloaded parameters will be sent
-    with align_module(module, device_to_put_offload):
+    with align_module_device(module, device_to_put_offload):
         for m_key, params in module.state_dict().items():
             if (root + f".{m_key}") in state_dict:
                 state_dict[root + f".{m_key}"] = params
@@ -1902,7 +1902,7 @@ def has_offloaded_params(module: torch.nn.Module) -> bool:
 
 
 @contextlib.contextmanager
-def align_module(module: torch.nn.Module, execution_device: Optional[torch.device] = None):
+def align_module_device(module: torch.nn.Module, execution_device: Optional[torch.device] = None):
     """
     Context manager that moves a module's parameters to the specified execution device.
 
@@ -1910,10 +1910,8 @@ def align_module(module: torch.nn.Module, execution_device: Optional[torch.devic
         module (`torch.nn.Module`):
             Module with parameters to align.
         execution_device (`torch.device`, *optional*):
-            If provided, overrides the module's execution device within the context.
-
-    Yields:
-        None: Yields control while the module's parameters are aligned to the execution device.
+            If provided, overrides the module's execution device within the context. Otherwise, use hook execution
+            device or pass
     """
     if has_offloaded_params(module):
         if execution_device is not None:
