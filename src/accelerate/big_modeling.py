@@ -107,7 +107,7 @@ def init_on_device(device: torch.device, include_buffers: bool = None):
     from accelerate import init_on_device
 
     with init_on_device(device=torch.device("cuda")):
-        tst = nn.Liner(100, 100)  # on `cuda` device
+        tst = nn.Linear(100, 100)  # on `cuda` device
     ```
     """
     if include_buffers is None:
