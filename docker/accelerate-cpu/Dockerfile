@@ -1,7 +1,7 @@
 # Builds CPU-only Docker image of PyTorch
 # Uses multi-staged approach to reduce size
 # Stage 1
-FROM python:3.8-slim as compile-image
+FROM python:3.9-slim as compile-image
 
 ARG DEBIAN_FRONTEND=noninteractive
 
