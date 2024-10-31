@@ -1904,7 +1904,7 @@ def has_offloaded_params(module: torch.nn.Module) -> bool:
 @contextlib.contextmanager
 def align_module(module: torch.nn.Module, execution_device: Optional[torch.device] = None):
     """
-    Moves a module's parameters to the specified execution device.
+    Context manager that moves a module's parameters to the specified execution device.
 
     Args:
         module (`torch.nn.Module`):
