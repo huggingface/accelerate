@@ -124,6 +124,7 @@ from .imports import (
     is_xpu_available,
 )
 from .modeling import (
+    align_module_device,
     calculate_maximum_sizes,
     check_device_map,
     check_tied_parameters_in_config,
