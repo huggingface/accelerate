@@ -24,7 +24,7 @@ _T = TypeVar("_T")
 _P = ParamSpec("_P")
 
 
-def deprecated(since: str, removed_in: str, instructions: str) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
+def deprecated(since: str, removed_in: str, instruction: str) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
     """Marks functions as deprecated.
 
     It will result in a warning when the function is called and a note in the docstring.
@@ -34,7 +34,7 @@ def deprecated(since: str, removed_in: str, instructions: str) -> Callable[[Call
             The version when the function was first deprecated.
         removed_in (`str`):
             The version when the function will be removed.
-        instructions (`str`):
+        instruction (`str`):
             The action users should take.
 
     Returns:
@@ -47,7 +47,7 @@ def deprecated(since: str, removed_in: str, instructions: str) -> Callable[[Call
             warnings.warn(
                 f"'{function.__module__}.{function.__name__}' "
                 f"is deprecated in version {since} and will be "
-                f"removed in {removed_in}. Please {instructions}.",
+                f"removed in {removed_in}. Please {instruction}.",
                 category=FutureWarning,
                 stacklevel=2,
             )
@@ -59,7 +59,7 @@ def deprecated(since: str, removed_in: str, instructions: str) -> Callable[[Call
         deprecation_note = textwrap.dedent(
             f"""\
             .. deprecated:: {since}
-                Deprecated and will be removed in version {removed_in}. Please {instructions}.
+                Deprecated and will be removed in version {removed_in}. Please {instruction}.
             """
         )
 

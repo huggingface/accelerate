@@ -472,7 +472,7 @@ class FindTiedParametersResult(list):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @deprecated(since="1.0.0rc0", removed_in="1.3.0", instructions="use another method instead")
+    @deprecated(since="1.0.0rc0", removed_in="1.3.0", instruction="use another method instead")
     def values(self):
         return sum([x[1:] for x in self], [])
 
