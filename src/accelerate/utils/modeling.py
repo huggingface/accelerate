@@ -1670,9 +1670,11 @@ def load_state_dict(checkpoint_file, device_map=None):
             if len(set(device_map.values())) == 1:
                 device = list(device_map.values())[0]
                 target_device = device
-                if is_xpu_available():
-                    if isinstance(device, int):
+                if isinstance(device, int):
+                    if is_xpu_available():
                         target_device = f"xpu:{device}"
+                    elif is_npu_available():
+                        target_device = f"npu:{device}"
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
