@@ -435,13 +435,13 @@ class UtilsTester(unittest.TestCase):
             return arg1, arg2
 
         with pytest.warns(
-            FutureWarning, match="deprecated in version 0.2.0 and will be removed in 0.3.0. Please toy instruction."
+            FutureWarning, match="deprecated in version 0.2.0 and will be removed in 0.3.0. toy instruction."
         ):
             self.assertEqual((1, 2), long_deprecated_demo(1, 2))
 
         long_expected_docstring = textwrap.dedent("""
             .. deprecated:: 0.2.0
-                Deprecated and will be removed in version 0.3.0. Please toy instruction.
+                Deprecated and will be removed in version 0.3.0. toy instruction.
 
             This is a long summary. This is a long summary. This is a long
             summary. This is a long summary.
@@ -465,7 +465,7 @@ class UtilsTester(unittest.TestCase):
 
         short_expected_docstring = textwrap.dedent("""
             .. deprecated:: 0.2.0
-                Deprecated and will be removed in version 0.3.0. Please toy instruction.
+                Deprecated and will be removed in version 0.3.0. toy instruction.
 
             Short summary.
             """)

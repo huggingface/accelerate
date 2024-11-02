@@ -47,7 +47,7 @@ def deprecated(since: str, removed_in: str, instruction: str) -> Callable[[Calla
             warnings.warn(
                 f"'{function.__module__}.{function.__name__}' "
                 f"is deprecated in version {since} and will be "
-                f"removed in {removed_in}. Please {instruction}.",
+                f"removed in {removed_in}. {instruction}.",
                 category=FutureWarning,
                 stacklevel=2,
             )
@@ -59,7 +59,7 @@ def deprecated(since: str, removed_in: str, instruction: str) -> Callable[[Calla
         deprecation_note = textwrap.dedent(
             f"""\
             .. deprecated:: {since}
-                Deprecated and will be removed in version {removed_in}. Please {instruction}.
+                Deprecated and will be removed in version {removed_in}. {instruction}.
             """
         )
 
