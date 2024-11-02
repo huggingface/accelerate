@@ -26,6 +26,7 @@ from parameterized import parameterized
 from safetensors.torch import save_file
 
 from accelerate import init_empty_weights
+from accelerate.big_modeling import cpu_offload
 from accelerate.test_utils import (
     require_cuda,
     require_huggingface_suite,
@@ -34,6 +35,7 @@ from accelerate.test_utils import (
     torch_device,
 )
 from accelerate.utils.modeling import (
+    align_module_device,
     check_device_map,
     clean_device_map,
     compute_module_sizes,
@@ -785,3 +787,50 @@ class ModelingUtilsTester(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             convert_file_size_to_int("-1GB")
+
+    def test_align_module_device_simple(self):
+        model = ModelForTest()
+        execution_device = torch.device(torch_device)
+        model_device = torch.device("cpu")
+
+        # test default execution device
+        with align_module_device(model.batchnorm):
+            assert model.linear1.weight.device == model_device
+            assert model.batchnorm.weight.device == model_device
+            assert model.linear2.weight.device == model_device
+        assert model.linear1.weight.device == model_device
+        assert model.batchnorm.weight.device == model_device
+        assert model.linear2.weight.device == model_device
+
+        # test with explicit execution device
+        with align_module_device(model.batchnorm, execution_device=execution_device):
+            assert model.linear1.weight.device == model_device
+            assert model.batchnorm.weight.device == execution_device
+            assert model.linear2.weight.device == model_device
+        assert model.linear1.weight.device == model_device
+        assert model.batchnorm.weight.device == model_device
+        assert model.linear2.weight.device == model_device
+
+    def test_align_module_device_offloaded(self):
+        model = ModelForTest()
+        execution_device = torch.device(torch_device)
+        offload_device = torch.device("meta")
+        cpu_offload(model, execution_device=execution_device)
+
+        # test default execution device
+        with align_module_device(model.batchnorm):
+            assert model.linear1.weight.device == offload_device
+            assert model.batchnorm.weight.device == execution_device
+            assert model.linear2.weight.device == offload_device
+        assert model.linear1.weight.device == offload_device
+        assert model.batchnorm.weight.device == offload_device
+        assert model.linear2.weight.device == offload_device
+
+        # test with explicit execution device
+        with align_module_device(model.batchnorm, execution_device="cpu"):
+            assert model.linear1.weight.device == offload_device
+            assert model.batchnorm.weight.device == torch.device("cpu")
+            assert model.linear2.weight.device == offload_device
+        assert model.linear1.weight.device == offload_device
+        assert model.batchnorm.weight.device == offload_device
+        assert model.linear2.weight.device == offload_device

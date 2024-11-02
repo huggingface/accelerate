@@ -1525,22 +1525,12 @@ def get_state_dict_offloaded_model(model: nn.Module):
     for name, module in model.named_modules():
         if name == "":
             continue
-        if has_offloaded_params(module):
-            original_device = module._hf_hook.execution_device
-            # assign hook execution device to cpu
-            module._hf_hook.execution_device = "cpu"
-            # onload meta tensors to execution device
-            try:
-                module._hf_hook.pre_forward(module)
-            except MemoryError:
-                raise MemoryError("Offloaded module must fit in CPU memory to call save_model!") from None
-            module_state_dict = module.state_dict()
-            # offload meta tensors from cpu
-            module._hf_hook.post_forward(module, torch.tensor([]))
-            # re-assign hook to original execution device
-            module._hf_hook.execution_device = original_device
-        else:
-            module_state_dict = module.state_dict()
+
+        try:
+            with align_module_device(module, "cpu"):
+                module_state_dict = module.state_dict()
+        except MemoryError:
+            raise MemoryError("Offloaded module must fit in CPU memory to call save_model!") from None
 
         for key in module_state_dict:
             # ignore placeholder parameters that are still on the meta device
@@ -1580,22 +1570,12 @@ def get_state_dict_from_offload(
     """
 
     root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
-    preforward = False
-    if has_offloaded_params(module):
-        # assign the device to which the offloaded parameters will be sent
-        original_device = module._hf_hook.execution_device
-        module._hf_hook.execution_device = device_to_put_offload
-        module._hf_hook.pre_forward(module)
-        preforward = True
 
-    for m_key in module.state_dict():
-        params = module.state_dict()[m_key]
-        if (root + f".{m_key}") in state_dict:
-            state_dict[root + f".{m_key}"] = params
-
-    if preforward:
-        module._hf_hook.post_forward(module, torch.tensor([]))
-        module._hf_hook.execution_device = original_device
+    # assign the device to which the offloaded parameters will be sent
+    with align_module_device(module, device_to_put_offload):
+        for m_key, params in module.state_dict().items():
+            if (root + f".{m_key}") in state_dict:
+                state_dict[root + f".{m_key}"] = params
 
     return state_dict
 
@@ -1913,3 +1893,42 @@ def has_offloaded_params(module: torch.nn.Module) -> bool:
     from ..hooks import AlignDevicesHook  # avoid circular import
 
     return hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload
+
+
+@contextlib.contextmanager
+def align_module_device(module: torch.nn.Module, execution_device: Optional[torch.device] = None):
+    """
+    Context manager that moves a module's parameters to the specified execution device.
+
+    Args:
+        module (`torch.nn.Module`):
+            Module with parameters to align.
+        execution_device (`torch.device`, *optional*):
+            If provided, overrides the module's execution device within the context. Otherwise, use hook execution
+            device or pass
+    """
+    if has_offloaded_params(module):
+        if execution_device is not None:
+            original_device = module._hf_hook.execution_device
+            module._hf_hook.execution_device = execution_device
+
+        try:
+            module._hf_hook.pre_forward(module)
+            yield
+        finally:
+            module._hf_hook.post_forward(module, None)
+            if execution_device is not None:
+                module._hf_hook.execution_device = original_device
+
+    elif execution_device is not None:
+        devices = {name: param.device for name, param in module.named_parameters()}
+        try:
+            for name in devices:
+                set_module_tensor_to_device(module, name, execution_device)
+            yield
+        finally:
+            for name, device in devices.items():
+                set_module_tensor_to_device(module, name, device)
+
+    else:
+        yield
