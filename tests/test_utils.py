@@ -474,6 +474,28 @@ class UtilsTester(unittest.TestCase):
 
         self.assertEqual(short_expected_docstring, short_actual_docstring)
 
+        @deprecated("0.2.0", "0.3.0", "toy instruction")
+        class OldClass:
+            """Old class docstring."""
+
+            def method(self):
+                pass
+
+        with pytest.warns(
+            FutureWarning, match="deprecated in version 0.2.0 and will be removed in 0.3.0. toy instruction."
+        ):
+            OldClass()
+
+        class_expected_docstring = textwrap.dedent("""
+            .. deprecated:: 0.2.0
+                Deprecated and will be removed in version 0.3.0. toy instruction.
+            Old class docstring.
+            """)
+        class_expected_docstring = "".join(class_expected_docstring.split())
+        class_actual_docstring = "".join(OldClass.__doc__.split())
+
+        self.assertEqual(class_expected_docstring, class_actual_docstring)
+
     def test_has_offloaded_params(self):
         model = RegressionModel()
         assert not has_offloaded_params(model)
