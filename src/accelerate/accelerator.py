@@ -2144,6 +2144,11 @@ class Accelerator:
                     if name in model_layer_group_map[model_idx]:
                         break
 
+        # Clear parameter lists.
+        for opt in optimizers.values():
+            for group in opt.param_groups:
+                group["params"] = []
+
         fsdp_2_base_layer_map = {}
 
         for model_idx, model in models.items():
@@ -2187,11 +2192,6 @@ class Accelerator:
 
             # Map remaining base layers under the overall FSDP wrap
             map_parms["_fsdp_wrapped_module._flat_param"] = base_layer_name
-
-        # Clear parameter list.
-        for opt in optimizers.values():
-            for group in opt.param_groups:
-                group["params"] = []
 
         # Replace optimizer parameter groups with the flattened ones.
         for model_idx, opt_idx in model_optimizer_map.items():
