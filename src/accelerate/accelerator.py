@@ -2105,13 +2105,18 @@ class Accelerator:
             for opt_idx, opt in list(temp_optimizers.items()):
                 found = False
                 for group in opt.param_groups:
-                    if any(param in group["params"] for param in model.parameters()):
-                        model_optimizer_map[model_idx] = opt_idx
-                        # Remove the optimizer to reduce future iterations
-                        temp_optimizers.pop(opt_idx)
-                        found = True
+                    for opt_param in group["params"]:
+                        for param in model.parameters():
+                            if param is opt_param:
+                                model_optimizer_map[model_idx] = opt_idx
+                                # Remove the optimizer to reduce future iterations
+                                temp_optimizers.pop(opt_idx)
+                                found = True
+                                break
+                        if found:
+                            break
+                    if found:
                         break
-                # Break out of the optimizer loop once a match is found for the current model
                 if found:
                     break
 
