@@ -43,6 +43,7 @@ from accelerate.utils.modeling import (
     convert_file_size_to_int,
     find_tied_parameters,
     get_balanced_memory,
+    get_state_dict_offloaded_model,
     infer_auto_device_map,
     load_checkpoint_in_model,
     load_state_dict,
@@ -64,6 +65,15 @@ class ModelForTest(nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
+
+
+class NestedModelForTest(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = ModelForTest()
+
+    def forward(self, x):
+        return self.model(x)
 
 
 class LinearWithNonPersistentBuffers(nn.Module):
@@ -788,6 +798,20 @@ class ModelingUtilsTester(unittest.TestCase):
         with self.assertRaises(ValueError):
             convert_file_size_to_int("-1GB")
 
+    def test_get_state_dict_offloaded_model(self):
+        for model_cls in (ModelForTest, NestedModelForTest):
+            model = model_cls()
+            execution_device = torch.device(torch_device)
+            original_state_dict = model.state_dict()
+
+            cpu_offload(model, execution_device=execution_device)
+            state_dict = get_state_dict_offloaded_model(model)
+
+            assert original_state_dict.keys() == state_dict.keys()
+            for key in original_state_dict:
+                # note that get_state_dict_offloaded_model does not move buffers to cpu
+                assert torch.equal(original_state_dict[key], state_dict[key])
+
     def test_align_module_device_simple(self):
         model = ModelForTest()
         execution_device = torch.device(torch_device)
@@ -834,3 +858,13 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.linear1.weight.device == offload_device
         assert model.batchnorm.weight.device == offload_device
         assert model.linear2.weight.device == offload_device
+
+    def test_align_module_device_offloaded_nested(self):
+        model = NestedModelForTest()
+        execution_device = torch.device(torch_device)
+        align_device = torch.device("cpu")
+        cpu_offload(model, execution_device=execution_device)
+        for module in model.modules():
+            with align_module_device(module, align_device):
+                for param in model.parameters(recurse=False):
+                    assert param.device == align_device
