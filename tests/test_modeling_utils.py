@@ -809,7 +809,6 @@ class ModelingUtilsTester(unittest.TestCase):
 
             assert original_state_dict.keys() == state_dict.keys()
             for key in original_state_dict:
-                # note that get_state_dict_offloaded_model does not move buffers to cpu
                 assert torch.equal(original_state_dict[key], state_dict[key])
 
     def test_align_module_device_simple(self):
