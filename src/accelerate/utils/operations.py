@@ -669,7 +669,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
         old_size = tensor.shape
         new_size = list(old_size)
         new_size[dim] = max_size
-        new_tensor = tensor.new_zeros(tuple(new_size)) + pad_index
+        new_tensor = (tensor.new_zeros(tuple(new_size)) + pad_index).to(tensor.dtype)
         if pad_first:
             indices = tuple(
                 slice(max_size - old_size[dim], max_size) if i == dim else slice(None) for i in range(len(new_size))
