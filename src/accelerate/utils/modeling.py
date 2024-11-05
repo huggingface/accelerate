@@ -1540,7 +1540,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
                 placeholders.add(name + f".{key}")
                 continue
             params = module_state_dict[key]
-            state_dict[name + f".{key}"] = params
+            state_dict[name + f".{key}"] = params.to("cpu")  # move buffers to cpu
     for key in placeholders.copy():
         if key in state_dict:
             placeholders.remove(key)
@@ -1923,7 +1923,7 @@ def align_module_device(module: torch.nn.Module, execution_device: Optional[torc
                 module._hf_hook.execution_device = original_device
 
     elif execution_device is not None:
-        devices = {name: param.device for name, param in module.named_parameters()}
+        devices = {name: param.device for name, param in module.named_parameters(recurse=False)}
         try:
             for name in devices:
                 set_module_tensor_to_device(module, name, execution_device)
