@@ -73,6 +73,7 @@ from .utils import (
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
+    ensure_weights_retied,
     extract_model_from_parallel,
     gather,
     gather_object,
@@ -1475,6 +1476,15 @@ class Accelerator:
                 if not is_type_fsdp:
                     self.state.fsdp_plugin.set_auto_wrap_policy(model)
                     fsdp_plugin = self.state.fsdp_plugin
+
+                    # need to ensure that params are re-tied after running
+                    # param_init_fn
+                    fsdp_plugin.param_init_fn = ensure_weights_retied(
+                        fsdp_plugin.param_init_fn,
+                        model,
+                        self.device,
+                    )
+
                     kwargs = {
                         "sharding_strategy": fsdp_plugin.sharding_strategy,
                         "cpu_offload": fsdp_plugin.cpu_offload,
@@ -1998,7 +2008,7 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
-            if self.device.type == "xpu" and model.device.type == "cpu":
+            if self.device.type == "xpu" and next(model.parameters()).device.type == "cpu":
                 model = model.to(self.device)
             # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
             if is_ipex_available():
