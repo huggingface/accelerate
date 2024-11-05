@@ -302,6 +302,8 @@ class UtilsTester(unittest.TestCase):
     def test_pad_across_processes(self):
         from torch.nested import nested_tensor
 
+        from accelerate import Accelerator
+
         nt = nested_tensor([[1, 2, 3], [1], [1, 2]])
         with self.assertWarns(CannotPadNestedTensorWarning):
             nt2 = pad_across_processes(nt)
@@ -315,6 +317,12 @@ class UtilsTester(unittest.TestCase):
         # dim = -4 is out of bounds
         padded_tensor = pad_across_processes(tensor, dim=-4)
         assert padded_tensor is tensor
+
+        # Booleans should be returned with the correct type
+        accelerator = Accelerator()
+        tensor = (torch.randn(4, 3, 100 * (accelerator.process_index + 1)) > 0).to(torch.bool)
+        padded_tensor = pad_across_processes(tensor, dim=-1)
+        assert padded_tensor.dtype == torch.bool
 
     def test_slice_and_concatenate(self):
         # First base case: 2 processes, batch size of 1
