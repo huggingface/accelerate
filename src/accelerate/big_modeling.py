@@ -37,6 +37,7 @@ from .utils import (
     find_tied_parameters,
     get_balanced_memory,
     infer_auto_device_map,
+    is_bnb_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
@@ -351,16 +352,17 @@ def dispatch_model(
     # Error early if the device map is incomplete.
     check_device_map(model, device_map)
 
-    # for backward compatibility
-    is_bnb_quantized = (
-        getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
-    ) and getattr(model, "quantization_method", "bitsandbytes") == "bitsandbytes"
+    # We need to force hook for quantized model that can't be moved with to()
+    if getattr(model, "quantization_method", "bitsandbytes") == "bitsandbytes":
+        # since bnb 0.43.2, we can move 4-bit model
+        if getattr(model, "is_loaded_in_8bit", False) or (getattr(model, "is_loaded_in_4bit", False) and not is_bnb_available(min_version="0.43.2")):
+            force_hooks = True
 
     # We attach hooks if the device_map has at least 2 different devices or if
     # force_hooks is set to `True`. Otherwise, the model in already loaded
     # in the unique device and the user can decide where to dispatch the model.
     # If the model is quantized, we always force-dispatch the model
-    if (len(set(device_map.values())) > 1) or is_bnb_quantized or force_hooks:
+    if (len(set(device_map.values())) > 1) or force_hooks:
         if main_device is None:
             if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
                 main_device = "cpu"
