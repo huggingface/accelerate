@@ -1613,7 +1613,8 @@ def infer_auto_device_map(
                 )
                 continue
 
-        #  Neither the current module nor any tied modules can be split, so we move to the next device
+        # If no module is assigned to the current device, we attempt to allocate a fallback module
+        # if fallback_allocation is enabled.
         if device_memory_used[device] == 0 and fallback_allocation and device != "disk":
             # We try to allocate a module that fits in the size limit using BFS.
             # Recompute the current max size as we need to consider the current module as well.
@@ -1634,6 +1635,7 @@ def infer_auto_device_map(
         if device_memory_used[device] == 0:
             device_minimum_assignment_memory[device] = module_size_with_ties + current_memory_reserved
 
+        #  Neither the current module nor any tied modules can be split, so we move to the next device.
         device_memory_used[device] = device_memory_used[device] + current_memory_reserved
         current_device += 1
         modules_to_treat = [(name, module)] + modules_to_treat
@@ -1667,7 +1669,7 @@ def infer_auto_device_map(
         devices_info = "\n".join(
             f"  - {device}: {mem} bytes required" for device, mem in device_minimum_assignment_memory.items()
         )
-        warnings.warn(
+        logger.info(
             f"Based on the current allocation process, no modules could be assigned to the following devices due to "
             f"insufficient memory:\n"
             f"{devices_info}\n"
