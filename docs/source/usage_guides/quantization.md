@@ -30,7 +30,7 @@ You will need to install the following requirements:
 ```bash
 pip install bitsandbytes
 ```
-For non-cuda devices, you can refer to the bitsandbytes installation guide [here](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend)
+For non-cuda devices, you can refer to the bitsandbytes installation guide [here](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend).
 
 - Install latest `accelerate` from source
 ```bash
