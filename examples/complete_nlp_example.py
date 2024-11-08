@@ -246,9 +246,14 @@ def training_function(config, args):
                 references=references,
             )
 
-        eval_metric = metric.compute()
-        # Use accelerator.print to print only on the main process.
-        accelerator.print(f"epoch {epoch}:", eval_metric)
+        if accelerator.is_main_process:
+            # Computing metrics in a distributed manner requires calling evaluate.load() with the
+            # n_process and process_id arguments. However, the metric.add_batch() step will fail 
+            # due to a bug with datasets and evaluate (see https://github.com/huggingface/evaluate/issues/542)
+            # and related
+            eval_metric = metric.compute()
+            # Use accelerator.print to print only on the main process.
+            accelerator.print(f"epoch {epoch}:", eval_metric)
         if args.with_tracking:
             accelerator.log(
                 {
