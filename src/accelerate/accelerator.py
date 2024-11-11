@@ -437,7 +437,6 @@ class Accelerator:
                 DistributedType.MULTI_GPU,
                 DistributedType.FSDP,
             )
-
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
             warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
