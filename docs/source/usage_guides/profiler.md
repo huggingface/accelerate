@@ -185,6 +185,9 @@ prof.export_chrome_trace("trace.json")
 <hfoption id="Accelerate">
 
 ```python
+model = models.resnet18()
+inputs = torch.randn(5, 3, 224, 224).cuda()
+
 profile_kwargs = ProfileKwargs(
     activities=["cpu", "cuda"],
     output_trace_dir="trace"
@@ -198,6 +201,7 @@ with accelerator.profile() as prof:
 
 # The trace will be saved to the specified directory
 ```
+For other hardware accelerators, e.g. XPU, you need to change `cuda` to `xpu` in the above example code.
 
 </hfoption>
 </hfoptions>
@@ -235,7 +239,7 @@ with profile(
     schedule=my_schedule,
     on_trace_ready=trace_handler
 ) as p:
-    for idx in range(8):
+    for idx in range(18):
         model(inputs)
         p.step()
 ```
@@ -259,7 +263,7 @@ accelerator = Accelerator(kwargs_handlers=[profile_kwargs])
 model = accelerator.prepare(model)
 
 with accelerator.profile() as prof:
-    for idx in range(8):
+    for idx in range(18):
         model(inputs)
         prof.step()
 ```
