@@ -1468,6 +1468,8 @@ class Accelerator:
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.TP:
+                if not model.supports_tp_plan:
+                    raise NotImplementedError("Provided model does not support tensor parallelism")
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
