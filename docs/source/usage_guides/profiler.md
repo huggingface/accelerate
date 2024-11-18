@@ -183,10 +183,10 @@ prof.export_chrome_trace("trace.json")
 
 </hfoption>
 <hfoption id="Accelerate">
-model = models.resnet18()
-inputs = torch.randn(5, 3, 224, 224).cuda()
 
 ```python
+model = models.resnet18()
+inputs = torch.randn(5, 3, 224, 224).cuda()
 profile_kwargs = ProfileKwargs(
     activities=["cpu", "cuda"],
     output_trace_dir="trace"
