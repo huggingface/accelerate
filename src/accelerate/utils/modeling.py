@@ -1066,11 +1066,11 @@ def get_balanced_memory(
     )
     # The last device is left with max_memory just in case the buffer is not enough.
     for idx in gpus_idx_list[:-1]:
-        if idx == 0 and not low_zero and module_sizes['model.embed_tokens'] > per_gpu * 0.9: 
-            max_memory[idx] = min(module_sizes['model.embed_tokens'] * 1.3, max_memory[idx])
-        elif idx == 1 and low_zero and module_sizes['model.embed_tokens'] > per_gpu * 0.9 :
-            max_memory[idx] = min(module_sizes['model.embed_tokens'] * 1.3, max_memory[idx])
-        else :
+        if idx == 0 and not low_zero and module_sizes["model.embed_tokens"] > per_gpu * 0.9:
+            max_memory[idx] = min(module_sizes["model.embed_tokens"] * 1.3, max_memory[idx])
+        elif idx == 1 and low_zero and module_sizes["model.embed_tokens"] > per_gpu * 0.9:
+            max_memory[idx] = min(module_sizes["model.embed_tokens"] * 1.3, max_memory[idx])
+        else:
             max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
