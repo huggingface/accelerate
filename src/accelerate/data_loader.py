@@ -586,6 +586,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         # In case it is manually passed in, the user can set it to what they like
         if self.iteration != epoch:
             self.iteration = epoch
+        if hasattr(self.batch_sampler, "set_epoch"):
+            self.batch_sampler.set_epoch(epoch)
         if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
             self.batch_sampler.sampler.set_epoch(epoch)
         # We support if a custom `Dataset` implementation has `set_epoch`
