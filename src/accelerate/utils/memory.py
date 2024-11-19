@@ -92,7 +92,7 @@ def release_memory(*objects):
 
 def should_reduce_batch_size(exception: Exception) -> bool:
     """
-    Checks if `exception` relates to CUDA out-of-memory, CUDNN not supported, or CPU out-of-memory
+    Checks if `exception` relates to CUDA out-of-memory, XPU out-of-memory, CUDNN not supported, or CPU out-of-memory
 
     Args:
         exception (`Exception`):
@@ -100,6 +100,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
     """
     _statements = [
         "CUDA out of memory.",  # CUDA OOM
+        "XPU out of memory.",  # XPU OOM
         "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",  # CUDNN SNAFU
         "DefaultCPUAllocator: can't allocate memory",  # CPU OOM
     ]
