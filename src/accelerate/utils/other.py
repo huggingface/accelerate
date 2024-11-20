@@ -23,6 +23,7 @@ from typing import OrderedDict
 
 import numpy as np
 import torch
+from packaging import version
 from packaging.version import Version
 from safetensors.torch import save_file as safe_save_file
 
