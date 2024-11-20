@@ -328,8 +328,8 @@ def merge_fsdp_weights(
 
 
 def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.cuda.device):
-    # Some PyTorch models do not have the "_tied_weights_keys" attribute.
-    if not (hasattr(model, "_tied_weights_keys") and model._tied_weights_keys):
+    _tied_names = model._tied_weights_keys
+    if not _tied_names:
         # if no tied names just passthrough
         return param_init_fn
 
