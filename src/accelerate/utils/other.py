@@ -217,7 +217,7 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
 # These should be added and then removed after loading in the file
 TORCH_SAFE_GLOBALS = [
     # numpy arrays are just numbers, not objects, so we can reconstruct them safely
-    np.core.multiarray._reconstruct,
+    np._core.multiarray._reconstruct,
     np.ndarray,
     # The following are needed for the RNG states
     encode,
