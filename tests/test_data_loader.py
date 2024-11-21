@@ -80,6 +80,21 @@ class SimpleIterableDataset(IterableDataset):
         self.epoch = epoch
 
 
+class SimpleBatchSampler(BatchSampler):
+    def __init__(self, sampler, batch_size, drop_last, generator, seed):
+        super().__init__(sampler, batch_size, drop_last)
+        self.generator = generator
+        self.seed = seed
+        self.epoch = 0
+
+    def __iter__(self):
+        self.generator.manual_seed(self.seed + self.epoch)
+        return super().__iter__()
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+
 class DataLoaderTester(unittest.TestCase):
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False, even_batches=True):
         batch_sampler_shards = [
@@ -468,6 +483,20 @@ class DataLoaderTester(unittest.TestCase):
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
+
+    def test_set_epoch_in_batch_sampler(self):
+        # Ensure that set_epoch gets propagated to custom batch samplers that accept it
+        dataset = list(range(16))
+        generator = torch.Generator()
+        batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=12)
+        dataloader = DataLoader(dataset, batch_sampler=batch_sampler)
+
+        accelerator = Accelerator()
+        dataloader = accelerator.prepare_data_loader(dataloader)
+
+        assert batch_sampler.epoch == 0
+        dataloader.set_epoch(1)
+        assert batch_sampler.epoch == 1
 
 
 class StatefulDataLoaderTester(unittest.TestCase):

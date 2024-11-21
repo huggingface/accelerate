@@ -71,12 +71,12 @@ config = {
 
 accelerator.init_trackers("example_project", config=config)
 
-my_model, my_optimizer, my_training_dataloader = accelerate.prepare(my_model, my_optimizer, my_training_dataloader)
+my_model, my_optimizer, my_training_dataloader = accelerator.prepare(my_model, my_optimizer, my_training_dataloader)
 device = accelerator.device
 my_model.to(device)
 
 for iteration in config["num_iterations"]:
-    for step, batch in my_training_dataloader:
+    for step, batch in enumerate(my_training_dataloader):
         my_optimizer.zero_grad()
         inputs, targets = batch
         inputs = inputs.to(device)

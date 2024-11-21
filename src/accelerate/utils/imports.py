@@ -179,8 +179,13 @@ def is_8bit_bnb_available():
     return False
 
 
-def is_bnb_available():
-    return _is_package_available("bitsandbytes")
+def is_bnb_available(min_version=None):
+    package_exists = _is_package_available("bitsandbytes")
+    if package_exists and min_version is not None:
+        bnb_version = version.parse(importlib.metadata.version("bitsandbytes"))
+        return compare_versions(bnb_version, ">=", min_version)
+    else:
+        return package_exists
 
 
 def is_bitsandbytes_multi_backend_available():

@@ -187,7 +187,6 @@ prof.export_chrome_trace("trace.json")
 ```python
 model = models.resnet18()
 inputs = torch.randn(5, 3, 224, 224).cuda()
-
 profile_kwargs = ProfileKwargs(
     activities=["cpu", "cuda"],
     output_trace_dir="trace"
@@ -201,7 +200,7 @@ with accelerator.profile() as prof:
 
 # The trace will be saved to the specified directory
 ```
-For other hardware accelerators, e.g. XPU, you need to change `cuda` to `xpu` in the above example code.
+For other hardware accelerators, e.g. XPU, you can change `cuda` to `xpu` in the above example code.
 
 </hfoption>
 </hfoptions>
@@ -222,7 +221,7 @@ To illustrate how the API works, consider the following example:
 from torch.profiler import schedule
 
 my_schedule = schedule(
-    skip_first=10,
+    skip_first=1,
     wait=5,
     warmup=1,
     active=3,
@@ -255,7 +254,7 @@ def trace_handler(p):
 
 profile_kwargs = ProfileKwargs(
     activities=["cpu", "cuda"],
-    schedule_option={"wait": 5, "warmup": 1, "active": 3, "repeat": 2, "skip_first": 10},
+    schedule_option={"wait": 5, "warmup": 1, "active": 3, "repeat": 2, "skip_first": 1},
     on_trace_ready=trace_handler
 )
 

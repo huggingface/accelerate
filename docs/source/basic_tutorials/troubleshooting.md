@@ -142,9 +142,9 @@ hostnames for each of the nodes.
 mpirun -f hostfile -n {number of nodes} -ppn 1 hostname
 ```
 
-## CUDA Out-of-Memory
+## Out-of-Memory
 
-One of the most frustrating errors when it comes to running training scripts is hitting "CUDA Out-of-Memory". The entire script needs to be restarted and any progress is lost.
+One of the most frustrating errors when it comes to running training scripts is hitting "Out-of-Memory" on devices like CUDA, XPU or CPU. The entire script needs to be restarted and any progress is lost.
 
 To address this problem, Accelerate provides the [`find_executable_batch_size`] utility that is heavily based on [toma](https://github.com/BlackHC/toma).
 This utility retries code that fails due to OOM (out-of-memory) conditions and automatically lowers batch sizes. For each OOM condition, the algorithm decreases the batch size by half and retries the code until it succeeds.
@@ -153,7 +153,7 @@ To use [`find_executable_batch_size`], restructure your training function to inc
 
 <Tip warning={true}> 
 
-The inner function **must** take batch size as the first parameter, but we do not pass one to it when called. The wrapper will handles this for you. Any object (models, optimizers) that consumes CUDA memory and is passed to the [`Accelerator`] also **must** be declared inside the inner function.
+The inner function **must** take batch size as the first parameter, but we do not pass one to it when called. The wrapper will handles this for you. Any object (models, optimizers) that consumes device memory and is passed to the [`Accelerator`] also **must** be declared inside the inner function.
 
 </Tip>
 
