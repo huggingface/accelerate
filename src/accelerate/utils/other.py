@@ -215,9 +215,10 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
 
 # The following are considered "safe" globals to reconstruct various types of objects when using `weights_only=True`
 # These should be added and then removed after loading in the file
+np_core = np._core if is_numpy_available("2.0.0") else np.core
 TORCH_SAFE_GLOBALS = [
     # numpy arrays are just numbers, not objects, so we can reconstruct them safely
-    np.core.multiarray._reconstruct,
+    np_core.multiarray._reconstruct,
     np.ndarray,
     # The following are needed for the RNG states
     encode,
