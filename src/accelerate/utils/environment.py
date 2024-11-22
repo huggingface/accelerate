@@ -366,52 +366,44 @@ def purge_accelerate_environment(func_or_cls):
     decorating the parent class.
 
     """
-    prefix = "ACCELERATE_"  # only env vars with this prefix are considered
+    prefix = "ACCELERATE_"
+
+    @contextmanager
+    def env_var_context():
+        # Store existing accelerate env vars
+        existing_vars = {k: v for k, v in os.environ.items() if k.startswith(prefix)}
+        try:
+            yield
+        finally:
+            # Restore original env vars or remove new ones
+            for key in [k for k in os.environ if k.startswith(prefix)]:
+                if key in existing_vars:
+                    os.environ[key] = existing_vars[key]
+                else:
+                    os.environ.pop(key, None)
 
     def wrap_function(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            existing_vars = {key: val for key, val in os.environ.items() if key.startswith(prefix)}
-            try:
-                # Run the test function or method
+            with env_var_context():
                 return func(*args, **kwargs)
-            finally:
-                # Restore or remove environment variables
-                for key in list(os.environ.keys()):
-                    if key.startswith(prefix):
-                        if key in existing_vars:
-                            os.environ[key] = existing_vars[key]
-                        else:
-                            os.environ.pop(key, None)
 
-        wrapper._is_purged_accelerate_environment_wrapped = True
+        wrapper._accelerate_is_purged_environment_wrapped = True
         return wrapper
 
     if not isinstance(func_or_cls, type):
-        # just a function/method
         return wrap_function(func_or_cls)
 
-    # Deal with classes. Special care has to be taken that we correctly deal with subclasses too.
-    original_init_subclass = getattr(func_or_cls, "__init_subclass__", None)
+    # Handle classes by wrapping test methods
+    def wrap_test_methods(test_class_instance):
+        for name in dir(test_class_instance):
+            if name.startswith("test"):
+                method = getattr(test_class_instance, name)
+                if callable(method) and not hasattr(method, "_accelerate_is_purged_environment_wrapped"):
+                    setattr(test_class_instance, name, wrap_function(method))
+        return test_class_instance
 
-    @classmethod
-    def init_subclass(cls, **kwargs):
-        if original_init_subclass:
-            original_init_subclass(**kwargs)
-        for attr_name in dir(cls):
-            if attr_name.startswith("test_"):
-                attr = getattr(cls, attr_name)
-                if callable(attr) and not hasattr(attr, "_is_purged_accelerate_environment_wrapped"):
-                    wrapped_method = wrap_function(attr)
-                    setattr(cls, attr_name, wrapped_method)
-
-    func_or_cls.__init_subclass__ = init_subclass
-
-    # Wrap existing methods in the class
-    for attr_name in dir(func_or_cls):
-        if attr_name.startswith("test"):
-            attr = getattr(func_or_cls, attr_name)
-            if callable(attr) and not hasattr(attr, "_is_purged_accelerate_environment_wrapped"):
-                wrapped_method = wrap_function(attr)
-                setattr(func_or_cls, attr_name, wrapped_method)
+    # Handle inheritance
+    wrap_test_methods(func_or_cls)
+    func_or_cls.__init_subclass__ = classmethod(lambda cls, **kw: wrap_test_methods(cls))
     return func_or_cls
