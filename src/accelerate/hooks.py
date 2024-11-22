@@ -436,7 +436,8 @@ def attach_execution_device_hook(
         return
 
     for child in module.children():
-        attach_execution_device_hook(child, execution_device, skip_keys=skip_keys, tied_params_map=tied_params_map)
+        attach_execution_device_hook(child, execution_device, skip_keys=skip_keys, 
+            preload_module_classes=preload_module_classes, tied_params_map=tied_params_map)
 
 
 def attach_align_device_hook(
