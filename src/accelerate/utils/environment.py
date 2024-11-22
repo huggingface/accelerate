@@ -383,6 +383,7 @@ def purge_accelerate_environment(func_or_cls):
                             os.environ[key] = existing_vars[key]
                         else:
                             os.environ.pop(key, None)
+
         wrapper._is_purged_accelerate_environment_wrapped = True
         return wrapper
 
@@ -391,16 +392,16 @@ def purge_accelerate_environment(func_or_cls):
         return wrap_function(func_or_cls)
 
     # Deal with classes. Special care has to be taken that we correctly deal with subclasses too.
-    original_init_subclass = getattr(func_or_cls, '__init_subclass__', None)
+    original_init_subclass = getattr(func_or_cls, "__init_subclass__", None)
 
     @classmethod
     def init_subclass(cls, **kwargs):
         if original_init_subclass:
             original_init_subclass(**kwargs)
         for attr_name in dir(cls):
-            if attr_name.startswith('test_'):
+            if attr_name.startswith("test_"):
                 attr = getattr(cls, attr_name)
-                if callable(attr) and not hasattr(attr, '_is_purged_accelerate_environment_wrapped'):
+                if callable(attr) and not hasattr(attr, "_is_purged_accelerate_environment_wrapped"):
                     wrapped_method = wrap_function(attr)
                     setattr(cls, attr_name, wrapped_method)
 
@@ -408,9 +409,9 @@ def purge_accelerate_environment(func_or_cls):
 
     # Wrap existing methods in the class
     for attr_name in dir(func_or_cls):
-        if attr_name.startswith('test'):
+        if attr_name.startswith("test"):
             attr = getattr(func_or_cls, attr_name)
-            if callable(attr) and not hasattr(attr, '_is_purged_accelerate_environment_wrapped'):
+            if callable(attr) and not hasattr(attr, "_is_purged_accelerate_environment_wrapped"):
                 wrapped_method = wrap_function(attr)
                 setattr(func_or_cls, attr_name, wrapped_method)
     return func_or_cls
