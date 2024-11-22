@@ -225,7 +225,8 @@ class Accelerator:
         dynamo_backend (`str` or [`~utils.DynamoBackend`], *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
         dynamo_plugin ([`~utils.TorchDynamoPlugin`], *optional*):
-            A configuration for how torch dynamo should be handled, if more tweaking than just the `backend` or `mode` is needed.
+            A configuration for how torch dynamo should be handled, if more tweaking than just the `backend` or `mode`
+            is needed.
         gradient_accumulation_plugin ([`~utils.GradientAccumulationPlugin`], *optional*):
             A configuration for how gradient accumulation should be handled, if more tweaking than just the
             `gradient_accumulation_steps` is needed.
