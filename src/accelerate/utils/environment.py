@@ -20,7 +20,7 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import lru_cache, wraps
 from shutil import which
 from typing import List, Optional
 
@@ -345,3 +345,72 @@ def patch_environment(**kwargs):
                 os.environ[key] = existing_vars[key]
             else:
                 os.environ.pop(key, None)
+
+
+def purge_accelerate_environment(func_or_cls):
+    """Decorator to clean up accelerate environment variables set by the decorated class or function.
+
+    In some circumstances, calling certain classes or functions can result in accelerate env vars being set and not
+    being cleaned up afterwards. As an example, when calling:
+
+    TrainingArguments(fp16=True, ...)
+
+    The following env var will be set:
+
+    ACCELERATE_MIXED_PRECISION=fp16
+
+    This can affect subsequent code, since the env var takes precedence over TrainingArguments(fp16=False). This is
+    especially relevant for unit testing, where we want to avoid the individual tests to have side effects on one
+    another. Decorate the unit test function or whole class with this decorator to ensure that after each test, the env
+    vars are cleaned up. This works for both unittest.TestCase and normal classes (pytest); it also works when
+    decorating the parent class.
+
+    """
+    prefix = "ACCELERATE_"  # only env vars with this prefix are considered
+
+    def wrap_function(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            existing_vars = {key: val for key, val in os.environ.items() if key.startswith(prefix)}
+            try:
+                # Run the test function or method
+                return func(*args, **kwargs)
+            finally:
+                # Restore or remove environment variables
+                for key in list(os.environ.keys()):
+                    if key.startswith(prefix):
+                        if key in existing_vars:
+                            os.environ[key] = existing_vars[key]
+                        else:
+                            os.environ.pop(key, None)
+        wrapper._is_purged_accelerate_environment_wrapped = True
+        return wrapper
+
+    if not isinstance(func_or_cls, type):
+        # just a function/method
+        return wrap_function(func_or_cls)
+
+    # Deal with classes. Special care has to be taken that we correctly deal with subclasses too.
+    original_init_subclass = getattr(func_or_cls, '__init_subclass__', None)
+
+    @classmethod
+    def init_subclass(cls, **kwargs):
+        if original_init_subclass:
+            original_init_subclass(**kwargs)
+        for attr_name in dir(cls):
+            if attr_name.startswith('test_'):
+                attr = getattr(cls, attr_name)
+                if callable(attr) and not hasattr(attr, '_is_purged_accelerate_environment_wrapped'):
+                    wrapped_method = wrap_function(attr)
+                    setattr(cls, attr_name, wrapped_method)
+
+    func_or_cls.__init_subclass__ = init_subclass
+
+    # Wrap existing methods in the class
+    for attr_name in dir(func_or_cls):
+        if attr_name.startswith('test'):
+            attr = getattr(func_or_cls, attr_name)
+            if callable(attr) and not hasattr(attr, '_is_purged_accelerate_environment_wrapped'):
+                wrapped_method = wrap_function(attr)
+                setattr(func_or_cls, attr_name, wrapped_method)
+    return func_or_cls
