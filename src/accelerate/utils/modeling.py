@@ -1555,7 +1555,6 @@ def get_state_dict_from_offload(
     module_name: str,
     state_dict: Dict[str, Union[str, torch.tensor]],
     device_to_put_offload: Union[int, str, torch.device] = "cpu",
-    move_to_device: bool = False,
 ):
     """
     Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defaults
@@ -1570,14 +1569,13 @@ def get_state_dict_from_offload(
             Dictionary of {module names: parameters}
         device_to_put_offload (`Union[int, str, torch.device]`):
             Device to load offloaded parameters into, defaults to the cpu.
-        move_to_device (`bool`):
-            Move non-offloaded parameters to `device_to_put_offload` if True, leave on existing device otherwise
     """
 
     root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
 
-    if not move_to_device and not has_offloaded_params(module):
-        device_to_put_offload = None  # do not move parameters
+    # do not move parameters if the module is not offloaded
+    if not has_offloaded_params(module):
+        device_to_put_offload = None
 
     # assign the device to which the offloaded parameters will be sent
     with align_module_device(module, device_to_put_offload):
