@@ -1554,7 +1554,7 @@ def get_state_dict_from_offload(
     module: nn.Module,
     module_name: str,
     state_dict: Dict[str, Union[str, torch.tensor]],
-    device_to_put_offload: Union[int, str, torch.device] = "cpu",
+    device_to_put_offload: Optional[Union[int, str, torch.device]] = None,
 ):
     """
     Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device (defaults
