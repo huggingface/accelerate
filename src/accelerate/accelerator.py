@@ -30,6 +30,7 @@ from types import MethodType
 from typing import Any, Callable, Union
 
 import torch
+import torch.optim.adagrad
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
@@ -83,6 +84,7 @@ from .utils import (
     has_offloaded_params,
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
+    is_bnb_available,
     is_deepspeed_available,
     is_ipex_available,
     is_lomo_available,
@@ -1839,10 +1841,42 @@ class Accelerator:
                     if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
                         "device", "none"
                     ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", True):
+                        defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
+
+                        # Select the DeepSpeedCPUOptimizer based on the original optimizer class.
+                        # DeepSpeedCPUAdam is the default
                         from deepspeed.ops.adam import DeepSpeedCPUAdam
 
-                        defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
-                        optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
+                        optimizer_class = DeepSpeedCPUAdam
+
+                        # For DeepSpeedCPUAdagrad
+                        if compare_versions("deepspeed", ">=", "0.5.5"):
+                            # Check if the optimizer is PyTorch's Adagrad.
+                            is_ada = isinstance(optimizer, torch.optim.Adagrad)
+                            # If not, and bitsandbytes is available,
+                            # # check if the optimizer is the 32-bit bitsandbytes Adagrad.
+                            if is_bnb_available() and not is_ada:
+                                import bitsandbytes.optim as bnb_opt
+
+                                is_ada = (
+                                    isinstance(optimizer, (bnb_opt.Adagrad, bnb_opt.Adagrad32bit))
+                                    and optimizer.optim_bits == 32
+                                )
+                            if is_ada:
+                                from deepspeed.ops.adagrad import DeepSpeedCPUAdagrad
+
+                                optimizer_class = DeepSpeedCPUAdagrad
+
+                        # For DeepSpeedCPULion
+                        if is_bnb_available(min_version="0.38.0") and compare_versions("deepspeed", ">=", "0.11.0"):
+                            from bitsandbytes.optim import Lion, Lion32bit
+
+                            if isinstance(optimizer, (Lion, Lion32bit)) and optimizer.optim_bits == 32:
+                                from deepspeed.ops.lion import DeepSpeedCPULion
+
+                                optimizer_class = DeepSpeedCPULion
+
+                        optimizer = optimizer_class(optimizer.param_groups, **defaults)
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
