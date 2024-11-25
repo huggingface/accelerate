@@ -1333,6 +1333,8 @@ class Accelerator:
             # Wrap models with FSDP and update the optimizers parameters.
             # Other types of wrapping are handled in the next if-else block.
             args = self._prepare_fsdp(*args, device_placement=device_placement)
+            # Clear non-utilized objects from all types of memory.
+            release_memory()
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -2161,7 +2163,7 @@ class Accelerator:
         # Clear parameter lists.
         for opt in optimizers.values():
             for group in opt.param_groups:
-                group["params"] = []
+                group["params"].clear()
 
         fsdp_2_base_layer_map = {}
 
