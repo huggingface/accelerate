@@ -111,17 +111,17 @@ Input shapes:
 
 For early stopping in distributed training, if each process has a specific stopping condition (e.g. validation loss), it may not be synchronized across all processes. As a result, a break can happen on process 0 but not on process 1 which will cause your code to hang indefinitely until a timeout occurs.
 
-If you have early stopping conditionals, use the `set_breakpoint` and `check_breakpoint` methods to make sure all the processes
+If you have early stopping conditionals, use the `set_trigger` and `check_trigger` methods to make sure all the processes
 are ended correctly.
 
 ```py
 # Assume `should_do_breakpoint` is a custom defined function that returns a conditional, 
 # and that conditional might be true only on process 1
 if should_do_breakpoint(loss):
-    accelerator.set_breakpoint()
+    accelerator.set_trigger()
 
 # Later in the training script when we need to check for the breakpoint
-if accelerator.check_breakpoint():
+if accelerator.check_trigger():
     break
 ```
 
