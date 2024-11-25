@@ -185,6 +185,7 @@ def main(
             save_thread.shutdown(wait=True)
 
     save_future.result()
+    distributed_state.destroy_process_group()
 
 
 if __name__ == "__main__":
