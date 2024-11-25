@@ -53,6 +53,7 @@ from accelerate.utils import (
     pad_across_processes,
     pad_input_tensors,
     patch_environment,
+    purge_accelerate_environment,
     recursively_apply,
     save,
     send_to_device,
@@ -431,3 +432,152 @@ class UtilsTester(unittest.TestCase):
         remove_hook_from_module(model)
         attach_align_device_hook(model, offload=True)
         assert has_offloaded_params(model)
+
+
+def set_dummy_accelerate_env_var():
+    """Set an accelerate env var
+
+    This class emulates the behavior of, for instance, transformers.TrainingArguments, which is allowed to set
+    accelerate env vars but does not clean them up. E.g.
+
+    TrainingArguments(fp16=True, output_dir="/tmp/test")
+
+    leaves ACCELERATE_MIXED_PRECISION=fp16 as an env var.
+    """
+    os.environ["ACCELERATE_SOME_ENV_VAR"] = "true"
+
+
+@purge_accelerate_environment
+class MyUnittest(unittest.TestCase):
+    def test_purge_env_vars_unittest_1(self):
+        os.environ.pop("ACCELERATE_SOME_ENV_VAR", None)
+        set_dummy_accelerate_env_var()
+        assert "ACCELERATE_SOME_ENV_VAR" in os.environ
+
+    def test_purge_env_vars_unittest_2(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+
+@unittest.skipIf(False, "dummy unittest wrapper")
+@purge_accelerate_environment
+@unittest.skipUnless(True, "dummy unittest wrapper")
+class MyUnittestWithDecorators(unittest.TestCase):
+    def test_purge_env_vars_unittest_with_wrapper_1(self):
+        os.environ.pop("ACCELERATE_SOME_ENV_VAR", None)
+        set_dummy_accelerate_env_var()
+        assert "ACCELERATE_SOME_ENV_VAR" in os.environ
+
+    def test_purge_env_vars_unittest_with_wrapper_2(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+    @unittest.skipIf(False, "dummy unittest wrapper")
+    def test_purge_env_vars_unittest_with_wrapper_3(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+    @unittest.skipIf(True, "this is always skipped")
+    def test_purge_env_vars_unittest_with_wrapper_4(self):
+        # ensure that unittest markers still do their job
+        assert False
+
+
+@purge_accelerate_environment
+class _BaseCls(unittest.TestCase):
+    def test_purge_env_vars_unittest_with_inheritance_3(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+
+class MyUnittestWithInheritance(_BaseCls):
+    def test_purge_env_vars_unittest_with_inheritance_1(self):
+        os.environ.pop("ACCELERATE_SOME_ENV_VAR", None)
+        set_dummy_accelerate_env_var()
+        assert "ACCELERATE_SOME_ENV_VAR" in os.environ
+
+    def test_purge_env_vars_unittest_with_inheritance_2(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+
+@purge_accelerate_environment
+class TestMyPytest:
+    def test_purge_env_vars_pytest_1(self):
+        os.environ.pop("ACCELERATE_SOME_ENV_VAR", None)
+        set_dummy_accelerate_env_var()
+        assert "ACCELERATE_SOME_ENV_VAR" in os.environ
+
+    def test_purge_env_vars_pytest_2(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+
+@pytest.fixture
+def dummy_fixture():
+    pass
+
+
+@pytest.mark.skipif(False, reason="dummy pytest wrapper")
+@pytest.mark.usefixtures("dummy_fixture")
+@purge_accelerate_environment
+@pytest.mark.skipif(False, reason="dummy pytest wrapper")
+@pytest.mark.usefixtures("dummy_fixture")
+class TestPytestWithWrapper:
+    def test_purge_env_vars_pytest_with_wrapper_1(self):
+        os.environ.pop("ACCELERATE_SOME_ENV_VAR", None)
+        set_dummy_accelerate_env_var()
+        assert "ACCELERATE_SOME_ENV_VAR" in os.environ
+
+    def test_purge_env_vars_pytest_with_wrapper_2(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+    @pytest.mark.skipif(False, reason="dummy pytest wrapper")
+    @pytest.mark.usefixtures("dummy_fixture")
+    def test_purge_env_vars_pytest_with_wrapper_3(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+    @pytest.mark.skipif(True, reason="this is always skipped")
+    def test_purge_env_vars_pytest_with_wrapper_4_should_be_skipped(self):
+        # ensure that pytest markers still do their job
+        assert False
+
+
+@purge_accelerate_environment
+class _PytestBaseCls:
+    def test_purge_env_vars_pytest_with_inheritance_3(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+
+class TestPytestWithInheritance(_PytestBaseCls):
+    def test_purge_env_vars_pytest_with_inheritance_1(self):
+        os.environ.pop("ACCELERATE_SOME_ENV_VAR", None)
+        set_dummy_accelerate_env_var()
+        assert "ACCELERATE_SOME_ENV_VAR" in os.environ
+
+    def test_purge_env_vars_pytest_with_inheritance_2(self):
+        assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+
+@purge_accelerate_environment
+def test_purge_env_vars_standalone_1():
+    os.environ.pop("ACCELERATE_SOME_ENV_VAR", None)
+    set_dummy_accelerate_env_var()
+    assert "ACCELERATE_SOME_ENV_VAR" in os.environ
+
+
+def test_purge_env_vars_standalone_2():
+    assert "ACCELERATE_SOME_ENV_VAR" not in os.environ
+
+
+def test_purge_env_vars_restores_previous_values():
+    # Ensure that purge_accelerate_environment restores values of previous accelerate env vars and does not delete
+    # untouched env vars.
+    @purge_accelerate_environment
+    def dummy_func():
+        os.environ["ACCELERATE_SOME_ENV_VAR"] = "456"
+
+    os.environ["ACCELERATE_SOME_ENV_VAR"] = "1"
+    os.environ["ACCELERATE_ANOTHER_ENV_VAR"] = "2"
+
+    dummy_func()
+
+    assert os.environ["ACCELERATE_SOME_ENV_VAR"] == "1"
+    assert os.environ["ACCELERATE_ANOTHER_ENV_VAR"] == "2"
+
+    del os.environ["ACCELERATE_SOME_ENV_VAR"]
+    del os.environ["ACCELERATE_ANOTHER_ENV_VAR"]
