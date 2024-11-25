@@ -174,6 +174,8 @@ When setting up 🤗 Accelerate for the first time, rather than running `acceler
 
 [[autodoc]] utils.environment.override_numa_affinity
 
+[[autodoc]] utils.purge_accelerate_environment
+
 ## Memory
 
 [[autodoc]] utils.find_executable_batch_size
