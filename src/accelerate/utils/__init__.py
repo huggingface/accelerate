@@ -71,6 +71,7 @@ from .environment import (
     parse_choice_from_env,
     parse_flag_from_env,
     patch_environment,
+    purge_accelerate_environment,
     set_numa_affinity,
     str_to_bool,
 )
