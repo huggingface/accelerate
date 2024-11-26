@@ -43,16 +43,7 @@ Why is this important? Under the hood this will set **5** different seed setting
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if is_xpu_available():
-        torch.xpu.manual_seed_all(seed)
-    elif is_npu_available():
-        torch.npu.manual_seed_all(seed)
-    elif is_mlu_available():
-        torch.mlu.manual_seed_all(seed)
-    elif is_musa_available():
-        torch.musa.manual_seed_all(seed)
-    else:
-        torch.cuda.manual_seed_all(seed)
+    torch.cuda.manual_seed_all(seed) # or torch.xpu.manual_seed_all, etc
     # ^^ safe to call this function even if cuda is not available
     if is_torch_xla_available():
         xm.set_rng_state(seed)
