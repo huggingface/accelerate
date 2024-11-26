@@ -819,8 +819,7 @@ class AcceleratorTester(AccelerateTestCase):
                 offload_folder=offload_folder,
                 preload_module_classes=["VQuantLinear"],
             )
-            x = torch.randn(1, 2)
-            print(my_model(x))
         # before fix, this would raise an error
         #       weight is on the meta device, we need a `value` to put in on 0
+        x = torch.randn(1, 2)
         my_model(x)
