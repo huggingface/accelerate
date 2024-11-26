@@ -42,6 +42,19 @@ def map_pytorch_optim_to_deepspeed(optimizer):
 
     optimizer_class = DeepSpeedCPUAdam
 
+    # For DeepSpeedCPUAdam (adamw_mode)
+    if compare_versions("deepspeed", ">=", "0.3.1"):
+        defaults["adamw_mode"] = False
+        is_adaw = isinstance(optimizer, optim.AdamW)
+
+        if is_bnb_available() and not is_adaw:
+            import bitsandbytes.optim as bnb_opt
+
+            is_adaw = isinstance(optimizer, (bnb_opt.AdamW, bnb_opt.AdamW32bit)) and optimizer.optim_bits == 32
+
+        if is_adaw:
+            defaults["adamw_mode"] = True
+
     # For DeepSpeedCPUAdagrad
     if compare_versions("deepspeed", ">=", "0.5.5"):
         # Check if the optimizer is PyTorch's Adagrad.
