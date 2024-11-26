@@ -126,6 +126,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         """
         if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
             self.optimizer.train()
+        elif hasattr(self.optimizer, "optimizer") and hasattr(self.optimizer.optimizer, "train") and callable(self.optimizer.optimizer.train):
+            self.optimizer.optimizer.train()
 
     def eval(self):
         """
