@@ -1702,6 +1702,10 @@ class Accelerator:
         deepspeed_plugin = self.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        tp_size = self.deepspeed_plugin.deepspeed_config["tensor_parallel"].get("autotp_size", 0)
+        if tp_size > 1:
+            self.state.dp_size_and_index = [self.state.num_processes // tp_size, self.state.process_index // tp_size]
+
         result = [
             self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
             for obj in args
@@ -2149,11 +2153,17 @@ class Accelerator:
             return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
+        num_processes = self.num_processes
+        process_index = self.process_index
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            if hasattr(self.state, "dp_size_and_index"):
+                num_processes = self.state.dp_size_and_index[0]
+                process_index = self.state.dp_size_and_index[1]
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
-            num_processes=self.num_processes,
-            process_index=self.process_index,
+            num_processes=num_processes,
+            process_index=process_index,
             split_batches=self.split_batches,
             put_on_device=device_placement,
             rng_types=self.rng_types.copy(),
@@ -3407,9 +3417,12 @@ class Accelerator:
         """
 
         if self.distributed_type == DistributedType.DEEPSPEED:
-            if self.deepspeed_config["zero_optimization"]["stage"] == 3:
+            if (
+                self.deepspeed_config["zero_optimization"]["stage"] == 3
+                or self.deepspeed_config["tensor_parallel"].get("autotp_size", 0) > 1
+            ):
                 if model.zero_gather_16bit_weights_on_model_save():
-                    state_dict = model._zero3_consolidated_16bit_state_dict()
+                    state_dict = model._consolidated_16bit_state_dict()
                 else:
                     raise ValueError(
                         "Cannot get 16bit model weights because `stage3_gather_16bit_weights_on_model_save` in DeepSpeed config is False. "
