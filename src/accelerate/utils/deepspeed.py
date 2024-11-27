@@ -78,6 +78,7 @@ class HfDeepSpeedConfig:
         self.config = config
 
         self.set_stage_and_offload()
+        self.set_sequence_parallel()
 
     def set_stage_and_offload(self):
         # zero stage - this is done as early as possible, before model is created, to allow
@@ -97,6 +98,9 @@ class HfDeepSpeedConfig:
             )
             if len(offload_devices & offload_devices_valid) > 0:
                 self._offload = True
+
+    def set_sequence_parallel(self):
+        self._sequence_parallel = self.get_value("sequence_parallel_size", 1) > 1
 
     def find_config_node(self, ds_key_long):
         config = self.config
@@ -168,6 +172,9 @@ class HfDeepSpeedConfig:
 
     def is_offload(self):
         return self._offload
+
+    def is_sequence_parallel(self):
+        return self._sequence_parallel
 
 
 class DeepSpeedEngineWrapper:
