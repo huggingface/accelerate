@@ -32,6 +32,7 @@ from accelerate.test_utils import (
     require_bnb,
     require_multi_gpu,
     require_non_cpu,
+    require_huggingface_suite,
     require_transformer_engine,
     slow,
     torch_device,
@@ -764,6 +765,7 @@ class AcceleratorTester(AccelerateTestCase):
             assert torch.allclose(original_linear2, new_linear2)
 
     @require_cuda
+    @require_huggingface_suite
     def test_nested_hook(self, use_safetensors):
         from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
 
@@ -817,7 +819,7 @@ class AcceleratorTester(AccelerateTestCase):
                 device_map="auto",
                 no_split_module_classes=["MySubModel"],
                 offload_folder=offload_folder,
-                preload_module_classes=["VQuantLinear"],
+                preload_module_classes=["MyLinear"],
             )
         # before fix, this would raise an error
         #       weight is on the meta device, we need a `value` to put in on 0
