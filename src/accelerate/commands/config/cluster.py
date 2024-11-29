@@ -603,6 +603,8 @@ def get_cluster_input():
             machine_type = "MLU(s)"
         elif is_musa_available():
             machine_type = "MUSA(s)"
+        elif is_xpu_available():
+            machine_type = "XPU(s)"
         else:
             machine_type = "GPU(s)"
         gpu_ids = _ask_field(
