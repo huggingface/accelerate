@@ -199,6 +199,7 @@ if is_deepspeed_available():
         DummyScheduler,
         HfDeepSpeedConfig,
         get_active_deepspeed_plugin,
+        map_pytorch_optim_to_deepspeed,
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model
