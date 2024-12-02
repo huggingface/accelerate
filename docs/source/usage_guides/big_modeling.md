@@ -21,7 +21,7 @@ This tutorial will show you how to use Big Model Inference in Accelerate and the
 
 ## Accelerate
 
-A typical workflow for loading a PyTorch model is shown below. `ModelClass` is a model that exceeds the GPU memory of your device (mps or cuda).
+A typical workflow for loading a PyTorch model is shown below. `ModelClass` is a model that exceeds the GPU memory of your device (mps or cuda or xpu).
 
 ```py
 import torch
@@ -64,7 +64,7 @@ Now that the model is fully dispatched, you can perform inference.
 
 ```py
 input = torch.randn(2,3)
-input = input.to("cuda")
+input = input.to(model.device.type)
 output = model(input)
 ```
 
@@ -91,7 +91,7 @@ model = load_checkpoint_and_dispatch(
 )
 
 input = torch.randn(2,3)
-input = input.to("cuda")
+input = input.to(model.device.type)
 output = model(input)
 ```
 
