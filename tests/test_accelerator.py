@@ -30,6 +30,7 @@ from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, skip_f
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
+    require_huggingface_suite,
     require_multi_gpu,
     require_non_cpu,
     require_transformer_engine,
@@ -762,3 +763,65 @@ class AcceleratorTester(AccelerateTestCase):
             assert torch.allclose(original_linear1, new_linear1)
             assert torch.allclose(original_batchnorm, new_batchnorm)
             assert torch.allclose(original_linear2, new_linear2)
+
+    @require_cuda
+    @require_huggingface_suite
+    def test_nested_hook(self, use_safetensors):
+        from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
+
+        class MyLinear(torch.nn.Module):
+            def __init__(self, device=None, dtype=None):
+                factory_kwargs = {"device": device, "dtype": dtype}
+                super().__init__()
+                self.centroid = torch.nn.Embedding(1, 2)
+                self.indices = torch.nn.parameter(torch.empty((1, 2, 2), **factory_kwargs))
+
+            def forward(self, x):
+                orig_shape = x.shape
+                x = torch.abs(x + self.indices).long()
+                x = x % 2
+                x = x.sum(-1)
+                x = (self.centroid.weight + x).reshape(orig_shape)
+                return x
+
+        class MySubModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layer = MyLinear()
+
+            def forward(self, x):
+                return self.layer(x)
+
+        class MyModel(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.layer = torch.nn.ModuleList([MySubModel() for i in range(4)])
+
+            def forward(self, x):
+                for layer in self.layer:
+                    x = layer(x)
+                return x
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            check_point = tmpdirname
+            offload_folder = check_point + "/offload"
+            os.makedirs(offload_folder, exist_ok=True)
+            config = PretrainedConfig()
+            m = MyModel(config)
+            m.save_pretrained(check_point)
+
+            with init_empty_weights():
+                my_model = MyModel(config)
+            my_model = load_checkpoint_and_dispatch(
+                my_model,
+                checkpoint=check_point,
+                max_memory={"cpu": 60, 0: 60},
+                device_map="auto",
+                no_split_module_classes=["MySubModel"],
+                offload_folder=offload_folder,
+                preload_module_classes=["MyLinear"],
+            )
+        # before fix, this would raise an error
+        #       weight is on the meta device, we need a `value` to put in on 0
+        x = torch.randn(1, 2)
+        my_model(x)
