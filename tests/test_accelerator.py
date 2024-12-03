@@ -30,9 +30,9 @@ from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, skip_f
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
+    require_huggingface_suite,
     require_multi_gpu,
     require_non_cpu,
-    require_huggingface_suite,
     require_transformer_engine,
     slow,
     torch_device,
