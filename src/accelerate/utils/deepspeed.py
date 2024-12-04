@@ -135,6 +135,12 @@ class HfDeepSpeedConfig:
                     f"Expected a string path to an existing deepspeed config, or a dictionary, or a base64 encoded string. Received: {config_file_or_dict}"
                 )
 
+        if "zero_optimization" in config and isinstance(config["zero_optimization"], bool):
+            from deepspeed.runtime.zero.config import read_zero_config_deprecated
+
+            zero_config_dict = read_zero_config_deprecated(config)
+            config["zero_optimization"] = zero_config_dict
+
         self.config = config
 
         self.set_stage_and_offload()
