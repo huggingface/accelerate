@@ -28,6 +28,7 @@ RUN python3 -m pip install --no-cache-dir \
 FROM python:3.9-slim AS build-image
 COPY --from=compile-image /opt/venv /opt/venv
 RUN useradd -ms /bin/bash user
+RUN echo "user ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/pip" >> /etc/sudoers
 USER user
 
 # Make sure we use the virtualenv
