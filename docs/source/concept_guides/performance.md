@@ -43,13 +43,13 @@ Why is this important? Under the hood this will set **5** different seed setting
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    torch.cuda.manual_seed_all(seed) # or torch.xpu.manual_seed_all, etc
     # ^^ safe to call this function even if cuda is not available
     if is_torch_xla_available():
         xm.set_rng_state(seed)
 ```
 
-The random state, numpy's state, torch, torch's cuda state, and if TPUs are available torch_xla's cuda state.
+The random state, numpy's state, torch, torch's device state, and if TPUs are available torch_xla's cuda state.
 
 ## Observed Batch Sizes 
 
