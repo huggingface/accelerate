@@ -100,7 +100,12 @@ class HfDeepSpeedConfig:
                 self._offload = True
 
     def set_sequence_parallel(self):
-        self._sequence_parallel = self.get_value("sequence_parallel_size", 1) > 1
+        from deepspeed.utils import groups as deepspeed_mpu
+
+        self._sequence_parallel_size = self.get_value("sequence_parallel_size", 1)
+        self._data_parallel_size = self.get_value("data_parallel_size", 1)
+        self._sequence_parallel = self._sequence_parallel_size > 1
+        self._sequence_parallel_rank = deepspeed_mpu._get_sequence_parallel_rank()
 
     def find_config_node(self, ds_key_long):
         config = self.config
@@ -175,6 +180,15 @@ class HfDeepSpeedConfig:
 
     def is_sequence_parallel(self):
         return self._sequence_parallel
+
+    def sequence_parallel_size(self):
+        return self._sequence_parallel_size
+
+    def data_parallel_size(self):
+        return self._data_parallel_size
+
+    def sequence_parallel_rank(self):
+        return self._sequence_parallel_rank
 
 
 class DeepSpeedEngineWrapper:

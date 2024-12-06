@@ -1142,6 +1142,7 @@ class DeepSpeedPlugin:
             for key in kwargs.keys():
                 self.fill_match(key, **kwargs, must_match=False)
             self.hf_ds_config.set_stage_and_offload()
+            self.hf_ds_config.set_sequence_parallel()
 
             # filling the missing values in the class attributes from the DeepSpeed config
             # when using the DeepSpeed config file.
