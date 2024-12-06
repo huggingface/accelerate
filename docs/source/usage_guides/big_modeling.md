@@ -92,7 +92,8 @@ model = load_checkpoint_and_dispatch(
 )
 
 input = torch.randn(2,3)
-input = input.to(model.device.type)
+device_type = next(iter(model.parameters())).device.type
+input = input.to(device_type)
 output = model(input)
 ```
 
