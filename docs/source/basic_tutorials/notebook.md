@@ -327,7 +327,7 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
     # Build dataloaders
     train_dataloader, eval_dataloader = get_dataloaders(batch_size)
 
-    # Instantiate the model (you build the model here so that the seed also controls new weight initaliziations)
+    # Instantiate the model (you build the model here so that the seed also controls new weight initializations)
     model = create_model("resnet50d", pretrained=True, num_classes=len(label_to_id))
 
     # Freeze the base model

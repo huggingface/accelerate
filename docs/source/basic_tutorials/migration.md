@@ -145,7 +145,7 @@ Set the mixed precision type to use in the [`Accelerator`], and then use the [`~
 ```diff
 + accelerator = Accelerator(mixed_precision="fp16")
 + with accelerator.autocast():
-      loss = complex_loss_function(outputs, target):
+      loss = complex_loss_function(outputs, target)
 ```
 
 ## Save and load
