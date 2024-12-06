@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Experiment trackers
 
-There are a large number of experiment tracking API's available, however getting them all to work with in a multi-processing environment can oftentimes be complex.
+There are a large number of experiment tracking APIs available, however getting them all to work in a multi-processing environment can oftentimes be complex.
 Accelerate provides a general tracking API that can be used to log useful items during your script through [`Accelerator.log`]
 
 ## Integrated Trackers
@@ -75,7 +75,7 @@ my_model, my_optimizer, my_training_dataloader = accelerator.prepare(my_model, m
 device = accelerator.device
 my_model.to(device)
 
-for iteration in config["num_iterations"]:
+for iteration in range(config["num_iterations"]):
     for step, batch in enumerate(my_training_dataloader):
         my_optimizer.zero_grad()
         inputs, targets = batch
@@ -184,7 +184,7 @@ wandb_tracker = accelerator.get_tracker("wandb")
 From there you can interact with `wandb`'s `run` object like normal:
 
 ```python
-wandb_run.log_artifact(some_artifact_to_log)
+wandb_tracker.log_artifact(some_artifact_to_log)
 ```
 
 <Tip>
