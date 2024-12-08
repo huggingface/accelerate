@@ -146,7 +146,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-    if is_torch_tensor(tensor) or hasattr(tensor, "to"):
+    if is_torch_tensor(tensor):
         # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
         if device == "npu":
             device = "npu:0"
