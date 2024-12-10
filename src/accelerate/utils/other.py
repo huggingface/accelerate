@@ -77,7 +77,8 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True, recursive
     """
     options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
 
-    if is_compiled_module(model):
+    is_compiled = is_compiled_module(model)
+    if is_compiled:
         compiled_model = model
         model = model._orig_mod
 
@@ -123,7 +124,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True, recursive
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
-    if is_compiled_module(model):
+    if is_compiled:
         compiled_model._orig_mod = model
         model = compiled_model
 

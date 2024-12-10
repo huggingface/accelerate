@@ -249,7 +249,7 @@ class UtilsTester(unittest.TestCase):
         distributed_compiled_model = torch.compile(distributed_model)
         compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model)
 
-        assert compiled_model._orig_mod == compiled_model_unwrapped
+        assert compiled_model._orig_mod == compiled_model_unwrapped._orig_mod
 
     def test_find_device(self):
         assert find_device([1, "a", torch.tensor([1, 2, 3])]) == torch.device("cpu")
