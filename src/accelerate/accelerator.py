@@ -2632,7 +2632,9 @@ class Accelerator:
         MyModel
         ```
         """
-        return extract_model_from_parallel(model, keep_fp32_wrapper)
+        while not isinstance(model, torch.nn.Module):
+            model = extract_model_from_parallel(model, keep_fp32_wrapper)
+        return model
 
     def wait_for_everyone(self):
         """
