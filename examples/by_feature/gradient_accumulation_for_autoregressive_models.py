@@ -323,7 +323,7 @@ def main():
         "--per_device_batch_size",
         type=int,
         default=2,
-        help="The number of minibatches to be ran before gradients are accumulated.",
+        help="The size of each minibatch",
     )
 
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
