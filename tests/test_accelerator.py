@@ -766,7 +766,7 @@ class AcceleratorTester(AccelerateTestCase):
 
     @require_cuda
     @require_huggingface_suite
-    def test_nested_hook(self, use_safetensors):
+    def test_nested_hook(self):
         from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
 
         class MyLinear(torch.nn.Module):
@@ -774,7 +774,7 @@ class AcceleratorTester(AccelerateTestCase):
                 factory_kwargs = {"device": device, "dtype": dtype}
                 super().__init__()
                 self.centroid = torch.nn.Embedding(1, 2)
-                self.indices = torch.nn.parameter(torch.empty((1, 2, 2), **factory_kwargs))
+                self.indices = torch.nn.Parameter(torch.empty((1, 2, 2), **factory_kwargs))
 
             def forward(self, x):
                 orig_shape = x.shape
@@ -821,7 +821,7 @@ class AcceleratorTester(AccelerateTestCase):
                 offload_folder=offload_folder,
                 preload_module_classes=["MyLinear"],
             )
-        # before fix, this would raise an error
-        #       weight is on the meta device, we need a `value` to put in on 0
-        x = torch.randn(1, 2)
-        my_model(x)
+            # before fix, this would raise an error
+            #       weight is on the meta device, we need a `value` to put in on 0
+            x = torch.randn(1, 2)
+            my_model(x)
