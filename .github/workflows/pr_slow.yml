@@ -38,6 +38,7 @@ jobs:
               head_ref: pr.head.ref,
               head_repo: pr.head.repo.full_name
             }
+
       - name: Parse workflow name
         if: steps.check_permissions.outputs.result == 'true'
         id: parse
@@ -45,12 +46,16 @@ jobs:
           COMMENT="${{ github.event.comment.body }}"
           WORKFLOW_NAME=$(echo "$COMMENT" | awk -F'\n' '/^!run/ {sub(/^!run */, ""); print $1; exit}')
           echo "workflow=$WORKFLOW_NAME" >> $GITHUB_OUTPUT
-      - name: Echo workflow name
-        if: steps.check_permissions.outputs.result == 'true'
-        run: |
-          echo "Workflow to run: ${{ steps.parse.outputs.workflow }}"
 
-      - name: Trigger workflow
+      - name: Checkout PR code
+        if: steps.check_permissions.outputs.result == 'true'
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ fromJson(steps.pr_details.outputs.result).head_repo }}
+          ref: ${{ fromJson(steps.pr_details.outputs.result).head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run workflow
         if: steps.check_permissions.outputs.result == 'true'
         uses: actions/github-script@v6
         with:
@@ -59,24 +64,18 @@ jobs:
             const prDetails = JSON.parse('${{ steps.pr_details.outputs.result }}');
             
             try {
-              // Trigger the workflow
+              // Run the workflow directly from the checked out code
               await github.rest.actions.createWorkflowDispatch({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 workflow_id: `${workflow}.yml`,
-                ref: prDetails.head_ref,
-                inputs: {
-                  repository: prDetails.head_repo,
-                  ref: prDetails.head_sha
-                }
+                ref: prDetails.head_ref
               });
               
-              // Handle the success message
-              const message = `Triggered workflow: ${workflow}\nWaiting for results...`;
+              const message = `Triggered workflow: ${workflow}\nUsing code from: ${prDetails.head_repo}@${prDetails.head_ref}\nWaiting for results...`;
               await updateOrCreateComment(message);
               
             } catch (error) {
-              // Handle any errors
               const errorMessage = `Error triggering workflow: ${error.message}`;
               await updateOrCreateComment(errorMessage);
             }
