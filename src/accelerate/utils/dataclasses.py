@@ -1074,6 +1074,14 @@ class DeepSpeedPlugin:
             "help": "Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one of ['O1' or 'O2']."
         },
     )
+    sequence_parallel_size: int = field(
+        default=None,
+        metadata={"help": "Number of devices to split the sequence dimension over"},
+    )
+    data_parallel_size: int = field(
+        default=None,
+        metadata={"help": "Number of groups of `sequence_parallel_size` to create for sequence parallelism"},
+    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -1137,6 +1145,8 @@ class DeepSpeedPlugin:
                 "offload_param_nvme_path": "zero_optimization.offload_param.nvme_path",
                 "offload_optimizer_nvme_path": "zero_optimization.offload_optimizer.nvme_path",
                 "zero3_save_16bit_model": "zero_optimization.stage3_gather_16bit_weights_on_model_save",
+                "sequence_parallel_size": "sequence_parallel_size",
+                "data_parallel_size": "data_parallel_size",
             }
             kwargs = {v: getattr(self, k) for k, v in plugin_to_config_mapping.items() if getattr(self, k) is not None}
             for key in kwargs.keys():
@@ -1172,6 +1182,10 @@ class DeepSpeedPlugin:
             }
             if self.gradient_clipping:
                 config["gradient_clipping"] = self.gradient_clipping
+            if self.sequence_parallel_size:
+                config["sequence_parallel_size"] = self.sequence_parallel_size
+            if self.data_parallel_size:
+                config["data_parallel_size"] = self.data_parallel_size
             self.hf_ds_config = HfDeepSpeedConfig(config)
 
         self.deepspeed_config = self.hf_ds_config.config
@@ -1251,6 +1265,9 @@ class DeepSpeedPlugin:
                 f" values:\n{mismatches_msg}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
             )
 
+    def set_sequence_parallel(self):
+        self.hf_ds_config.set_sequence_parallel()
+
     def set_mixed_precision(self, mixed_precision):
         ds_config = self.deepspeed_config
         kwargs = {
@@ -1308,6 +1325,13 @@ class DeepSpeedPlugin:
 
     def is_zero3_init_enabled(self):
         return self.zero3_init_flag
+
+    def is_sequence_parallel_enabled(self):
+        return self.sequence_parallel_size is not None and self.sequence_parallel_size > 1
+
+    @property
+    def sequence_parallel_rank(self):
+        return self.hf_ds_config.sequence_parallel_rank()
 
     @contextmanager
     def zero3_init_context_manager(self, enable=False):

@@ -34,7 +34,7 @@ import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
+from .data_loader import DataLoaderAdapter, DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -1662,7 +1662,12 @@ class Accelerator:
 
         deepspeed_plugin = self.deepspeed_plugin
 
-        is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        data_loader_idx = next(
+            (i for i, obj in enumerate(args) if isinstance(obj, (torch.utils.data.DataLoader, DataLoaderAdapter))),
+            None,
+        )
+        is_dataloader_present = data_loader_idx is not None
+
         result = [
             self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
             for obj in args
@@ -1716,6 +1721,10 @@ class Accelerator:
             config_kwargs["train_batch_size"] = (
                 batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * world_size
             )
+
+        data_loader = None
+        if is_dataloader_present:
+            data_loader = result[data_loader_idx]
 
         model = None
         optimizer = None
@@ -1857,7 +1866,13 @@ class Accelerator:
 
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
 
-            deepspeed_plugin.hf_ds_config.set_sequence_parallel()
+            deepspeed_plugin.set_sequence_parallel()
+
+            if data_loader is not None and hasattr(data_loader, "set_sequence_parallel"):
+                data_loader.set_sequence_parallel(
+                    deepspeed_plugin.sequence_parallel_size,
+                    deepspeed_plugin.sequence_parallel_rank,
+                )
 
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()

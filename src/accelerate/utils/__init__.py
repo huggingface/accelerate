@@ -184,6 +184,7 @@ from .operations import (
     recursively_apply,
     reduce,
     send_to_device,
+    shard_tensors,
     slice_tensors,
 )
 from .versions import compare_versions, is_torch_version

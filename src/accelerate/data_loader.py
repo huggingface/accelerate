@@ -19,6 +19,8 @@ from typing import Callable, List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
+from accelerate.utils.operations import ensure_position_ids, find_position_ids, find_sequence_length, shard_tensors
+
 from .logging import get_logger
 from .state import DistributedType, GradientState, PartialState, is_torch_xla_available
 from .utils import (
@@ -539,6 +541,9 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self._drop_last = _drop_last
         self._non_blocking = _non_blocking
         self.iteration = 0
+        self.sequence_parallel_size = 1
+        self.sequence_parallel_rank = 0
+        self.is_sequence_parallel = False
 
     def __iter__(self):
         if self.rng_types is not None:
@@ -558,6 +563,13 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
             try:
                 # But we still move it to the device so it is done before `StopIteration` is reached
                 if self.device is not None:
+                    if self.is_sequence_parallel:
+                        current_batch = ensure_position_ids(current_batch)
+                        seq_len = find_sequence_length(current_batch)
+                        rank = self.sequence_parallel_rank
+                        start = rank * (seq_len // self.sequence_parallel_size)
+                        end = (rank + 1) * (seq_len // self.sequence_parallel_size)
+                        current_batch = shard_tensors(current_batch, start, end)
                     current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
                 self._update_state_dict()
                 next_batch = next(dataloader_iter)
@@ -583,6 +595,11 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         """
         args = super().__reduce__()
         return (DataLoaderShard, *args[1:])
+
+    def set_sequence_parallel(self, sequence_parallel_size: int, sequence_parallel_rank: int):
+        self.sequence_parallel_size = sequence_parallel_size
+        self.sequence_parallel_rank = sequence_parallel_rank
+        self.is_sequence_parallel = sequence_parallel_size > 1
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like
