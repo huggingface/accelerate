@@ -35,6 +35,16 @@ class MultiProcessAdapter(logging.LoggerAdapter):
         state = PartialState()
         return not main_process_only or (main_process_only and state.is_main_process)
 
+    def process(self, msg, kwargs):
+        msg, kwargs = super().process(msg, kwargs)
+
+        # set `stacklevel` to exclude ourself in `Logger.findCaller()` while respecting user's choice
+        kwargs.setdefault("stacklevel", 2)
+
+        state = PartialState()
+        msg = f"[RANK {state.process_index}] {msg}"
+        return msg, kwargs
+
     def log(self, level, msg, *args, **kwargs):
         """
         Delegates logger call after checking if we should log.
@@ -46,7 +56,7 @@ class MultiProcessAdapter(logging.LoggerAdapter):
         read, but comes at the cost of sometimes needing to wait for the other processes. Default is `False` to not
         break with the previous behavior.
 
-        `in_order` is ignored if `main_process_only` is passed.
+        `main_process_only` is ignored if `in_order` is passed.
         """
         if PartialState._shared_state == {}:
             raise RuntimeError(
@@ -54,19 +64,16 @@ class MultiProcessAdapter(logging.LoggerAdapter):
             )
         main_process_only = kwargs.pop("main_process_only", True)
         in_order = kwargs.pop("in_order", False)
-        # set `stacklevel` to exclude ourself in `Logger.findCaller()` while respecting user's choice
-        kwargs.setdefault("stacklevel", 2)
 
         if self.isEnabledFor(level):
-            if self._should_log(main_process_only):
-                msg, kwargs = self.process(msg, kwargs)
+            msg, kwargs = self.process(msg, kwargs)
+            if not in_order and self._should_log(main_process_only):
                 self.logger.log(level, msg, *args, **kwargs)
 
             elif in_order:
                 state = PartialState()
                 for i in range(state.num_processes):
                     if i == state.process_index:
-                        msg, kwargs = self.process(msg, kwargs)
                         self.logger.log(level, msg, *args, **kwargs)
                     state.wait_for_everyone()
 
@@ -82,7 +89,7 @@ class MultiProcessAdapter(logging.LoggerAdapter):
         self.warning(*args, **kwargs)
 
 
-def get_logger(name: str, log_level: str = None):
+def get_logger(name: str, log_level: str | None = None):
     """
     Returns a `logging.Logger` for `name` that can handle multiprocessing.
 
