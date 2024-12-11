@@ -134,9 +134,9 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, max_training
 
 # For testing only
 if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
-    from accelerate.test_utils.training import mocked_dataloaders
+    from accelerate.test_utils.training import mocked_dataloaders_for_autoregressive_models
 
-    get_dataloaders = mocked_dataloaders  # noqa: F811
+    get_dataloaders = mocked_dataloaders_for_autoregressive_models  # noqa: F811
 
 
 def training_function(config, args):
