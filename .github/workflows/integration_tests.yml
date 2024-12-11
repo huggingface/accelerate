@@ -7,15 +7,6 @@
 
 name: Integration Tests
 
-on:
-  pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "examples/**"
-      - "setup.py"
-    types: [opened, synchronize, reopened]
 
 env:
   HF_HOME: ~/hf_cache
