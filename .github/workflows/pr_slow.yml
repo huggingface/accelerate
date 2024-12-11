@@ -55,7 +55,7 @@ jobs:
           ref: ${{ fromJson(steps.pr_details.outputs.result).head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run workflow
+      - name: Run workflow and monitor
         if: steps.check_permissions.outputs.result == 'true'
         uses: actions/github-script@v6
         with:
@@ -64,7 +64,7 @@ jobs:
             const prDetails = JSON.parse('${{ steps.pr_details.outputs.result }}');
             
             try {
-              // Run the workflow directly from the checked out code
+              // Run the workflow
               await github.rest.actions.createWorkflowDispatch({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -72,11 +72,39 @@ jobs:
                 ref: prDetails.head_ref
               });
               
-              const message = `Triggered workflow: ${workflow}\nUsing code from: ${prDetails.head_repo}@${prDetails.head_ref}\nWaiting for results...`;
-              await updateOrCreateComment(message);
+              const initialMessage = `Triggered workflow: ${workflow}\nUsing code from: ${prDetails.head_repo}@${prDetails.head_ref}\nWaiting for results...`;
+              await updateOrCreateComment(initialMessage);
+
+              // Wait for workflow to start (give it 30 seconds)
+              await new Promise(resolve => setTimeout(resolve, 30000));
+
+              // Monitor the workflow until completion
+              let isComplete = false;
+              while (!isComplete) {
+                const runs = await github.rest.actions.listWorkflowRuns({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: `${workflow}.yml`,
+                  head_sha: prDetails.head_sha,
+                  per_page: 1
+                });
+
+                if (runs.data.workflow_runs.length > 0) {
+                  const run = runs.data.workflow_runs[0];
+                  if (run.status === 'completed') {
+                    const finalMessage = `Workflow ${workflow} completed with status: ${run.conclusion}\nRun details: ${run.html_url}`;
+                    await updateOrCreateComment(finalMessage);
+                    isComplete = true;
+                  }
+                }
+
+                if (!isComplete) {
+                  await new Promise(resolve => setTimeout(resolve, 30000)); // Check every 30 seconds
+                }
+              }
               
             } catch (error) {
-              const errorMessage = `Error triggering workflow: ${error.message}`;
+              const errorMessage = `Error with workflow: ${error.message}`;
               await updateOrCreateComment(errorMessage);
             }
 
