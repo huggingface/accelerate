@@ -1,0 +1,152 @@
+name: Manual Workflow Trigger
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+jobs:
+  process-comment:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '!run')
+    
+    steps:
+      - name: Check if commenter has write access
+        id: check_permissions
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const response = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.payload.comment.user.login
+            });
+            return response.data.permission === 'admin' || response.data.permission === 'write';
+
+      - name: Get PR details
+        if: steps.check_permissions.outputs.result == 'true'
+        id: pr_details
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            return {
+              head_sha: pr.head.sha,
+              head_ref: pr.head.ref,
+              head_repo: pr.head.repo.full_name
+            }
+
+      - name: Parse workflow name
+        if: steps.check_permissions.outputs.result == 'true'
+        id: parse
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          WORKFLOW_NAME=$(echo "$COMMENT" | sed 's/!run //')
+          echo "workflow=$WORKFLOW_NAME" >> $GITHUB_OUTPUT
+
+      - name: Trigger workflow
+        if: steps.check_permissions.outputs.result == 'true'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const workflow = '${{ steps.parse.outputs.workflow }}';
+            const prDetails = JSON.parse('${{ steps.pr_details.outputs.result }}');
+            
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: `${workflow}.yml`,
+                ref: prDetails.head_ref,
+                inputs: {
+                  repository: prDetails.head_repo,
+                  ref: prDetails.head_sha
+                }
+              });
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `Triggered workflow: ${workflow}\nWaiting for results...`
+              });
+            } catch (error) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `Error triggering workflow: ${error.message}`
+              });
+            }
+
+  monitor-reaction:
+    runs-on: ubuntu-latest
+    if: github.event.comment.reactions && contains(github.event.comment.reactions, '+1')
+    
+    steps:
+      - name: Check reaction permissions
+        id: check_reaction_perms
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const response = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.payload.sender.login
+            });
+            return response.data.permission === 'admin' || response.data.permission === 'write';
+
+      - name: Get PR details for reaction
+        if: steps.check_reaction_perms.outputs.result == 'true'
+        id: pr_details_reaction
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            return {
+              head_sha: pr.head.sha,
+              head_ref: pr.head.ref,
+              head_repo: pr.head.repo.full_name
+            }
+
+      - name: Retrigger on thumbs up
+        if: steps.check_reaction_perms.outputs.result == 'true'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const workflow = '${{ steps.parse.outputs.workflow }}';
+            const prDetails = JSON.parse('${{ steps.pr_details_reaction.outputs.result }}');
+            
+            // Retrigger the workflow
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: `${workflow}.yml`,
+              ref: prDetails.head_ref,
+              inputs: {
+                repository: prDetails.head_repo,
+                ref: prDetails.head_sha
+              }
+            });
+            
+            // Remove the thumbs up reaction
+            await github.rest.reactions.deleteForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              reaction_id: context.payload.reaction.id
+            });
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Re-running workflow: ${workflow}\nWaiting for results...`
+            });
