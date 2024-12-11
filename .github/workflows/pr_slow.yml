@@ -62,6 +62,7 @@ jobs:
           script: |
             const workflow = '${{ steps.parse.outputs.workflow }}';
             const prDetails = JSON.parse('${{ steps.pr_details.outputs.result }}');
+            let commentId = null;
             
             try {
               // Run the workflow
@@ -72,8 +73,14 @@ jobs:
                 ref: prDetails.head_ref
               });
               
-              const initialMessage = `Triggered workflow: ${workflow}\nUsing code from: ${prDetails.head_repo}@${prDetails.head_ref}\nWaiting for results...`;
-              await updateOrCreateComment(initialMessage);
+              // Create initial comment
+              const initialComment = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `Triggered workflow: ${workflow}\nUsing code from: ${prDetails.head_repo}@${prDetails.head_ref}\nWaiting for results...`
+              });
+              commentId = initialComment.data.id;
 
               // Wait for workflow to start (give it 30 seconds)
               await new Promise(resolve => setTimeout(resolve, 30000));
@@ -92,8 +99,12 @@ jobs:
                 if (runs.data.workflow_runs.length > 0) {
                   const run = runs.data.workflow_runs[0];
                   if (run.status === 'completed') {
-                    const finalMessage = `Workflow ${workflow} completed with status: ${run.conclusion}\nRun details: ${run.html_url}`;
-                    await updateOrCreateComment(finalMessage);
+                    await github.rest.issues.updateComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      comment_id: commentId,
+                      body: `Workflow ${workflow} completed with status: ${run.conclusion}\nRun details: ${run.html_url}`
+                    });
                     isComplete = true;
                   }
                 }
@@ -105,35 +116,19 @@ jobs:
               
             } catch (error) {
               const errorMessage = `Error with workflow: ${error.message}`;
-              await updateOrCreateComment(errorMessage);
-            }
-
-            // Helper function to update or create comments
-            async function updateOrCreateComment(message) {
-              const comments = await github.rest.issues.listComments({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number
-              });
-              
-              const botComment = comments.data.find(comment => 
-                comment.user.login === 'github-actions[bot]' && 
-                comment.body.includes('Triggered workflow:')
-              );
-              
-              if (botComment) {
+              if (commentId) {
                 await github.rest.issues.updateComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  comment_id: botComment.id,
-                  body: message
+                  comment_id: commentId,
+                  body: errorMessage
                 });
               } else {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.issue.number,
-                  body: message
+                  body: errorMessage
                 });
               }
             }
