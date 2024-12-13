@@ -99,3 +99,64 @@ def mocked_dataloaders(accelerator, batch_size: int = 16):
     eval_dataloader = DataLoader(tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=1)
 
     return train_dataloader, eval_dataloader
+
+
+def mocked_dataloaders_for_autoregressive_models(accelerator, batch_size: int = 16):
+    from datasets import load_dataset
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-360M")
+    tokenizer.pad_token = tokenizer.eos_token
+
+    data_files = {"train": "tests/test_samples/MRPC/train.csv", "validation": "tests/test_samples/MRPC/dev.csv"}
+    datasets = load_dataset("csv", data_files=data_files)
+
+    def tokenize_function(examples):
+        # max_length=None => use the model max length (it's actually the default)
+        outputs = tokenizer(examples["sentence1"], truncation=True, max_length=None, return_attention_mask=False)
+        return outputs
+
+    # Apply the method we just defined to all the examples in all the splits of the dataset
+    # starting with the main process first:
+    with accelerator.main_process_first():
+        tokenized_datasets = datasets.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=["sentence1", "sentence2", "label"],
+        )
+
+    def collate_fn(examples):
+        # On TPU it's best to pad everything to the same length or training will be very slow.
+        max_length = (
+            128
+            if accelerator.distributed_type == DistributedType.XLA
+            else max([len(e["input_ids"]) for e in examples])
+        )
+        # When using mixed precision we want round multiples of 8/16
+        if accelerator.mixed_precision == "fp8":
+            pad_to_multiple_of = 16
+        elif accelerator.mixed_precision != "no":
+            pad_to_multiple_of = 8
+        else:
+            pad_to_multiple_of = None
+
+        batch = tokenizer.pad(
+            examples,
+            padding="max_length",
+            max_length=max_length + 1,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors="pt",
+        )
+
+        batch["labels"] = batch["input_ids"][:, 1:]
+        batch["input_ids"] = batch["input_ids"][:, :-1]
+
+        batch["labels"] = torch.where(batch["labels"] == tokenizer.pad_token_id, -100, batch["labels"])
+
+        return batch
+
+    # Instantiate dataloaders.
+    train_dataloader = DataLoader(tokenized_datasets["train"], shuffle=False, collate_fn=collate_fn, batch_size=2)
+    eval_dataloader = DataLoader(tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=1)
+
+    return train_dataloader, eval_dataloader
