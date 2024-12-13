@@ -21,7 +21,7 @@ import torch
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
@@ -43,7 +43,6 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: 
         model_name (`str`, *optional*):
     """
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-
     datasets = load_dataset("glue", "mrpc")
 
     def tokenize_function(examples):
@@ -92,11 +91,7 @@ def training_function(config, args):
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size, model_name)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, return_dict=True)
-
-    if args.add_pad_token:
-        if model.config.pad_token_id is None:
-            model.config.pad_token_id = 0
+    model = AutoModelForCausalLM.from_pretrained(model_name, return_dict=True)
 
     # Instantiate optimizer
     optimizer_cls = (
@@ -247,12 +242,6 @@ def main():
         type=int,
         default=3,
         help="Number of train epochs.",
-    )
-    parser.add_argument(
-        "--add_pad_token",
-        type=bool,
-        default=False,
-        help="To add pad token if not exists.",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}
