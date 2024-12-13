@@ -1111,7 +1111,6 @@ def _init_infer_auto_device_map(
     """
     Initialize variables required for computing the device map for model allocation.
     """
-    max_memory = get_max_memory(max_memory)
     if no_split_module_classes is None:
         no_split_module_classes = []
     elif not isinstance(no_split_module_classes, (list, tuple)):
@@ -1354,6 +1353,8 @@ def infer_auto_device_map(
     """
 
     # Initialize the variables
+    max_memory = get_max_memory(max_memory)
+
     (
         devices,
         main_devices,
