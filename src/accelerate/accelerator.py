@@ -1844,8 +1844,6 @@ class Accelerator:
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
             kwargs = dict(model=model, config_params=self.deepspeed_config)
-            if deepspeed_mpu.mpu:
-                kwargs["mpu"] = deepspeed_mpu.mpu
             if optimizer is not None:
                 if isinstance(optimizer, (DummyOptim)):
                     kwargs["model_parameters"] = optimizer.params
@@ -1868,11 +1866,12 @@ class Accelerator:
 
             deepspeed_plugin.set_sequence_parallel()
 
-            if data_loader is not None and hasattr(data_loader, "set_sequence_parallel"):
-                data_loader.set_sequence_parallel(
-                    deepspeed_plugin.sequence_parallel_size,
-                    deepspeed_plugin.sequence_parallel_rank,
-                )
+            if data_loader is not None and deepspeed_plugin.is_sequence_parallel_enabled():
+                if hasattr(data_loader, "set_sequence_parallel"):
+                    data_loader.set_sequence_parallel(
+                        deepspeed_plugin.sequence_parallel_size,
+                        deepspeed_plugin.sequence_parallel_rank,
+                    )
 
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()

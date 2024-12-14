@@ -19,7 +19,7 @@ from typing import Callable, List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
-from accelerate.utils.operations import ensure_position_ids, find_position_ids, find_sequence_length, shard_tensors
+from accelerate.utils.operations import ensure_position_ids, find_sequence_length, shard_tensors
 
 from .logging import get_logger
 from .state import DistributedType, GradientState, PartialState, is_torch_xla_available
@@ -599,7 +599,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     def set_sequence_parallel(self, sequence_parallel_size: int, sequence_parallel_rank: int):
         self.sequence_parallel_size = sequence_parallel_size
         self.sequence_parallel_rank = sequence_parallel_rank
-        self.is_sequence_parallel = sequence_parallel_size > 1
+        self.is_sequence_parallel = sequence_parallel_size is not None and sequence_parallel_size > 1
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like

@@ -300,22 +300,6 @@ def find_sequence_length(data):
     return data.shape[-1]
 
 
-def find_position_ids(data):
-    """
-    Finds the position ids in a dictionary of tensors if they exist.
-
-    Args:
-        data (dictionary of `torch.Tensor`): The data from which to find the position ids.
-
-    Returns:
-        `torch.Tensor`: The position ids or `None` if not found.
-    """
-    if not isinstance(data, Mapping):
-        return None
-    position_ids = data.get("position_ids", None)
-    return position_ids
-
-
 def ensure_position_ids(data):
     """
     Finds the position ids in a dictionary of tensors if they exist, otherwise creates them.
