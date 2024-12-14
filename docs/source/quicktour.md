@@ -173,8 +173,9 @@ The `device_map` parameter determines where to place each model layer, and speci
 ```py
 from accelerate import load_checkpoint_and_dispatch
 
+model_checkpoint = "your-local-model-folder"
 model = load_checkpoint_and_dispatch(
-    model, checkpoint="mistralai/Mixtral-8x7B-Instruct-v0.1", device_map="auto", no_split_module_classes=['Block']
+    model, checkpoint=model_checkpoint, device_map="auto", no_split_module_classes=['Block']
 )
 ```
 

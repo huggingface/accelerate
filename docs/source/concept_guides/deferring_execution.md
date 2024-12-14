@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# DExecuting and deferring jobs
+# Executing and deferring jobs
 
 When you run your usual script, instructions are executed in order. Using Accelerate to deploy your script on several
 GPUs at the same time introduces a complication: while each process executes all instructions in order, some may be

@@ -1101,6 +1101,7 @@ def _init_infer_auto_device_map(
     special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
 ) -> Tuple[
     List[Union[int, str]],
+    Dict[Union[int, str], Union[int, str]],
     List[Union[int, str]],
     List[int],
     Dict[str, int],
@@ -1147,6 +1148,7 @@ def _init_infer_auto_device_map(
 
     return (
         devices,
+        max_memory,
         main_devices,
         gpus,
         module_sizes,
@@ -1356,6 +1358,7 @@ def infer_auto_device_map(
     # Initialize the variables
     (
         devices,
+        max_memory,
         main_devices,
         gpus,
         module_sizes,
@@ -1670,9 +1673,11 @@ def load_state_dict(checkpoint_file, device_map=None):
             if len(set(device_map.values())) == 1:
                 device = list(device_map.values())[0]
                 target_device = device
-                if is_xpu_available():
-                    if isinstance(device, int):
+                if isinstance(device, int):
+                    if is_xpu_available():
                         target_device = f"xpu:{device}"
+                    elif is_npu_available():
+                        target_device = f"npu:{device}"
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1704,9 +1709,11 @@ def load_state_dict(checkpoint_file, device_map=None):
                 progress_bar = None
             for device in devices:
                 target_device = device
-                if is_xpu_available():
-                    if isinstance(device, int):
+                if isinstance(device, int):
+                    if is_xpu_available():
                         target_device = f"xpu:{device}"
+                    elif is_npu_available():
+                        target_device = f"npu:{device}"
 
                 with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
                     for key in device_weights[device]:
@@ -1783,6 +1790,10 @@ def get_state_dict_from_offload(
     """
 
     root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
+
+    # do not move parameters if the module is not offloaded
+    if not has_offloaded_params(module):
+        device_to_put_offload = None
 
     # assign the device to which the offloaded parameters will be sent
     with align_module_device(module, device_to_put_offload):

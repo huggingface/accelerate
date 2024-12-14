@@ -71,6 +71,7 @@ from .environment import (
     parse_choice_from_env,
     parse_flag_from_env,
     patch_environment,
+    purge_accelerate_environment,
     set_numa_affinity,
     str_to_bool,
 )
@@ -199,6 +200,7 @@ if is_deepspeed_available():
         DummyScheduler,
         HfDeepSpeedConfig,
         get_active_deepspeed_plugin,
+        map_pytorch_optim_to_deepspeed,
     )
 
 from .bnb import has_4bit_bnb_layers, load_and_quantize_model

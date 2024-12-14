@@ -121,6 +121,7 @@ if is_deepspeed_available():
         DeepSpeedSchedulerWrapper,
         DummyOptim,
         DummyScheduler,
+        map_pytorch_optim_to_deepspeed,
     )
 
 if is_megatron_lm_available():
@@ -1853,10 +1854,7 @@ class Accelerator:
                     if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
                         "device", "none"
                     ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", True):
-                        from deepspeed.ops.adam import DeepSpeedCPUAdam
-
-                        defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
-                        optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
+                        optimizer = map_pytorch_optim_to_deepspeed(optimizer)
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
