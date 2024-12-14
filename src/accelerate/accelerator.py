@@ -113,9 +113,7 @@ from .utils.other import is_compiled_module
 
 
 if is_deepspeed_available():
-    from deepspeed.utils import groups as deepspeed_mpu
-
-    from .utils import (
+    from .utils.deepspeed import (
         DeepSpeedEngineWrapper,
         DeepSpeedOptimizerWrapper,
         DeepSpeedSchedulerWrapper,
@@ -2133,6 +2131,9 @@ class Accelerator:
             return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
+        sequence_parallel = False
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            sequence_parallel = self.deepspeed_plugin.is_sequence_parallel_enabled()
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2148,6 +2149,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
+            sequence_parallel=sequence_parallel,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader

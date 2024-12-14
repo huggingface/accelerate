@@ -961,6 +961,7 @@ def prepare_data_loader(
     data_seed: Optional[int] = None,
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
+    sequence_parallel: Optional[int] = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -1028,6 +1029,9 @@ def prepare_data_loader(
             "If set to true, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
+        sequence_parallel (`bool`, *optional*, defaults to `False`):
+            If set, the dataloader will be set to be sequence parallel. This means that the dataloader will split
+            sequences across multiple processes. It is incompatible with `split_batches`.
 
 
     Returns:
@@ -1057,6 +1061,8 @@ def prepare_data_loader(
 
     # Sanity check
     if split_batches:
+        if sequence_parallel:
+            raise ValueError("Using `split_batches=True` and `sequence_parallel` is not supported.")
         if dataloader.batch_size is not None:
             batch_size_for_check = dataloader.batch_size
         else:
@@ -1103,7 +1109,11 @@ def prepare_data_loader(
         dataloader.generator = generator
         dataloader.sampler.generator = generator
     # No change if no multiprocess
-    if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
+    if (
+        (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM)
+        and not dispatch_batches
+        and not sequence_parallel
+    ):
         if isinstance(new_dataset, IterableDataset):
             if getattr(dataloader.dataset, "generator", None) is not None:
                 synchronized_generator = dataloader.dataset.generator
