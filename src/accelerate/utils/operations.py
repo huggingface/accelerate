@@ -280,48 +280,6 @@ def ignorant_find_batch_size(data):
     return None
 
 
-def find_sequence_length(data):
-    """
-    Recursively finds the sequence length in a nested list/tuple/dictionary of lists of tensors.
-
-    Args:
-        data (nested list/tuple/dictionary of `torch.Tensor`): The data from which to find the sequence length.
-
-    Returns:
-        `int`: The sequence length
-    """
-    if isinstance(data, (tuple, list)):
-        return find_sequence_length(data[0])
-    elif isinstance(data, Mapping):
-        for k in data.keys():
-            return find_sequence_length(data[k])
-    elif not isinstance(data, torch.Tensor):
-        raise TypeError(f"Can only find the sequence length of tensors but got {type(data)}.")
-    return data.shape[-1]
-
-
-def ensure_position_ids(data):
-    """
-    Finds the position ids in a dictionary of tensors if they exist, otherwise creates them.
-
-    Args:
-        data (dictionary of `torch.Tensor`): The data from which to find or create the position ids.
-
-    Returns:
-        `dictionary of `torch.Tensor`: The data with the position ids.
-    """
-    if not isinstance(data, Mapping):
-        return None
-    position_ids = data.get("position_ids", None)
-    if position_ids is None:
-        seq_len = find_sequence_length(data)
-        batch_size = find_batch_size(data)
-        position_ids = torch.arange(seq_len, device=find_device(data))
-        position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
-    data["position_ids"] = position_ids
-    return data
-
-
 def listify(data):
     """
     Recursively finds tensors in a nested list/tuple/dictionary and converts them to a list of numbers.
@@ -642,13 +600,6 @@ def slice_tensors(data, tensor_slice, process_index=None, num_processes=None):
         return tensor[tensor_slice]
 
     return recursively_apply(_slice_tensor, data, tensor_slice)
-
-
-def shard_tensors(data, start, end):
-    def _shard_tensors(tensor: torch.Tensor, start, end):
-        return tensor.narrow(-1, start, end - start)
-
-    return recursively_apply(_shard_tensors, data, start, end)
 
 
 def concatenate(data, dim=0):
