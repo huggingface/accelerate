@@ -34,7 +34,7 @@ import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
+from .data_loader import DataLoaderAdapter, DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -1661,7 +1661,12 @@ class Accelerator:
 
         deepspeed_plugin = self.deepspeed_plugin
 
-        is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        data_loader_idx = next(
+            (i for i, obj in enumerate(args) if isinstance(obj, (torch.utils.data.DataLoader, DataLoaderAdapter))),
+            None,
+        )
+        is_dataloader_present = data_loader_idx is not None
+
         result = [
             self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
             for obj in args
@@ -1708,10 +1713,17 @@ class Accelerator:
         }
         # This is skipped when preparing just a model
         if batch_size_per_device is not None:
+            world_size = self.num_processes
+            if deepspeed_plugin.get_value("data_parallel_size") is not None:
+                world_size = deepspeed_plugin.get_value("data_parallel_size")
             config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
             config_kwargs["train_batch_size"] = (
-                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes
+                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * world_size
             )
+
+        data_loader = None
+        if is_dataloader_present:
+            data_loader = result[data_loader_idx]
 
         model = None
         optimizer = None
@@ -1847,6 +1859,16 @@ class Accelerator:
                             kwargs["lr_scheduler"] = scheduler
 
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
+
+            deepspeed_plugin.set_sequence_parallel()
+
+            if data_loader is not None and deepspeed_plugin.is_sequence_parallel_enabled():
+                if hasattr(data_loader, "set_sequence_parallel"):
+                    data_loader.set_sequence_parallel(
+                        deepspeed_plugin.sequence_parallel_size,
+                        deepspeed_plugin.sequence_parallel_rank,
+                    )
+
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
                 engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
@@ -2109,6 +2131,9 @@ class Accelerator:
             return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
+        sequence_parallel = False
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            sequence_parallel = self.deepspeed_plugin.is_sequence_parallel_enabled()
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2124,6 +2149,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
+            sequence_parallel=sequence_parallel,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
