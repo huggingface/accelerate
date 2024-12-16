@@ -944,7 +944,7 @@ def prepare_data_loader(
     data_seed: Optional[int] = None,
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
-    sequence_parallel: Optional[int] = False,
+    sequence_parallel: Optional[bool] = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
