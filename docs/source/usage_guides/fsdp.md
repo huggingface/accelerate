@@ -186,6 +186,23 @@ accelerate merge-weights pytorch_model_fsdp_0/ output_path
 
 ## A few caveats to be aware of
 
+- PyTorch FSDP auto wraps sub-modules. With `use_orig_params=False`, it flattens the parameters in each sub-module and shards them in place.
+  Due to this, any optimizer created before model wrapping gets broken and occupies more memory. Further, you might also observe correctness issues during training. 
+  Hence, it is highly recommended and efficient to prepare the model before creating the optimizer. Example: 
+```diff
+  model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
++ model = accelerator.prepare(model)
+
+  optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
+
+- model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+-    )
+
++ optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
++         optimizer, train_dataloader, eval_dataloader, lr_scheduler
++    )
+```
 - In case of multiple models, pass the optimizers to the prepare call in the same order as corresponding models else `accelerator.save_state()` and `accelerator.load_state()` will result in wrong/unexpected behaviour.
 - This feature is incompatible with `--predict_with_generate` in the `run_translation.py` script of `Transformers` library.
 
