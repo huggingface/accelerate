@@ -113,7 +113,7 @@ from .utils.other import is_compiled_module
 
 
 if is_deepspeed_available():
-    from .utils.deepspeed import (
+    from .utils import (
         DeepSpeedEngineWrapper,
         DeepSpeedOptimizerWrapper,
         DeepSpeedSchedulerWrapper,
