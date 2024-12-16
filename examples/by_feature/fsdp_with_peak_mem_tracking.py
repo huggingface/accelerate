@@ -245,7 +245,7 @@ def training_function(config, args):
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path, return_dict=True, low_cpu_mem_usage=True
     )
-    # In FSDP, with `use_orig_params` as False, we need to `.prepare` the model before instantiating the optimizer. 
+    # In FSDP, with `use_orig_params` as False, we need to `.prepare` the model before instantiating the optimizer.
     # We prepare the model beforehand in all cases for simplicity.
     model = accelerator.prepare(model)
 
@@ -269,7 +269,6 @@ def training_function(config, args):
         num_warmup_steps=10,
         num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
     )
-
 
     optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         optimizer, train_dataloader, eval_dataloader, lr_scheduler
