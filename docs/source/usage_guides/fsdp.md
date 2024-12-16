@@ -180,9 +180,10 @@ accelerate merge-weights pytorch_model_fsdp_0/ output_path
 
 ## Mapping between FSDP sharding strategies and DeepSpeed ZeRO Stages
 * `FULL_SHARD` maps to the DeepSpeed `ZeRO Stage-3`. Shards optimizer states, gradients and parameters.
-* `SHARD_GRAD_OP` maps to the DeepSpeed `ZeRO Stage-2`. Shards optimizer states and gradients.
+* `SHARD_GRAD_OP` maps to DeepSpeed `ZeRO Stage-2`. Shards optimizer states and gradients. A key difference from `ZeRO Stage-2` is that `SHARD_GRAD_OP` also shards the model parameters outside of computation (forward/backward passes).
 * `NO_SHARD` maps to `ZeRO Stage-0`. No sharding wherein each GPU has full copy of model, optimizer states and gradients.
 * `HYBRID_SHARD` maps to `ZeRO++ Stage-3` wherein `zero_hpz_partition_size=<num_gpus_per_node>`. Here, this will shard optimizer states, gradients and parameters within each node while each node has full copy.
+
 
 ## A few caveats to be aware of
 
