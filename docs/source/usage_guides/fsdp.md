@@ -184,7 +184,6 @@ accelerate merge-weights pytorch_model_fsdp_0/ output_path
 * `NO_SHARD` maps to `ZeRO Stage-0`. No sharding wherein each GPU has full copy of model, optimizer states and gradients.
 * `HYBRID_SHARD` maps to `ZeRO++ Stage-3` wherein `zero_hpz_partition_size=<num_gpus_per_node>`. Here, this will shard optimizer states, gradients and parameters within each node while each node has full copy.
 
-
 ## A few caveats to be aware of
 
 - PyTorch FSDP auto wraps sub-modules. With `use_orig_params=False`, it flattens the parameters in each sub-module and shards them in place.
