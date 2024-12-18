@@ -37,7 +37,6 @@ class CPUOptimizerTester(unittest.TestCase):
 
 
 @require_non_cpu
-@require_non_xpu
 class OptimizerTester(unittest.TestCase):
     def test_accelerated_optimizer_step_was_skipped(self):
         model = torch.nn.Linear(5, 5)
