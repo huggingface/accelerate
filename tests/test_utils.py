@@ -240,16 +240,28 @@ class UtilsTester(unittest.TestCase):
             assert original_key == new_key, f"Keys did not align: {original_key} != {new_key}"
 
     @require_torch_min_version(version="2.0")
-    def test_dynamo_extract_model(self):
+    def test_dynamo_extract_model_keep_torch_compile(self):
         model = RegressionModel()
         compiled_model = torch.compile(model)
 
         # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
         distributed_model = torch.nn.parallel.DataParallel(model)
         distributed_compiled_model = torch.compile(distributed_model)
-        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model)
+        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=True)
 
         assert compiled_model._orig_mod == compiled_model_unwrapped._orig_mod
+
+    @require_torch_min_version(version="2.0")
+    def test_dynamo_extract_model_remove_torch_compile(self):
+        model = RegressionModel()
+        compiled_model = torch.compile(model)
+
+        # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
+        distributed_model = torch.nn.parallel.DataParallel(model)
+        distributed_compiled_model = torch.compile(distributed_model)
+        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=False)
+
+        assert compiled_model._orig_mod == compiled_model_unwrapped
 
     def test_find_device(self):
         assert find_device([1, "a", torch.tensor([1, 2, 3])]) == torch.device("cpu")
