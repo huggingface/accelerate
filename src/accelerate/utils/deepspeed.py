@@ -50,7 +50,7 @@ def map_pytorch_optim_to_deepspeed(optimizer):
         if is_bnb_available() and not is_adaw:
             import bitsandbytes.optim as bnb_opt
 
-            is_adaw = isinstance(optimizer, (bnb_opt.AdamW, bnb_opt.AdamW32bit)) and optimizer.optim_bits == 32
+            is_adaw = isinstance(optimizer, (bnb_opt.AdamW, bnb_opt.AdamW32bit)) and optimizer.args.optim_bits == 32
 
         if is_adaw:
             defaults["adamw_mode"] = True
