@@ -67,16 +67,18 @@ def map_pytorch_optim_to_deepspeed(optimizer):
             is_ada = isinstance(optimizer, (bnb_opt.Adagrad, bnb_opt.Adagrad32bit)) and optimizer.optim_bits == 32
         if is_ada:
             from deepspeed.ops.adagrad import DeepSpeedCPUAdagrad
-
+            
+            defaults.pop("adamw_mode")
             optimizer_class = DeepSpeedCPUAdagrad
 
     # For DeepSpeedCPULion
     if is_bnb_available(min_version="0.38.0") and compare_versions("deepspeed", ">=", "0.11.0"):
         from bitsandbytes.optim import Lion, Lion32bit
 
-        if isinstance(optimizer, (Lion, Lion32bit)) and optimizer.optim_bits == 32:
+        if isinstance(optimizer, (Lion, Lion32bit)) and optimizer.args.optim_bits == 32:
             from deepspeed.ops.lion import DeepSpeedCPULion
 
+            defaults.pop("adamw_mode")
             optimizer_class = DeepSpeedCPULion
 
     return optimizer_class(optimizer.param_groups, **defaults)
