@@ -27,7 +27,6 @@ from accelerate.test_utils import (
     path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
-    require_non_xpu,
 )
 from accelerate.test_utils.testing import slow
 from accelerate.utils import AutocastKwargs, KwargsHandler, ProfileKwargs, TorchDynamoPlugin, clear_environment

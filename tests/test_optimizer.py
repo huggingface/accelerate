@@ -19,7 +19,7 @@ import torch
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import require_cpu, require_non_cpu, require_non_xpu
+from accelerate.test_utils import require_cpu, require_non_cpu
 
 
 @require_cpu
