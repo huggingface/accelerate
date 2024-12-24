@@ -333,6 +333,7 @@ def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.c
         # if no tied names just passthrough
         return param_init_fn
 
+    _tied_names = model._tied_weights_keys
     # get map of parameter instances to params.
     # - needed for replacement later
     _tied_params = {}
