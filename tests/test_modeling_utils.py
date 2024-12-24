@@ -28,7 +28,6 @@ from safetensors.torch import save_file
 from accelerate import init_empty_weights
 from accelerate.big_modeling import cpu_offload
 from accelerate.test_utils import (
-    require_cuda,
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
