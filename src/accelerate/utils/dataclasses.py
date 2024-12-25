@@ -230,7 +230,7 @@ class GradScalerKwargs(KwargsHandler):
     from accelerate import Accelerator
     from accelerate.utils import GradScalerKwargs
 
-    kwargs = GradScalerKwargs(backoff_filter=0.25)
+    kwargs = GradScalerKwargs(backoff_factor=0.25)
     accelerator = Accelerator(kwargs_handlers=[kwargs])
     ```
     """
