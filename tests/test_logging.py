@@ -53,6 +53,7 @@ def test_log_stack(caplog):
     )
 
     message = "Test"
+    expected_message, _ = logger.process(message, {})
     lineno = current_lineno() + 1  # the next line is the actual callsite
     logger.warning(message)
 
@@ -63,7 +64,7 @@ def test_log_stack(caplog):
     assert rec.name == __name__
     assert rec.lineno == lineno
     assert rec.funcName == test_log_stack.__name__
-    assert rec.message == message
+    assert rec.message == expected_message
 
 
 @pytest.mark.usefixtures("accelerator")
@@ -76,6 +77,7 @@ def test_custom_stacklevel(caplog):
     logger = CustomLogger(wrapped_logger, {})
 
     message = "Test"
+    expected_message, _ = wrapped_logger.process(message, {})
     lineno = current_lineno() + 1  # the next line is the actual callsite
     logger.warning(message)
 
@@ -88,4 +90,4 @@ def test_custom_stacklevel(caplog):
     assert rec.name == __name__
     assert rec.lineno == lineno
     assert rec.funcName == test_custom_stacklevel.__name__
-    assert rec.message == message
+    assert rec.message == expected_message
