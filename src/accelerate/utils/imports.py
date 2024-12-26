@@ -375,6 +375,23 @@ def is_npu_available(check_device=False):
             return False
     return hasattr(torch, "npu") and torch.npu.is_available()
 
+@lru_cache
+def is_sdaa_available(check_device=False):
+    "Checks if `torch_sdaa` is installed and potentially if a SDAA is in the environment"
+    if importlib.util.find_spec("torch_sdaa") is None:
+        return False
+
+    import torch_sdaa  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            _ = torch.sdaa.device_count()
+            return torch.sdaa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "sdaa") and torch.sdaa.is_available()
+
 
 @lru_cache
 def is_xpu_available(check_device=False):

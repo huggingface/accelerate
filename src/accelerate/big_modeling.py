@@ -39,6 +39,7 @@ from .utils import (
     infer_auto_device_map,
     is_bnb_available,
     is_mlu_available,
+    is_sdaa_available,
     is_musa_available,
     is_npu_available,
     is_torch_version,
@@ -468,6 +469,8 @@ def dispatch_model(
             model.npu = add_warning(model.npu, model)
         elif is_mlu_available():
             model.mlu = add_warning(model.mlu, model)
+        elif is_sdaa_available():
+            model.sdaa = add_warning(model.sdaa, model)
         elif is_musa_available():
             model.musa = add_warning(model.musa, model)
         elif is_xpu_available():
@@ -490,6 +493,8 @@ def dispatch_model(
             device = f"npu:{device}"
         elif is_mlu_available() and isinstance(device, int):
             device = f"mlu:{device}"
+        elif is_sdaa_available() and isinstance(device, int):
+            device = f"sdaa:{device}"
         elif is_musa_available() and isinstance(device, int):
             device = f"musa:{device}"
         elif is_xpu_available() and isinstance(device, int):

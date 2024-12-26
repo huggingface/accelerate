@@ -22,6 +22,7 @@ from ...utils import (
     is_deepspeed_available,
     is_fp8_available,
     is_mlu_available,
+    is_sdaa_available,
     is_mps_available,
     is_msamp_available,
     is_musa_available,
@@ -61,6 +62,7 @@ def get_cluster_input():
             "multi-GPU",
             "multi-NPU",
             "multi-MLU",
+            "multi-SDAA",
             "multi-MUSA",
             "TPU",
         ],
@@ -80,6 +82,7 @@ def get_cluster_input():
     if distributed_type in [
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
@@ -164,6 +167,7 @@ def get_cluster_input():
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.XLA,
             DistributedType.MULTI_MUSA,
         ]
@@ -226,6 +230,7 @@ def get_cluster_input():
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.NO,
         ]
@@ -380,6 +385,7 @@ def get_cluster_input():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_XPU,
     ]:
@@ -552,6 +558,7 @@ def get_cluster_input():
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
         DistributedType.XLA,
@@ -589,6 +596,7 @@ def get_cluster_input():
         in [
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
@@ -601,6 +609,8 @@ def get_cluster_input():
             machine_type = "NPU(s)"
         elif is_mlu_available():
             machine_type = "MLU(s)"
+        elif is_sdaa_available():
+            machine_type = "SDAA(s)"
         elif is_musa_available():
             machine_type = "MUSA(s)"
         elif is_xpu_available():

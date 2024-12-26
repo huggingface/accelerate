@@ -71,6 +71,7 @@ class LocalSGD:
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
         ]:
