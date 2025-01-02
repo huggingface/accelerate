@@ -54,6 +54,7 @@ EXCLUDE_EXAMPLES = [
     "schedule_free.py",
     "tracking.py",
     "automatic_gradient_accumulation.py",
+    "gradient_accumulation_for_autoregressive_models.py",
     "fsdp_with_peak_mem_tracking.py",
     "deepspeed_with_config_support.py",
     "megatron_lm_gpt_pretraining.py",
@@ -243,6 +244,14 @@ class FeatureExamplesTests(TempDirTestCase):
 
     def test_gradient_accumulation(self):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
+        run_command(self.launch_args + testargs)
+
+    def test_gradient_accumulation_for_autoregressive_models(self):
+        testargs = [
+            "examples/by_feature/gradient_accumulation_for_autoregressive_models.py",
+            "--gradient_accumulation_steps",
+            "2",
+        ]
         run_command(self.launch_args + testargs)
 
     def test_local_sgd(self):
