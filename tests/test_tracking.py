@@ -52,7 +52,7 @@ from accelerate.utils import (
 
 
 if is_comet_ml_available():
-    from comet_ml import OfflineExperiment
+    from comet_ml import ExperimentConfig
 
 if is_tensorboard_available():
     import struct
@@ -201,16 +201,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         assert logged_items["_step"] == "0"
 
 
-# Comet has a special `OfflineExperiment` we need to use for testing
-def offline_init(self, run_name: str, tmpdir: str):
-    self.run_name = run_name
-    self.writer = OfflineExperiment(project_name=run_name, offline_directory=tmpdir)
-    logger.info(f"Initialized offline CometML project {self.run_name}")
-    logger.info("Make sure to log any initial configurations with `self.store_init_configuration` before training!")
-
-
 @require_comet_ml
-@mock.patch.object(CometMLTracker, "__init__", offline_init)
 class CometMLTest(unittest.TestCase):
     @staticmethod
     def get_value_from_key(log_list, key: str, is_param: bool = False):
@@ -231,7 +222,9 @@ class CometMLTest(unittest.TestCase):
 
     def test_init_trackers(self):
         with tempfile.TemporaryDirectory() as d:
-            tracker = CometMLTracker("test_project_with_config", d)
+            tracker = CometMLTracker(
+                "test_project_with_config", online=False, experiment_config=ExperimentConfig(offline_directory=d)
+            )
             accelerator = Accelerator(log_with=tracker)
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
             accelerator.init_trackers(None, config)
@@ -249,7 +242,9 @@ class CometMLTest(unittest.TestCase):
 
     def test_log(self):
         with tempfile.TemporaryDirectory() as d:
-            tracker = CometMLTracker("test_project_with_config", d)
+            tracker = CometMLTracker(
+                "test_project_with_config", online=False, experiment_config=ExperimentConfig(offline_directory=d)
+            )
             accelerator = Accelerator(log_with=tracker)
             accelerator.init_trackers(None)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}

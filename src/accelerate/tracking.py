@@ -406,7 +406,7 @@ class CometMLTracker(GeneralTracker):
         run_name (`str`):
             The name of the experiment run.
         **kwargs (additional keyword arguments, *optional*):
-            Additional key word arguments passed along to the `Experiment.__init__` method.
+            Additional key word arguments passed along to the `comet_ml.start` method.
     """
 
     name = "comet_ml"
@@ -417,9 +417,9 @@ class CometMLTracker(GeneralTracker):
         super().__init__()
         self.run_name = run_name
 
-        from comet_ml import Experiment
+        from comet_ml import start
 
-        self.writer = Experiment(project_name=run_name, **kwargs)
+        self.writer = start(project_name=run_name, **kwargs)
         logger.debug(f"Initialized CometML project {self.run_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -440,7 +440,7 @@ class CometMLTracker(GeneralTracker):
                 `str`, `float`, `int`, or `None`.
         """
         self.writer.log_parameters(values)
-        logger.debug("Stored initial configuration hyperparameters to CometML")
+        logger.debug("Stored initial configuration hyperparameters to Comet")
 
     @on_main_process
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
@@ -466,15 +466,15 @@ class CometMLTracker(GeneralTracker):
                 self.writer.log_other(k, v, **kwargs)
             elif isinstance(v, dict):
                 self.writer.log_metrics(v, step=step, **kwargs)
-        logger.debug("Successfully logged to CometML")
+        logger.debug("Successfully logged to Comet")
 
     @on_main_process
     def finish(self):
         """
-        Closes `comet-ml` writer
+        Flush `comet-ml` writer
         """
-        self.writer.end()
-        logger.debug("CometML run closed")
+        self.writer.flush()
+        logger.debug("Comet run flushed")
 
 
 class AimTracker(GeneralTracker):
