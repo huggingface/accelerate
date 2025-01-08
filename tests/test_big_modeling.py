@@ -43,7 +43,7 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
-from accelerate.utils import is_torch_version, offload_state_dict
+from accelerate.utils import offload_state_dict
 
 
 logger = logging.getLogger(__name__)
@@ -166,9 +166,8 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights(include_buffers=True):
             module = nn.BatchNorm1d(4)
             # nn.Module.register_parameter/buffer shouldn't be changed with torch >= 2.0
-            if is_torch_version(">=", "2.0"):
-                assert register_parameter_func == nn.Module.register_parameter
-                assert register_buffer_func == nn.Module.register_buffer
+            assert register_parameter_func == nn.Module.register_parameter
+            assert register_buffer_func == nn.Module.register_buffer
         assert module.weight.device == torch.device("meta")
         assert module.running_mean.device == torch.device("meta")
 

@@ -718,12 +718,11 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         **kwargs,
     ):
         shuffle = False
-        if is_torch_version(">=", "1.11.0"):
-            from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
+        from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-            # We need to save the shuffling state of the DataPipe
-            if isinstance(dataset, ShufflerIterDataPipe):
-                shuffle = dataset._shuffle_enabled
+        # We need to save the shuffling state of the DataPipe
+        if isinstance(dataset, ShufflerIterDataPipe):
+            shuffle = dataset._shuffle_enabled
         super().__init__(dataset, use_stateful_dataloader=use_stateful_dataloader, **kwargs)
         self.split_batches = split_batches
         if shuffle:
