@@ -79,23 +79,36 @@ accelerate env
 
 An example output is shown below, which describes two GPUs on a single machine with no mixed precision being used:
 
+
 ```bash
-- `Accelerate` version: 0.11.0.dev0
-- Platform: Linux-5.10.0-15-cloud-amd64-x86_64-with-debian-11.3
-- Python version: 3.7.12
-- Numpy version: 1.19.5
-- PyTorch version (GPU?): 1.12.0+cu102 (True)
+- `Accelerate` version: 1.2.0.dev0
+- Platform: Linux-6.8.0-47-generic-x86_64-with-glibc2.35
+- `accelerate` bash location: /home/zach/miniconda3/envs/accelerate/bin/accelerate
+- Python version: 3.10.13
+- Numpy version: 1.26.4
+- PyTorch version (GPU?): 2.5.1+cu124 (True)
+- PyTorch XPU available: False
+- PyTorch NPU available: False
+- PyTorch MLU available: False
+- PyTorch MUSA available: False
+- System RAM: 187.91 GB
+- GPU type: NVIDIA GeForce RTX 4090
 - `Accelerate` default config:
         - compute_environment: LOCAL_MACHINE
         - distributed_type: MULTI_GPU
         - mixed_precision: no
         - use_cpu: False
+        - debug: False
         - num_processes: 2
         - machine_rank: 0
         - num_machines: 1
-        - main_process_ip: None
-        - main_process_port: None
+        - gpu_ids: all
+        - rdzv_backend: static
+        - same_network: True
         - main_training_function: main
-        - deepspeed_config: {}
-        - fsdp_config: {}
+        - enable_cpu_affinity: False
+        - downcast_bf16: no
+        - tpu_use_cluster: False
+        - tpu_use_sudo: False
+        - tpu_env: []
 ```
