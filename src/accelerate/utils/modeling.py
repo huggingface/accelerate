@@ -365,7 +365,7 @@ def set_module_tensor_to_device(
                             new_value.quant_min,
                             new_value.quant_max,
                             new_value.zero_point_domain,
-                        )
+                        ),
                         requires_grad=old_value.requires_grad,
                     ).to(device)
                 else:
