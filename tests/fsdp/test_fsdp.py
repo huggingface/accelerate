@@ -29,7 +29,6 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     get_launch_command,
     path_in_accelerate_package,
-    require_fsdp,
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
@@ -55,7 +54,6 @@ BF16 = "bf16"
 dtypes = [FP16, BF16]
 
 
-@require_fsdp
 @require_non_cpu
 @require_non_torch_xla
 class FSDPPluginIntegration(AccelerateTestCase):
@@ -290,7 +288,6 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
 @require_non_torch_xla
-@require_fsdp
 @require_multi_device
 @slow
 class FSDPIntegrationTest(TempDirTestCase):

@@ -44,7 +44,6 @@ from accelerate.utils import (
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
-    is_torch_version,
     is_torch_xla_available,
     is_xpu_available,
     patch_environment,
@@ -1055,7 +1054,7 @@ def _validate_launch_command(args):
                 mp_from_config_flag = True
         else:
             if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
-                native_amp = is_torch_version(">=", "1.10")
+                native_amp = True
             else:
                 native_amp = is_bf16_available(True)
             if (

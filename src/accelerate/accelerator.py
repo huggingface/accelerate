@@ -1608,8 +1608,6 @@ class Accelerator:
             model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
-            if not is_torch_version(">=", "2.0"):
-                raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 

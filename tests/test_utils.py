@@ -195,7 +195,6 @@ class UtilsTester(unittest.TestCase):
 
     @require_triton
     @require_non_cpu
-    @require_torch_min_version(version="2.0")
     def test_dynamo(self):
         model = RegressionModel()
         model._original_forward = model.forward
@@ -239,7 +238,6 @@ class UtilsTester(unittest.TestCase):
         for original_key, new_key in zip(orig_state_dict_keys, unwrapped_state_dict_keys):
             assert original_key == new_key, f"Keys did not align: {original_key} != {new_key}"
 
-    @require_torch_min_version(version="2.0")
     def test_dynamo_extract_model_keep_torch_compile(self):
         model = RegressionModel()
         compiled_model = torch.compile(model)
@@ -251,7 +249,6 @@ class UtilsTester(unittest.TestCase):
 
         assert compiled_model._orig_mod == compiled_model_unwrapped._orig_mod
 
-    @require_torch_min_version(version="2.0")
     def test_dynamo_extract_model_remove_torch_compile(self):
         model = RegressionModel()
         compiled_model = torch.compile(model)
