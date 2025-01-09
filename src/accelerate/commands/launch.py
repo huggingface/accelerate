@@ -37,6 +37,7 @@ from accelerate.utils import (
     _filter_args,
     check_cuda_p2p_ib_support,
     convert_dict_to_env_variables,
+    is_bf16_available,
     is_deepspeed_available,
     is_mlu_available,
     is_musa_available,
@@ -1054,6 +1055,8 @@ def _validate_launch_command(args):
         else:
             if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
                 native_amp = True
+            else:
+                native_amp = is_bf16_available(True)
             if (
                 args.mixed_precision == "bf16"
                 and not native_amp
