@@ -23,7 +23,7 @@ import shutil
 import tempfile
 import warnings
 from collections import OrderedDict, defaultdict
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -544,64 +544,6 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
             )
 
 
-def _get_named_modules(
-    module: torch.nn.Module,
-    memo: Optional[Set[torch.nn.Module]] = None,
-    prefix: str = "",
-    remove_duplicate: bool = True,
-):
-    """
-    Return an iterator over all modules in the network, yielding both the name of the module as well as the module
-    itself. Copied from PyTorch `torch.nn.Module.named_modules` for compatability with torch < 2.0 versions with
-    `remove_duplicate` option added.
-
-    Args:
-        memo (set of `torch.nn.Module`, *optional*):
-            A memo to store the set of modules already added to the result
-        prefix (`str`, *optional*):
-            A prefix that will be added to the name of the module
-        remove_duplicate (`bool`, *optional*):
-            Whether to remove the duplicated module instances in the result or not
-
-    Yields:
-        (str, Module): Tuple of name and module
-
-    Note:
-        Duplicate modules are returned only once. In the following example, ``l`` will be returned only once.
-    """
-    if memo is None:
-        memo = set()
-    if module not in memo:
-        if remove_duplicate:
-            memo.add(module)
-        yield prefix, module
-        for name, sub_module in module._modules.items():
-            if sub_module is None:
-                continue
-            submodule_prefix = prefix + ("." if prefix else "") + name
-            yield from _get_named_modules(sub_module, memo, submodule_prefix, remove_duplicate)
-
-
-def _get_named_parameters(module: torch.nn.Module, prefix="", recurse=True, remove_duplicate: bool = True):
-    """
-    Help yield various names + members of modules. Copied from PyTorch `torch.nn.Module.named_modules` for
-    compatability with torch < 2.0 versions with `remove_duplicate` option added.
-    """
-    memo = set()
-    modules = (
-        _get_named_modules(module, prefix=prefix, remove_duplicate=remove_duplicate) if recurse else [(prefix, module)]
-    )
-    for module_prefix, module in modules:
-        members = module._parameters.items()
-        for k, v in members:
-            if v is None or v in memo:
-                continue
-            if remove_duplicate:
-                memo.add(v)
-            name = module_prefix + ("." if module_prefix else "") + k
-            yield name, v
-
-
 def find_tied_parameters(model: torch.nn.Module, **kwargs):
     """
     Find the tied parameters in a given model.
@@ -633,13 +575,11 @@ def find_tied_parameters(model: torch.nn.Module, **kwargs):
     """
 
     # get ALL model parameters and thier names
-    all_named_parameters = {name: param for name, param in _get_named_parameters(model, remove_duplicate=False)}
+    all_named_parameters = {name: param for name, param in model.named_parameters(remove_duplicate=False)}
 
     # get ONLY unique named parameters,
     # if parameter is tied and have multiple names, it will be included only once
-    no_duplicate_named_parameters = {
-        name: param for name, param in _get_named_parameters(model, remove_duplicate=True)
-    }
+    no_duplicate_named_parameters = {name: param for name, param in model.named_parameters(remove_duplicate=True)}
 
     # the difference of the two sets will give us the tied parameters
     tied_param_names = set(all_named_parameters.keys()) - set(no_duplicate_named_parameters.keys())
