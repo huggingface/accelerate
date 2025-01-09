@@ -15,7 +15,6 @@
 import contextlib
 import gc
 import importlib
-import importlib.metadata
 import inspect
 import json
 import logging
@@ -45,7 +44,7 @@ from .imports import (
 from .memory import clear_device_cache, get_xpu_available_memory
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
-from .versions import is_torch_version
+from .versions import compare_versions, is_torch_version
 
 
 if is_npu_available(check_device=False):
@@ -354,32 +353,14 @@ def set_module_tensor_to_device(
             elif param_cls.__name__ in ["AffineQuantizedTensor"]:
                 if (
                     importlib.util.find_spec("torchao") is not None
-                    and importlib.metadata.version("torchao") >= "0.7.0"
+                    and compare_versions("torchao", ">=", "0.7.0")
                 ):
                     # TorchAO v0.7.0 made layout_tensor an internal private variable and exposed tensor_impl
-                    new_value = torch.nn.Parameter(
-                        param_cls(
-                            new_value.tensor_impl,
-                            new_value.block_size,
-                            new_value.shape,
-                            new_value.quant_min,
-                            new_value.quant_max,
-                            new_value.zero_point_domain,
-                        ),
-                        requires_grad=old_value.requires_grad,
-                    ).to(device)
+                    args = (new_value.tensor_impl,)
                 else:
-                    new_value = torch.nn.Parameter(
-                        param_cls(
-                            new_value.layout_tensor,
-                            new_value.block_size,
-                            new_value.shape,
-                            new_value.quant_min,
-                            new_value.quant_max,
-                            new_value.zero_point_domain,
-                        ),
-                        requires_grad=old_value.requires_grad,
-                    ).to(device)
+                    args = (new_value.layout_tensor,)
+                args += (new_value.block_size, new_value.shape, new_value.quant_min, new_value.quant_max, new_value.zero_point_domain)
+                new_value = torch.nn.Parameter(param_cls(*args), requires_grad=old_value.requires_grad).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
 
