@@ -19,7 +19,7 @@ import torch
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import require_cpu, require_non_cpu, require_non_xpu
+from accelerate.test_utils import require_cpu, require_non_cpu
 
 
 @require_cpu
@@ -37,7 +37,6 @@ class CPUOptimizerTester(unittest.TestCase):
 
 
 @require_non_cpu
-@require_non_xpu
 class OptimizerTester(unittest.TestCase):
     def test_accelerated_optimizer_step_was_skipped(self):
         model = torch.nn.Linear(5, 5)

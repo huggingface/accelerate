@@ -27,7 +27,6 @@ from accelerate.test_utils import (
     path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
-    require_non_xpu,
 )
 from accelerate.test_utils.testing import slow
 from accelerate.utils import AutocastKwargs, KwargsHandler, ProfileKwargs, TorchDynamoPlugin, clear_environment
@@ -50,7 +49,6 @@ class KwargsHandlerTester(unittest.TestCase):
         assert MockClass(a=2, c=2.25).to_kwargs() == {"a": 2, "c": 2.25}
 
     @require_non_cpu
-    @require_non_xpu
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         scaler_handler = GradScalerKwargs(init_scale=1024, growth_factor=2)
