@@ -22,11 +22,13 @@ from functools import wraps
 from typing import Any, Dict, List, Optional, Union
 
 import yaml
+from packaging import version
 
 from .logging import get_logger
 from .state import PartialState
 from .utils import (
     LoggerType,
+    compare_versions,
     is_aim_available,
     is_clearml_available,
     is_comet_ml_available,
@@ -402,11 +404,16 @@ class CometMLTracker(GeneralTracker):
 
     API keys must be stored in a Comet config file.
 
+    Note:
+        For `comet_ml` versions < 3.41.0, additional keyword arguments are passed to `comet_ml.Experiment` instead:
+        https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/Experiment/#comet_ml.Experiment.__init__
+
     Args:
         run_name (`str`):
             The name of the experiment run.
         **kwargs (additional keyword arguments, *optional*):
-            Additional key word arguments passed along to the `comet_ml.start` method.
+            Additional key word arguments passed along to the `comet_ml.start` method:
+            https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/start/
     """
 
     name = "comet_ml"
@@ -417,9 +424,15 @@ class CometMLTracker(GeneralTracker):
         super().__init__()
         self.run_name = run_name
 
-        from comet_ml import start
+        import comet_ml
 
-        self.writer = start(project_name=run_name, **kwargs)
+        comet_version = version.parse(comet_ml.__version__)
+        if compare_versions(comet_version, ">=", "3.41.0"):
+            self.writer = comet_ml.start(project_name=run_name, **kwargs)
+        else:
+            logger.info("Update `comet_ml` (>=3.41.0) for experiment reuse and offline support.")
+            self.writer = comet_ml.Experiment(project_name=run_name, **kwargs)
+
         logger.debug(f"Initialized CometML project {self.run_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
