@@ -473,7 +473,7 @@ class CometMLTracker(GeneralTracker):
         """
         Flush `comet-ml` writer
         """
-        self.writer.flush()
+        self.writer.end()
         logger.debug("Comet run flushed")
 
 
