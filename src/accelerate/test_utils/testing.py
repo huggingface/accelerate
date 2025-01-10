@@ -479,6 +479,7 @@ class AccelerateTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # Reset the state of the AcceleratorState singleton.
+        PartialState().destroy_process_group()
         AcceleratorState._reset_state()
         PartialState._reset_state()
 

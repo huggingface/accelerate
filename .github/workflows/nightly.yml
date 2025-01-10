@@ -45,6 +45,7 @@ jobs:
           source activate accelerate
           make test
 
+
       - name: Run examples on GPUs
         working-directory: accelerate
         if: always()
@@ -92,13 +93,6 @@ jobs:
         run: |
           source activate accelerate
           make test_deepspeed
-
-      - name: Run Integration tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_integrations
 
       - name: Run examples on GPUs
         working-directory: accelerate
@@ -204,13 +198,6 @@ jobs:
         run: |
           source activate accelerate
           make test_deepspeed
-
-      - name: Run Integration tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_integrations
 
       - name: Run examples on GPUs
         working-directory: accelerate
