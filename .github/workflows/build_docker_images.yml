@@ -105,6 +105,6 @@ jobs:
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
         with:
-          file: benchmarks/fp8/Dockerfile
+          file: benchmarks/fp8/transformer_engine/Dockerfile
           push: true
           tags: huggingface/accelerate:gpu-fp8-transformerengine-nightly-${{ env.date }}
