@@ -106,6 +106,8 @@ class DummyConfig:
 @require_deepspeed
 @require_non_cpu
 class DeepSpeedConfigIntegration(AccelerateTestCase):
+    destroy_pg = False
+
     def setUp(self):
         super().setUp()
 

@@ -476,10 +476,13 @@ class AccelerateTestCase(unittest.TestCase):
     tests.
     """
 
+    destroy_pg = True
+
     def tearDown(self):
         super().tearDown()
         # Reset the state of the AcceleratorState singleton.
-        PartialState().destroy_process_group()
+        if self.destroy_pg:
+            PartialState().destroy_process_group()
         AcceleratorState._reset_state()
         PartialState._reset_state()
 

@@ -42,6 +42,7 @@ GPT2_TINY = "hf-internal-testing/tiny-random-gpt2"
 @require_deepspeed
 @require_non_cpu
 class DeepSpeedConfigIntegration(AccelerateTestCase):
+    destroy_pg = False
     parser = launch_command_parser()
     test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
 
