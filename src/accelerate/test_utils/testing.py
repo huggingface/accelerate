@@ -43,6 +43,7 @@ from ..utils import (
     is_dvclive_available,
     is_import_timer_available,
     is_mlu_available,
+    is_sdaa_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
@@ -75,6 +76,8 @@ def get_backend():
         return "mps", 1, lambda: 0
     elif is_mlu_available():
         return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
+    elif is_sdaa_available():
+        return "sdaa", torch.sdaa.device_count(), torch.sdaa.memory_allocated
     elif is_musa_available():
         return "musa", torch.musa.device_count(), torch.musa.memory_allocated
     elif is_npu_available():
@@ -185,6 +188,11 @@ def require_mlu(test_case):
     """
     return unittest.skipUnless(is_mlu_available(), "test require a MLU")(test_case)
 
+def require_sdaa(test_case):
+    """
+    Decorator marking a test that requires SDAA. These tests are skipped when there are no SDAA available.
+    """
+    return unittest.skipUnless(is_sdaa_available(), "test require a SDAA")(test_case)
 
 def require_musa(test_case):
     """
