@@ -854,6 +854,7 @@ def deepspeed_launcher(args):
 
 def tpu_launcher(args):
     import torch_xla.distributed.xla_multiprocessing as xmp
+    from torch_xla import device_count
 
     if args.no_python:
         raise ValueError("--no_python cannot be used with TPU launcher")
@@ -874,13 +875,17 @@ def tpu_launcher(args):
             f"Your training script should have a function named {args.main_training_function}, or you should pass a "
             "different value to `--main_training_function`."
         )
+    if args.num_processes and args.num_processes != device_count():
+        raise ValueError(
+            f"Number of processes ({args.num_processes}) must match the number of TPU devices ({device_count()})"
+        )
 
     # Patch sys.argv
     sys.argv = [mod.__file__] + args.training_script_args
 
     main_function = getattr(mod, args.main_training_function)
     with patch_environment(**current_env):
-        xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
+        xmp.spawn(PrepareForLaunch(main_function), args=())
 
 
 def tpu_pod_launcher(args):

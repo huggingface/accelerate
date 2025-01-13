@@ -30,6 +30,7 @@ from argparse import REMAINDER, ArgumentParser
 from pathlib import Path
 
 import torch_xla.distributed.xla_multiprocessing as xmp
+from torch_xla import device_count
 
 
 def parse_args():
@@ -46,7 +47,13 @@ def parse_args():
     )
 
     # Optional arguments for the launch helper
-    parser.add_argument("--num_cores", type=int, default=1, help="Number of TPU cores to use (1 or 8).")
+    num_devices = device_count()
+    parser.add_argument(
+        "--num_cores",
+        type=int,
+        default=num_devices,
+        help="Number of TPU cores to use (1 or number of available devices).",
+    )
 
     # positional
     parser.add_argument(
@@ -76,7 +83,12 @@ def main():
     mod = importlib.import_module(mod_name)
 
     # Patch sys.argv
-    sys.argv = [args.training_script] + args.training_script_args + ["--tpu_num_cores", str(args.num_cores)]
+    sys.argv = [args.training_script] + args.training_script_args
+    num_cores = args.num_cores
+    if num_cores == device_count() and num_cores != 1:
+        # There is an error in xmp.spawn that causes it to fail when num_cores is specified and not 1, so we set it to
+        # None when it matches the number of devices.
+        num_cores = None
     xmp.spawn(mod._mp_fn, args=(), nprocs=args.num_cores)
 
 
