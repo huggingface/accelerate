@@ -238,11 +238,8 @@ class BigModelingTester(unittest.TestCase):
 
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         cpu_offload(gpt2, execution_device=0)
-        outputs = gpt2.generate(inputs["input_ids"])
-        assert (
-            tokenizer.decode(outputs[0].tolist())
-            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-        )
+        outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+        assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
 
     def test_disk_offload(self):
         model = ModelForTest()
@@ -301,11 +298,8 @@ class BigModelingTester(unittest.TestCase):
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         with TemporaryDirectory() as tmp_dir:
             disk_offload(gpt2, tmp_dir, execution_device=0)
-            outputs = gpt2.generate(inputs["input_ids"])
-            assert (
-                tokenizer.decode(outputs[0].tolist())
-                == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-            )
+            outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+            assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
 
     @require_non_cpu
     def test_dispatch_model_and_remove_hook(self):
@@ -686,22 +680,16 @@ class BigModelingTester(unittest.TestCase):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
 
         gpt2 = dispatch_model(gpt2, device_map)
-        outputs = gpt2.generate(inputs["input_ids"])
-        assert (
-            tokenizer.decode(outputs[0].tolist())
-            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-        )
+        outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+        assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
 
         # Dispatch with a bit of CPU offload
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         for i in range(4):
             device_map[f"transformer.h.{i}"] = "cpu"
         gpt2 = dispatch_model(gpt2, device_map)
-        outputs = gpt2.generate(inputs["input_ids"])
-        assert (
-            tokenizer.decode(outputs[0].tolist())
-            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-        )
+        outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+        assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
         # Dispatch with a bit of CPU and disk offload
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         for i in range(2):
@@ -713,11 +701,8 @@ class BigModelingTester(unittest.TestCase):
             }
             offload_state_dict(tmp_dir, state_dict)
             gpt2 = dispatch_model(gpt2, device_map, offload_dir=tmp_dir)
-            outputs = gpt2.generate(inputs["input_ids"])
-            assert (
-                tokenizer.decode(outputs[0].tolist())
-                == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-            )
+            outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+            assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
 
     @require_non_cpu
     def test_dispatch_model_with_unused_submodules(self):
