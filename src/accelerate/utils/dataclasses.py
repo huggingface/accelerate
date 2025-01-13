@@ -1074,6 +1074,14 @@ class DeepSpeedPlugin:
             "help": "Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one of ['O1' or 'O2']."
         },
     )
+    sequence_parallel_size: int = field(
+        default=None,
+        metadata={"help": "Number of devices to split the sequence dimension over"},
+    )
+    data_parallel_size: int = field(
+        default=None,
+        metadata={"help": "Number of groups of `sequence_parallel_size` to create for sequence parallelism"},
+    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -1137,11 +1145,14 @@ class DeepSpeedPlugin:
                 "offload_param_nvme_path": "zero_optimization.offload_param.nvme_path",
                 "offload_optimizer_nvme_path": "zero_optimization.offload_optimizer.nvme_path",
                 "zero3_save_16bit_model": "zero_optimization.stage3_gather_16bit_weights_on_model_save",
+                "sequence_parallel_size": "sequence_parallel_size",
+                "data_parallel_size": "data_parallel_size",
             }
             kwargs = {v: getattr(self, k) for k, v in plugin_to_config_mapping.items() if getattr(self, k) is not None}
             for key in kwargs.keys():
                 self.fill_match(key, **kwargs, must_match=False)
             self.hf_ds_config.set_stage_and_offload()
+            self.hf_ds_config.set_sequence_parallel()
 
             # filling the missing values in the class attributes from the DeepSpeed config
             # when using the DeepSpeed config file.
@@ -1171,6 +1182,10 @@ class DeepSpeedPlugin:
             }
             if self.gradient_clipping:
                 config["gradient_clipping"] = self.gradient_clipping
+            if self.sequence_parallel_size:
+                config["sequence_parallel_size"] = self.sequence_parallel_size
+            if self.data_parallel_size:
+                config["data_parallel_size"] = self.data_parallel_size
             self.hf_ds_config = HfDeepSpeedConfig(config)
 
         self.deepspeed_config = self.hf_ds_config.config
@@ -1305,8 +1320,20 @@ class DeepSpeedPlugin:
         unset_hf_deepspeed_config()
         self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
+    def set_sequence_parallel(self):
+        from deepspeed.utils import groups as deepspeed_groups
+
+        self._sequence_parallel_rank = deepspeed_groups._get_sequence_parallel_rank()
+
     def is_zero3_init_enabled(self):
         return self.zero3_init_flag
+
+    def is_sequence_parallel_enabled(self):
+        return self.sequence_parallel_size is not None and self.sequence_parallel_size > 1
+
+    @property
+    def sequence_parallel_rank(self):
+        return self._sequence_parallel_rank
 
     @contextmanager
     def zero3_init_context_manager(self, enable=False):
