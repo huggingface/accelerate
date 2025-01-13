@@ -176,7 +176,7 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
-    # @require_cuda
+    @require_cuda
     def test_setting_cpu_affinity(self):
         with patch_environment(accelerate_cpu_affinity=1, accelerate_debug_mode=1):
             with self.assertLogs("accelerate.utils.environment", level="INFO") as cm:
