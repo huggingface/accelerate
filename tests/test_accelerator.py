@@ -788,7 +788,7 @@ class AcceleratorTester(AccelerateTestCase):
             assert torch.allclose(original_batchnorm, new_batchnorm)
             assert torch.allclose(original_linear2, new_linear2)
 
-    @require_cuda
+    @require_non_cpu
     @require_huggingface_suite
     def test_nested_hook(self):
         from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
