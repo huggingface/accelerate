@@ -228,8 +228,16 @@ def is_timm_available():
     return _is_package_available("timm")
 
 
+@lru_cache
 def is_triton_available():
-    return _is_package_available("triton")
+    try:
+        from triton.compiler.compiler import triton_key
+
+        return triton_key is not None
+    except ImportError:
+        return False
+    except RuntimeError:
+        return False
 
 
 def is_aim_available():
