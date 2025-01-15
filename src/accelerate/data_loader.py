@@ -419,7 +419,11 @@ class DataLoaderAdapter:
             )
         if use_stateful_dataloader:
             torchdata_version = version.parse(importlib.metadata.version("torchdata"))
-            if compare_versions(torchdata_version, "<", "0.11") and is_torch_version(">=", "2.6.0"):
+            if (
+                "in_order" in kwargs
+                and compare_versions(torchdata_version, "<", "0.11")
+                and is_torch_version(">=", "2.6.0")
+            ):
                 kwargs.pop("in_order")
             self.base_dataloader = StatefulDataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
         else:
