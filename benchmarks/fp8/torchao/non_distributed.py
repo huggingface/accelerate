@@ -20,6 +20,7 @@ This particular script verifies this for single GPU training.
 
 import evaluate
 import torch
+from functools import partial
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -104,8 +105,6 @@ def get_training_utilities(model_name: str, batch_size: int = 16, accelerator=No
     return model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
 
 
-
-
 def evaluate_model(model, dataloader, metric, accelerator=None):
     "Turns model to .eval(), runs dataloader, calculates metric, then turns eval back on"
     model.eval()
@@ -120,19 +119,31 @@ def evaluate_model(model, dataloader, metric, accelerator=None):
     return metric.compute()
 
 
-def module_filter_func(module, *args):
+def module_filter_func(module, fqn, first_layer_name=None, last_layer_name=None):
     if isinstance(module, torch.nn.Linear):
         if module.in_features % 16 != 0 or module.out_features % 16 != 0:
             return False
-        
+    # For stability reasons, we skip the first and last linear layers
+    # Otherwise can lead to the model not training or converging properly
+    if fqn in (first_layer_name, last_layer_name):
+        return False
     return True
 
 
 def train_baseline():
     set_seed(42)
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME)
+    first_linear = None
+    last_linear = None
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Linear):
+            if first_linear is None:
+                first_linear = name
+            last_linear = name
+
+    func = partial(module_filter_func, first_layer_name=first_linear, last_layer_name=last_linear)
     model.to("cuda")
-    convert_to_float8_training(model, module_filter_fn=module_filter_func)
+    convert_to_float8_training(model, module_filter_fn=func)
     base_model_results = evaluate_model(model, eval_dataloader, METRIC)
     model.train()
 
