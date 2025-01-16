@@ -27,9 +27,7 @@ def find_first_last_linear_layers(model: torch.nn.Module):
     """
     Finds the first and last linear layer names in a model.
 
-    This is needed during FP8 to avoid issues with
-    instability by keeping the first and last layers
-    unquantized.
+    This is needed during FP8 to avoid issues with instability by keeping the first and last layers unquantized.
 
     Ref: https://x.com/xariusrke/status/1826669142604141052
     """
@@ -72,31 +70,29 @@ def filter_linear_layers(module, layer_name, first_layer_name, last_layer_name) 
 
 @torchao_required
 def convert_to_float8_training(
-        model: torch.nn.Module,
-        config=None,
-        module_filter_func=None,
-        ):
+    model: torch.nn.Module,
+    config=None,
+    module_filter_func=None,
+):
     """
-    Converts all `nn.Linear` layers in the model (except the first and last)
-    to torchao's `Float8Linear` layer inplace.
+    Converts all `nn.Linear` layers in the model (except the first and last) to torchao's `Float8Linear` layer inplace.
 
     Args:
         model (`torch.nn.Module`):
             The model to convert.
         config (`torchao.float8.Float8LinearConfig`, *optional*):
             The configuration for the FP8 training. Recommended to utilize
-            `torchao.float8.recipe_name_to_linear_config` to generate this.
-            In general, the default config should be sufficient.
+            `torchao.float8.recipe_name_to_linear_config` to generate this. In general, the default config should be
+            sufficient.
         module_filter_func (`Callable`, *optional*):
-            Optional function that must take in a module and layer name,
-            and returns a boolean indicating whether the module should be
-            converted to FP8. Defaults to `filter_linear_layers`. See
-            it for an example.
+            Optional function that must take in a module and layer name, and returns a boolean indicating whether the
+            module should be converted to FP8. Defaults to `filter_linear_layers`. See it for an example.
 
     Example:
 
     ```python
     from accelerate.utils.ao import convert_to_float8_training
+
     model = MyModel()
     model.to("cuda")
     convert_to_float8_training(model)
@@ -109,4 +105,4 @@ def convert_to_float8_training(
     first_linear, last_linear = find_first_last_linear_layers(model)
     if module_filter_func is None:
         module_filter_func = partial(filter_linear_layers, first_layer_name=first_linear, last_layer_name=last_linear)
-    convert_to_float8_training(model, config, module_filter_func)
+    convert_to_float8_training(model, module_filter_fn=module_filter_func, config=config)

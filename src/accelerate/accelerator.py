@@ -29,10 +29,11 @@ from functools import partial
 from types import MethodType
 from typing import Any, Callable, Union
 
-from accelerate.utils.imports import is_torchao_available
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
+
+from accelerate.utils.imports import is_torchao_available
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -49,10 +50,8 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     WEIGHTS_PATTERN_NAME,
-    AutocastKwargs,
     AORecipeKwargs,
-    TERecipeKwargs,
-    MSAMPRecipeKwargs,
+    AutocastKwargs,
     DataLoaderConfiguration,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
@@ -66,10 +65,12 @@ from .utils import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
+    MSAMPRecipeKwargs,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
     RNGType,
+    TERecipeKwargs,
     TorchDynamoPlugin,
     TorchTensorParallelPlugin,
     apply_fp8_autowrap,
@@ -77,8 +78,8 @@ from .utils import (
     clean_state_dict_for_safetensors,
     compare_versions,
     convert_model,
-    convert_to_float8_training,
     convert_outputs_to_fp32,
+    convert_to_float8_training,
     ensure_weights_retied,
     extract_model_from_parallel,
     gather,
@@ -472,7 +473,9 @@ class Accelerator:
             elif is_msamp_available():
                 self.msamp_recipe_handler = MSAMPRecipeKwargs()
             else:
-                raise ImportError("Tried to train with `fp8` and auto-detect backend, but no FP8-compatible backend was installed.")
+                raise ImportError(
+                    "Tried to train with `fp8` and auto-detect backend, but no FP8-compatible backend was installed."
+                )
 
         self.delayed_fp8_autocast = False
         if self.has_fp8_handler:
@@ -1671,8 +1674,13 @@ class Accelerator:
     def _prepare_ao(self, *args):
         if not is_torchao_available():
             raise ImportError("`torchao` was not found on your system. Please ensure that `torchao` is installed")
-        for model in self._models:
-            convert_to_float8_training(model, config=self.ao_recipe_handler.config, module_filter_func=self.ao_recipe_handler.module_filter_func)
+        for arg in args:
+            if isinstance(arg, torch.nn.Module):
+                convert_to_float8_training(
+                    arg,
+                    config=self.ao_recipe_handler.config,
+                    module_filter_func=self.ao_recipe_handler.module_filter_func,
+                )
         return args
 
     def _prepare_te(self, *args):

@@ -18,9 +18,10 @@ This script tests to ensure that `accelerate` performs at the same level as raw 
 This particular script verifies this for single GPU training.
 """
 
+from functools import partial
+
 import evaluate
 import torch
-from functools import partial
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -28,6 +29,7 @@ from torchao.float8 import convert_to_float8_training
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator
+from accelerate.state import AcceleratorState
 from accelerate.utils import AORecipeKwargs, set_seed
 
 
@@ -169,8 +171,10 @@ def train_baseline():
 
 def train_integration():
     set_seed(42)
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME)
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[AORecipeKwargs()])
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(
+        MODEL_NAME, accelerator=accelerator
+    )
     model = accelerator.prepare(model)
     base_model_results = evaluate_model(model, eval_dataloader, METRIC)
     model.train()
@@ -196,17 +200,18 @@ def train_integration():
 
 
 if __name__ == "__main__":
-    # baseline_not_trained, baseline_trained = train_baseline()
+    baseline_not_trained, baseline_trained = train_baseline()
+    AcceleratorState._reset_state(True)
     accelerator_not_trained, accelerator_trained = train_integration()
-    # assert (
-    #     baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
-    # ), f'Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
-    # assert (
-    #     baseline_not_trained["f1"] == accelerator_not_trained["f1"]
-    # ), f'F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
-    # assert (
-    #     baseline_trained["accuracy"] == accelerator_trained["accuracy"]
-    # ), f'Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
-    # assert (
-    #     baseline_trained["f1"] == accelerator_trained["f1"]
-    # ), f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
+    assert (
+        baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
+    ), f'Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
+    assert (
+        baseline_not_trained["f1"] == accelerator_not_trained["f1"]
+    ), f'F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
+    assert (
+        baseline_trained["accuracy"] == accelerator_trained["accuracy"]
+    ), f'Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
+    assert (
+        baseline_trained["f1"] == accelerator_trained["f1"]
+    ), f'F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'

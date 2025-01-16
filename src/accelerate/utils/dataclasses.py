@@ -20,17 +20,16 @@ import argparse
 import copy
 import enum
 import functools
+import logging
 import os
 import warnings
-import logging
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args
 
 import torch
 
-from .ao import filter_linear_layers
 from .constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
@@ -50,6 +49,7 @@ from .imports import (
     is_xpu_available,
 )
 from .versions import compare_versions, is_torch_version
+
 
 if TYPE_CHECKING:
     # Mock imports for type checking
@@ -298,24 +298,19 @@ class AORecipeKwargs(KwargsHandler):
 
     Args:
         recipe_name (`str`, *optional*, default to `None`):
-            The name of the recipe to use for FP8 training. Should
-            be compatible with `torchao.float8.recipe_name_to_linear_config`.
+            The name of the recipe to use for FP8 training. Should be compatible with
+            `torchao.float8.recipe_name_to_linear_config`.
         config (`torchao.float8.Float8LinearConfig`, *optional*, default to `None`):
-            The configuration for the FP8 training. In general, the default config 
-            should be sufficient.
+            The configuration for the FP8 training. In general, the default config should be sufficient.
         module_filter_func (`Callable`, *optional*, default to `None`):
-            Optional function that must take in a module and layer name,
-            and returns a boolean indicating whether the module should be
-            converted to FP8. Defaults to `accelerate.utils.ao.filter_linear_layers`. See
-            it for an example.
+            Optional function that must take in a module and layer name, and returns a boolean indicating whether the
+            module should be converted to FP8. Defaults to `accelerate.utils.ao.filter_linear_layers`. See it for an
+            example.
     """
+
     recipe_name: str = None
     config: "Float8LinearConfig" = None
     module_filter_func: Callable = None
-
-    def __post_init__(self):
-        if self.module_filter_func is None:
-            self.module_filter_func = filter_linear_layers
 
 
 @dataclass
@@ -356,6 +351,7 @@ class TERecipeKwargs(KwargsHandler):
         override_linear_precision (`tuple` of three `bool`, *optional*, default to `(False, False, False)`):
             Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
     """
+
     use_autocast_during_eval: bool = None
     margin: int = None
     interval: int = None
@@ -367,9 +363,7 @@ class TERecipeKwargs(KwargsHandler):
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
         if not is_transformer_engine_available():
-            raise ImportError(
-                "TransformerEngine is not available. Please install it or use a different backend."
-            )
+            raise ImportError("TransformerEngine is not available. Please install it or use a different backend.")
         if self.use_autocast_during_eval is None:
             self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
         if self.margin is None:
@@ -401,6 +395,7 @@ class MSAMPRecipeKwargs(KwargsHandler):
     Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
     training with `ms-amp`.
     """
+
     opt_level: OptLevel = None
 
     def __post_init__(self):
@@ -414,8 +409,7 @@ class MSAMPRecipeKwargs(KwargsHandler):
 @dataclass
 class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
     """
-    Deprecated. Please use one of the proper FP8 recipe
-    kwargs classes such as `TERecipeKwargs` or `MSAMPRecipeKwargs`
+    Deprecated. Please use one of the proper FP8 recipe kwargs classes such as `TERecipeKwargs` or `MSAMPRecipeKwargs`
     instead.
     """
 
