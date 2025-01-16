@@ -28,8 +28,7 @@ from torchao.float8 import convert_to_float8_training
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator
-from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, set_seed
+from accelerate.utils import AORecipeKwargs, set_seed
 
 
 MODEL_NAME = "bert-base-cased"
@@ -119,7 +118,7 @@ def evaluate_model(model, dataloader, metric, accelerator=None):
     return metric.compute()
 
 
-def module_filter_func(module, fqn, first_layer_name=None, last_layer_name=None):
+def filter_linear_layers(module, fqn, first_layer_name=None, last_layer_name=None):
     if isinstance(module, torch.nn.Linear):
         if module.in_features % 16 != 0 or module.out_features % 16 != 0:
             return False
@@ -141,7 +140,7 @@ def train_baseline():
                 first_linear = name
             last_linear = name
 
-    func = partial(module_filter_func, first_layer_name=first_linear, last_layer_name=last_linear)
+    func = partial(filter_linear_layers, first_layer_name=first_linear, last_layer_name=last_linear)
     model.to("cuda")
     convert_to_float8_training(model, module_filter_fn=func)
     base_model_results = evaluate_model(model, eval_dataloader, METRIC)
@@ -168,9 +167,37 @@ def train_baseline():
     return base_model_results, trained_model_results
 
 
+def train_integration():
+    set_seed(42)
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = get_training_utilities(MODEL_NAME)
+    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[AORecipeKwargs()])
+    model = accelerator.prepare(model)
+    base_model_results = evaluate_model(model, eval_dataloader, METRIC)
+    model.train()
+
+    for batch in train_dataloader:
+        outputs = model(**batch)
+        loss = outputs.loss
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        lr_scheduler.step()
+
+    trained_model_results = evaluate_model(model, eval_dataloader, METRIC)
+
+    assert (
+        trained_model_results["accuracy"] > base_model_results["accuracy"]
+    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
+    assert (
+        trained_model_results["f1"] > base_model_results["f1"]
+    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+
+    return base_model_results, trained_model_results
+
+
 if __name__ == "__main__":
-    baseline_not_trained, baseline_trained = train_baseline()
-    # accelerator_not_trained, accelerator_trained = train_integration()
+    # baseline_not_trained, baseline_trained = train_baseline()
+    accelerator_not_trained, accelerator_trained = train_integration()
     # assert (
     #     baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
     # ), f'Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'

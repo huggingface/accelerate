@@ -142,6 +142,10 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     return True
 
 
+def is_torchao_available():
+    return _is_package_available("torchao")
+
+
 def is_deepspeed_available():
     if is_mlu_available():
         return _is_package_available("deepspeed", metadata_name="deepspeed-mlu")
@@ -420,6 +424,22 @@ def is_torchdata_stateful_dataloader_available():
         torchdata_version = version.parse(importlib.metadata.version("torchdata"))
         return compare_versions(torchdata_version, ">=", "0.8.0")
     return False
+
+
+def torchao_required(func):
+    """
+    A decorator that ensures the decorated function is only called when torchao is available.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not is_torchao_available():
+            raise ImportError(
+                "`torchao` is not available, please install it before calling this function via `pip install torchao`."
+            )
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 # TODO: Rework this into `utils.deepspeed` and migrate the "core" chunks into `accelerate.deepspeed`

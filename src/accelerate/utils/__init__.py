@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from .ao import convert_to_float8_training
 from .constants import (
     MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
     MODEL_NAME,
@@ -33,6 +34,7 @@ from .constants import (
 )
 from .dataclasses import (
     AutocastKwargs,
+    AORecipeKwargs,
     BnbQuantizationConfig,
     ComputeEnvironment,
     CustomDtype,
@@ -58,6 +60,8 @@ from .dataclasses import (
     TensorInformation,
     TorchDynamoPlugin,
     TorchTensorParallelPlugin,
+    TERecipeKwargs,
+    MSAMPRecipeKwargs,
     add_model_config_to_megatron_parser,
 )
 from .environment import (
@@ -78,6 +82,7 @@ from .environment import (
 )
 from .imports import (
     deepspeed_required,
+    torchao_required,
     get_ccl_version,
     is_4bit_bnb_available,
     is_8bit_bnb_available,
@@ -115,6 +120,7 @@ from .imports import (
     is_tensorboard_available,
     is_timm_available,
     is_torch_xla_available,
+    is_torchao_available,
     is_torchdata_available,
     is_torchdata_stateful_dataloader_available,
     is_torchvision_available,
