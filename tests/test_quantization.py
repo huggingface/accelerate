@@ -203,7 +203,6 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
 
-
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         """
@@ -409,7 +408,6 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         """
         from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
-
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             # saving state dict for now but will save config and other in the future
