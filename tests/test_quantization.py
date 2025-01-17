@@ -377,9 +377,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         r"""
         Test whether it is possible to serialize a model in 8-bit.
         """
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             # saving state dict for now but will save config and other in the future
@@ -411,10 +410,9 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         r"""
         Test whether it is possible to serialize a model in 8-bit and offload weights to cpu/disk
         """
-
+        from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
 
-        from bitsandbytes.nn import Int8Params
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             # saving state dict for now but will save config and other in the future
@@ -473,9 +471,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         r"""
         Test whether it is possible to serialize a model in 8-bit.
         """
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             # saving state dict for now but will save config and other in the future
