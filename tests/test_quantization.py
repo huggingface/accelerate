@@ -134,9 +134,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         r"""
         A simple test to check if `llm_int8_skip_modules` works as expected
         """
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         import bitsandbytes as bnb
+        from transformers import AutoConfig, AutoModelForCausalLM
 
         bnb_quantization_config = BnbQuantizationConfig(
             load_in_8bit=True, skip_modules=["lm_head", "transformer.word_embeddings"]
@@ -201,9 +200,9 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
     @require_multi_device
     def test_cpu_gpu_loading_custom_device_map(self):
+        from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
 
-        from bitsandbytes.nn import Int8Params
 
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
@@ -257,9 +256,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
     @require_multi_device
     def test_cpu_gpu_loading_custom_device_map_offload_state_dict(self):
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
 
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map` and offload_state_dict=True.
@@ -315,9 +313,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
     @require_multi_device
     def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
 
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
@@ -377,9 +374,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         r"""
         Test whether it is possible to serialize a model in 8-bit.
         """
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             # saving state dict for now but will save config and other in the future
@@ -411,10 +407,9 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         r"""
         Test whether it is possible to serialize a model in 8-bit and offload weights to cpu/disk
         """
-
+        from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
 
-        from bitsandbytes.nn import Int8Params
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             # saving state dict for now but will save config and other in the future
@@ -473,9 +468,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         r"""
         Test whether it is possible to serialize a model in 8-bit.
         """
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             # saving state dict for now but will save config and other in the future
