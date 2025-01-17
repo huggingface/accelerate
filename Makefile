@@ -70,3 +70,8 @@ test_prod:
 
 test_rest:
 	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch" $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_rest.log",)
+
+# For developers to prepare a release
+prepare_release:
+	rm -rf dist build
+	python setup.py bdist_wheel sdist
