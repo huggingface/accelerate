@@ -1442,8 +1442,11 @@ class Accelerator:
                             "You can't train a model that has been loaded in 8-bit or 4-bit precision on a different device than the one "
                             "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}` or `device_map={'':torch.xpu.current_device()}`"
                         )
-
-            if ("cpu" in model_devices and not is_bitsandbytes_multi_backend_available()) or "disk" in model_devices:
+            if (
+                ("cpu" in model_devices and not is_bitsandbytes_multi_backend_available())
+                or ("cpu" in model_devices and is_bitsandbytes_multi_backend_available() and is_xpu_available())
+                or "disk" in model_devices
+            ):
                 raise ValueError(
                     "You can't train a model that has been loaded in 8-bit or 4-bit precision with CPU or disk offload. "
                     "If you want train the 8-bit or 4-bit model in CPU, please install bitsandbytes with multi-backend, see https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
