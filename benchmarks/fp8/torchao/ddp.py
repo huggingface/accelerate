@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,18 +22,15 @@ from functools import partial
 
 import evaluate
 import torch
-from datasets import load_dataset
+from fp8_utils import get_dataloaders
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import AdamW
-from torch.utils.data import DataLoader
 from torchao.float8 import convert_to_float8_training
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
+from transformers import AutoModelForSequenceClassification, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.utils import AORecipeKwargs, set_seed
-
-from fp8_utils import get_dataloaders
 
 
 MODEL_NAME = "bert-base-cased"
