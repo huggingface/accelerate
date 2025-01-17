@@ -149,11 +149,13 @@ def load_and_quantize_model(
             torch.cuda.empty_cache()
         elif torch.cuda.is_available():
             model.to(torch.cuda.current_device())
+        elif torch.xpu.is_available():
+            model.to(torch.xpu.current_device())
         else:
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
         logger.info(
-            f"The model device type is {model_device.type}. However, cuda is needed for quantization."
-            "We move the model to cuda."
+            f"The model device type is {model_device.type}. However, gpu is needed for quantization."
+            "We move the model to gpu."
         )
         return model
 

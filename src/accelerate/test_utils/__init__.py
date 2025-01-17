@@ -44,6 +44,7 @@ from .testing import (
     require_tpu,
     require_transformer_engine,
     require_xpu,
+    require_xpu_or_cuda,
     skip,
     slow,
     torch_device,
