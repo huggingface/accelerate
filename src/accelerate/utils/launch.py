@@ -34,7 +34,7 @@ from ..utils import (
     is_torch_xla_available,
     is_xpu_available,
 )
-from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
+from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS, DEEPSPEED_MULTINODE_MPI_LAUNCHERS
 from ..utils.other import is_port_in_use, merge_dicts
 from .dataclasses import DistributedType, SageMakerDistributedType
 
@@ -320,6 +320,17 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         # set to default pdsh
         args.deepspeed_multinode_launcher = DEEPSPEED_MULTINODE_LAUNCHERS[0]
 
+    if args.deepspeed_multinode_launcher in DEEPSPEED_MULTINODE_MPI_LAUNCHERS:
+        # MPI based launchers do not support --include and --exclude
+        if args.deepspeed_exclusion_filter is not None:
+            raise ValueError(
+                f"--deepspeed_exclusion_filter is not supported with --deepspeed_multinode_launcher {args.deepspeed_multinode_launcher}"
+            )
+        if args.deepspeed_inclusion_filter is not None:
+            raise ValueError(
+                f"--deepspeed_inclusion_filter is not supported with --deepspeed_multinode_launcher {args.deepspeed_multinode_launcher}"
+            )
+
     if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         cmd = ["deepspeed", "--no_local_rank"]
         cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
@@ -337,7 +348,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
                     str(args.deepspeed_inclusion_filter),
                 ]
             )
-        else:
+        elif args.deepspeed_multinode_launcher not in DEEPSPEED_MULTINODE_MPI_LAUNCHERS:
+            # MPI based launchers do not support --num_gpus
             cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
         if main_process_ip:
             cmd.extend(["--master_addr", str(main_process_ip)])
