@@ -541,7 +541,7 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
         for param in tie_param:
             tie_param_devices[param] = _get_param_device(param, device_map)
         if len(set(tie_param_devices.values())) > 1:
-            logger.warn(
+            logger.warning(
                 f"Tied parameters are on different devices: {tie_param_devices}. "
                 "Please modify your custom device map or set `device_map='auto'`. "
             )
@@ -1078,7 +1078,7 @@ def _init_infer_auto_device_map(
     tied_parameters = find_tied_parameters(model)
 
     if check_tied_parameters_in_config(model) and len(tied_parameters) == 0:
-        logger.warn(
+        logger.warning(
             "The model weights are not tied. Please use the `tie_weights` method before using the `infer_auto_device` function."
         )
 
@@ -1596,7 +1596,7 @@ def load_state_dict(checkpoint_file, device_map=None):
             weight_names = f.keys()
 
         if metadata is None:
-            logger.warn(
+            logger.warning(
                 f"The safetensors archive passed at {checkpoint_file} does not contain metadata. "
                 "Make sure to save your model with the `save_pretrained` method. Defaulting to 'pt' metadata."
             )
@@ -1806,7 +1806,7 @@ def load_checkpoint_in_model(
     tied_params = find_tied_parameters(model)
 
     if check_tied_parameters_in_config(model) and len(tied_params) == 0:
-        logger.warn(
+        logger.warning(
             "The model weights are not tied. Please use the `tie_weights` method before using the `infer_auto_device` function."
         )
     if device_map is not None:
