@@ -75,3 +75,16 @@ test_rest:
 prepare_release:
 	rm -rf dist build
 	python setup.py bdist_wheel sdist
+
+# Make sure this is ran in a fresh venv of some form
+install_test_release:
+	pip uninstall accelerate -y
+	pip install -i https://testpypi.python.org/pypi --extra-index-url https://pypi.org/simple accelerate
+
+# Run as `make target=testpypi upload_release`
+upload_release:
+	@if [ "$(target)" != "testpypi" ] && [ "$(target)" != "pypi" ]; then \
+		echo "Error: target must be either 'testpypi' or 'pypi'"; \
+		exit 1; \
+	fi
+	twine upload dist/* -r $(target)
