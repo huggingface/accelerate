@@ -103,20 +103,15 @@ setup(
 #      git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi'
 #    Push the tag and release commit to git: git push --tags origin vXX.xx-release
 # 5. Run the following commands in the top-level directory:
-#      rm -rf dist
-#      rm -rf build
-#      python setup.py bdist_wheel
-#      python setup.py sdist
+#      make prepare_release
 # 6. Upload the package to the pypi test server first:
-#      twine upload dist/* -r testpypi
+#      make target=testpypi upload_release
 # 7. Check that you can install it in a virtualenv by running:
-#      pip install accelerate
-#      pip uninstall accelerate
-#      pip install -i https://testpypi.python.org/pypi accelerate
+#      make install_test_release
 #      accelerate env
 #      accelerate test
 # 8. Upload the final version to actual pypi:
-#      twine upload dist/* -r pypi
+#      make target=pypi upload_release
 # 9. Add release notes to the tag in github once everything is looking hunky-dory.
 # 10. Go back to the main branch and update the version in __init__.py, setup.py to the new version ".dev" and push to
 #     main.
