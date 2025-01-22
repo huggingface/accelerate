@@ -40,8 +40,8 @@ from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
     is_cuda_available,
     is_mlu_available,
-    is_musa_available,
     is_msamp_available,
+    is_musa_available,
     is_npu_available,
     is_transformer_engine_available,
     is_xpu_available,
