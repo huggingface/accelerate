@@ -53,13 +53,13 @@ accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 ```{yaml}
 mixed_precision: fp8
 fp8_config:
-  amax_compute_algorithm: max
-  amax_history_length: 1024
+  amax_compute_algo: max
+  amax_history_len: 1024
   backend: TE
   fp8_format: HYBRID
   interval: 1
   margin: 0
-  override_linear_precision: false
+  override_linear_precision: (false, false, false)
   use_autocast_during_eval: false
 ```
 
@@ -114,13 +114,13 @@ Similarly this can be set in your `config.yaml`:
 ```{yaml}
 mixed_precision: fp8
 fp8_config:
-    amax_compute_algorithm: max
-    amax_history_length: 1024
+    amax_compute_algo: max
+    amax_history_len: 1024
     backend: TE
     fp8_format: HYBRID
     interval: 1
     margin: 0
-    override_linear_precision: false
+    override_linear_precision: (false, false, false)
     use_autocast_during_eval: false
 ```
 

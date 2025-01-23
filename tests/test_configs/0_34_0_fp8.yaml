@@ -4,13 +4,13 @@ distributed_type: MULTI_GPU
 downcast_bf16: 'no'
 enable_cpu_affinity: false
 fp8_config:
-  amax_compute_algorithm: max
-  amax_history_length: 1024
+  amax_compute_algo: max
+  amax_history_len: 1024
   backend: TE
   fp8_format: E4M3
   interval: 1
   margin: 0
-  override_linear_precision: false
+  override_linear_precision: (false, false, false)
   use_autocast_during_eval: false
 gpu_ids: all
 machine_rank: 0
