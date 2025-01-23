@@ -329,8 +329,8 @@ class Accelerator:
                 if compare_versions("deepspeed-mlu", "<", "0.10.1"):
                     raise ImportError("DeepSpeed MLU version must be >= 0.10.1. Please update DeepSpeed MLU.")
             elif is_musa_available():
-                if compare_versions("deepspeed", ">", "0.14.3"):
-                    raise ImportError("DeepSpeed MUSA version must be <= 0.14.3. Please downgrade DeepSpeed.")
+                if compare_versions("deepspeed", "<", "0.14.3"):
+                    raise ImportError("DeepSpeed MUSA version must be >= 0.14.3. Please update DeepSpeed.")
             elif compare_versions("deepspeed", "<", "0.9.3"):
                 raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
 
