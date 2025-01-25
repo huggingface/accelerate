@@ -339,6 +339,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
             )
         else:
             cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+        if args.deepspeed_ssh_port is not None:
+            cmd.extend(["--ssh_port", str(args.deepspeed_ssh_port)])
         if main_process_ip:
             cmd.extend(["--master_addr", str(main_process_ip)])
         cmd.extend(["--master_port", str(main_process_port)])

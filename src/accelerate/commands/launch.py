@@ -482,6 +482,12 @@ def launch_command_parser(subparsers=None):
         help="DeepSpeed hostfile for configuring multi-node compute resources.",
     )
     deepspeed_args.add_argument(
+        "--deepspeed_ssh_port",
+        default=None,
+        type=str,
+        help="SSH port to use for remote connections with DeepSpeed.",
+    )
+    deepspeed_args.add_argument(
         "--deepspeed_exclusion_filter",
         default=None,
         type=str,
