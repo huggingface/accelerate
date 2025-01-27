@@ -41,6 +41,7 @@ from .imports import (
     is_cuda_available,
     is_mlu_available,
     is_msamp_available,
+    is_musa_available,
     is_npu_available,
     is_transformer_engine_available,
     is_xpu_available,
@@ -1686,6 +1687,8 @@ class FullyShardedDataParallelPlugin:
                 device = torch.npu.current_device()
             elif is_mlu_available():
                 device = torch.mlu.current_device()
+            elif is_musa_available():
+                device = torch.musa.current_device()
             elif is_cuda_available():
                 device = torch.cuda.current_device()
             elif is_xpu_available():

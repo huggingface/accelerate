@@ -28,6 +28,7 @@ from .utils import (
 )
 from .utils.imports import (
     is_mlu_available,
+    is_musa_available,
     is_npu_available,
     is_xpu_available,
 )
@@ -391,6 +392,8 @@ class AlignDevicesHook(ModelHook):
                         device = f"npu:{device}"
                     elif is_mlu_available():
                         device = f"mlu:{device}"
+                    elif is_musa_available():
+                        device = f"musa:{device}"
                     elif is_xpu_available():
                         device = f"xpu:{device}"
                 del self.tied_params_map[value_pointer][device]

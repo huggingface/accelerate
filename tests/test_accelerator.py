@@ -30,8 +30,9 @@ from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, skip_f
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
+    require_cuda_or_xpu,
     require_huggingface_suite,
-    require_multi_gpu,
+    require_multi_device,
     require_non_cpu,
     require_transformer_engine,
     slow,
@@ -452,7 +453,7 @@ class AcceleratorTester(AccelerateTestCase):
             getattr(valid_dl, "_is_accelerate_prepared", False) is True
         ), "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
 
-    @require_cuda
+    @require_cuda_or_xpu
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
@@ -498,7 +499,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_non_torch_xla
     @slow
     @require_bnb
-    @require_multi_gpu
+    @require_multi_device
     def test_accelerator_bnb_multi_device(self):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
@@ -507,6 +508,8 @@ class AcceleratorTester(AccelerateTestCase):
             PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
         elif torch_device == "npu":
             PartialState._shared_state = {"distributed_type": DistributedType.MULTI_NPU}
+        elif torch_device == "xpu":
+            PartialState._shared_state = {"distributed_type": DistributedType.MULTI_XPU}
         else:
             raise ValueError(f"{torch_device} is not supported in test_accelerator_bnb_multi_device.")
 
@@ -534,7 +537,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_non_torch_xla
     @slow
     @require_bnb
-    @require_multi_gpu
+    @require_multi_device
     def test_accelerator_bnb_multi_device_no_distributed(self):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
