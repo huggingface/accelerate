@@ -570,7 +570,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
             current_batch = next_batch
             # But we still move it to the device so it is done before `StopIteration` is reached
             if self.device is not None:
-                    current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
+                current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
 
             try:
                 next_batch = next(dataloader_iter)
