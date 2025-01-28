@@ -40,7 +40,7 @@ class TPIntegrationTest(TempDirTestCase):
         self.test_tp_size = 2
         self.model_name_or_path = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self.batch_size = 1
-        from transformers.trainer_utils import set_seed
+        from accelerate.utils import set_seed
 
         set_seed(42)
 

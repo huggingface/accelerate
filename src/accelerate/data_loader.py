@@ -1093,6 +1093,9 @@ def prepare_data_loader(
     if num_processes is None:
         num_processes = state.num_processes
 
+    if process_index is None:
+        process_index = state.process_index
+
     # when device mesh is used, specifically with TP
     # then there is need to update process_index and num_processes
     # to bring in the effect of generating same batch across TP ranks
@@ -1102,21 +1105,18 @@ def prepare_data_loader(
     # ranks would range from 0...11
     # from data angle ranks should look like 0 0 0 1 1 1 2 2 2 3 3 3
     # processes with same ranks/ids would receive the same batch
-    submesh_fsdp_size = 1
-    submesh_dp_size = 1
-    submesh_tp_size = 1
     if torch_device_mesh:
+        submesh_fsdp_size = 1
+        submesh_dp_size = 1
+        submesh_tp_size = 1
         if "tp" in torch_device_mesh.mesh_dim_names:
             submesh_tp_size = torch_device_mesh["tp"].size()
         if "dp" in torch_device_mesh.mesh_dim_names:
             submesh_dp_size = torch_device_mesh["dp"].size()
         if "fsdp" in torch_device_mesh.mesh_dim_names:
             submesh_fsdp_size = torch_device_mesh["fsdp"].size()
-    num_processes = submesh_fsdp_size * submesh_dp_size
-    if process_index is None:
-        process_index = state.process_index
-    if torch_device_mesh:
         process_index = process_index // submesh_tp_size
+        num_processes = submesh_fsdp_size * submesh_dp_size
 
     # Sanity check
     if split_batches:
