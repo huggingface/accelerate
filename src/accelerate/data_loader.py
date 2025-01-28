@@ -572,12 +572,13 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
             if self.device is not None:
                 current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
 
+            # We need to update the state dict before iterating again
+            self._update_state_dict()
             try:
                 next_batch = next(dataloader_iter)
             except StopIteration:
                 self.end_of_dataloader = True
 
-            self._update_state_dict()
             if batch_index >= self.skip_batches:
                 yield current_batch
             batch_index += 1
