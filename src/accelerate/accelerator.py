@@ -108,7 +108,12 @@ from .utils import (
     save_fsdp_optimizer,
     wait_for_everyone,
 )
-from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME, BETA_TP_AVAILABLE_PYTORCH_VERSION
+from .utils.constants import (
+    BETA_TP_AVAILABLE_PYTORCH_VERSION,
+    BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
+    FSDP_PYTORCH_VERSION,
+    PROFILE_PATTERN_NAME,
+)
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -359,9 +364,14 @@ class Accelerator:
             if not is_torch_version(">=", FSDP_PYTORCH_VERSION):
                 raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
 
-        if os.environ.get("ACCELERATE_USE_TP", "false") == "true" or isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
+        if os.environ.get("ACCELERATE_USE_TP", "false") == "true" or isinstance(
+            torch_tp_plugin, TorchTensorParallelPlugin
+        ):
             if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
                 raise ValueError(f"TP requires PyTorch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}")
+
+            if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
+                raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
@@ -373,12 +383,14 @@ class Accelerator:
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
 
         if torch_tp_plugin is None:
-            torch_tp_plugin = (TorchTensorParallelPlugin() if os.environ.get("ACCELERATE_USE_TP", "false") == "true" else None)
+            torch_tp_plugin = (
+                TorchTensorParallelPlugin() if os.environ.get("ACCELERATE_USE_TP", "false") == "true" else None
+            )
         else:
             if not isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
                 raise TypeError("`torch_tp_plugin` must be a TorchTensorParallelPlugin object.")
             os.environ["ACCELERATE_USE_TP"] = "true"
-        
+
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
                 MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" else None
@@ -1489,8 +1501,14 @@ class Accelerator:
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.TP:
-                if not model.supports_tp_plan:
-                    raise NotImplementedError("Provided model does not support tensor parallelism")
+                if hasattr(model, "supports_tp_plan") and not model.supports_tp_plan:
+                    if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
+                        raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+                    raise NotImplementedError(
+                        "Provided model does not support tensor parallelism. \
+                        Tensor parallelism plan can be added as base_model_tp_plan to model config class \
+                        and _tp_plan attribute to model class."
+                    )
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model

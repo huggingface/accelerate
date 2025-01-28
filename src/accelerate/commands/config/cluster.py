@@ -487,7 +487,7 @@ def get_cluster_input():
                 distributed_type = DistributedType.TP
             if distributed_type == DistributedType.TP:
                 tp_config["tp_size"] = _ask_field(
-                    "What should be your Tensor Parallel degree? [1e8]: ",
+                    "What should be your Tensor Parallel degree? [1]: ",
                     int,
                     default=1,
                 )

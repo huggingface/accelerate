@@ -342,6 +342,13 @@ def require_deepspeed(test_case):
     return unittest.skipUnless(is_deepspeed_available(), "test requires DeepSpeed")(test_case)
 
 
+def require_tp(test_case):
+    """
+    Decorator marking a test that requires TP installed. These tests are skipped when TP isn't installed
+    """
+    return unittest.skipUnless(is_torch_version(">=", "2.3.0"), "test requires torch version >= 2.3.0")(test_case)
+
+
 def require_torch_min_version(test_case=None, version=None):
     """
     Decorator marking that a test requires a particular torch version to be tested. These tests are skipped when an

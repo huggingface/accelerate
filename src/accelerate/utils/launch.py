@@ -286,6 +286,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
 
     if args.use_tp:
         current_env["ACCELERATE_USE_TP"] = "true"
+        current_env["TP_SIZE"] = str(args.tp_size)
 
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"

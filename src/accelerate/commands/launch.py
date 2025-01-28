@@ -594,7 +594,7 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
     )
-    
+
     # tp args
     tp_args = parser.add_argument_group("TP Arguments", "Arguments related to Tensor Parallelism using PyToch.")
     tp_args.add_argument(

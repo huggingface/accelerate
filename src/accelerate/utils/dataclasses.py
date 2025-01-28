@@ -1826,10 +1826,14 @@ class TorchTensorParallelPlugin:
         metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
     )
 
-    # type has to be "torch.distributed.DeviceMesh"
-    torch_device_mesh: torch.distributed.DeviceMesh = field(default=None)
+    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
+    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
 
     def __post_init__(self):
+        self.tp_size = self.tp_size if os.environ.get("TP_SIZE", "1") == "1" else int(os.environ.get("TP_SIZE", "1"))
+        if self.tp_size == 1:
+            raise ValueError("Provide TP degree > 1.")
+
         if is_torch_version("<", BETA_TP_AVAILABLE_PYTORCH_VERSION):
             raise ValueError(
                 f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
