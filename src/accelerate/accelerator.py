@@ -493,6 +493,8 @@ class Accelerator:
                 check_is_tpu=True
             ):
                 raise ValueError(f"fp16 mixed precision requires a GPU or MPS device (not {self.device.type!r}).")
+            if self.device.type == "mps" and not is_torch_version(">=", "2.5.0"):
+                raise ValueError("fp16 mixed precision with mps device require a Pytorch >= 2.5.0")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
 
@@ -504,8 +506,10 @@ class Accelerator:
                 self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
-            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available():
+            if not self.native_amp and not is_torch_xla_available():
                 raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
+            if self.native_amp and self.device.type == "mps" and not is_torch_version(">=", "2.6.0"):
+                raise ValueError("bf16 mixed precision with mps device require a Pytorch >= 2.6.0")
 
         elif self.state.mixed_precision == "fp8":
             # We always enable `native_amp` for FP8
