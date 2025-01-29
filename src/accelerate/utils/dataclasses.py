@@ -30,6 +30,7 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 import torch
 
 from .constants import (
+    BETA_TP_AVAILABLE_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
@@ -541,6 +542,7 @@ class DistributedType(str, enum.Enum):
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
+    TP = "TP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
 
@@ -1811,6 +1813,36 @@ class FullyShardedDataParallelPlugin:
                     f"Values must be one of {list(mixed_precision_mapping.values())}"
                 )
             self.mixed_precision_policy = MixedPrecision(**self.mixed_precision_policy)
+
+
+@dataclass
+class TorchTensorParallelPlugin:
+    """
+    This plugin is used to enable tensor parallelism using PyTorch >= 2.0.
+    """
+
+    tp_size: int = field(
+        default=1,
+        metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
+    )
+
+    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
+    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
+
+    def __post_init__(self):
+        self.tp_size = self.tp_size if os.environ.get("TP_SIZE", "1") == "1" else int(os.environ.get("TP_SIZE", "1"))
+        if self.tp_size == 1:
+            raise ValueError("Provide TP degree > 1.")
+
+        if is_torch_version("<", BETA_TP_AVAILABLE_PYTORCH_VERSION):
+            raise ValueError(
+                f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
+            )
+        from torch.distributed.device_mesh import init_device_mesh
+
+        mesh_dim_name = "tp"
+        device = "cuda"  # support for other devices has to be investigated
+        self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
 
 
 @dataclass
