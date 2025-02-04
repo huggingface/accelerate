@@ -210,10 +210,12 @@ class PartialState:
                         use_deepspeed = True
                     # Deal with all other backends but XPU and CPU, that gets handled special later
                     elif (
-                        self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU)
+                        self.distributed_type
+                        not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU, DistributedType.MULTI_HPU)
                         and not torch.distributed.is_initialized()
                     ):
                         torch.distributed.init_process_group(backend=self.backend, **kwargs)
+
             # XPU and CPU require special env configs to be set
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                 dist_information = get_cpu_distributed_information()
@@ -255,6 +257,16 @@ class PartialState:
                 if not torch.distributed.is_initialized():
                     torch.distributed.init_process_group(backend=self.backend, **kwargs)
 
+            elif self.distributed_type == DistributedType.MULTI_HPU:
+                from habana_frameworks.torch.distributed.hccl import initialize_distributed_hpu
+
+                hpu_world_size, hpu_rank, hpu_local_rank = initialize_distributed_hpu()
+
+                if not torch.distributed.is_initialized():
+                    torch.distributed.init_process_group(
+                        backend=self.backend, rank=hpu_rank, world_size=hpu_world_size
+                    )
+
             # No backend == no distributed training
             if self.backend is None:
                 self.distributed_type = DistributedType.NO
@@ -271,6 +283,10 @@ class PartialState:
                     self.local_process_index = xm.get_local_ordinal()
                 else:
                     self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
+            elif self.distributed_type == DistributedType.MULTI_HPU:
+                self.process_index = hpu_rank
+                self.num_processes = hpu_world_size
+                self.local_process_index = hpu_local_rank
             else:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
@@ -763,14 +779,7 @@ class PartialState:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
             elif is_hpu_available():
-                if backend is None:
-                    backend = "hccl"
-
-                if backend == "hccl":
-                    from habana_frameworks.torch.distributed.hccl import initialize_distributed_hpu
-
-                    _ = initialize_distributed_hpu()
-
+                backend = "hccl"
                 distributed_type = DistributedType.MULTI_HPU
 
         if distributed_type is None and (
