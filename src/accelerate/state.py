@@ -763,10 +763,14 @@ class PartialState:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
             elif is_hpu_available():
-                import habana_frameworks.torch.distributed.hccl  # noqa: F401
-
                 if backend is None:
                     backend = "hccl"
+
+                if backend == "hccl":
+                    from habana_frameworks.torch.distributed.hccl import initialize_distributed_hpu
+
+                    _ = initialize_distributed_hpu()
+
                 distributed_type = DistributedType.MULTI_HPU
 
         if distributed_type is None and (
