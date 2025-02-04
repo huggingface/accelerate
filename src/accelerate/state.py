@@ -297,7 +297,7 @@ class PartialState:
 
             if self.device.type == "hpu":
                 # we should do this in optimum-habana somehow and not here
-                from optimum.habana.distributed import parallel_state
+                from optimum.habana.distributed import parallel_state  # noqa: F401
 
                 if self.distributed_type != DistributedType.DEEPSPEED:
                     context_parallel_size = 1
