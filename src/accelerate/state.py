@@ -65,6 +65,9 @@ if is_musa_available(check_device=False):
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
 
+if is_hpu_available(check_device=False):
+    import habana_frameworks.torch  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 
@@ -370,6 +373,7 @@ class PartialState:
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
+            DistributedType.MULTI_HPU,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
@@ -738,13 +742,9 @@ class PartialState:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
             elif is_hpu_available():
-                backend = "hccl"
-                if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
-                    distributed_type = DistributedType.DEEPSPEED
-                elif os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
-                    distributed_type = DistributedType.FSDP
-                else:
-                    distributed_type = DistributedType.MULTI_HPU
+                if backend is None:
+                    backend = "hccl"
+                distributed_type = DistributedType.MULTI_HPU
 
         if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
@@ -920,6 +920,7 @@ class AcceleratorState:
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
+                DistributedType.MULTI_HPU,
             ]:
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or fsdp_plugin is not None:
                     self.distributed_type = DistributedType.FSDP
