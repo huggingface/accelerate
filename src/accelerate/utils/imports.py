@@ -379,6 +379,27 @@ def is_npu_available(check_device=False):
 
 
 @lru_cache
+def is_hpu_available(check_device=False):
+    "Checks if `torch_hpu` is installed and potentially if a HPU is in the environment"
+    if importlib.util.find_spec("habana_frameworks") is None:
+        return False
+
+    import habana_frameworks.torch  # noqa: F401
+
+    if check_device:
+        try:
+            import habana_frameworks.torch.utils.experimental as htexp
+
+            if htexp.hpu.is_available():
+                _ = htexp.hpu.device_count()
+                return True
+            return False
+        except RuntimeError:
+            return False
+    return True
+
+
+@lru_cache
 def is_xpu_available(check_device=False):
     """
     Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and

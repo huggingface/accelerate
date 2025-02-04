@@ -38,6 +38,7 @@ from .utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_mps_available,
@@ -736,6 +737,14 @@ class PartialState:
                 if backend is None:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
+            elif is_hpu_available():
+                backend = "hccl"
+                if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
+                    distributed_type = DistributedType.DEEPSPEED
+                elif os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
+                    distributed_type = DistributedType.FSDP
+                else:
+                    distributed_type = DistributedType.MULTI_HPU
 
         if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1

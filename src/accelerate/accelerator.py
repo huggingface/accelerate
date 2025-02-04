@@ -168,7 +168,7 @@ _use_seedable_sampler = object()
 
 class Accelerator:
     """
-    Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
+    Creates an instance of an accelerator for distributed training (on multi-GPU, TPU, HPU) or mixed precision training.
 
     Args:
         device_placement (`bool`, *optional*, defaults to `True`):
@@ -415,9 +415,9 @@ class Accelerator:
 
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(
-                    handler, KwargsHandler
-                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
+                assert isinstance(handler, KwargsHandler), (
+                    f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
+                )
                 if isinstance(handler, DistributedDataParallelKwargs):
                     if self.ddp_handler is not None:
                         raise ValueError("You can only pass one `DistributedDataParallelKwargs` in `kwargs_handler`.")
@@ -529,7 +529,7 @@ class Accelerator:
             DistributedType.DEEPSPEED,
             DistributedType.MEGATRON_LM,
         ):
-            if self.device.type in ["cpu", "xpu"]:
+            if self.device.type in ["cpu", "xpu", "hpu"]:
                 self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
@@ -1415,6 +1415,8 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
+            if not evaluation_mode and self.distributed_type == DistributedType.MULTI_HPU:
+                device_placement = None
         self._models.append(model)
 
         # TODO: Look at enabling native TP training directly with a proper config

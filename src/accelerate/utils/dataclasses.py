@@ -40,6 +40,7 @@ from .constants import (
 from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
     is_cuda_available,
+    is_hpu_available,
     is_mlu_available,
     is_msamp_available,
     is_musa_available,
@@ -528,6 +529,7 @@ class DistributedType(str, enum.Enum):
         - **MULTI_MUSA** -- Distributed on multiple MUSAs.
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
+        - **MULTI_HPU** -- Distributed on multiple HPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **XLA** -- Using TorchXLA.
     """
@@ -545,6 +547,7 @@ class DistributedType(str, enum.Enum):
     TP = "TP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
+    MULTI_HPU = "MULTI_HPU"
 
 
 class SageMakerDistributedType(str, enum.Enum):
@@ -646,6 +649,7 @@ class DynamoBackend(str, BaseEnum):
     TORCHXLA_TRACE_ONCE = "TORCHXLA_TRACE_ONCE"
     IPEX = "IPEX"
     TVM = "TVM"
+    HPU_BACKEND = "HPU_BACKEND"
 
 
 class LoggerType(BaseEnum):
@@ -1695,6 +1699,8 @@ class FullyShardedDataParallelPlugin:
                 device = torch.cuda.current_device()
             elif is_xpu_available():
                 device = torch.xpu.current_device()
+            elif is_hpu_available():
+                device = torch.hpu.current_device()
             else:
                 raise RuntimeError(
                     "There are currently no available devices found, must be one of 'XPU', 'CUDA', or 'NPU'."
