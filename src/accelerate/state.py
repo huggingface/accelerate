@@ -294,6 +294,25 @@ class PartialState:
                         'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                         "will do this automatically."
                     )
+
+            if self.device.type == "hpu":
+                # we should do this in optimum-habana somehow and not here
+                from optimum.habana.distributed import parallel_state
+
+                if self.distributed_type != DistributedType.DEEPSPEED:
+                    context_parallel_size = 1
+                if parallel_state.is_unitialized():
+                    parallel_state.initialize_model_parallel(
+                        sequence_parallel_size=context_parallel_size, use_fp8=False
+                    )
+                else:
+                    if parallel_state.get_sequence_parallel_world_size() != context_parallel_size:
+                        raise ValueError(
+                            "The initialized sequence parallel world size does not match the context parallel size."
+                        )
+                    if parallel_state.amax_reduction_is_initialized():
+                        logger.info("FP8 amax reduction group is already initialized.")
+
         # Important: This should be the *only* code outside of `self.initialized!`
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
@@ -709,6 +728,8 @@ class PartialState:
             return torch.device("cuda")
         elif is_xpu_available():
             return torch.device("xpu")
+        elif is_hpu_available():
+            return torch.device("hpu")
         else:
             return torch.device("cpu")
 
@@ -742,6 +763,8 @@ class PartialState:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
             elif is_hpu_available():
+                import habana_frameworks.torch.distributed.hccl  # noqa: F401
+
                 if backend is None:
                     backend = "hccl"
                 distributed_type = DistributedType.MULTI_HPU
@@ -785,7 +808,7 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
