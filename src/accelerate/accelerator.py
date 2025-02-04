@@ -168,7 +168,8 @@ _use_seedable_sampler = object()
 
 class Accelerator:
     """
-    Creates an instance of an accelerator for distributed training (on multi-GPU, TPU, HPU) or mixed precision training.
+    Creates an instance of an accelerator for distributed training (on multi-GPU, TPU, HPU) or mixed precision
+    training.
 
     Args:
         device_placement (`bool`, *optional*, defaults to `True`):
@@ -415,9 +416,9 @@ class Accelerator:
 
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(handler, KwargsHandler), (
-                    f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
-                )
+                assert isinstance(
+                    handler, KwargsHandler
+                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
                 if isinstance(handler, DistributedDataParallelKwargs):
                     if self.ddp_handler is not None:
                         raise ValueError("You can only pass one `DistributedDataParallelKwargs` in `kwargs_handler`.")
