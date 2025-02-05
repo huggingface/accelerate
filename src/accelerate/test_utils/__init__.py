@@ -24,6 +24,7 @@ from .testing import (
     require_bnb,
     require_cpu,
     require_cuda,
+    require_cuda_or_xpu,
     require_huggingface_suite,
     require_mlu,
     require_sdaa,

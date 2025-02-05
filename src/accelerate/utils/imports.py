@@ -229,6 +229,8 @@ def is_timm_available():
 
 
 def is_triton_available():
+    if is_xpu_available():
+        return _is_package_available("triton", "pytorch-triton-xpu")
     return _is_package_available("triton")
 
 
@@ -405,9 +407,6 @@ def is_xpu_available(check_device=False):
         return False
 
     if is_ipex_available():
-        if is_torch_version("<=", "1.12"):
-            return False
-
         import intel_extension_for_pytorch  # noqa: F401
     else:
         if is_torch_version("<=", "2.3"):

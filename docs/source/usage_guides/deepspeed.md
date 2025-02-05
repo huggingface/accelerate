@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed
 
-[DeepSpeed](https://github.com/microsoft/DeepSpeed) implements everything described in the [ZeRO paper](https://arxiv.org/abs/1910.02054). Some of the salient optimizations are:
+[DeepSpeed](https://github.com/deepspeedai/DeepSpeed) implements everything described in the [ZeRO paper](https://arxiv.org/abs/1910.02054). Some of the salient optimizations are:
 
 1. Optimizer state partitioning (ZeRO stage 1)
 2. Gradient partitioning (ZeRO stage 2)
@@ -33,7 +33,7 @@ DeepSpeed ZeRO-2 is primarily used only for training, as its features are of no 
 DeepSpeed ZeRO-3 can be used for inference as well since it allows huge models to be loaded on multiple GPUs, which
 won't be possible on a single GPU.
 
-Accelerate integrates [DeepSpeed](https://github.com/microsoft/DeepSpeed) via 2 options:
+Accelerate integrates [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) via 2 options:
 
 1. Integration of the DeepSpeed features via `deepspeed config file` specification in `accelerate config` . You just supply your custom config file or use our template. Most of
    this document is focused on this feature. This supports all the core features of DeepSpeed and gives user a lot of flexibility.
@@ -74,7 +74,7 @@ Inference:
 
 ## How it works?
 
-**Pre-Requisites**: Install DeepSpeed version >=0.6.5. Please refer to the [DeepSpeed Installation details](https://github.com/microsoft/DeepSpeed#installation)
+**Pre-Requisites**: Install DeepSpeed version >=0.6.5. Please refer to the [DeepSpeed Installation details](https://github.com/deepspeedai/DeepSpeed#installation)
 for more information.
 
 We will first look at easy to use integration via `accelerate config`.
@@ -714,7 +714,7 @@ model, eval_dataloader = accelerator.prepare(model, eval_dataloader)
 
 The documentation for the internals related to deepspeed can be found [here](../package_reference/deepspeed).
 
-- [Project's github](https://github.com/microsoft/deepspeed)
+- [Project's github](https://github.com/deepspeedai/DeepSpeed)
 - [Usage docs](https://www.deepspeed.ai/getting-started/)
 - [API docs](https://deepspeed.readthedocs.io/en/latest/index.html)
 - [Blog posts](https://www.microsoft.com/en-us/research/search/?q=deepspeed)
@@ -728,7 +728,7 @@ Papers:
 
 
 Finally, please, remember that `Accelerate` only integrates DeepSpeed, therefore if you
-have any problems or questions with regards to DeepSpeed usage, please, file an issue with [DeepSpeed GitHub](https://github.com/microsoft/DeepSpeed/issues).
+have any problems or questions with regards to DeepSpeed usage, please, file an issue with [DeepSpeed GitHub](https://github.com/deepspeedai/DeepSpeed/issues).
 
 
 <Tip>

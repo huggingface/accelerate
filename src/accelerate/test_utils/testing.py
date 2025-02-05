@@ -175,6 +175,16 @@ def require_xpu(test_case):
     return unittest.skipUnless(is_xpu_available(), "test requires a XPU")(test_case)
 
 
+def require_cuda_or_xpu(test_case):
+    """
+    Decorator marking a test that requires CUDA or XPU. These tests are skipped when there are no GPU available or when
+    TorchXLA is available.
+    """
+    cuda_condition = is_cuda_available() and not is_torch_xla_available()
+    xpu_condition = is_xpu_available()
+    return unittest.skipUnless(cuda_condition or xpu_condition, "test requires a CUDA GPU or XPU")(test_case)
+
+
 def require_non_xpu(test_case):
     """
     Decorator marking a test that should be skipped for XPU.
@@ -340,11 +350,11 @@ def require_deepspeed(test_case):
     return unittest.skipUnless(is_deepspeed_available(), "test requires DeepSpeed")(test_case)
 
 
-def require_fsdp(test_case):
+def require_tp(test_case):
     """
-    Decorator marking a test that requires FSDP installed. These tests are skipped when FSDP isn't installed
+    Decorator marking a test that requires TP installed. These tests are skipped when TP isn't installed
     """
-    return unittest.skipUnless(is_torch_version(">=", "1.12.0"), "test requires torch version >= 1.12.0")(test_case)
+    return unittest.skipUnless(is_torch_version(">=", "2.3.0"), "test requires torch version >= 2.3.0")(test_case)
 
 
 def require_torch_min_version(test_case=None, version=None):

@@ -42,7 +42,6 @@ from .utils import (
     is_sdaa_available,
     is_musa_available,
     is_npu_available,
-    is_torch_version,
     is_xpu_available,
     load_checkpoint_in_model,
     offload_state_dict,
@@ -115,8 +114,7 @@ def init_on_device(device: torch.device, include_buffers: bool = None):
     if include_buffers is None:
         include_buffers = parse_flag_from_env("ACCELERATE_INIT_INCLUDE_BUFFERS", False)
 
-    # TODO(shingjan): remove the torch version check once older versions are deprecated
-    if is_torch_version(">=", "2.0") and include_buffers:
+    if include_buffers:
         with device:
             yield
         return

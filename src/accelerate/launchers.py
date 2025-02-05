@@ -135,6 +135,7 @@ def notebook_launcher(
     if (in_colab or in_kaggle) and (os.environ.get("TPU_NAME", None) is not None):
         # TPU launch
         import torch_xla.distributed.xla_multiprocessing as xmp
+        from torch_xla import device_count
 
         if len(AcceleratorState._shared_state) > 0:
             raise ValueError(
@@ -142,12 +143,10 @@ def notebook_launcher(
                 "your training function. Restart your notebook and make sure no cells initializes an "
                 "`Accelerator`."
             )
-        if num_processes is None:
-            num_processes = 8
 
         launcher = PrepareForLaunch(function, distributed_type="XLA")
-        print(f"Launching a training on {num_processes} TPU cores.")
-        xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
+        print(f"Launching a training on {device_count()} TPU cores.")
+        xmp.spawn(launcher, args=args, start_method="fork")
     elif in_colab and get_gpu_info()[1] < 2:
         # No need for a distributed launch otherwise as it's either CPU or one GPU.
         if torch.cuda.is_available():

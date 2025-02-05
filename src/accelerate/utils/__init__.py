@@ -57,6 +57,7 @@ from .dataclasses import (
     SageMakerDistributedType,
     TensorInformation,
     TorchDynamoPlugin,
+    TorchTensorParallelPlugin,
     add_model_config_to_megatron_parser,
 )
 from .environment import (

@@ -87,6 +87,8 @@ def env_command(args):
         info["MLU type"] = torch.mlu.get_device_name()
     if pt_sdaa_available:
         info["SDAA type"] = torch.sdaa.get_device_name()
+    if pt_musa_available:
+        info["MUSA type"] = torch.musa.get_device_name()
     if pt_npu_available:
         info["CANN version"] = torch.version.cann
 

@@ -36,6 +36,7 @@ from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import (
     require_bnb,
     require_cuda,
+    require_cuda_or_xpu,
     require_multi_device,
     require_multi_gpu,
     require_non_cpu,
@@ -43,7 +44,7 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
-from accelerate.utils import is_torch_version, offload_state_dict
+from accelerate.utils import offload_state_dict
 
 
 logger = logging.getLogger(__name__)
@@ -166,9 +167,8 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights(include_buffers=True):
             module = nn.BatchNorm1d(4)
             # nn.Module.register_parameter/buffer shouldn't be changed with torch >= 2.0
-            if is_torch_version(">=", "2.0"):
-                assert register_parameter_func == nn.Module.register_parameter
-                assert register_buffer_func == nn.Module.register_buffer
+            assert register_parameter_func == nn.Module.register_parameter
+            assert register_buffer_func == nn.Module.register_buffer
         assert module.weight.device == torch.device("meta")
         assert module.running_mean.device == torch.device("meta")
 
@@ -239,11 +239,8 @@ class BigModelingTester(unittest.TestCase):
 
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         cpu_offload(gpt2, execution_device=0)
-        outputs = gpt2.generate(inputs["input_ids"])
-        assert (
-            tokenizer.decode(outputs[0].tolist())
-            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-        )
+        outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+        assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
 
     def test_disk_offload(self):
         model = ModelForTest()
@@ -302,11 +299,8 @@ class BigModelingTester(unittest.TestCase):
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         with TemporaryDirectory() as tmp_dir:
             disk_offload(gpt2, tmp_dir, execution_device=0)
-            outputs = gpt2.generate(inputs["input_ids"])
-            assert (
-                tokenizer.decode(outputs[0].tolist())
-                == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-            )
+            outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+            assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
 
     @require_non_cpu
     def test_dispatch_model_and_remove_hook(self):
@@ -687,22 +681,16 @@ class BigModelingTester(unittest.TestCase):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
 
         gpt2 = dispatch_model(gpt2, device_map)
-        outputs = gpt2.generate(inputs["input_ids"])
-        assert (
-            tokenizer.decode(outputs[0].tolist())
-            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-        )
+        outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+        assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
 
         # Dispatch with a bit of CPU offload
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         for i in range(4):
             device_map[f"transformer.h.{i}"] = "cpu"
         gpt2 = dispatch_model(gpt2, device_map)
-        outputs = gpt2.generate(inputs["input_ids"])
-        assert (
-            tokenizer.decode(outputs[0].tolist())
-            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-        )
+        outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+        assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
         # Dispatch with a bit of CPU and disk offload
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         for i in range(2):
@@ -714,11 +702,8 @@ class BigModelingTester(unittest.TestCase):
             }
             offload_state_dict(tmp_dir, state_dict)
             gpt2 = dispatch_model(gpt2, device_map, offload_dir=tmp_dir)
-            outputs = gpt2.generate(inputs["input_ids"])
-            assert (
-                tokenizer.decode(outputs[0].tolist())
-                == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
-            )
+            outputs = gpt2.generate(inputs["input_ids"], max_new_tokens=10)
+            assert tokenizer.decode(outputs[0].tolist()) == "Hello world! My name is Kiyoshi, and I'm a student at"
 
     @require_non_cpu
     def test_dispatch_model_with_unused_submodules(self):
@@ -893,7 +878,7 @@ class BigModelingTester(unittest.TestCase):
     @require_non_torch_xla
     @slow
     @require_bnb
-    @require_multi_gpu
+    @require_multi_device
     def test_dispatch_model_bnb(self):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
@@ -922,7 +907,7 @@ class BigModelingTester(unittest.TestCase):
         assert model.h[(-1)].self_attention.query_key_value.weight.dtype == torch.int8
         assert model.h[(-1)].self_attention.query_key_value.weight.device.index == 1
 
-    @require_cuda
+    @require_cuda_or_xpu
     @slow
     @require_bnb
     def test_dispatch_model_int8_simple(self):
@@ -962,7 +947,7 @@ class BigModelingTester(unittest.TestCase):
         model = load_checkpoint_and_dispatch(
             model,
             checkpoint=model_path,
-            device_map={"": torch.device("cuda:0")},
+            device_map={"": torch_device},
         )
 
         assert model.h[0].self_attention.query_key_value.weight.dtype == torch.int8
@@ -979,13 +964,13 @@ class BigModelingTester(unittest.TestCase):
         model = load_checkpoint_and_dispatch(
             model,
             checkpoint=model_path,
-            device_map={"": "cuda:0"},
+            device_map={"": torch_device},
         )
 
         assert model.h[0].self_attention.query_key_value.weight.dtype == torch.int8
         assert model.h[0].self_attention.query_key_value.weight.device.index == 0
 
-    @require_cuda
+    @require_cuda_or_xpu
     @slow
     @require_bnb
     def test_dipatch_model_fp4_simple(self):
@@ -1026,7 +1011,7 @@ class BigModelingTester(unittest.TestCase):
         model = load_checkpoint_and_dispatch(
             model,
             checkpoint=model_path,
-            device_map={"": torch.device("cuda:0")},
+            device_map={"": torch_device},
         )
 
         assert model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8
@@ -1043,7 +1028,7 @@ class BigModelingTester(unittest.TestCase):
         model = load_checkpoint_and_dispatch(
             model,
             checkpoint=model_path,
-            device_map={"": "cuda:0"},
+            device_map={"": torch_device},
         )
 
         assert model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8

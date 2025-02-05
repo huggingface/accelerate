@@ -70,3 +70,21 @@ test_prod:
 
 test_rest:
 	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch" $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_rest.log",)
+
+# For developers to prepare a release
+prepare_release:
+	rm -rf dist build
+	python setup.py bdist_wheel sdist
+
+# Make sure this is ran in a fresh venv of some form
+install_test_release:
+	pip uninstall accelerate -y
+	pip install -i https://testpypi.python.org/pypi --extra-index-url https://pypi.org/simple accelerate
+
+# Run as `make target=testpypi upload_release`
+upload_release:
+	@if [ "$(target)" != "testpypi" ] && [ "$(target)" != "pypi" ]; then \
+		echo "Error: target must be either 'testpypi' or 'pypi'"; \
+		exit 1; \
+	fi
+	twine upload dist/* -r $(target)
