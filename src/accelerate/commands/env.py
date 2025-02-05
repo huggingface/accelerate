@@ -83,6 +83,8 @@ def env_command(args):
         info["GPU type"] = torch.cuda.get_device_name()
     if pt_mlu_available:
         info["MLU type"] = torch.mlu.get_device_name()
+    if pt_musa_available:
+        info["MUSA type"] = torch.musa.get_device_name()
     if pt_npu_available:
         info["CANN version"] = torch.version.cann
 

@@ -67,6 +67,7 @@ from .utils import (
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
+    TorchTensorParallelPlugin,
     apply_fp8_autowrap,
     check_os_kernel,
     clean_state_dict_for_safetensors,
@@ -107,7 +108,12 @@ from .utils import (
     save_fsdp_optimizer,
     wait_for_everyone,
 )
-from .utils.constants import FSDP_PYTORCH_VERSION, PROFILE_PATTERN_NAME
+from .utils.constants import (
+    BETA_TP_AVAILABLE_PYTORCH_VERSION,
+    BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
+    FSDP_PYTORCH_VERSION,
+    PROFILE_PATTERN_NAME,
+)
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -189,6 +195,9 @@ class Accelerator:
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
+        torch_tp_plugin ([`~utils.TorchTensorParallelPlugin`], *optional*):
+            Tweak your torch tensor parallel. This argument is optional and can be configured directly using
+            *accelerate config*
         megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -258,6 +267,7 @@ class Accelerator:
         dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
+        torch_tp_plugin: TorchTensorParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
@@ -329,8 +339,8 @@ class Accelerator:
                 if compare_versions("deepspeed-mlu", "<", "0.10.1"):
                     raise ImportError("DeepSpeed MLU version must be >= 0.10.1. Please update DeepSpeed MLU.")
             elif is_musa_available():
-                if compare_versions("deepspeed", ">", "0.14.3"):
-                    raise ImportError("DeepSpeed MUSA version must be <= 0.14.3. Please downgrade DeepSpeed.")
+                if compare_versions("deepspeed", "<", "0.14.3"):
+                    raise ImportError("DeepSpeed MUSA version must be >= 0.14.3. Please update DeepSpeed.")
             elif compare_versions("deepspeed", "<", "0.9.3"):
                 raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
 
@@ -354,6 +364,15 @@ class Accelerator:
             if not is_torch_version(">=", FSDP_PYTORCH_VERSION):
                 raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
 
+        if os.environ.get("ACCELERATE_USE_TP", "false") == "true" or isinstance(
+            torch_tp_plugin, TorchTensorParallelPlugin
+        ):
+            if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
+                raise ValueError(f"TP requires PyTorch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}")
+
+            if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
+                raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
                 FullyShardedDataParallelPlugin() if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" else None
@@ -362,6 +381,15 @@ class Accelerator:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
+
+        if torch_tp_plugin is None:
+            torch_tp_plugin = (
+                TorchTensorParallelPlugin() if os.environ.get("ACCELERATE_USE_TP", "false") == "true" else None
+            )
+        else:
+            if not isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
+                raise TypeError("`torch_tp_plugin` must be a TorchTensorParallelPlugin object.")
+            os.environ["ACCELERATE_USE_TP"] = "true"
 
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
@@ -428,6 +456,7 @@ class Accelerator:
             dynamo_plugin=dynamo_plugin,
             deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
+            torch_tp_plugin=torch_tp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             **kwargs,
@@ -1474,6 +1503,16 @@ class Accelerator:
                     )
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
+            elif self.distributed_type == DistributedType.TP:
+                if hasattr(model, "supports_tp_plan") and not model.supports_tp_plan:
+                    if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
+                        raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+                    raise NotImplementedError(
+                        "Provided model does not support tensor parallelism. \
+                        Tensor parallelism plan can be added as base_model_tp_plan to model config class \
+                        and _tp_plan attribute to model class."
+                    )
+                model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -2125,6 +2164,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
+            torch_device_mesh=self.state.torch_tp_plugin.torch_device_mesh if self.state.torch_tp_plugin else None,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader

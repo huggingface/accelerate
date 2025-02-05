@@ -73,6 +73,7 @@ options_to_group = {
     "tpu": "TPU",
     "use_deepspeed": "DeepSpeed Arguments",
     "use_fsdp": "FSDP Arguments",
+    "use_tp": "PyTorch TP Arguments",
     "use_megatron_lm": "Megatron-LM Arguments",
     "fp8_backend": "FP8 Arguments",
 }
@@ -260,6 +261,12 @@ def launch_command_parser(subparsers=None):
         default=False,
         action="store_true",
         help="Whether to use fsdp.",
+    )
+    paradigm_args.add_argument(
+        "--use_tp",
+        default=False,
+        action="store_true",
+        help="Whether to use PyTorch TP.",
     )
     paradigm_args.add_argument(
         "--use_megatron_lm",
@@ -586,6 +593,15 @@ def launch_command_parser(subparsers=None):
         default="false",
         type=str,
         help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
+    )
+
+    # tp args
+    tp_args = parser.add_argument_group("TP Arguments", "Arguments related to Tensor Parallelism using PyToch.")
+    tp_args.add_argument(
+        "--tp_size",
+        default=1,
+        type=int,
+        help="PyTorch Tensor Parallelism (TP) degree. Set a value greater than 1 to activate. (useful only when `use_tp` flag is passed)",
     )
 
     # megatron_lm args
@@ -969,9 +985,9 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def _validate_launch_command(args):
     # Sanity checks
-    if sum([args.multi_gpu, args.cpu, args.tpu, args.use_deepspeed, args.use_fsdp]) > 1:
+    if sum([args.multi_gpu, args.cpu, args.tpu, args.use_deepspeed, args.use_fsdp, args.use_tp]) > 1:
         raise ValueError(
-            "You can only use one of `--cpu`, `--multi_gpu`, `--tpu`, `--use_deepspeed`, `--use_fsdp` at a time."
+            "You can only use one of `--cpu`, `--multi_gpu`, `--tpu`, `--use_deepspeed`, `--use_fsdp`, `--use_tp` at a time."
         )
     if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
@@ -988,6 +1004,7 @@ def _validate_launch_command(args):
             and not args.tpu_use_cluster
             and not args.use_deepspeed
             and not args.use_fsdp
+            and not args.use_tp
             and not args.use_megatron_lm
         ):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
@@ -1005,6 +1022,7 @@ def _validate_launch_command(args):
             )
             args.tpu = defaults.distributed_type == DistributedType.XLA
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
+            args.use_tp = defaults.distributed_type == DistributedType.TP
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
         if args.gpu_ids is None:
@@ -1032,6 +1050,8 @@ def _validate_launch_command(args):
                         if "fsdp" not in arg_to_set:
                             arg_to_set = "fsdp_" + arg_to_set
                         setattr(args, arg_to_set, defaults.fsdp_config[k])
+                    for k in defaults.tp_config:
+                        setattr(args, k, defaults.tp_config[k])
                     for k in defaults.megatron_lm_config:
                         setattr(args, k, defaults.megatron_lm_config[k])
                     for k in defaults.dynamo_config:
@@ -1156,6 +1176,8 @@ def launch_command(args):
         args.deepspeed_fields_from_accelerate_config = ",".join(args.deepspeed_fields_from_accelerate_config)
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
+        multi_gpu_launcher(args)
+    elif args.use_tp and not args.cpu:
         multi_gpu_launcher(args)
     elif args.use_megatron_lm and not args.cpu:
         multi_gpu_launcher(args)
