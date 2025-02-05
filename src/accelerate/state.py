@@ -730,18 +730,12 @@ class PartialState:
             backend = "xla"
             distributed_type = DistributedType.XLA
         elif is_hpu_available():
-            from habana_frameworks.torch.distributed.hccl import initialize_distributed_hpu  # noqa: F401
+            import habana_frameworks.torch.distributed.hccl
 
-            print("after importing habana_frameworks in prepare_backend")
+            if int(os.environ.get("LOCAL_RANK", -1)) != -1:
+                backend = "hccl"
+                distributed_type = DistributedType.MULTI_HPU
 
-            print(os.environ.get("LOCAL_RANK", -1))
-            print(os.environ.get("WORLD_SIZE", -1))
-            print(os.environ.get("RANK", -1))
-            print(os.environ.get("MASTER_ADDR", -1))
-            print(os.environ.get("MASTER_PORT", -1))
-
-            backend = "hccl"
-            distributed_type = DistributedType.MULTI_HPU
         elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
             if is_mlu_available():
                 backend = "cncl"
