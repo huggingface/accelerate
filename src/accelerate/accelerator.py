@@ -1333,6 +1333,8 @@ class Accelerator:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
+        elif self.distributed_type == DistributedType.FSDP:
+            result = self._prepare_fsdp(*args)
         else:
             if self.fp8_backend == "MSAMP":
                 args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
@@ -1990,6 +1992,19 @@ class Accelerator:
             self._schedulers.append(scheduler)
 
         return tuple(result)
+
+    def _prepare_fsdp(self, *args):
+        # NOTE: we prepare all models first in FSDP to handle the case with `use_orig_params=False`
+        # Refer https://github.com/huggingface/accelerate/pull/3298 for more details. 
+        result = [self.prepare_model(obj) if isinstance(obj, torch.nn.Module) else obj for obj in args ]
+        # prepare everything else
+        result = tuple(
+                self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj 
+                for obj in args
+            )
+        # second pass for scheduler
+        result = tuple(self._prepare_one(obj) for obj in result)
+        return result
 
     def _prepare_ipex_or_xpu(self, *args):
         """
