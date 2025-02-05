@@ -1473,7 +1473,7 @@ class Accelerator:
                         )
             if (
                 ("cpu" in model_devices and not is_bitsandbytes_multi_backend_available())
-                or ("cpu" in model_devices and is_bitsandbytes_multi_backend_available() and is_xpu_available())
+                or ("cpu" in model_devices and is_xpu_available())
                 or "disk" in model_devices
             ):
                 raise ValueError(
