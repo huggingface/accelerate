@@ -729,12 +729,6 @@ class PartialState:
         elif is_torch_xla_available():
             backend = "xla"
             distributed_type = DistributedType.XLA
-        elif is_hpu_available():
-            import habana_frameworks.torch.distributed.hccl
-
-            if int(os.environ.get("LOCAL_RANK", -1)) != -1:
-                backend = "hccl"
-                distributed_type = DistributedType.MULTI_HPU
 
         elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
             if is_mlu_available():
@@ -748,6 +742,9 @@ class PartialState:
             elif is_npu_available():
                 backend = "hccl"
                 distributed_type = DistributedType.MULTI_NPU
+            elif is_hpu_available():
+                backend = "hccl"
+                distributed_type = DistributedType.MULTI_HPU
             elif torch.cuda.is_available():
                 if backend is None:
                     backend = "nccl"

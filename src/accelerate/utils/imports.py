@@ -385,6 +385,7 @@ def is_hpu_available(check_device=False):
         return False
 
     import habana_frameworks.torch  # noqa: F401
+    import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
 
     if check_device:
         try:
