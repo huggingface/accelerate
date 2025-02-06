@@ -2002,6 +2002,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
             DistributedType.FSDP,
             DistributedType.XLA,
         ]:
