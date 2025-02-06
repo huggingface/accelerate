@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import torch
 from huggingface_hub import model_info
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
@@ -24,7 +25,7 @@ from accelerate.utils import (
     is_timm_available,
     is_transformers_available,
 )
-import torch
+
 
 if is_transformers_available():
     import transformers
