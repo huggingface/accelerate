@@ -24,7 +24,7 @@ from accelerate.utils import (
     is_timm_available,
     is_transformers_available,
 )
-
+import torch
 
 if is_transformers_available():
     import transformers
@@ -120,7 +120,7 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
                         break
                 if value is not None:
                     constructor = getattr(transformers, value)
-            model = constructor.from_config(config, trust_remote_code=trust_remote_code)
+            model = constructor.from_config(config, torch_dtype=torch.float32, trust_remote_code=trust_remote_code)
     elif library_name == "timm":
         if not is_timm_available():
             raise ImportError(
