@@ -40,6 +40,7 @@ from accelerate.test_utils import (
     require_multi_device,
     require_multi_gpu,
     require_non_cpu,
+    require_non_hpu,
     require_non_torch_xla,
     slow,
     torch_device,
@@ -612,6 +613,7 @@ class BigModelingTester(unittest.TestCase):
             assert (free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130
 
     @require_multi_device
+    @require_non_hpu
     def test_dispatch_model_multi_devices(self):
         model = BiggerModelForTest()
         device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
@@ -653,6 +655,7 @@ class BigModelingTester(unittest.TestCase):
                 model.to(0)
 
     @require_multi_device
+    @require_non_hpu
     def test_dispatch_model_move_model_warning(self):
         model = ModelForTest()
         device_map = {"linear1": 0, "batchnorm": 0, "linear2": 1}
@@ -668,6 +671,7 @@ class BigModelingTester(unittest.TestCase):
 
     @slow
     @require_multi_device
+    @require_non_hpu
     def test_dispatch_model_gpt2_on_two_devices(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
         inputs = tokenizer("Hello world! My name is", return_tensors="pt").to(torch_device)
@@ -724,6 +728,7 @@ class BigModelingTester(unittest.TestCase):
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_multi_device
+    @require_non_hpu
     def test_dispatch_model_with_unused_submodules_multi_device(self):
         model = ModelWithUnusedSubModulesForTest()
         device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
@@ -773,6 +778,7 @@ class BigModelingTester(unittest.TestCase):
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_multi_device
+    @require_non_hpu
     def test_load_checkpoint_and_dispatch_multi_device(self):
         model = BiggerModelForTest()
         device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
@@ -823,6 +829,7 @@ class BigModelingTester(unittest.TestCase):
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_multi_device
+    @require_non_hpu
     def test_load_checkpoint_and_dispatch_multi_device_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
         device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
@@ -882,6 +889,7 @@ class BigModelingTester(unittest.TestCase):
     @slow
     @require_bnb
     @require_multi_device
+    @require_non_hpu
     def test_dispatch_model_bnb(self):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
