@@ -63,7 +63,7 @@ def check_has_model(error):
 
 def create_empty_model(model_name: str, library_name: str, trust_remote_code: bool = False, access_token: str = None):
     """
-    Creates an empty model from its parent library on the `Hub` to calculate the overall memory consumption.
+    Creates an empty model in full precision from its parent library on the `Hub` to calculate the overall memory consumption.
 
     Args:
         model_name (`str`):
@@ -121,6 +121,7 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
                         break
                 if value is not None:
                     constructor = getattr(transformers, value)
+            # we need to pass the dtype, otherwise it is going to use the torch_dtype that is saved in the config
             model = constructor.from_config(config, torch_dtype=torch.float32, trust_remote_code=trust_remote_code)
     elif library_name == "timm":
         if not is_timm_available():
