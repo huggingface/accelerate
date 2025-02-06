@@ -470,7 +470,7 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         model = accelerator.prepare(model)
 
-    @require_cuda
+    @require_cuda_or_xpu
     @slow
     @require_bnb
     def test_accelerator_bnb_cpu_error(self):
