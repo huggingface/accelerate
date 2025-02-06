@@ -28,6 +28,7 @@ from packaging import version
 
 from .imports import (
     is_cuda_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_mps_available,
@@ -58,6 +59,9 @@ def clear_device_cache(garbage_collection=False):
         torch.mps.empty_cache()
     elif is_cuda_available():
         torch.cuda.empty_cache()
+    elif is_hpu_available():
+        # doesn't have an empty_cache method
+        pass
 
 
 def release_memory(*objects):

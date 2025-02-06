@@ -34,6 +34,7 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    require_non_hpu,
     require_transformer_engine,
     slow,
     torch_device,
@@ -173,7 +174,7 @@ class AcceleratorTester(AccelerateTestCase):
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
-        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla"]
+        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla", "hpu"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
@@ -215,6 +216,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert prepared_train_dl in accelerator._dataloaders
         assert prepared_valid_dl in accelerator._dataloaders
 
+    @require_non_hpu
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
         # Free up refs with empty_cache() and gc.collect()
@@ -583,6 +585,7 @@ class AcceleratorTester(AccelerateTestCase):
         model_loaded(inputs)
 
     @require_non_cpu
+    @require_non_hpu
     def test_can_unwrap_model_fp16(self):
         # test for a regression introduced in #872
         # before the fix, after unwrapping with keep_fp32_wrapper=False, there would be the following error:

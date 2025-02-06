@@ -41,6 +41,7 @@ from ..utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_dvclive_available,
+    is_hpu_available,
     is_import_timer_available,
     is_mlu_available,
     is_mps_available,
@@ -81,6 +82,8 @@ def get_backend():
         return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
         return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
+    elif is_hpu_available():
+        return "hpu", torch.xpu.device_count(), torch.xpu.memory_allocated
     else:
         return "cpu", 1, lambda: 0
 
@@ -187,6 +190,13 @@ def require_non_xpu(test_case):
     Decorator marking a test that should be skipped for XPU.
     """
     return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
+
+
+def require_non_hpu(test_case):
+    """
+    Decorator marking a test that should be skipped for HPU.
+    """
+    return unittest.skipUnless(torch_device != "hpu", "test requires a non-HPU")(test_case)
 
 
 def require_mlu(test_case):

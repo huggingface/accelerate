@@ -1487,6 +1487,7 @@ class Accelerator:
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
+                DistributedType.MULTI_HPU,
             ):
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -3270,6 +3271,7 @@ class Accelerator:
                 DistributedType.MULTI_MLU,
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
+                DistributedType.MULTI_HPU,
             ):
                 map_location = "on_device"
             else:

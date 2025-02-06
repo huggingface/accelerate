@@ -21,7 +21,14 @@ import torch
 from ..state import AcceleratorState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, RNGType
-from .imports import is_mlu_available, is_musa_available, is_npu_available, is_torch_xla_available, is_xpu_available
+from .imports import (
+    is_hpu_available,
+    is_mlu_available,
+    is_musa_available,
+    is_npu_available,
+    is_torch_xla_available,
+    is_xpu_available,
+)
 
 
 if is_torch_xla_available():
@@ -53,6 +60,8 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
         torch.mlu.manual_seed_all(seed)
     elif is_musa_available():
         torch.musa.manual_seed_all(seed)
+    elif is_hpu_available():
+        torch.hpu.manual_seed_all(seed)
     else:
         torch.cuda.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
