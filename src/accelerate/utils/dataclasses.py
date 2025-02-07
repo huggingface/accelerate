@@ -698,6 +698,7 @@ class RNGType(BaseEnum):
     NPU = "npu"
     XLA = "xla"
     XPU = "xpu"
+    HPU = "hpu"
     GENERATOR = "generator"
 
 
@@ -1703,7 +1704,7 @@ class FullyShardedDataParallelPlugin:
                 device = torch.hpu.current_device()
             else:
                 raise RuntimeError(
-                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', or 'NPU'."
+                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', 'MLU', 'NPU', 'MUSA', or 'HPU'."
                 )
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`
