@@ -1183,6 +1183,7 @@ class Accelerator:
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
         ):
             dl_even_batches_values = []
 
@@ -1416,6 +1417,9 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
+            if not evaluation_mode and self.distributed_type == DistributedType.MULTI_HPU:
+                device_placement = None
+
         self._models.append(model)
 
         # TODO: Look at enabling native TP training directly with a proper config
@@ -1497,6 +1501,10 @@ class Accelerator:
                     else:
                         device_ids, output_device = None, None
 
+                    if self.distributed_type == DistributedType.MULTI_HPU:
+                        device_ids, output_device = None, None
+                        model = model.to(self.device)
+
                     model = torch.nn.parallel.DistributedDataParallel(
                         model, device_ids=device_ids, output_device=output_device, **kwargs
                     )
@@ -1550,6 +1558,7 @@ class Accelerator:
                         "limit_all_gathers": fsdp_plugin.limit_all_gathers,
                         "device_id": self.device,
                     }
+                    print(f"fsdp kwargs: {kwargs}")
                     model = FSDP(model, **kwargs)
                     if fsdp_plugin.activation_checkpointing:
                         from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
