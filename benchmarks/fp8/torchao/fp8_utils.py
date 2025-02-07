@@ -62,7 +62,7 @@ def get_dataloaders(model_name: str, batch_size: int = 16):
     return train_dataloader, eval_dataloader
 
 
-def get_training_utilities(model_name: str, batch_size: int = 16, accelerator=None):
+def get_training_utilities(model_name: str, batch_size: int = 16, accelerator=None, prepare=True):
     """
     Returns a tuple of:
         - Model
