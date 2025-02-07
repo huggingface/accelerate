@@ -39,6 +39,7 @@ from accelerate.utils import (
     convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
+    is_hpu_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
@@ -1017,6 +1018,7 @@ def _validate_launch_command(args):
                     DistributedType.MULTI_MLU,
                     DistributedType.MULTI_MUSA,
                     DistributedType.MULTI_XPU,
+                    DistributedType.MULTI_HPU,
                 )
                 else False
             )
@@ -1104,6 +1106,8 @@ def _validate_launch_command(args):
                 args.num_processes = torch.musa.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
+            elif is_hpu_available():
+                args.num_processes = torch.hpu.device_count()
             else:
                 args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
@@ -1117,6 +1121,7 @@ def _validate_launch_command(args):
                 or (is_mlu_available() and torch.mlu.device_count() > 1)
                 or (is_musa_available() and torch.musa.device_count() > 1)
                 or (is_npu_available() and torch.npu.device_count() > 1)
+                or (is_hpu_available() and torch.hpu.device_count() > 1)
                 or (torch.cuda.device_count() > 1)
             )
         ):
