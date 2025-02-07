@@ -1335,7 +1335,6 @@ class DeepSpeedPlugin:
             "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH",
             "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_NVME_PATH",
             "ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL",
-            "ACCELERATE_MIXED_PRECISION",
         ]
         env_variable_names_to_ignore = [
             name.replace("ACCELERATE_", "").replace("DEEPSPEED_", "").lower() for name in env_variable_names_to_ignore
