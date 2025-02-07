@@ -18,7 +18,6 @@ import shutil
 from pathlib import Path
 
 import torch
-from safetensors.torch import load_file
 from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy, StateDictType
 from torch.utils.data import DataLoader
 
@@ -26,7 +25,8 @@ from accelerate import Accelerator, FullyShardedDataParallelPlugin
 from accelerate.commands.merge import merge_command, merge_command_parser
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.training import RegressionDataset
-from accelerate.utils import merge_fsdp_weights, patch_environment, save_fsdp_model
+from accelerate.utils import is_hpu_available, merge_fsdp_weights, patch_environment, save_fsdp_model
+from safetensors.torch import load_file
 
 
 logging.basicConfig(level=logging.INFO)
@@ -77,11 +77,16 @@ def mock_training(accelerator, model):
 
 
 def check_weights(operation, state_1, state_2):
+    if is_hpu_available():
+        device = "hpu"
+    else:
+        device = "cuda"
+
     for weight_1, weight_2 in zip(state_1.values(), state_2.values()):
-        if str(weight_1.device) != "cuda":
-            weight_1 = weight_1.to("cuda")
-        if str(weight_2.device) != "cuda":
-            weight_2 = weight_2.to("cuda")
+        if str(weight_1.device) != device:
+            weight_1 = weight_1.to(device)
+        if str(weight_2.device) != device:
+            weight_2 = weight_2.to(device)
         if operation == "same":
             assert torch.allclose(weight_1, weight_2)
         else:

@@ -1558,7 +1558,6 @@ class Accelerator:
                         "limit_all_gathers": fsdp_plugin.limit_all_gathers,
                         "device_id": self.device,
                     }
-                    print(f"fsdp kwargs: {kwargs}")
                     model = FSDP(model, **kwargs)
                     if fsdp_plugin.activation_checkpointing:
                         from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
