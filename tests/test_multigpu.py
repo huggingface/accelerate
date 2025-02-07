@@ -35,7 +35,7 @@ from accelerate.test_utils import (
     require_torchvision,
     torch_device,
 )
-from accelerate.utils import patch_environment
+from accelerate.utils import is_hpu_available, patch_environment
 
 
 class MultiDeviceTester(unittest.TestCase):
@@ -70,7 +70,12 @@ class MultiDeviceTester(unittest.TestCase):
     def test_multi_device_merge_fsdp_weights(self):
         print(f"Found {device_count} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [self.merge_weights_file_path]
-        with patch_environment(omp_num_threads=1):
+
+        env_kwargs = dict(omp_num_threads=1)
+        if is_hpu_available():
+            env_kwargs.update(pt_hpu_lazy_mode="0")
+
+        with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
     @require_non_torch_xla
@@ -89,6 +94,8 @@ class MultiDeviceTester(unittest.TestCase):
             env_kwargs.update(ascend_rt_visible_devices="0,1")
         elif torch_device == "mlu":
             env_kwargs.update(mlu_visible_devices="0,1")
+        elif torch_device == "hpu":
+            env_kwargs.update(habana_visible_devices="0,1")
         else:
             env_kwargs.update(cuda_visible_devices="0,1")
         with patch_environment(**env_kwargs):
@@ -150,7 +157,11 @@ if __name__ == "__main__":
         def forward(self, x):
             return self.linear2(self.batchnorm(self.linear1(x)))
 
-    device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
+    if is_hpu_available():
+        device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
+    else:
+        device_map = {"linear1": 0, "batchnorm": "cuda", "linear2": 1}
+
     model = ModelForTest()
     dispatch_model(model, device_map=device_map)
     with assert_exception(ValueError, "You can't train a model that has been loaded with"):

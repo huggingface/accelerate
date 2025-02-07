@@ -1701,7 +1701,7 @@ class FullyShardedDataParallelPlugin:
             elif is_xpu_available():
                 device = torch.xpu.current_device()
             elif is_hpu_available():
-                device = torch.hpu.current_device()
+                device = torch.device("hpu", torch.hpu.current_device())
             else:
                 raise RuntimeError(
                     "There are currently no available devices found, must be one of 'XPU', 'CUDA', 'MLU', 'NPU', 'MUSA', or 'HPU'."
