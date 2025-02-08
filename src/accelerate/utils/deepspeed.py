@@ -143,8 +143,13 @@ class HfDeepSpeedConfig:
                 config = json.load(f)
         else:
             try:
-                config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode("utf-8")
-                config = json.loads(config_decoded)
+                try:
+                    # First try parsing as JSON directly
+                    config = json.loads(config_file_or_dict)
+                except json.JSONDecodeError:
+                    # If that fails, try base64 decoding
+                    config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode("utf-8")
+                    config = json.loads(config_decoded)
             except (UnicodeDecodeError, AttributeError, ValueError):
                 raise ValueError(
                     f"Expected a string path to an existing deepspeed config, or a dictionary, or a base64 encoded string. Received: {config_file_or_dict}"
