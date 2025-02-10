@@ -1096,13 +1096,12 @@ def prepare_data_loader(
     if process_index is None:
         process_index = state.process_index
 
-
     if torch_device_mesh:
         if state.distributed_type == DistributedType.DEEPSPEED:
-            # In DeepSpeed, the optimizer sharing level in DP is determined by the config file.  
-            # Only considers "dp" and "tp".  
-            # Given a device mesh (dp, tp) = (2, 3):  
-            # - From the data parallel perspective, ranks should be structured as: 0 0 0 1 1 1  
+            # In DeepSpeed, the optimizer sharing level in DP is determined by the config file.
+            # Only considers "dp" and "tp".
+            # Given a device mesh (dp, tp) = (2, 3):
+            # - From the data parallel perspective, ranks should be structured as: 0 0 0 1 1 1
             # - Processes with the same DP rank will receive the same batch.
             if "tp" in torch_device_mesh.mesh_dim_names:
                 submesh_tp_size = torch_device_mesh["tp"].size()

@@ -1705,6 +1705,7 @@ class Accelerator:
         tp_size = self.deepspeed_plugin.deepspeed_config["tensor_parallel"].get("autotp_size", 0)
         if tp_size > 1:
             from torch.distributed.device_mesh import init_device_mesh
+
             mesh_dim_name = "tp"
             self.state.ds_device_mesh = init_device_mesh(self.device.type, (tp_size,), mesh_dim_names=(mesh_dim_name,))
 
