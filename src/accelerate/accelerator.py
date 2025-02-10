@@ -85,6 +85,7 @@ from .utils import (
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
+    is_hpu_available,
     is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
@@ -150,6 +151,10 @@ if is_torch_xla_available():
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
+
+if is_hpu_available(check_device=False):
+    import habana_frameworks.torch  # noqa: F401
+    import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
 
 
 try:

@@ -694,6 +694,7 @@ class PartialState:
         - MLU if `is_mlu_available()`
         - MUSA if `is_musa_available()`
         - NPU if `is_npu_available()`
+        - HPU if `is_hpu_available()`
         - CPU otherwise
         """
         if is_mps_available():
@@ -707,12 +708,12 @@ class PartialState:
         # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
         elif is_npu_available():
             return torch.device("npu")
+        elif is_hpu_available():
+            return torch.device("hpu")
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
             return torch.device("xpu")
-        elif is_hpu_available():
-            return torch.device("hpu")
         else:
             return torch.device("cpu")
 
@@ -796,7 +797,7 @@ class PartialState:
         if device == "xla":
             self.device = xm.xla_device()
         elif device == "hpu":
-            self.device = torch.device("hpu", torch.hpu.current_device())
+            self.device = torch.device("hpu")
         else:
             if device == "gpu":
                 device = "cuda"

@@ -384,10 +384,6 @@ def is_hpu_available(check_device=False):
     if importlib.util.find_spec("habana_frameworks") is None:
         return False
 
-    # not sure if this should be here but keeping it for now
-    import habana_frameworks.torch  # noqa: F401
-    import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
-
     if check_device:
         try:
             import habana_frameworks.torch.utils.experimental as htexp
