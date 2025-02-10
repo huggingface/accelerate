@@ -18,9 +18,8 @@ from typing import List
 
 import numpy as np
 import torch
-from torch.cuda.amp import GradScaler
-
 from safetensors.torch import load_model
+from torch.cuda.amp import GradScaler
 
 from .utils import (
     MODEL_NAME,

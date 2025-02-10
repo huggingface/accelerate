@@ -24,7 +24,6 @@ from typing import OrderedDict
 import numpy as np
 import torch
 from packaging.version import Version
-
 from safetensors.torch import save_file as safe_save_file
 
 from ..commands.config.default import write_basic_config  # noqa: F401

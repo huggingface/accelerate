@@ -430,7 +430,8 @@ class ProfileKwargs(KwargsHandler):
 
     Args:
         activities (`List[str]`, *optional*, default to `None`):
-            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, "hpu" or `"cuda"`.
+            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, "hpu" or
+            `"cuda"`.
         schedule_option (`Dict[str, int]`, *optional*, default to `None`):
             The schedule option to use for the profiler. Available keys are `wait`, `warmup`, `active`, `repeat` and
             `skip_first`. The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the

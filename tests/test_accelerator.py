@@ -476,7 +476,6 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         model = accelerator.prepare(model)
 
-
     @require_non_hpu
     @require_cuda_or_xpu
     @slow

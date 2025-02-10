@@ -18,6 +18,7 @@ import shutil
 from pathlib import Path
 
 import torch
+from safetensors.torch import load_file
 from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy, StateDictType
 from torch.utils.data import DataLoader
 
@@ -26,7 +27,6 @@ from accelerate.commands.merge import merge_command, merge_command_parser
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.training import RegressionDataset
 from accelerate.utils import is_hpu_available, merge_fsdp_weights, patch_environment, save_fsdp_model
-from safetensors.torch import load_file
 
 
 logging.basicConfig(level=logging.INFO)
