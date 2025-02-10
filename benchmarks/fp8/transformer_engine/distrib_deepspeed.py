@@ -66,7 +66,7 @@ def train_baseline(zero_stage: int = 1):
     import numpy as np
 
     config = {
-        "train_batch_size": 32,
+        "train_batch_size": 16,
         "train_micro_batch_size_per_gpu": 16,
         "gradient_accumulation_steps": 1,
         "zero_optimization": {
@@ -171,7 +171,7 @@ def train_integration(zero_stage: int = 1):
 
 if __name__ == "__main__":
     # for zero_stage in [1, 2, 3]:
-    zero_stage = 1
+    zero_stage = 3
     baseline_not_trained, baseline_trained, baseline_outputs, baseline_data = train_baseline(zero_stage)
     accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(zero_stage)
     assert (

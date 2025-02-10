@@ -69,6 +69,16 @@ def filter_linear_layers(module, layer_name, first_layer_name, last_layer_name) 
 
 
 @torchao_required
+def has_ao_layers(model: torch.nn.Module):
+    from torchao.float8.float8_linear import Float8Linear
+
+    for name, module in model.named_modules():
+        if isinstance(module, Float8Linear):
+            return True
+    return False
+
+
+@torchao_required
 def convert_to_float8_training(
     model: torch.nn.Module,
     config=None,
