@@ -17,13 +17,13 @@ import os
 import unittest
 
 import torch
-from transformers import AutoModelForSequenceClassification
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     get_launch_command,
     require_cuda,
+    require_huggingface_suite,
     require_multi_gpu,
     require_torchao,
     require_transformer_engine,
@@ -58,6 +58,8 @@ def maintain_proper_deepspeed_config(expected_version):
 
 
 def can_convert_ao_model():
+    from transformers import AutoModelForSequenceClassification
+
     accelerator_kwargs = {"mixed_precision": "fp8", "kwargs_handlers": [AORecipeKwargs()]}
     accelerator = Accelerator(**accelerator_kwargs)
     dataloader = torch.utils.data.DataLoader(torch.randn(10, 32), batch_size=2)
@@ -117,6 +119,7 @@ class TestTransformerEngine(unittest.TestCase):
 
 
 @require_torchao
+@require_huggingface_suite
 class TestTorchAO(unittest.TestCase):
     @require_cuda
     def test_can_prepare_model_single_gpu(self):
