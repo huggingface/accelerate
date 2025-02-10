@@ -35,6 +35,7 @@ class CPUOptimizerTester(unittest.TestCase):
             self.fail(f"Accelerated optimizer pickling failed with {e}")
         AcceleratorState._reset_state()
 
+
 @require_non_hpu
 @require_non_cpu
 class OptimizerTester(unittest.TestCase):

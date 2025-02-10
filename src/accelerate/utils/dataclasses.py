@@ -402,7 +402,7 @@ class FP8RecipeKwargs(KwargsHandler):
 
 
 # Literal
-ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda"]
+ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda", "hpu"]
 
 
 @dataclass
@@ -430,7 +430,7 @@ class ProfileKwargs(KwargsHandler):
 
     Args:
         activities (`List[str]`, *optional*, default to `None`):
-            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, or `"cuda"`.
+            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, "hpu" or `"cuda"`.
         schedule_option (`Dict[str, int]`, *optional*, default to `None`):
             The schedule option to use for the profiler. Available keys are `wait`, `warmup`, `active`, `repeat` and
             `skip_first`. The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the
@@ -635,6 +635,7 @@ class DynamoBackend(str, BaseEnum):
         - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
           more](https://github.com/intel/intel-extension-for-pytorch).
         - **TVM** -- Uses Apach TVM for inference optimizations. [Read more](https://tvm.apache.org/)
+        - **HPU_BACKEND** -- Uses HPU backend for inference optimizations.
 
     """
 
@@ -1852,8 +1853,14 @@ class TorchTensorParallelPlugin:
             )
         from torch.distributed.device_mesh import init_device_mesh
 
+        # support for other devices has to be investigated
+        if is_hpu_available():
+            device = "hpu"
+        else:
+            device = "cuda"
+
         mesh_dim_name = "tp"
-        device = "cuda"  # support for other devices has to be investigated
+
         self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
 
 
