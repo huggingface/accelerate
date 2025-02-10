@@ -3678,10 +3678,6 @@ class Accelerator:
     @property
     def fp8_backend(self):
         "Returns the configured backend for training in FP8"
-<<<<<<< HEAD
-        if self._mixed_precision == "fp8" and self.fp8_recipe_handler is not None:
-            return self.fp8_recipe_handler.backend
-=======
         if self.has_fp8_handler:
             if self.fp8_recipe_handler is not None:
                 return self.fp8_recipe_handler.backend
@@ -3691,7 +3687,6 @@ class Accelerator:
                 return "TE"
             elif self.msamp_recipe_handler is not None:
                 return "MSAMP"
->>>>>>> be210db (Currently broken)
         elif self.state.deepspeed_plugin is not None and self.state.deepspeed_plugin.enable_msamp:
             return "MSAMP"
         return None
