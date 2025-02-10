@@ -67,6 +67,7 @@ if is_npu_available(check_device=False):
 
 if is_hpu_available(check_device=False):
     import habana_frameworks.torch  # noqa: F401
+    import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

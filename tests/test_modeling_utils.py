@@ -30,6 +30,7 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    require_non_hpu,
     torch_device,
 )
 from accelerate.utils.modeling import (
@@ -182,6 +183,7 @@ class ModelingUtilsTester(unittest.TestCase):
         self.check_set_module_tensor_for_device(model, torch_device, "meta")
 
     @require_multi_device
+    @require_non_hpu
     def test_set_module_tensor_between_gpus(self):
         model = ModelForTest().to(torch_device)
         self.check_set_module_tensor_for_device(model, torch_device, torch_device.replace("0", "1"))
@@ -448,6 +450,7 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.linear2.weight.device == torch.device("cpu")
 
     @require_multi_device
+    @require_non_hpu
     def test_load_checkpoint_in_model_two_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
 
@@ -853,6 +856,7 @@ class ModelingUtilsTester(unittest.TestCase):
         assert device_map == expected_device_map
 
     @require_non_cpu
+    @require_non_hpu
     def test_get_balanced_memory(self):
         model = ModelForTest()
         # model has size 236: linear1 64, batchnorm 72, linear2 100
