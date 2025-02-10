@@ -16,7 +16,13 @@ import unittest
 
 from torch import nn
 
-from accelerate.test_utils import memory_allocated_func, require_non_cpu, require_non_torch_xla, torch_device
+from accelerate.test_utils import (
+    memory_allocated_func,
+    require_non_cpu,
+    require_non_hpu,
+    require_non_torch_xla,
+    torch_device,
+)
 from accelerate.utils.memory import find_executable_batch_size, release_memory
 
 
@@ -106,6 +112,7 @@ class MemoryTest(unittest.TestCase):
 
     @require_non_cpu
     @require_non_torch_xla
+    @require_non_hpu  # can't release memory on HPU
     def test_release_memory(self):
         starting_memory = memory_allocated_func()
         model = ModelForTest()
