@@ -31,6 +31,7 @@ from .imports import (
     is_torch_distributed_available,
     is_torch_xla_available,
     is_xpu_available,
+    is_hpu_available,
 )
 
 
@@ -153,6 +154,15 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             device = "xpu:0"
         try:
             return tensor.to(device, non_blocking=non_blocking)
+        except RuntimeError as error:
+            if is_hpu_available() and "Error when trying to cast Long to Int" in str(error):
+                raise RuntimeError(
+                    "Error when trying to move a Long tensor to HPU device. "
+                    "Please make sure you're using int32 tensors with HPU or set "
+                    "PT_ENABLE_INT64_SUPPORT=1 in your environment to enable int64 support."
+                )
+            else:
+                raise error
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
             return tensor.to(device)
         except AssertionError as error:
