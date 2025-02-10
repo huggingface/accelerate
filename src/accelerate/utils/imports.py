@@ -143,7 +143,11 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
 
 
 def is_torchao_available():
-    return _is_package_available("torchao")
+    package_exists = _is_package_available("torchao")
+    if package_exists:
+        torchao_version = version.parse(importlib.metadata.version("torchao"))
+        return compare_versions(torchao_version, ">=", "0.6.1")
+    return False
 
 
 def is_deepspeed_available():

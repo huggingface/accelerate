@@ -297,9 +297,6 @@ class AORecipeKwargs(KwargsHandler):
     training with `torchao` FP8.
 
     Args:
-        recipe_name (`str`, *optional*, default to `None`):
-            The name of the recipe to use for FP8 training. Should be compatible with
-            `torchao.float8.recipe_name_to_linear_config`.
         config (`torchao.float8.Float8LinearConfig`, *optional*, default to `None`):
             The configuration for the FP8 training. In general, the default config should be sufficient.
         module_filter_func (`Callable`, *optional*, default to `None`):
@@ -308,7 +305,6 @@ class AORecipeKwargs(KwargsHandler):
             example.
     """
 
-    recipe_name: str = None
     config: "Float8LinearConfig" = None
     module_filter_func: Callable = None
 
