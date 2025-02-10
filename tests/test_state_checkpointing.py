@@ -34,8 +34,9 @@ from accelerate.test_utils import (
     execute_subprocess_async,
     require_non_cpu,
     require_non_torch_xla,
+    torch_device,
 )
-from accelerate.utils import DistributedType, ProjectConfiguration, set_seed
+from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -379,14 +380,13 @@ class CheckpointTest(unittest.TestCase):
     @require_non_torch_xla
     def test_map_location(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
-        execute_subprocess_async(
-            cmd,
-            env={
-                **os.environ,
-                "USE_SAFETENSORS": str(self.use_safetensors),
-                "OMP_NUM_THREADS": "1",
-            },
-        )
+
+        env_kwargs = dict(use_safe_tensors=str(self.use_safetensors), omp_num_threads="1")
+        if torch_device == "hpu":
+            env_kwargs.update(pt_hpu_lazy_mode="0")
+
+        with patch_environment(**env_kwargs):
+            execute_subprocess_async(cmd)
 
 
 if __name__ == "__main__":
