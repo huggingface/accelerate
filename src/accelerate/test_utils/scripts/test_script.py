@@ -35,6 +35,7 @@ from accelerate.utils import (
     gather,
     is_bf16_available,
     is_datasets_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_musa_available,
@@ -51,6 +52,13 @@ if is_xpu_available():
     from accelerate.test_utils import RegressionModel4XPU as RegressionModel
 else:
     from accelerate.test_utils import RegressionModel
+
+if is_hpu_available():
+    ATOL = 1e-3
+    RTOL = 1e-3
+else:
+    ATOL = 1e-6
+    RTOL = 1e-6
 
 
 def generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler=False):
@@ -194,7 +202,6 @@ def dl_preparation_check():
         result.append(gather(batch))
     result = torch.cat(result)
 
-    print(state.process_index, result, type(dl))
     assert torch.equal(result.cpu(), torch.arange(0, length).long()), "Wrong non-shuffled dataloader result."
 
     dl = DataLoader(range(length), batch_size=8)
@@ -473,8 +480,8 @@ def training_check(use_seedable_sampler=False):
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-    assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+    torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
+    torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
 
@@ -498,8 +505,8 @@ def training_check(use_seedable_sampler=False):
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-    assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+    torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
+    torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
 
     accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
 
@@ -525,8 +532,8 @@ def training_check(use_seedable_sampler=False):
                 optimizer.step()
 
         model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+        torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
+        torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
 
     if torch.cuda.is_available():
         # Mostly a test that model.forward will have autocast when running unwrap_model(model, keep_fp32_wrapper=True)
@@ -543,7 +550,7 @@ def training_check(use_seedable_sampler=False):
         input_tensor = torch.Tensor([1, 2]).to(dtype=torch.float16, device=accelerator.device)
         output = model_with_fp32_wrapper(input_tensor)
 
-    # BF16 support is only for CPU + TPU, and some GPU
+    # BF16 support for CPU + TPU + HPU + XPU, and some GPU
     if is_bf16_available():
         # Mostly a test that BF16 doesn't crash as the operation inside the model is not converted to BF16
         print("BF16 training check.")
@@ -566,8 +573,8 @@ def training_check(use_seedable_sampler=False):
                 optimizer.step()
 
         model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+        torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
+        torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
 
     # IPEX support is only for CPU
     if is_ipex_available():
@@ -591,33 +598,8 @@ def training_check(use_seedable_sampler=False):
                 optimizer.step()
 
         model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
-
-    # XPU support is only for XPU
-    if is_xpu_available():
-        print("xpu BF16 training check.")
-        AcceleratorState._reset_state()
-        dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
-        accelerator = Accelerator(mixed_precision="bf16", cpu=False, dataloader_config=dataloader_config)
-        train_dl = generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler)
-        model = RegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-
-        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
-        set_seed(42)
-        generator.manual_seed(42)
-        for _ in range(3):
-            for batch in train_dl:
-                model.zero_grad()
-                output = model(batch["x"])
-                loss = torch.nn.functional.mse_loss(output, batch["y"])
-                accelerator.backward(loss)
-                optimizer.step()
-
-        model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on XPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on XPU or distributed training."
+        torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
+        torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
 
 
 def test_split_between_processes_dataset(datasets_Dataset):
@@ -687,7 +669,7 @@ def test_split_between_processes_nested_dict():
                 assert results["a"] == data_copy["a"][4:]
             elif state.process_index == 3:
                 # We return a list each time
-                assert results["a"] == data_copy["a"][-2:], f'Expected: {data_copy["a"][-2]}, Actual: {results["a"]}'
+                assert results["a"] == data_copy["a"][-2:], f"Expected: {data_copy['a'][-2]}, Actual: {results['a']}"
             if state.process_index == 0:
                 assert results["b"] == data_copy["b"][: 8 // state.num_processes]
             elif state.num_processes == 2:
@@ -697,7 +679,7 @@ def test_split_between_processes_nested_dict():
             if state.process_index == 0:
                 assert torch.allclose(
                     results["c"], data_copy["c"][: 8 // state.num_processes]
-                ), f"Did not obtain expected values on process 0, expected `{data['c'][:8 // state.num_processes]}`, received: {results['c']}"
+                ), f"Did not obtain expected values on process 0, expected `{data['c'][: 8 // state.num_processes]}`, received: {results['c']}"
             elif state.num_processes == 2:
                 assert torch.allclose(
                     results["c"], data_copy["c"][4:]
@@ -713,12 +695,14 @@ def test_split_between_processes_nested_dict():
 def test_split_between_processes_tensor():
     state = AcceleratorState()
     if state.num_processes > 1:
-        data = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]]).to(state.device)
+        # some accelerators like HPUs don't support int64
+        data = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]], dtype=torch.int32).to(state.device)
         with state.split_between_processes(data) as results:
             if state.process_index == 0:
-                assert torch.allclose(results, torch.tensor([0, 1, 2, 3]).to(state.device))
+                expected = torch.tensor([[0, 1, 2, 3]], dtype=torch.int32).to(state.device)
             else:
-                assert torch.allclose(results, torch.tensor([4, 5, 6, 7]).to(state.device))
+                expected = torch.tensor([[4, 5, 6, 7]], dtype=torch.int32).to(state.device)
+            torch.testing.assert_close(results, expected)
     state.wait_for_everyone()
 
 
@@ -824,7 +808,7 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
-    if state.distributed_type != DistributedType.XLA:
+    if state.distributed_type not in [DistributedType.XLA, DistributedType.MULTI_HPU]:
         central_dl_preparation_check()
         custom_sampler_check()
         check_seedable_sampler()

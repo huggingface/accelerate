@@ -456,6 +456,7 @@ class AcceleratorTester(AccelerateTestCase):
         ), "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
 
     @require_cuda_or_xpu
+    @require_non_hpu
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
@@ -473,6 +474,7 @@ class AcceleratorTester(AccelerateTestCase):
         model = accelerator.prepare(model)
 
     @require_cuda
+    @require_non_hpu
     @slow
     @require_bnb
     def test_accelerator_bnb_cpu_error(self):
@@ -499,6 +501,7 @@ class AcceleratorTester(AccelerateTestCase):
             model = accelerator.prepare(model)
 
     @require_non_torch_xla
+    @require_non_hpu
     @slow
     @require_bnb
     @require_multi_device
@@ -537,6 +540,7 @@ class AcceleratorTester(AccelerateTestCase):
         PartialState._reset_state()
 
     @require_non_torch_xla
+    @require_non_hpu
     @slow
     @require_bnb
     @require_multi_device

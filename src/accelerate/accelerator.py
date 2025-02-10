@@ -1502,6 +1502,7 @@ class Accelerator:
                         device_ids, output_device = None, None
 
                     if self.distributed_type == DistributedType.MULTI_HPU:
+                        # For hpu, model needs to be on the device before wrapping with DDP
                         device_ids, output_device = None, None
                         model = model.to(self.device)
 

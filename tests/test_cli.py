@@ -28,6 +28,7 @@ from accelerate.test_utils.testing import (
     capture_call_output,
     path_in_accelerate_package,
     require_multi_device,
+    require_non_hpu,
     require_timm,
     require_transformers,
     run_command,
@@ -93,6 +94,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         args = accelerate_test_cmd.test_command_parser().parse_args([])
         accelerate_test_cmd.test_command(args)
 
+    @require_non_hpu
     @require_multi_device
     def test_notebook_launcher(self):
         """
@@ -184,7 +186,7 @@ class LaunchArgTester(unittest.TestCase):
         args = self.parser.parse_args(["test.py"])
         for arg in args.__dict__:
             if "_" in arg:
-                bad_arg = f'--{arg.replace("_", "-")}'
+                bad_arg = f"--{arg.replace('_', '-')}"
                 # Need an exception for `num-processes` since it's in the docstring
                 if bad_arg == "--num-processes":
                     assert help_return.count(bad_arg) == 1, f"Found {bad_arg} in `accelerate launch -h`"

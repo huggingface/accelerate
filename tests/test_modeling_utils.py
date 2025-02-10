@@ -23,7 +23,6 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 from parameterized import parameterized
-from safetensors.torch import save_file
 
 from accelerate import init_empty_weights
 from accelerate.big_modeling import cpu_offload
@@ -51,6 +50,7 @@ from accelerate.utils.modeling import (
     retie_parameters,
     set_module_tensor_to_device,
 )
+from safetensors.torch import save_file
 
 
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"

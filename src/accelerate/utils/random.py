@@ -95,7 +95,9 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         rng_state = torch.xpu.get_rng_state()
     elif rng_type == RNGType.HPU:
         assert is_hpu_available(), "Can't synchronize HPU seeds on an environment without HPUs."
-        rng_state = torch.hpu.get_rng_state()
+        from habana_frameworks.torch.hpu import random as hpu_random  # type: ignore
+
+        rng_state = hpu_random.get_rng_state()
     elif rng_type == RNGType.GENERATOR:
         assert generator is not None, "Need a generator to synchronize its seed."
         rng_state = generator.get_state()
@@ -137,7 +139,9 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     elif rng_type == RNGType.XLA:
         xm.set_rng_state(rng_state.item())
     elif rng_state == RNGType.HPU:
-        torch.hpu.set_rng_state(rng_state)
+        from habana_frameworks.torch.hpu import random as hpu_random  # type: ignore
+
+        hpu_random.set_rng_state(rng_state)
     elif rng_type == RNGType.GENERATOR:
         generator.set_state(rng_state)
 
