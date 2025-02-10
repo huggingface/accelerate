@@ -798,7 +798,7 @@ class PartialState:
         if device == "xla":
             self.device = xm.xla_device()
         elif device == "hpu":
-            self.device = torch.device("hpu")
+            self.device = torch.device("hpu", index=torch.hpu.current_device())
         else:
             if device == "gpu":
                 device = "cuda"

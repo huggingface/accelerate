@@ -27,11 +27,11 @@ from ..state import AcceleratorState, PartialState
 from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import (
+    is_hpu_available,
     is_npu_available,
     is_torch_distributed_available,
     is_torch_xla_available,
     is_xpu_available,
-    is_hpu_available,
 )
 
 

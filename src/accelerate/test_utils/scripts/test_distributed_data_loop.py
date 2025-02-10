@@ -401,11 +401,8 @@ def main():
     sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
     loader = DataLoader(dataset, sampler=sampler, batch_size=None, collate_fn=default_collate, num_workers=NUM_WORKERS)
     test_data_loader(loader, accelerator)
-
-    if accelerator.distributed_type != DistributedType.MULTI_HPU:
-        # TODO: investigate why this is causing termination issues on HPU
-        test_stateful_dataloader(accelerator)
-        test_stateful_dataloader_save_state(accelerator)
+    test_stateful_dataloader(accelerator)
+    test_stateful_dataloader_save_state(accelerator)
 
     accelerator.end_training()
 
