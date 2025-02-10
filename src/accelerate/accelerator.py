@@ -1704,7 +1704,9 @@ class Accelerator:
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         tp_size = self.deepspeed_plugin.deepspeed_config["tensor_parallel"].get("autotp_size", 0)
         if tp_size > 1:
-            self.state.dp_size_and_index = [self.state.num_processes // tp_size, self.state.process_index // tp_size]
+            from torch.distributed.device_mesh import init_device_mesh
+            mesh_dim_name = "tp"
+            self.state.ds_device_mesh = init_device_mesh(self.device.type, (tp_size,), mesh_dim_names=(mesh_dim_name,))
 
         result = [
             self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
@@ -2153,17 +2155,18 @@ class Accelerator:
             return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
-        num_processes = self.num_processes
-        process_index = self.process_index
-        if self.distributed_type == DistributedType.DEEPSPEED:
-            if hasattr(self.state, "dp_size_and_index"):
-                num_processes = self.state.dp_size_and_index[0]
-                process_index = self.state.dp_size_and_index[1]
+
+        device_mesh = None
+        if self.state.torch_tp_plugin:
+            device_mesh = self.state.torch_tp_plugin.torch_device_mesh
+        elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
+            device_mesh = self.state.ds_device_mesh
+
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
-            num_processes=num_processes,
-            process_index=process_index,
+            num_processes=self.num_processes,
+            process_index=self.process_index,
             split_batches=self.split_batches,
             put_on_device=device_placement,
             rng_types=self.rng_types.copy(),
@@ -2174,7 +2177,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
-            torch_device_mesh=self.state.torch_tp_plugin.torch_device_mesh if self.state.torch_tp_plugin else None,
+            torch_device_mesh=device_mesh,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
