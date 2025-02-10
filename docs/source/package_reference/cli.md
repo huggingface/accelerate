@@ -202,8 +202,8 @@ The following arguments are only useful when `use_deepspeed` is passed or `deeps
 * `--zero3_init_flag` (`str`) -- Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with DeepSpeed ZeRO Stage-3.
 * `--zero3_save_16bit_model` (`str`) -- Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. Only applicable with DeepSpeed ZeRO Stage-3.
 * `--deepspeed_hostfile` (`str`) -- DeepSpeed hostfile for configuring multi-node compute resources.
-* `--deepspeed_exclusion_filter` (`str`) -- DeepSpeed exclusion filter string when using mutli-node setup.
-* `--deepspeed_inclusion_filter` (`str`) -- DeepSpeed inclusion filter string when using mutli-node setup.
+* `--deepspeed_exclusion_filter` (`str`) -- DeepSpeed exclusion filter string when using multi-node setup.
+* `--deepspeed_inclusion_filter` (`str`) -- DeepSpeed inclusion filter string when using multi-node setup.
 * `--deepspeed_multinode_launcher` (`str`) -- DeepSpeed multi-node launcher to use.
 * `--deepspeed_moe_layer_cls_names` (`str`) -- comma-separated list of transformer MoE layer class names (case-sensitive) to wrap, e.g, `MixtralSparseMoeBlock` `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock`
 
