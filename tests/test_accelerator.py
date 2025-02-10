@@ -48,11 +48,14 @@ from accelerate.test_utils.testing import (
 from accelerate.utils import FP8RecipeKwargs, is_torchdata_stateful_dataloader_available, patch_environment
 from accelerate.utils.dataclasses import DataLoaderConfiguration
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
-from accelerate.utils.random import set_seed
+from accelerate.utils.random import is_hpu_available, set_seed
 
 
 if is_torchdata_stateful_dataloader_available():
     from torchdata.stateful_dataloader import StatefulDataLoader
+
+if is_hpu_available():
+    os.environ["PT_ENABLE_INT64_SUPPORT"] = "1"
 
 
 class ModelWithTiedWeights(torch.nn.Module):
