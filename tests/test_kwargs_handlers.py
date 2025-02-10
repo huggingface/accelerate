@@ -27,10 +27,26 @@ from accelerate.test_utils import (
     path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
+    require_non_hpu,
 )
 from accelerate.test_utils.testing import slow
-from accelerate.utils import AutocastKwargs, KwargsHandler, ProfileKwargs, TorchDynamoPlugin, clear_environment
+from accelerate.utils import (
+    AutocastKwargs,
+    KwargsHandler,
+    ProfileKwargs,
+    TorchDynamoPlugin,
+    clear_environment,
+    is_hpu_available,
+)
 from accelerate.utils.dataclasses import DistributedType
+
+
+MIXED_PRECISION = "fp16"
+MIXED_PRECISION_DTYPE = torch.float16
+
+if is_hpu_available():
+    MIXED_PRECISION = "bf16"
+    MIXED_PRECISION_DTYPE = torch.bfloat16
 
 
 @dataclass
@@ -49,6 +65,7 @@ class KwargsHandlerTester(unittest.TestCase):
         assert MockClass(a=2, c=2.25).to_kwargs() == {"a": 2, "c": 2.25}
 
     @require_non_cpu
+    @require_non_hpu
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         scaler_handler = GradScalerKwargs(init_scale=1024, growth_factor=2)
@@ -75,7 +92,7 @@ class KwargsHandlerTester(unittest.TestCase):
     def test_autocast_kwargs(self):
         kwargs = AutocastKwargs(enabled=False)
         AcceleratorState._reset_state()
-        accelerator = Accelerator(mixed_precision="fp16")
+        accelerator = Accelerator(mixed_precision=MIXED_PRECISION)
 
         a_float32 = torch.rand((8, 8), device=accelerator.device)
         b_float32 = torch.rand((8, 8), device=accelerator.device)
@@ -83,17 +100,17 @@ class KwargsHandlerTester(unittest.TestCase):
         d_float32 = torch.rand((8, 8), device=accelerator.device)
 
         with accelerator.autocast():
-            e_float16 = torch.mm(a_float32, b_float32)
-            assert e_float16.dtype == torch.float16
+            e_mixed = torch.mm(a_float32, b_float32)
+            assert e_mixed.dtype == MIXED_PRECISION_DTYPE
 
             with accelerator.autocast(autocast_handler=kwargs):
                 # Convert e_float16 to float32
-                f_float32 = torch.mm(c_float32, e_float16.float())
+                f_float32 = torch.mm(c_float32, e_mixed.float())
                 assert f_float32.dtype == torch.float32
 
-            g_float16 = torch.mm(d_float32, f_float32)
+            g_mixed = torch.mm(d_float32, f_float32)
             # We should be back in fp16
-            assert g_float16.dtype == torch.float16
+            assert g_mixed.dtype == MIXED_PRECISION_DTYPE
 
     @slow
     def test_profile_kwargs(self):

@@ -480,11 +480,16 @@ class ProfileKwargs(KwargsHandler):
             "cuda": torch.profiler.ProfilerActivity.CUDA,
         }
 
+        if is_hpu_available():
+            profiler_activity_map["hpu"] = torch.profiler.ProfilerActivity.HPU
+
         if is_torch_version(">=", XPU_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
+            if torch.xpu.is_available():
+                profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
 
         if is_torch_version(">=", MITA_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
+            if torch.mtia.is_available():
+                profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
 
         if activity not in profiler_activity_map:
             raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")

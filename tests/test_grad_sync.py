@@ -25,7 +25,7 @@ from accelerate.test_utils import (
     require_non_cpu,
     test_sync,
 )
-from accelerate.utils import patch_environment, is_hpu_available
+from accelerate.utils import is_hpu_available, patch_environment
 
 
 class SyncScheduler(unittest.TestCase):
