@@ -23,6 +23,7 @@ import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
+from accelerate.commands.to_fsdp2 import to_fsdp2_command, to_fsdp2_command_parser
 from accelerate.commands.tpu import tpu_command_launcher, tpu_command_parser
 from accelerate.test_utils.testing import (
     capture_call_output,
@@ -513,3 +514,73 @@ class ModelEstimatorTester(unittest.TestCase):
         assert (
             total_size == output[0][2]
         ), f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+
+
+class ToFSDP2Tester(unittest.TestCase):
+    """
+    Test case for verifying the `accelerate to-fsdp2` CLI outputs.
+    """
+
+    parser = to_fsdp2_command_parser()
+    test_config_path = Path("tests/test_configs")
+
+    def tearDown(self):
+        if (self.test_config_path / "output.yaml").exists():
+            (self.test_config_path / "output.yaml").unlink()
+
+    def test_nonexistent_config_file(self):
+        with self.assertRaises(FileNotFoundError, msg="Config file `nonexistent.yaml` not found"):
+            args = self.parser.parse_args(["--config_file", "nonexistent.yaml"])
+            to_fsdp2_command(args)
+
+    def test_no_output_without_overwrite(self):
+        with self.assertRaises(ValueError, msg="If --overwrite is not set, --output_file must be provided"):
+            args = self.parser.parse_args(["--config_file", str(self.test_config_path / "latest_fsdp.yaml")])
+            to_fsdp2_command(args)
+
+    @patch("pathlib.Path.exists")
+    def test_overwrite_when_output_file_exists(self, mock_exists):
+        mock_exists.side_effect = (
+            lambda: str(mock_exists._mock_self) == "output.yaml" or mock_exists._mock_self.exists()
+        )
+
+        with self.assertRaises(
+            FileExistsError, msg="Output file `output.yaml` already exists and --overwrite is not set"
+        ):
+            args = self.parser.parse_args(
+                ["--config_file", str(self.test_config_path / "latest_fsdp.yaml"), "--output_file", "output.yaml"]
+            )
+            to_fsdp2_command(args)
+
+    def test_fsdp2_config(self):
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                str(self.test_config_path / "latest_fsdp.yaml"),
+                "--output_file",
+                str(self.test_config_path / "output.yaml"),
+            ]
+        )
+        to_fsdp2_command(args)
+
+        config = load_config_from_file(str(self.test_config_path / "output.yaml"))
+        assert isinstance(config, ClusterConfig)
+        assert config.fsdp_config["fsdp_version"] == 2
+
+    def test_config_already_fsdp2(self):
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                str(self.test_config_path / "latest_fsdp.yaml"),
+                "--output_file",
+                str(self.test_config_path / "output.yaml"),
+            ]
+        )
+
+        mock_config = {"fsdp_config": {"fsdp_version": 2}}
+
+        with patch("accelerate.commands.to_fsdp2.load_config", return_value=mock_config):
+            with self.assertLogs(level="WARNING") as cm:
+                to_fsdp2_command(args)
+
+            assert "Config already specfies FSDP2, skipping conversion..." in cm.output[0]
