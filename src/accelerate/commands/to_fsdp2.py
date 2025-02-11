@@ -47,6 +47,15 @@ ARGUMENT_KEY_MAPPING = {
     "fsdp_activation_checkpointing": "fsdp_activation_checkpointing",  # TODO: not in the docs?
 }
 
+ARGUMENT_VALUE_MAPPING = {
+    "fsdp_sharding_strategy": {
+        "FULL_SHARD": True,
+        "SHARD_GRAD_OP": False,
+        "HYBRID_SHARD": True,
+        "HYBRID_SHARD_ZERO2": False,
+    },
+    #  TODO: do we need to handle mp/offload policy
+}
 
 if is_rich_available():
     from rich.logging import RichHandler
@@ -99,6 +108,8 @@ def convert_config_to_fsdp2(config: dict) -> dict:
             logger.warning(f"Argument {key} is not being converted, skipping this key...")
             new_fsdp_config[key] = value
         else:
+            if key in ARGUMENT_VALUE_MAPPING:
+                value = ARGUMENT_VALUE_MAPPING[key].get(value, value)
             new_fsdp_config[ARGUMENT_KEY_MAPPING[key]] = value
 
     new_fsdp_config["fsdp_version"] = 2
