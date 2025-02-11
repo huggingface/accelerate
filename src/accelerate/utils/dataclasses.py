@@ -1409,6 +1409,8 @@ class FullyShardedDataParallelPlugin:
     This plugin is used to enable fully sharded data parallelism.
 
     Args:
+        fsdp_version (`int`, defaults to `1`):
+            The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to FSDP2 format.
         sharding_strategy (`Union[str, torch.distributed.fsdp.ShardingStrategy]`, defaults to `'FULL_SHARD'`):
             Sharding strategy to use. Should be either a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
@@ -1465,16 +1467,24 @@ class FullyShardedDataParallelPlugin:
             is `size_based_wrap`.
     """
 
+    fsdp_version: int = field(
+        default=1,
+        metadata={
+            "help": "The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to FSDP2 format."
+        },
+    )
+
+    # TODO: How to handle this in FSDP2, as the values are not mapped 1:1
     sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
         default=None,
         metadata={
             "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'"
         },
     )
-    backward_prefetch: Union[str, "torch.distributed.fsdp.BackwardPrefetch"] = field(
+    backward_prefetch: Optional[Union[str, "torch.distributed.fsdp.BackwardPrefetch"]] = field(
         default=None,
         metadata={
-            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'"
+            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'. This becomes obsolete in FSDP2."
         },
     )
     mixed_precision_policy: Optional[Union[dict, "torch.distributed.fsdp.MixedPrecision"]] = field(
@@ -1535,9 +1545,11 @@ class FullyShardedDataParallelPlugin:
             "Enabling this can help lower the number of CUDA malloc retries."
         },
     )
-    use_orig_params: bool = field(
+    use_orig_params: Optional[bool] = field(
         default=None,
-        metadata={"help": "Whether to use the original parameters for the optimizer. Defaults to `False`"},
+        metadata={
+            "help": "Whether to use the original parameters for the optimizer. Defaults to `False`. This becomes obsolete in FSDP2."
+        },
     )
     param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
         default=None,
@@ -1547,12 +1559,12 @@ class FullyShardedDataParallelPlugin:
             "Only applicable when `sync_module_states` is `True`. By default is a `lambda` which calls `to_empty` on the module."
         },
     )
-    sync_module_states: bool = field(
+    sync_module_states: Optional[bool] = field(
         default=None,
         metadata={
             "help": "Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 "
             "to ensure they are the same across all ranks after initialization. Defaults to `False` unless "
-            "`cpu_ram_efficient_loading` is `True`, then will be forcibly enabled."
+            "`cpu_ram_efficient_loading` is `True`, then will be forcibly enabled. This becomes obsolete in FSDP2."
         },
     )
     forward_prefetch: bool = field(
@@ -1599,6 +1611,8 @@ class FullyShardedDataParallelPlugin:
 
         env_prefix = "FSDP_"
         # Strategy: By default we should always assume that values are passed in, else we check the environment variables
+        if self.fsdp_version is None:
+            self.fsdp_version = int(os.environ.get(env_prefix + "VERSION", "1"))
         if self.sharding_strategy is None:
             self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
         if isinstance(self.sharding_strategy, str):
@@ -1626,6 +1640,9 @@ class FullyShardedDataParallelPlugin:
                 self.backward_prefetch = BackwardPrefetch(int(self.backward_prefetch))
             else:
                 self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
+        if self.fsdp_version == 2 and self.backward_prefetch is not None:
+            warnings.warn("Backward prefetch is not supported in FSDP2. Setting backward prefetch to None.")
+            self.backward_prefetch = None
 
         self.set_state_dict_type()
 
@@ -1657,9 +1674,15 @@ class FullyShardedDataParallelPlugin:
 
         if self.use_orig_params is None:
             self.use_orig_params = str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False")) == 1
+        if self.fsdp_version == 2 and self.use_orig_params is not None:
+            warnings.warn("use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters.")
+            self.use_orig_params = None
 
         if self.sync_module_states is None:
             self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
+        if self.fsdp_version == 2 and self.sync_module_states is not None:
+            warnings.warn("sync_module_states is obsolete in FSDP2, as it is not needed anymore.")
+            self.sync_module_states = None
 
         if self.forward_prefetch is None:
             self.forward_prefetch = str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False")) == 1
@@ -1674,12 +1697,20 @@ class FullyShardedDataParallelPlugin:
                 str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")) == 1
             )
 
-        if self.cpu_ram_efficient_loading and not self.sync_module_states:
+        if self.cpu_ram_efficient_loading and self.sync_module_states is False:
             warnings.warn(
                 "sync_module_states cannot be False since efficient cpu ram loading enabled. "
                 "Setting sync_module_states to True."
             )
             self.sync_module_states = True
+
+        # Invariant: sync_module_states is None in FSDP2 only
+        if self.cpu_ram_efficient_loading and self.sync_module_states is None:
+            # TODO: how does this interact with FSDP2
+            warnings.warn(
+                "cpu_ram_efficient_loading is enabled, but sync_module_states is not set. "
+                "This is not properly tested yet in FSDP2"
+            )
 
         if isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)

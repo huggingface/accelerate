@@ -118,7 +118,7 @@ def convert_config_to_fsdp2(config: dict) -> dict:
 
 
 def to_fsdp2_command_parser(subparsers=None):
-    description = "Convert an Accelerate config from FSDP1 to FSDP@"
+    description = "Convert an Accelerate config from FSDP1 to FSDP2"
 
     if subparsers is not None:
         parser = subparsers.add_parser("to-fsdp2", description=description)
