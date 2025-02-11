@@ -158,7 +158,7 @@ def to_fsdp2_command(args):
     _validate_to_fsdp2_args(args)
     config = load_config(args.config_file)
 
-    if not args.overwrite and args.output_file is None:
+    if args.overwrite and args.output_file is None:
         args.output_file = args.config_file
 
     new_config = convert_config_to_fsdp2(config)

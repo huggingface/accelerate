@@ -524,6 +524,16 @@ class ToFSDP2Tester(unittest.TestCase):
     parser = to_fsdp2_command_parser()
     test_config_path = Path("tests/test_configs")
 
+    @classmethod
+    def setUpClass(cls):
+        if (cls.test_config_path / "latest_fsdp.yaml").exists():
+            cls.original_config = load_config_from_file(str(cls.test_config_path / "latest_fsdp.yaml"))
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.original_config is not None:
+            cls.original_config.to_yaml_file(str(cls.test_config_path / "latest_fsdp.yaml"))
+
     def tearDown(self):
         if (self.test_config_path / "output.yaml").exists():
             (self.test_config_path / "output.yaml").unlink()
@@ -584,3 +594,17 @@ class ToFSDP2Tester(unittest.TestCase):
                 to_fsdp2_command(args)
 
             assert "Config already specfies FSDP2, skipping conversion..." in cm.output[0]
+
+    def test_fsdp2_overwrite(self):
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                str(self.test_config_path / "latest_fsdp.yaml"),
+                "--overwrite",
+            ]
+        )
+        to_fsdp2_command(args)
+
+        config = load_config_from_file(str(self.test_config_path / "latest_fsdp.yaml"))
+        assert isinstance(config, ClusterConfig)
+        assert config.fsdp_config["fsdp_version"] == 2
