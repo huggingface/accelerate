@@ -22,9 +22,9 @@ from timm import create_model
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
-from transformers import set_seed
 
 from accelerate import Accelerator
+from accelerate.utils import set_seed
 
 
 ########################################################################
