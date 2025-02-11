@@ -16,7 +16,7 @@
 
 import enum
 import logging
-import os
+from pathlib import Path
 
 import yaml
 
@@ -68,13 +68,13 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_to_fsdp2_args(args):
-    if not os.path.exists(args.config_file):
+    if not Path(args.config_file).exists():
         raise FileNotFoundError(f"Config file {args.config_file} not found")
 
     if not args.overwrite and args.output_file is None:
         raise ValueError("If --overwrite is not set, --output_file must be provided")
 
-    if not args.overwrite and os.path.exists(args.output_file):
+    if not args.overwrite and Path(args.output_file).exists():
         raise FileExistsError(f"Output file {args.output_file} already exists and --overwrite is not set")
 
 
