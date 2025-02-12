@@ -76,22 +76,22 @@ class FSDPPluginIntegration(AccelerateTestCase):
         # check that giving enums works fine
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             env = self.fsdp_env.copy()
-            env["FSDP_SHARDING_STRATEGY"] = f"{i + 1}"
+            env["FSDP_RESHARD_AFTER_FORWARD"] = f"{i + 1}"
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
-            fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=ShardingStrategy(i + 1))
-            assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
+                assert fsdp_plugin.reshard_after_forward == ShardingStrategy(i + 1)
+            fsdp_plugin = FullyShardedDataParallelPlugin(reshard_after_forward=ShardingStrategy(i + 1))
+            assert fsdp_plugin.reshard_after_forward == ShardingStrategy(i + 1)
 
         # check that giving names works fine
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             env = self.fsdp_env.copy()
-            env["FSDP_SHARDING_STRATEGY"] = strategy
+            env["FSDP_RESHARD_AFTER_FORWARD"] = strategy
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
-            fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=strategy)
-            assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
+                assert fsdp_plugin.reshard_after_forward == ShardingStrategy(i + 1)
+            fsdp_plugin = FullyShardedDataParallelPlugin(reshard_after_forward=strategy)
+            assert fsdp_plugin.reshard_after_forward == ShardingStrategy(i + 1)
 
     def test_backward_prefetch(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch
@@ -267,7 +267,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
         for flag in [True, False]:
             env = self.fsdp_env.copy()
-            env["FSDP_OFFLOAD_PARAMS"] = str(flag).lower()
+            env["FSDP_OFFLOAD_POLICY"] = str(flag).lower()
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert fsdp_plugin.cpu_offload == CPUOffload(offload_params=flag)
