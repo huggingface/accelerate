@@ -308,6 +308,7 @@ class AORecipeKwargs(KwargsHandler):
     config: Optional["Float8LinearConfig"] = None
     module_filter_func: Optional[Callable] = None
 
+
 @dataclass
 class TERecipeKwargs(KwargsHandler):
     """
