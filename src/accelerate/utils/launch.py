@@ -268,7 +268,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         if args.fsdp_cpu_ram_efficient_loading and not args.fsdp_sync_module_states:
             raise ValueError("When using `--fsdp_cpu_ram_efficient_loading` set `--fsdp_sync_module_states` to `True`")
 
-        current_env["FSDP_VERSION"] = str(args.fsdp_version)
+        current_env["FSDP_VERSION"] = str(args.fsdp_version) if hasattr(args, "fsdp_version") else "1"
         current_env["FSDP_RESHARD_AFTER_FORWARD"] = str(args.fsdp_reshard_after_forward).lower()
         current_env["FSDP_OFFLOAD_POLICY"] = str(args.fsdp_offload_policy)
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)

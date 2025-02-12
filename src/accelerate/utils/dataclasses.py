@@ -1410,7 +1410,8 @@ class FullyShardedDataParallelPlugin:
 
     Args:
         fsdp_version (`int`, defaults to `1`):
-            The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to FSDP2 format.
+            The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to
+            FSDP2 format.
         sharding_strategy (`Union[str, torch.distributed.fsdp.ShardingStrategy, bool]`, defaults to `'FULL_SHARD'`):
             Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
@@ -1427,7 +1428,8 @@ class FullyShardedDataParallelPlugin:
             `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like.
         cpu_offload (`Union[bool, torch.distributed.fsdp.CPUOffload, torch.distributed.fsdp.CPUOffloadPolicy]`, defaults to `False`):
             Whether to offload parameters to CPU. Should be either a `bool` or an instance of
-            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2.
+            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or
+            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2.
         ignored_modules (`Optional[Iterable[torch.nn.Module]]`, defaults to `None`):
             A list of modules to ignore when wrapping with FSDP.
         state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
