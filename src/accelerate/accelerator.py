@@ -78,8 +78,8 @@ from .utils import (
     clean_state_dict_for_safetensors,
     compare_versions,
     convert_model,
+    convert_model_to_fp8_ao,
     convert_outputs_to_fp32,
-    convert_to_float8_training,
     ensure_weights_retied,
     extract_model_from_parallel,
     gather,
@@ -1681,7 +1681,7 @@ class Accelerator:
             )
         for arg in args:
             if isinstance(arg, torch.nn.Module):
-                convert_to_float8_training(
+                convert_model_to_fp8_ao(
                     arg,
                     config=self.ao_recipe_handler.config,
                     module_filter_func=self.ao_recipe_handler.module_filter_func,

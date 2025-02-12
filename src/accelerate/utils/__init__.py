@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .ao import convert_to_float8_training, has_ao_layers
+from .ao import convert_model_to_fp8_ao, has_ao_layers
 from .constants import (
     MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
     MODEL_NAME,

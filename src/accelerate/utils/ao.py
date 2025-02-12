@@ -84,7 +84,7 @@ def has_ao_layers(model: torch.nn.Module):
 
 
 @torchao_required
-def convert_to_float8_training(
+def convert_model_to_fp8_ao(
     model: torch.nn.Module,
     config: Optional["Float8LinearConfig"] = None,
     module_filter_func: Optional[Callable] = filter_linear_layers,
@@ -106,7 +106,7 @@ def convert_to_float8_training(
     Example:
 
     ```python
-    from accelerate.utils.ao import convert_to_float8_training
+    from accelerate.utils.ao import convert_model_to_fp8_ao
 
     model = MyModel()
     model.to("cuda")
