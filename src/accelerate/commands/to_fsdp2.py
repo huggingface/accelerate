@@ -37,7 +37,7 @@ ARGUMENT_KEY_MAPPING = {
     "fsdp_backward_prefetch": ConversionStatus.REMOVED,
     "fsdp_forward_prefetch": ConversionStatus.NOT_YET_IMPLEMENTED,
     "fsdp_cpu_ram_efficient_loading": "fsdp_cpu_ram_efficient_loading",
-    "fsdp_offload_params": "fsdp_offload_policy",  # TODO: check how to do this, as accelerate uses different mapping even now
+    "fsdp_offload_params": "fsdp_offload_params",  # TODO: This becomes obsolete in FSDP2
     "fsdp_sharding_strategy": "fsdp_reshard_after_forward",
     "fsdp_state_dict_type": "fsdp_state_dict_type",
     "fsdp_sync_module_states": ConversionStatus.REMOVED,

@@ -270,7 +270,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
 
         current_env["FSDP_VERSION"] = str(args.fsdp_version) if hasattr(args, "fsdp_version") else "1"
         current_env["FSDP_RESHARD_AFTER_FORWARD"] = str(args.fsdp_reshard_after_forward).lower()
-        current_env["FSDP_OFFLOAD_POLICY"] = str(args.fsdp_offload_policy)
+        current_env["FSDP_OFFLOAD_PARAMS"] = str(args.offload_params)
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
         if args.fsdp_auto_wrap_policy is not None:
             current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)

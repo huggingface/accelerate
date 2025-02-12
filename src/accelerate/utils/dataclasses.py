@@ -1642,14 +1642,19 @@ class FullyShardedDataParallelPlugin:
             )
 
         if self.cpu_offload is None:
-            self.cpu_offload = str_to_bool(os.environ.get(env_prefix + "OFFLOAD_POLICY", "False")) == 1
+            self.cpu_offload = str_to_bool(os.environ.get(env_prefix + "OFFLOAD_PARAMS", "False")) == 1
         if isinstance(self.cpu_offload, bool):
-            self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
+            if self.fsdp_version == 2:
+                if not self.cpu_offload:
+                    warnings.warn("Offload_params is set to False, however FSDP2 always offloads parameters and runs optimizer step on CPU. This will be overridden to True.")
+                self.cpu_offload = CPUOffloadPolicy()  # TODO: enable pin memory config
+            else:
+                self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
         if self.fsdp_version != 2 and isinstance(self.cpu_offload, CPUOffloadPolicy):
             raise ValueError(
                 "cpu_offload set to `torch.distributed.fsdp.CPUOffloadPolicy`. This is not supported in FSDP1, please set to a `bool` or an instance of `torch.distributed.fsdp.CPUOffload`"
             )
-        if self.fsdp_version == 2 and not isinstance(CPUOffloadPolicy):
+        if self.fsdp_version == 2 and not isinstance(self.cpu_offload, CPUOffloadPolicy):
             raise ValueError(
                 "cpu_offload set to `bool` or `torch.distributed.fsdp.CPUOffload`. This is not supported in FSDP2, please set to an instance of `torch.distributed.fsdp.CPUOffloadPolicy`"
             )
