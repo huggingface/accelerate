@@ -78,7 +78,7 @@ def _validate_to_fsdp2_args(args):
         raise FileExistsError(f"Output file {args.output_file} already exists and --overwrite is not set")
 
 
-def convert_config_to_fsdp2(config: dict) -> dict:
+def convert_config_to_fsdp2(config: dict, only_rename: bool = False) -> dict:
     fsdp_config = config.get("fsdp_config", {})
 
     if not fsdp_config:
@@ -96,6 +96,13 @@ def convert_config_to_fsdp2(config: dict) -> dict:
 
     for key, value in fsdp_config.items():
         conversion_status = ARGUMENT_KEY_MAPPING.get(key, None)
+        # short circuit if only renaming
+        if only_rename:
+            if isinstance(conversion_status, ConversionStatus) or conversion_status is None:
+                conversion_status = key
+            new_fsdp_config[conversion_status] = value
+            continue
+
         if conversion_status == ConversionStatus.REMOVED:
             logger.warning(f"Argument {key} has been removed in FSDP2, skipping this key...")
             continue
@@ -112,7 +119,7 @@ def convert_config_to_fsdp2(config: dict) -> dict:
                 value = ARGUMENT_VALUE_MAPPING[key].get(value, value)
             new_fsdp_config[ARGUMENT_KEY_MAPPING[key]] = value
 
-    new_fsdp_config["fsdp_version"] = 2
+    new_fsdp_config["fsdp_version"] = 1 if only_rename else 2
     config["fsdp_config"] = new_fsdp_config
     return config
 
@@ -138,6 +145,12 @@ def to_fsdp2_command_parser(subparsers=None):
         help="The path to the output file to write the converted config to. If not provided, the input file will be overwritten (if --overwrite is set)",
         default=None,
     )
+    parser.add_argument(
+        "--only-rename",
+        action="store_true",
+        help="If set to True, only rename keys in the config file and do not convert the config, this is required because of breaking changes introduced in FSDP2",
+        default=False,
+    )
 
     if subparsers is not None:
         parser.set_defaults(func=to_fsdp2_command)
@@ -161,7 +174,7 @@ def to_fsdp2_command(args):
     if args.overwrite and args.output_file is None:
         args.output_file = args.config_file
 
-    new_config = convert_config_to_fsdp2(config)
+    new_config = convert_config_to_fsdp2(config, args.only_rename)
 
     with open(args.output_file, "w") as f:
         yaml.dump(new_config, f)
