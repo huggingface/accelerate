@@ -22,11 +22,8 @@ from functools import partial
 
 import evaluate
 import torch
-from datasets import load_dataset
-from torch.optim import AdamW
-from torch.utils.data import DataLoader
+from fp8_utils import get_training_utilities
 from torchao.float8 import convert_to_float8_training
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
@@ -35,75 +32,6 @@ from accelerate.utils import AORecipeKwargs, set_seed
 
 MODEL_NAME = "bert-base-cased"
 METRIC = evaluate.load("glue", "mrpc")
-
-
-def get_dataloaders(model_name: str, batch_size: int = 16):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    datasets = load_dataset("glue", "mrpc")
-
-    def tokenize_function(examples):
-        # max_length=None => use the model max length (it's actually the default)
-        outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)
-        return outputs
-
-    # Apply the method we just defined to all the examples in all the splits of the dataset
-    # starting with the main process first:
-    tokenized_datasets = datasets.map(
-        tokenize_function,
-        batched=True,
-        remove_columns=["idx", "sentence1", "sentence2"],
-    )
-
-    # We also rename the 'label' column to 'labels' which is the expected name for labels by the models of the
-    # transformers library
-    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-
-    def collate_fn(examples):
-        return tokenizer.pad(
-            examples,
-            padding="longest",
-            pad_to_multiple_of=16,  # Specific for FP8
-            return_tensors="pt",
-        )
-
-    # Instantiate dataloaders.
-    train_dataloader = DataLoader(
-        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size, drop_last=True
-    )
-    eval_dataloader = DataLoader(
-        tokenized_datasets["validation"],
-        shuffle=False,
-        collate_fn=collate_fn,
-        batch_size=16,
-        drop_last=True,
-    )
-
-    return train_dataloader, eval_dataloader
-
-
-def get_training_utilities(model_name: str, batch_size: int = 16, accelerator=None):
-    """
-    Returns a tuple of:
-        - Model
-        - Optimizer
-        - Train dataloader (prepared)
-        - Eval dataloader (prepared)
-        - LR Scheduler
-    Suitable for training on the MRPC dataset
-    """
-
-    if accelerator is None:
-        accelerator = Accelerator()
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
-    train_dataloader, eval_dataloader = get_dataloaders(model_name, batch_size)
-    optimizer = AdamW(model.parameters(), lr=0.0001)
-    lr_scheduler = get_linear_schedule_with_warmup(
-        optimizer=optimizer,
-        num_warmup_steps=100,
-        num_training_steps=len(train_dataloader) * 2,
-    )
-    train_dataloader, eval_dataloader = accelerator.prepare(train_dataloader, eval_dataloader)
-    return model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
 
 
 def evaluate_model(model, dataloader, metric, accelerator=None):

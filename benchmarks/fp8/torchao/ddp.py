@@ -22,11 +22,9 @@ from functools import partial
 
 import evaluate
 import torch
-from fp8_utils import get_dataloaders
+from fp8_utils import get_training_utilities
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.optim import AdamW
 from torchao.float8 import convert_to_float8_training
-from transformers import AutoModelForSequenceClassification, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
@@ -35,31 +33,6 @@ from accelerate.utils import AORecipeKwargs, set_seed
 
 MODEL_NAME = "bert-base-cased"
 METRIC = evaluate.load("glue", "mrpc")
-
-
-def get_training_utilities(model_name: str, batch_size: int = 16, accelerator=None):
-    """
-    Returns a tuple of:
-        - Model
-        - Optimizer
-        - Train dataloader (prepared)
-        - Eval dataloader (prepared)
-        - LR Scheduler
-    Suitable for training on the MRPC dataset
-    """
-
-    if accelerator is None:
-        accelerator = Accelerator()
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
-    train_dataloader, eval_dataloader = get_dataloaders(model_name, batch_size)
-    optimizer = AdamW(model.parameters(), lr=0.0001)
-    lr_scheduler = get_linear_schedule_with_warmup(
-        optimizer=optimizer,
-        num_warmup_steps=100,
-        num_training_steps=len(train_dataloader) * 2,
-    )
-    train_dataloader, eval_dataloader = accelerator.prepare(train_dataloader, eval_dataloader)
-    return model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
 
 
 def evaluate_model(model, dataloader, metric, accelerator=None):
