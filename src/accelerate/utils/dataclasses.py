@@ -424,6 +424,7 @@ class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
         self.backend = self.backend.upper()
         if self.backend not in get_args(Backend):
             raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine) to use `FP8RecipeKwargs`.")
+        super().__post_init__()
 
 
 # Literal
