@@ -467,14 +467,18 @@ class Accelerator:
         if self._mixed_precision == "fp8" and not self.has_fp8_handler:
             # Prioritize TE -> AO -> MSAMP
             if is_torchao_available():
+                logger.info("Found `torchao` installed, using it for FP8 training.")
                 self.ao_recipe_handler = AORecipeKwargs()
             elif is_transformer_engine_available():
+                logger.info("Found `transformer-engine` installed, using it for FP8 training.")
                 self.te_recipe_handler = TERecipeKwargs()
             elif is_msamp_available():
+                logger.info("Found `msamp` installed, using it for FP8 training.")
                 self.msamp_recipe_handler = MSAMPRecipeKwargs()
             else:
                 raise ImportError(
-                    "Tried to train with `fp8` and auto-detect backend, but no FP8-compatible backend was installed."
+                    "Tried to train with `fp8` and auto-detect backend, but no FP8-compatible backend was installed. "
+                    "Valid backends are: `torchao`, `transformer-engine`, and `msamp`."
                 )
 
         self.delayed_fp8_autocast = False
@@ -484,7 +488,6 @@ class Accelerator:
                 self.distributed_type not in (DistributedType.FSDP, DistributedType.DEEPSPEED)
             ):
                 raise ValueError("Passing in an FP8 configuration requires setting `mixed_precision='fp8'`.")
-            # DEPRECATE once 2.0 is released
             self.delayed_fp8_autocast = self.fp8_backend == "TE" and self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.FSDP,
@@ -1673,7 +1676,9 @@ class Accelerator:
 
     def _prepare_ao(self, *args):
         if not is_torchao_available():
-            raise ImportError("`torchao` was not found on your system. Please ensure that `torchao` is installed")
+            raise ImportError(
+                "`torchao` was not found on your system or is too old of a version. Please ensure that `torchao >= 0.6.1` is installed"
+            )
         for arg in args:
             if isinstance(arg, torch.nn.Module):
                 convert_to_float8_training(

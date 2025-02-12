@@ -17,10 +17,15 @@ Needed utilities for torchao FP8 training.
 """
 
 from functools import partial
+from typing import Callable, Optional
 
 import torch
 
-from .imports import torchao_required
+from .imports import is_torchao_available, torchao_required
+
+
+if is_torchao_available():
+    from torchao.float8.float8_linear import Float8LinearConfig
 
 
 def find_first_last_linear_layers(model: torch.nn.Module):
@@ -81,8 +86,8 @@ def has_ao_layers(model: torch.nn.Module):
 @torchao_required
 def convert_to_float8_training(
     model: torch.nn.Module,
-    config=None,
-    module_filter_func=None,
+    config: Optional["Float8LinearConfig"] = None,
+    module_filter_func: Optional[Callable] = None,
 ):
     """
     Converts all `nn.Linear` layers in the model (except the first and last) to torchao's `Float8Linear` layer inplace.
