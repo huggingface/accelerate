@@ -87,7 +87,7 @@ def has_ao_layers(model: torch.nn.Module):
 def convert_to_float8_training(
     model: torch.nn.Module,
     config: Optional["Float8LinearConfig"] = None,
-    module_filter_func: Optional[Callable] = None,
+    module_filter_func: Optional[Callable] = filter_linear_layers,
 ):
     """
     Converts all `nn.Linear` layers in the model (except the first and last) to torchao's `Float8Linear` layer inplace.
@@ -98,8 +98,8 @@ def convert_to_float8_training(
         config (`torchao.float8.Float8LinearConfig`, *optional*):
             The configuration for the FP8 training. Recommended to utilize
             `torchao.float8.recipe_name_to_linear_config` to generate this. In general, the default config should be
-            sufficient.
-        module_filter_func (`Callable`, *optional*):
+            sufficient (what is passed when set to `None`).
+        module_filter_func (`Callable`, *optional*, defaults to `filter_linear_layers`):
             Optional function that must take in a module and layer name, and returns a boolean indicating whether the
             module should be converted to FP8. Defaults to `filter_linear_layers`. See it for an example.
 
