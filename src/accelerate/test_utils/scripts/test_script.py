@@ -57,7 +57,7 @@ def generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_
     "Creates a dataloader that can also use the `SeedableRandomSampler`"
     if use_seedable_sampler:
         # The SeedableRandomSampler is needed during distributed setups
-        # for full reproducability across processes with the `DataLoader`
+        # for full reproducibility across processes with the `DataLoader`
         sampler = SeedableRandomSampler(
             generator=generator,
             data_source=train_set,

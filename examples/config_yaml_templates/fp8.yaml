@@ -7,11 +7,11 @@ fp8_config:
   backend: TE # Can be TE | MS-AMP
   # The following are TE specific arguments.
   # See https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html#common-api for more details
-  amax_history_length: 1024
+  amax_history_len: 1024
   fp8_format: E4M3
   interval: 1
   margin: 0
-  override_linear_precision: false
+  override_linear_precision: (false, false, false)
   # Generally this should always be set to `false` to have the most realistic fp8 eval performance
   use_autocast_during_eval: false
   # If using MS-AMP, we ignore all of the prior and set a opt_level

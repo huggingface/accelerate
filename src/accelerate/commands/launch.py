@@ -1060,6 +1060,11 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.ipex_config[k])
                     for k in defaults.mpirun_config:
                         setattr(args, k, defaults.mpirun_config[k])
+                    for k in defaults.fp8_config:
+                        arg_to_set = k
+                        if "fp8" not in arg_to_set:
+                            arg_to_set = "fp8_" + arg_to_set
+                        setattr(args, arg_to_set, defaults.fp8_config[k])
                     continue
 
                 # Those args are handled separately
