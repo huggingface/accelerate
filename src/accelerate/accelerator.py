@@ -2227,7 +2227,7 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
 
-        nd_device_mesh = prepare_nd_device_mesh(self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1, self.state.fsdp_plugin is not None)
+        nd_device_mesh = prepare_nd_device_mesh(self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1, self.state.fsdp2_plugin is not None)
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
