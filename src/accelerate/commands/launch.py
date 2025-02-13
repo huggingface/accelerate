@@ -653,7 +653,7 @@ def launch_command_parser(subparsers=None):
         help="Dtype for forward outputs to be used in mixed precision training.",
     )
     fsdp2_args.add_argument(
-        "--FSDP2_CAST_FORWARD_INPUTS",
+        "--fsdp2_cast_forward_inputs",
         default="false",
         type=str,
         help="Decides Whether (true|false) to cast forward inputs in mixed precision training.",
