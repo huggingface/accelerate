@@ -1563,7 +1563,8 @@ class Accelerator:
                         "mp_policy": fsdp2_plugin.mp_policy,
                         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
                         "offload_policy": fsdp2_plugin.offload_policy,
-                        "ignored_params": fsdp2_plugin.ignored_params,
+                        # pretty recent feature so lets ignore it for now
+                        # "ignored_params": fsdp2_plugin.ignored_params,
                         "mesh": fsdp2_plugin.torch_device_mesh,
                     }
 
