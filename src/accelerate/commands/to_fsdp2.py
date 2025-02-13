@@ -21,7 +21,6 @@ from pathlib import Path
 import yaml
 
 from accelerate.commands.utils import CustomArgumentParser
-from accelerate.utils import is_rich_available
 
 
 class ConversionStatus(enum.Enum):
@@ -30,7 +29,9 @@ class ConversionStatus(enum.Enum):
 
 
 ARGUMENT_KEY_MAPPING = {
+    # New keys in FSDP2
     "fsdp_version": "fsdp_version",
+    "fsdp_reshard_after_forward": "fsdp_reshard_after_forward",
     # https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
     # https://huggingface.co/docs/accelerate/en/usage_guides/fsdp
     "fsdp_auto_wrap_policy": "fsdp_auto_wrap_policy",
@@ -53,6 +54,14 @@ ARGUMENT_VALUE_MAPPING = {
         "SHARD_GRAD_OP": False,
         "HYBRID_SHARD": True,
         "HYBRID_SHARD_ZERO2": False,
+        "NO_SHARD": False,
+    },
+    "fsdp_reshard_after_forward": {  # Needed to convert newly created configs using FSDP1 to FSDP2
+        "FULL_SHARD": True,
+        "SHARD_GRAD_OP": False,
+        "HYBRID_SHARD": True,
+        "HYBRID_SHARD_ZERO2": False,
+        "NO_SHARD": False,
     },
     #  TODO: do we need to handle mp/offload policy
 }
