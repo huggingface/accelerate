@@ -29,6 +29,7 @@ from functools import partial
 from types import MethodType
 from typing import Any, Callable, Union
 
+from accelerate.utils.dataclasses import get_module_class_from_name
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -1366,6 +1367,8 @@ class Accelerator:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
+        elif self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+            result = self._prepare_fsdp2(*args)
         else:
             if self.fp8_backend == "MSAMP":
                 args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
@@ -1517,6 +1520,68 @@ class Accelerator:
                         and _tp_plan attribute to model class."
                     )
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
+            elif self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+                from torch.distributed.fsdp import FSDPModule, fully_shard
+
+                is_type_fsdp = isinstance(model, FSDPModule) or (
+                    is_compiled_module(model) and isinstance(model._orig_mod, FSDPModule)
+                )
+
+                if not is_type_fsdp:
+                    fsdp2_plugin = self.state.fsdp_plugin
+                    kwargs = {
+                        "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
+                        "mp_policy": fsdp2_plugin.mp_policy,
+                        "offload_params": fsdp2_plugin.offload_params,
+                    }
+
+                    if auto_wrap_policy := fsdp2_plugin.auto_wrap_policy is not None:
+                        from torch.distributed.fsdp.wrap import (
+                            size_based_auto_wrap_policy,
+                            transformer_auto_wrap_policy,
+                        )
+
+                        # Simulate the behavior of the old auto_wrap_policy
+                        if auto_wrap_policy is transformer_auto_wrap_policy:
+                            no_split_modules = getattr(model, "_no_split_modules", [])
+                            transformer_cls_names_to_wrap = list(no_split_modules)
+                            if fsdp2_plugin.transformer_cls_names_to_wrap is not None:
+                                transformer_cls_names_to_wrap = fsdp2_plugin.transformer_cls_names_to_wrap
+                            transformer_cls_to_wrap = set()
+
+                            for layer_class in transformer_cls_names_to_wrap:
+                                transformer_cls = get_module_class_from_name(model, layer_class)
+                                if transformer_cls is None:
+                                    raise ValueError(
+                                        f"Could not find the transformer layer class {layer_class} in the model."
+                                    )
+                                transformer_cls_to_wrap.add(transformer_cls)
+
+                            def policy(module: torch.nn.Module) -> bool:
+                                if fsdp2_plugin.transformer_cls_names_to_wrap is None:
+                                    return False
+                                return isinstance(module, tuple(transformer_cls_to_wrap))
+
+                        elif auto_wrap_policy is size_based_auto_wrap_policy:
+
+                            def policy(module: torch.nn.Module) -> bool:
+                                return module.numel() > fsdp2_plugin.min_num_params
+
+                        stack = [model]
+                        ordered_modules = []
+                        while stack:
+                            current_module = stack.pop()
+                            for _, attr in current_module.named_children():
+                                if isinstance(attr, torch.nn.Module):
+                                    stack.append(attr)
+                            ordered_modules.append(current_module)
+
+                        for module in ordered_modules[::-1][:-1]:  # Skip the top-most module, as that one is wrapped even without policy
+                            if policy(module):
+                                fully_shard(module, **kwargs)
+
+                    fully_shard(model, **kwargs)  # Wrap the top-most module nonetheless
+
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -1542,7 +1607,7 @@ class Accelerator:
                     )
 
                     kwargs = {
-                        "sharding_strategy": fsdp_plugin.sharding_strategy,
+                        "sharding_strategy": fsdp_plugin.reshard_after_forward,
                         "cpu_offload": fsdp_plugin.cpu_offload,
                         "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
                         "mixed_precision": fsdp_plugin.mixed_precision_policy,
