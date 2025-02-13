@@ -1638,7 +1638,7 @@ class FullyShardedDataParallelPlugin:
                     self.reshard_after_forward = ShardingStrategy[self.reshard_after_forward.upper()]
         if self.fsdp_version != 2 and isinstance(self.reshard_after_forward, bool):
             raise ValueError(
-                "reshard_after_forward set to bool. This is not supported in FSDP1, please set to a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
+                f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP1, please set to a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
             )
 
         if self.cpu_offload is None:
@@ -1650,14 +1650,12 @@ class FullyShardedDataParallelPlugin:
                 self.cpu_offload = CPUOffloadPolicy()  # TODO: enable pin memory config
             else:
                 self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
-        if self.fsdp_version != 2 and isinstance(self.cpu_offload, CPUOffloadPolicy):
-            raise ValueError(
-                "cpu_offload set to `torch.distributed.fsdp.CPUOffloadPolicy`. This is not supported in FSDP1, please set to a `bool` or an instance of `torch.distributed.fsdp.CPUOffload`"
-            )
-        if self.fsdp_version == 2 and not isinstance(self.cpu_offload, CPUOffloadPolicy):
-            raise ValueError(
-                "cpu_offload set to `bool` or `torch.distributed.fsdp.CPUOffload`. This is not supported in FSDP2, please set to an instance of `torch.distributed.fsdp.CPUOffloadPolicy`"
-            )
+        if isinstance(self.cpu_offload, CPUOffloadPolicy):
+            err = f"`cpu_offload` set to {self.cpu_offload}."
+            if self.fsdp_version != 2:
+                raise ValueError(f"{err} This is not supported in FSDP1, please set to a `bool` or an instance of `torch.distributed.fsdp.CPUOffload`")
+            else:
+                raise ValueError(f"{err} This is not supported in FSDP2, please set to an instance of `torch.distributed.fsdp.CPUOffloadPolicy`")
 
         if self.backward_prefetch is None:
             self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
@@ -1718,7 +1716,7 @@ class FullyShardedDataParallelPlugin:
             self.forward_prefetch = str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False")) == 1
         if self.fsdp_version == 2 and self.forward_prefetch is not None:
             raise ValueError(
-                "forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version` set to 1"
+                "forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version=1`"
             )
 
         if self.activation_checkpointing is None:
@@ -1886,7 +1884,7 @@ class FullyShardedDataParallelPlugin:
         """
         Validates the mixed precision policy, abstracted away to not bring in the imports if not needed.
         """
-        from torch.distributed.fsdp import MixedPrecision, MixedPrecisionPolicy
+        from torch.distributed.fsdp import MixedPrecision, MixedPrecisionPolicy  # TODO(S1ro1): handle versions
 
         if self.fsdp_version == 2:
             if not isinstance(self.mixed_precision_policy, MixedPrecisionPolicy):

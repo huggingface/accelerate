@@ -57,13 +57,6 @@ ARGUMENT_VALUE_MAPPING = {
     #  TODO: do we need to handle mp/offload policy
 }
 
-if is_rich_available():
-    from rich.logging import RichHandler
-
-    FORMAT = "%(message)s"
-    logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
-
-
 logger = logging.getLogger(__name__)
 
 
