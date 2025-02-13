@@ -29,10 +29,11 @@ from functools import partial
 from types import MethodType
 from typing import Any, Callable, Union
 
-from accelerate.utils.dataclasses import get_module_class_from_name
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
+
+from accelerate.utils.dataclasses import get_module_class_from_name
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -1367,8 +1368,6 @@ class Accelerator:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
-        elif self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
-            result = self._prepare_fsdp2(*args)
         else:
             if self.fp8_backend == "MSAMP":
                 args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
@@ -1531,11 +1530,11 @@ class Accelerator:
                     fsdp2_plugin = self.state.fsdp_plugin
                     kwargs = {
                         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
-                        "mp_policy": fsdp2_plugin.mp_policy,
-                        "offload_params": fsdp2_plugin.offload_params,
+                        "offload_policy": fsdp2_plugin.cpu_offload,
+                        "mp_policy": fsdp2_plugin.mixed_precision_policy,
                     }
 
-                    if auto_wrap_policy := fsdp2_plugin.auto_wrap_policy is not None:
+                    if (auto_wrap_policy := fsdp2_plugin.auto_wrap_policy) is not None:
                         from torch.distributed.fsdp.wrap import (
                             size_based_auto_wrap_policy,
                             transformer_auto_wrap_policy,
@@ -1576,7 +1575,9 @@ class Accelerator:
                                     stack.append(attr)
                             ordered_modules.append(current_module)
 
-                        for module in ordered_modules[::-1][:-1]:  # Skip the top-most module, as that one is wrapped even without policy
+                        for module in ordered_modules[::-1][
+                            :-1
+                        ]:  # Skip the top-most module, as that one is wrapped even without policy
                             if policy(module):
                                 fully_shard(module, **kwargs)
 

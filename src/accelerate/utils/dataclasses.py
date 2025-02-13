@@ -1471,7 +1471,7 @@ class FullyShardedDataParallelPlugin:
     """
 
     fsdp_version: int = field(
-        default=1,
+        default=None,
         metadata={
             "help": "The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to FSDP2 format."
         },
@@ -1652,16 +1652,14 @@ class FullyShardedDataParallelPlugin:
                 self.cpu_offload = CPUOffloadPolicy()  # TODO: enable pin memory config
             else:
                 self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
-        if isinstance(self.cpu_offload, CPUOffloadPolicy):
-            err = f"`cpu_offload` set to {self.cpu_offload}."
-            if self.fsdp_version != 2:
-                raise ValueError(
-                    f"{err} This is not supported in FSDP1, please set to a `bool` or an instance of `torch.distributed.fsdp.CPUOffload`"
-                )
-            else:
-                raise ValueError(
-                    f"{err} This is not supported in FSDP2, please set to an instance of `torch.distributed.fsdp.CPUOffloadPolicy`"
-                )
+        if isinstance(self.cpu_offload, CPUOffloadPolicy) and self.fsdp_version == 1:
+            raise ValueError(
+                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.CPUOffloadPolicy` in FSDP1, got {self.cpu_offload}"
+            )
+        if isinstance(self.cpu_offload, CPUOffload) and self.fsdp_version == 2:
+            raise ValueError(
+                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.CPUOffload` in FSDP2, got {self.cpu_offload}"
+            )
 
         if self.backward_prefetch is None:
             self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
@@ -1706,19 +1704,19 @@ class FullyShardedDataParallelPlugin:
             elif self.auto_wrap_policy.upper() == "NO_WRAP":
                 self.auto_wrap_policy = None
 
-        if self.use_orig_params is None:
+        if self.use_orig_params is None and self.fsdp_version == 1:
             self.use_orig_params = str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False")) == 1
         if self.fsdp_version == 2 and self.use_orig_params is not None:
             warnings.warn("use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters.")
             self.use_orig_params = None
 
-        if self.sync_module_states is None:
+        if self.sync_module_states is None and self.fsdp_version == 1:
             self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
         if self.fsdp_version == 2 and self.sync_module_states is not None:
             warnings.warn("sync_module_states is obsolete in FSDP2, as it is not needed anymore.")
             self.sync_module_states = None
 
-        if self.forward_prefetch is None:
+        if self.forward_prefetch is None and self.fsdp_version == 1:
             self.forward_prefetch = str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False")) == 1
         if self.fsdp_version == 2 and self.forward_prefetch is not None:
             raise ValueError("forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version=1`")
@@ -1750,6 +1748,12 @@ class FullyShardedDataParallelPlugin:
 
         if isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)
+        if self.fsdp_version == 2 and self.mixed_precision_policy is None:
+            from torch.distributed.fsdp import (
+                MixedPrecisionPolicy,  # TODO(S1ro1): Cleanup and versions, fsdp2 doesn't support None
+            )
+
+            self.mixed_precision_policy = MixedPrecisionPolicy()
         if self.mixed_precision_policy is not None:
             self.validate_mixed_precision_policy()
 
