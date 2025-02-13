@@ -1886,11 +1886,8 @@ class FullyShardedDataParallelPlugin2:
         if self.reshard_after_forward is None:
             self.reshard_after_forward = str_to_bool(os.environ.get(env_prefix + "RESHARD_AFTER_FORWARD", "True")) == 1
         
-        if isinstance(self.offload_policy, dict):
-            self.set_offload_policy()
-        
-        if isinstance(self.mp_policy, dict):
-            self.set_mp_policy()
+        self.set_offload_policy()
+        self.set_mp_policy()
 
         from torch.distributed.device_mesh import init_device_mesh
         dp_mesh_dim_name = "dp"

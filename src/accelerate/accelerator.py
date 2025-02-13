@@ -1558,14 +1558,13 @@ class Accelerator:
                 )
 
                 if not is_type_fsdp:
-                    fsdp2_plugin: FullyShardedDataParallelPlugin2 = self.state.fsdp2_plugin
                     fsdp2_kwargs  = {
-                        "mp_policy": fsdp2_plugin.mp_policy,
-                        "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
-                        "offload_policy": fsdp2_plugin.offload_policy,
+                        "mp_policy": self.state.fsdp2_plugin.mp_policy,
+                        "reshard_after_forward": self.state.fsdp2_plugin.reshard_after_forward,
+                        "offload_policy": self.state.fsdp2_plugin.offload_policy,
                         # pretty recent feature so lets ignore it for now
                         # "ignored_params": fsdp2_plugin.ignored_params,
-                        "mesh": fsdp2_plugin.torch_device_mesh,
+                        "mesh": self.state.fsdp2_plugin.torch_device_mesh,
                     }
 
                     for layer in model.model.layers:
