@@ -1646,16 +1646,22 @@ class FullyShardedDataParallelPlugin:
         if isinstance(self.cpu_offload, bool):
             if self.fsdp_version == 2:
                 if not self.cpu_offload:
-                    warnings.warn("Offload_params is set to False, however FSDP2 always offloads parameters and runs optimizer step on CPU. This will be overridden to True.")
+                    warnings.warn(
+                        "Offload_params is set to False, however FSDP2 always offloads parameters and runs optimizer step on CPU. This will be overridden to True."
+                    )
                 self.cpu_offload = CPUOffloadPolicy()  # TODO: enable pin memory config
             else:
                 self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
         if isinstance(self.cpu_offload, CPUOffloadPolicy):
             err = f"`cpu_offload` set to {self.cpu_offload}."
             if self.fsdp_version != 2:
-                raise ValueError(f"{err} This is not supported in FSDP1, please set to a `bool` or an instance of `torch.distributed.fsdp.CPUOffload`")
+                raise ValueError(
+                    f"{err} This is not supported in FSDP1, please set to a `bool` or an instance of `torch.distributed.fsdp.CPUOffload`"
+                )
             else:
-                raise ValueError(f"{err} This is not supported in FSDP2, please set to an instance of `torch.distributed.fsdp.CPUOffloadPolicy`")
+                raise ValueError(
+                    f"{err} This is not supported in FSDP2, please set to an instance of `torch.distributed.fsdp.CPUOffloadPolicy`"
+                )
 
         if self.backward_prefetch is None:
             self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
@@ -1715,9 +1721,7 @@ class FullyShardedDataParallelPlugin:
         if self.forward_prefetch is None:
             self.forward_prefetch = str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False")) == 1
         if self.fsdp_version == 2 and self.forward_prefetch is not None:
-            raise ValueError(
-                "forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version=1`"
-            )
+            raise ValueError("forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version=1`")
 
         if self.activation_checkpointing is None:
             self.activation_checkpointing = (
