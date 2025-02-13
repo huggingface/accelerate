@@ -405,10 +405,12 @@ class Accelerator:
             if not isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
                 raise TypeError("`torch_tp_plugin` must be a TorchTensorParallelPlugin object.")
             os.environ["ACCELERATE_USE_TP"] = "true"
-            
+
         if fsdp2_plugin is None:
             fsdp2_plugin = (
-                FullyShardedDataParallelPlugin2() if os.environ.get("ACCELERATE_USE_FSDP2", "false") == "true" else None
+                FullyShardedDataParallelPlugin2()
+                if os.environ.get("ACCELERATE_USE_FSDP2", "false") == "true"
+                else None
             )
         else:
             if not isinstance(fsdp2_plugin, FullyShardedDataParallelPlugin2):
@@ -1513,7 +1515,15 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
-            device_mesh = prepare_nd_device_mesh(self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1, self.state.fsdp2_plugin is not None)
+            # motivation behind preparing device mesh at the start is to easily extend
+            # device preparation for any combination of parallelisms and pass it on
+            # neatly to respective parallelism distribution code snippets.
+            # function prepare_nd_device_mesh should be enough to extend logic for future combinations
+            # for now prepare_nd_device_mesh handles any combination of TP and FSDP/HSDP
+            device_mesh = prepare_nd_device_mesh(
+                self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1,
+                self.state.fsdp2_plugin is not None,
+            )
             if self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
@@ -1548,6 +1558,7 @@ class Accelerator:
             if self.distributed_type == DistributedType.FSDP2 or self.distributed_type == DistributedType.FSDP2_TP:
                 self.state.fsdp2_plugin.torch_device_mesh = device_mesh["dp", "fsdp"]
                 from torch.distributed._composable.fsdp import fully_shard, FSDPModule
+
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
                 # don't wrap it again
                 # In case the model is already compiled using PyTorch 2.0 and the wrapped model in it
@@ -1558,7 +1569,7 @@ class Accelerator:
                 )
 
                 if not is_type_fsdp:
-                    fsdp2_kwargs  = {
+                    fsdp2_kwargs = {
                         "mp_policy": self.state.fsdp2_plugin.mp_policy,
                         "reshard_after_forward": self.state.fsdp2_plugin.reshard_after_forward,
                         "offload_policy": self.state.fsdp2_plugin.offload_policy,
@@ -1570,25 +1581,14 @@ class Accelerator:
                     for layer in model.model.layers:
                         fully_shard(layer, **fsdp2_kwargs)
                     fully_shard(model, **fsdp2_kwargs)
+                    # if the previous and current models are same, delete the previous one
+                    if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
+                        del self._models[-2]
+                    self._models[-1] = model
 
                     #######
-                    # does existing activation_checkpointing API work out of the box with FSDP2?
+                    # TODO: support activation_checkpointing for FSDP2 and nd parallel cases
                     #######
-                    # if fsdp_plugin.activation_checkpointing:
-                    #     from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-                    #         CheckpointImpl,
-                    #         apply_activation_checkpointing,
-                    #         checkpoint_wrapper,
-                    #     )
-
-                    #     apply_activation_checkpointing(
-                    #         model,
-                    #         checkpoint_wrapper_fn=functools.partial(
-                    #             checkpoint_wrapper,
-                    #             checkpoint_impl=CheckpointImpl.NO_REENTRANT,
-                    #         ),
-                    #         auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
-                    #     )
 
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
@@ -2227,7 +2227,10 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
 
-        nd_device_mesh = prepare_nd_device_mesh(self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1, self.state.fsdp2_plugin is not None)
+        nd_device_mesh = prepare_nd_device_mesh(
+            self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1,
+            self.state.fsdp2_plugin is not None,
+        )
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2497,7 +2500,9 @@ class Accelerator:
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
-                    return torch.nn.utils.clip_grad_norm_(parameters=parameters, max_norm=max_norm, norm_type=norm_type)
+                    return torch.nn.utils.clip_grad_norm_(
+                        parameters=parameters, max_norm=max_norm, norm_type=norm_type
+                    )
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
