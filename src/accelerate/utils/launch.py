@@ -290,6 +290,16 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
 
+    if args.use_fsdp2:
+        current_env["ACCELERATE_USE_FSDP2"] = "true"
+        current_env["FSDP2_RESHARD_AFTER_FORWARD"] = str(args.fsdp2_reshard_after_forward).lower()
+        current_env["FSDP2_CPU_OFFLOAD"] = str(args.fsdp2_cpu_offload).lower()
+        current_env["FSDP2_CPU_OFFLOAD_PIN_MEMORY"] = str(args.fsdp2_cpu_offload_pin_memory).lower()
+        current_env["FSDP2_MP_PARAM_DTYPE"] = str(args.fsdp2_mp_param_dtype).lower()
+        current_env["FSDP2_MP_REDUCE_DTYPE"] = str(args.fsdp2_mp_reduce_dtype).lower()
+        current_env["FSDP2_MP_OUTPUT_DTYPE"] = str(args.fsdp2_mp_output_dtype).lower()
+        current_env["FSDP2_CAST_FORWARD_INPUTS"] = str(args.fsdp2_cast_forward_inputs).lower()
+
     if args.use_tp:
         current_env["ACCELERATE_USE_TP"] = "true"
         current_env["TP_SIZE"] = str(args.tp_size)

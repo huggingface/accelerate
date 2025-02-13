@@ -73,6 +73,7 @@ options_to_group = {
     "tpu": "TPU",
     "use_deepspeed": "DeepSpeed Arguments",
     "use_fsdp": "FSDP Arguments",
+    "use_fsdp2": "FSDP2 Arguments",
     "use_tp": "PyTorch TP Arguments",
     "use_megatron_lm": "Megatron-LM Arguments",
     "fp8_backend": "FP8 Arguments",
@@ -261,6 +262,12 @@ def launch_command_parser(subparsers=None):
         default=False,
         action="store_true",
         help="Whether to use fsdp.",
+    )
+    paradigm_args.add_argument(
+        "--use_fsdp2",
+        default=False,
+        action="store_true",
+        help="Whether to use fsdpv2.",
     )
     paradigm_args.add_argument(
         "--use_tp",
@@ -602,6 +609,54 @@ def launch_command_parser(subparsers=None):
         default=1,
         type=int,
         help="PyTorch Tensor Parallelism (TP) degree. Set a value greater than 1 to activate. (useful only when `use_tp` flag is passed)",
+    )
+
+    # fsdp2 args
+    fsdp2_args = parser.add_argument_group("FSDP2 Arguments", "Arguments related to Fully Shared Data Parallelism Version 2.")
+    fsdp2_args.add_argument(
+        "--fsdp2_reshard_after_forward",
+        default="true",
+        type=str,
+        help="Decides Whether (true|false) to reshard parameters after forward pass.",
+    )
+    fsdp2_args.add_argument(
+        "--fsdp2_cpu_offload",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) to offload to CPU.",
+    )
+    fsdp2_args.add_argument(
+        "--fsdp2_cpu_offload_pin_memory",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) to pin memory during CPU offload.",
+    )
+    fsdp2_args.add_argument(
+        "--fsdp2_mp_param_dtype",
+        default="no",
+        type=str,
+        choices=["no", "fp16", "bf16", "fp8"],
+        help="Parameter datatype to be used in mixed precision training.",
+    )
+    fsdp2_args.add_argument(
+        "--fsdp2_mp_reduce_dtype",
+        default="no",
+        type=str,
+        choices=["no", "fp16", "bf16", "fp8"],
+        help="Dtype for gradient reduction to be used in mixed precision training.",
+    )
+    fsdp2_args.add_argument(
+        "--fsdp2_mp_output_dtype",
+        default="no",
+        type=str,
+        choices=["no", "fp16", "bf16", "fp8"],
+        help="Dtype for forward outputs to be used in mixed precision training.",
+    )
+    fsdp2_args.add_argument(
+        "--FSDP2_CAST_FORWARD_INPUTS",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) to cast forward inputs in mixed precision training.",
     )
 
     # megatron_lm args
