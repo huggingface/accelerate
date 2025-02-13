@@ -1513,7 +1513,7 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
-            device_mesh = prepare_nd_device_mesh(self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1, self.state.fsdp_plugin is not None)
+            device_mesh = prepare_nd_device_mesh(self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1, self.state.fsdp2_plugin is not None)
             if self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
@@ -1574,21 +1574,21 @@ class Accelerator:
                     #######
                     # does existing activation_checkpointing API work out of the box with FSDP2?
                     #######
-                    if fsdp_plugin.activation_checkpointing:
-                        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-                            CheckpointImpl,
-                            apply_activation_checkpointing,
-                            checkpoint_wrapper,
-                        )
+                    # if fsdp_plugin.activation_checkpointing:
+                    #     from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+                    #         CheckpointImpl,
+                    #         apply_activation_checkpointing,
+                    #         checkpoint_wrapper,
+                    #     )
 
-                        apply_activation_checkpointing(
-                            model,
-                            checkpoint_wrapper_fn=functools.partial(
-                                checkpoint_wrapper,
-                                checkpoint_impl=CheckpointImpl.NO_REENTRANT,
-                            ),
-                            auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
-                        )
+                    #     apply_activation_checkpointing(
+                    #         model,
+                    #         checkpoint_wrapper_fn=functools.partial(
+                    #             checkpoint_wrapper,
+                    #             checkpoint_impl=CheckpointImpl.NO_REENTRANT,
+                    #         ),
+                    #         auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
+                    #     )
 
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
