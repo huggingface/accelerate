@@ -612,7 +612,9 @@ def launch_command_parser(subparsers=None):
     )
 
     # fsdp2 args
-    fsdp2_args = parser.add_argument_group("FSDP2 Arguments", "Arguments related to Fully Shared Data Parallelism Version 2.")
+    fsdp2_args = parser.add_argument_group(
+        "FSDP2 Arguments", "Arguments related to Fully Shared Data Parallelism Version 2."
+    )
     fsdp2_args.add_argument(
         "--fsdp2_reshard_after_forward",
         default="true",
@@ -1059,6 +1061,7 @@ def _validate_launch_command(args):
             and not args.tpu_use_cluster
             and not args.use_deepspeed
             and not args.use_fsdp
+            and not args.use_fsdp2
             and not args.use_tp
             and not args.use_megatron_lm
         ):
@@ -1078,6 +1081,7 @@ def _validate_launch_command(args):
             args.tpu = defaults.distributed_type == DistributedType.XLA
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_tp = defaults.distributed_type == DistributedType.TP
+            args.use_fsdp2 = defaults.distributed_type == DistributedType.FSDP2
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
         if args.gpu_ids is None:
@@ -1236,6 +1240,8 @@ def launch_command(args):
         args.deepspeed_fields_from_accelerate_config = ",".join(args.deepspeed_fields_from_accelerate_config)
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
+        multi_gpu_launcher(args)
+    elif args.use_fsdp2 and not args.cpu:
         multi_gpu_launcher(args)
     elif args.use_tp and not args.cpu:
         multi_gpu_launcher(args)

@@ -1850,13 +1850,12 @@ class FullyShardedDataParallelPlugin2:
     reshard_after_forward: Optional[bool] = field(
         default=None,
         metadata={
-            "help": 
-                "If reshard_after_forward is True, the parameters are sharded on every forward pass and all-gathered during backward pass."
-                "reshard_after_forward in conjunction with device mesh dimension would mean different strategies like the following:"
-                "reshard_after_forward=True and 1D device mesh mean full shard"
-                "reshard_after_forward=True and 2D device mesh mean hybrid shard"
-                "reshard_after_forward=False and 1D device mesh mean shard grad and optimizer states only"
-                "reshard_after_forward=False and 2D device mesh mean hybrid shard with grad and optim sharding only"
+            "help": "If reshard_after_forward is True, the parameters are sharded on every forward pass and all-gathered during backward pass."
+            "reshard_after_forward in conjunction with device mesh dimension would mean different strategies like the following:"
+            "reshard_after_forward=True and 1D device mesh mean full shard"
+            "reshard_after_forward=True and 2D device mesh mean hybrid shard"
+            "reshard_after_forward=False and 1D device mesh mean shard grad and optimizer states only"
+            "reshard_after_forward=False and 2D device mesh mean hybrid shard with grad and optim sharding only"
         },
     )
     offload_policy: Optional[Union[dict, "torch.distributed._composable.OffloadPolicy"]] = field(
@@ -1865,45 +1864,45 @@ class FullyShardedDataParallelPlugin2:
             "help": "A config to enable CPU offload. If passing in a `dict`, it should have the following key: `pin_memory`."
         },
     )
-    mp_policy: Optional[Union[dict, "torch.distributed._composable.MixedPrecisionPolicy"]] = (
-        field(
-            default=None,
-            metadata={
-                "help": "A config to enable mixed precision training with FullyShardedDataParallelv2. If passing in a `dict`, it"
+    mp_policy: Optional[Union[dict, "torch.distributed._composable.MixedPrecisionPolicy"]] = field(
+        default=None,
+        metadata={
+            "help": "A config to enable mixed precision training with FullyShardedDataParallelv2. If passing in a `dict`, it"
             "should have the following keys: `param_dtype`, `reduce_dtype`, `output_dtype`, and `cast_forward_inputs`. "
-            },
-        )
+        },
     )
     ignored_params: Optional[set["torch.nn.Parameter"]] = field(
         default=None,
-        metadata={
-            "help": "The set of parameters that we don't want to shard with FSDP."
-        },
+        metadata={"help": "The set of parameters that we don't want to shard with FSDP."},
     )
 
     def __post_init__(self):
         env_prefix = "FSDP2_"
         if self.reshard_after_forward is None:
             self.reshard_after_forward = str_to_bool(os.environ.get(env_prefix + "RESHARD_AFTER_FORWARD", "True")) == 1
-        
+
         self.set_offload_policy()
         self.set_mp_policy()
 
         from torch.distributed.device_mesh import init_device_mesh
+
         dp_mesh_dim_name = "dp"
         fsdp_mesh_dim_name = "fsdp"
         device = "cuda"  # support for other devices has to be investigated
         num_nodes = torch.distributed.get_world_size() // torch.cuda.device_count()
         nproc_per_node = torch.cuda.device_count()
-        self.torch_device_mesh = init_device_mesh(device, (num_nodes,nproc_per_node), mesh_dim_names=(dp_mesh_dim_name, fsdp_mesh_dim_name))
+        self.torch_device_mesh = init_device_mesh(
+            device, (num_nodes, nproc_per_node), mesh_dim_names=(dp_mesh_dim_name, fsdp_mesh_dim_name)
+        )
 
     def set_offload_policy(self, pin_memory=None):
         """
         Set the offload policy
         """
         from torch.distributed._composable.fsdp import CPUOffloadPolicy
+
         env_prefix = "FSDP2_"
-        
+
         if self.offload_policy is None:
             fsdp2_cpu_offload = str_to_bool(os.environ.get(env_prefix + "CPU_OFFLOAD", "False")) == 1
             if fsdp2_cpu_offload:
@@ -1918,6 +1917,7 @@ class FullyShardedDataParallelPlugin2:
         Set mixed precision policy
         """
         from torch.distributed._composable.fsdp import MixedPrecisionPolicy
+
         env_prefix = "FSDP2_"
         mixed_precision_mapping = {
             "fp8": torch.bfloat16,
@@ -1926,18 +1926,22 @@ class FullyShardedDataParallelPlugin2:
             "fp32": torch.float32,
         }
 
-        # current_env["FSDP2_MP_PARAM_DTYPE"] = str(args.fsdp2_mp_param_dtype).lower()
-        # current_env["FSDP2_MP_REDUCE_DTYPE"] = str(args.fsdp2_mp_reduce_dtype).lower()
-        # current_env["FSDP2_MP_OUTPUT_DTYPE"] = str(args.fsdp2_mp_output_dtype).lower()
-        # current_env["FSDP2_CAST_FORWARD_INPUTS"] = str(args.fsdp2_cast_forward_inputs).lower()
-        
         if self.mp_policy is None:
             param_dtype = mixed_precision_mapping.get(os.environ.get(env_prefix + "MP_PARAM_DTYPE", param_dtype), None)
-            reduce_dtype = mixed_precision_mapping.get(os.environ.get(env_prefix + "MP_REDUCE_DTYPE", reduce_dtype), None)
-            output_dtype = mixed_precision_mapping.get(os.environ.get(env_prefix + "MP_OUTPUT_DTYPE", output_dtype), None)
+            reduce_dtype = mixed_precision_mapping.get(
+                os.environ.get(env_prefix + "MP_REDUCE_DTYPE", reduce_dtype), None
+            )
+            output_dtype = mixed_precision_mapping.get(
+                os.environ.get(env_prefix + "MP_OUTPUT_DTYPE", output_dtype), None
+            )
             if not cast_forward_inputs:
                 cast_forward_inputs = str_to_bool(os.environ.get(env_prefix + "CAST_FORWARD_INPUTS", "False")) == 1
-            self.mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype, output_dtype=output_dtype, cast_forward_inputs=cast_forward_inputs)
+            self.mp_policy = MixedPrecisionPolicy(
+                param_dtype=param_dtype,
+                reduce_dtype=reduce_dtype,
+                output_dtype=output_dtype,
+                cast_forward_inputs=cast_forward_inputs,
+            )
 
         if isinstance(self.mp_policy, dict):
             self.mp_policy = MixedPrecisionPolicy(**self.mp_policy)
@@ -1972,47 +1976,6 @@ class TorchTensorParallelPlugin:
         device = "cuda"  # support for other devices has to be investigated
         self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
 
-
-@dataclass
-class DeviceMeshHandler:
-    """
-    This handler is used to create and hold device mesh state throughout the training 
-    and dynamically support any combination of parallelisms.
-    """
-
-    tp_size: int = field(
-        default=1,
-        metadata={"help": "tensor parallel size will be used in the device mesh preparation with other parallelisms."},
-    )
-    
-    use_fsdp: bool = field(
-        default=False,
-        metadata={"help": "fsdp v2 will be used with other parallelisms for device mesh preparation."},
-    )
-
-    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
-
-    def __post_init__(self):
-        self.tp_size = self.tp_size if os.environ.get("TP_SIZE", "1") == "1" else int(os.environ.get("TP_SIZE", "1"))
-        self.use_fsdp = self.use_fsdp or str_to_bool(os.environ.get("ACCELERATE_USE_FSDP2", "False")) == 1
-        if self.tp_size == 1:
-            raise ValueError("Provide TP degree > 1.")
-
-        if is_torch_version("<", BETA_TP_AVAILABLE_PYTORCH_VERSION):
-            raise ValueError(
-                f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
-            )
-        from torch.distributed.device_mesh import init_device_mesh
-
-        mesh_dim_names = ("tp",)
-        mesh_dims = (self.tp_size,)
-        if self.use_fsdp:
-            num_nodes = torch.distributed.get_world_size() // torch.cuda.device_count()
-            nproc_per_node = torch.cuda.device_count()
-            mesh_dim_names = ("dp", "fsdp",) + mesh_dim_names
-            mesh_dims = (num_nodes, nproc_per_node, ) + mesh_dims
-        device = "cuda"  # support for other devices has to be investigated
-        self.torch_device_mesh = init_device_mesh(device, mesh_dims, mesh_dim_names=mesh_dim_names)
 
 @dataclass
 class MegatronLMPlugin:
