@@ -17,7 +17,7 @@ Needed utilities for torchao FP8 training.
 """
 
 from functools import partial
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import torch
 
@@ -45,33 +45,46 @@ def find_first_last_linear_layers(model: torch.nn.Module):
     return first_linear, last_linear
 
 
-def filter_linear_layers(module, layer_name, first_layer_name, last_layer_name) -> bool:
+def filter_linear_layers(module, fqn: str, layers_to_filter: List[str]) -> bool:
     """
     A function which will check if `module` is:
     - a `torch.nn.Linear` layer
     - has in_features and out_features divisible by 16
-    - is not the first or last layer of the model.
+    - is not part of `layers_to_filter`
 
     Args:
         module (`torch.nn.Module`):
             The module to check.
-        layer_name (`str`):
+        fqn (`str`):
             The fully qualified name of the layer.
-        first_layer_name (`str`):
-            The name of the first layer of the model.
-        last_layer_name (`str`):
-            The name of the last layer of the model.
+        layers_to_filter (`List[str]`):
+            The list of layers to filter.
     """
     if isinstance(module, torch.nn.Linear):
         if module.in_features % 16 != 0 or module.out_features % 16 != 0:
             return False
-    # For stability reasons, we skip the first and last linear layers
-    # Otherwise can lead to the model not training or converging properly
-    # TODO: apply this to all FP8 backends
-    if layer_name in (first_layer_name, last_layer_name):
+    if fqn in layers_to_filter:
         return False
     return True
 
+
+def filter_first_and_last_linear_layers(module, fqn: str) -> bool:
+    """
+    A filter function which will filter out all linear layers except the first and last.
+
+    <Tip>
+        For stability reasons, we skip the first and last linear layers
+        Otherwise can lead to the model not training or converging properly
+    </Tip>
+
+    Args:
+        module (`torch.nn.Module`):
+            The module to check.
+        fqn (`str`):
+            The fully qualified name of the layer.
+    """
+    first_linear, last_linear = find_first_last_linear_layers(module)
+    return filter_linear_layers(module, fqn, layers_to_filter=[first_linear, last_linear])
 
 @torchao_required
 def has_ao_layers(model: torch.nn.Module):
@@ -87,7 +100,7 @@ def has_ao_layers(model: torch.nn.Module):
 def convert_model_to_fp8_ao(
     model: torch.nn.Module,
     config: Optional["Float8LinearConfig"] = None,
-    module_filter_func: Optional[Callable] = filter_linear_layers,
+    module_filter_func: Optional[Callable] = filter_first_and_last_linear_layers,
 ):
     """
     Converts all `nn.Linear` layers in the model (except the first and last) to torchao's `Float8Linear` layer inplace.
