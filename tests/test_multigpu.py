@@ -72,9 +72,6 @@ class MultiDeviceTester(unittest.TestCase):
         cmd = DEFAULT_LAUNCH_COMMAND + [self.merge_weights_file_path]
 
         env_kwargs = dict(omp_num_threads=1)
-        if torch_device == "hpu":
-            env_kwargs.update(pt_hpu_lazy_mode=0, pt_enable_int64_support=1)
-
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
@@ -96,7 +93,7 @@ class MultiDeviceTester(unittest.TestCase):
         elif torch_device == "mlu":
             env_kwargs.update(mlu_visible_devices="0,1")
         elif torch_device == "hpu":
-            env_kwargs.update(habana_visible_devices="0,1", pt_hpu_lazy_mode="0", pt_enable_int64_support=1)
+            env_kwargs.update(habana_visible_devices="0,1")
         else:
             env_kwargs.update(cuda_visible_devices="0,1")
 

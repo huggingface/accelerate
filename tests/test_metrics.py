@@ -28,14 +28,7 @@ from accelerate.test_utils import (
     require_multi_device,
     require_single_device,
 )
-from accelerate.utils import is_hpu_available, patch_environment
-
-
-if is_hpu_available():
-    import os
-
-    os.environ["PT_HPU_LAZY_MODE"] = "0"
-    os.environ["PT_ENABLE_INT64_SUPPORT"] = "1"
+from accelerate.utils import patch_environment
 
 
 @require_huggingface_suite
