@@ -1753,7 +1753,9 @@ class FullyShardedDataParallelPlugin:
                 MixedPrecisionPolicy,
             )
 
-            self.mixed_precision_policy = MixedPrecisionPolicy() # FSDP2 requires an `empty` policy as it does not support `None`
+            self.mixed_precision_policy = (
+                MixedPrecisionPolicy()
+            )  # FSDP2 requires an `empty` policy as it does not support `None`
         if self.mixed_precision_policy is not None:
             self.validate_mixed_precision_policy()
 
@@ -1875,7 +1877,7 @@ class FullyShardedDataParallelPlugin:
                 self.mixed_precision_policy = MixedPrecision(
                     param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
                 )
-            elif self.fsdp_version == 2: # at this point we're sure we are at a version that supports it
+            elif self.fsdp_version == 2:  # at this point we're sure we are at a version that supports it
                 self.mixed_precision_policy = MixedPrecisionPolicy(
                     param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
                 )
@@ -1903,7 +1905,9 @@ class FullyShardedDataParallelPlugin:
         Validates the mixed precision policy, abstracted away to not bring in the imports if not needed.
         """
         if self.fsdp_version == 2:
-            from torch.distributed.fsdp import MixedPrecisionPolicy # at this point we're sure we are at a version that supports it
+            from torch.distributed.fsdp import (
+                MixedPrecisionPolicy,  # at this point we're sure we are at a version that supports it
+            )
 
             if not isinstance(self.mixed_precision_policy, MixedPrecisionPolicy):
                 raise ValueError(

@@ -113,8 +113,8 @@ from .utils import (
 from .utils.constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
-    FSDP_PYTORCH_VERSION,
     FSDP2_PYTORCH_VERSION,
+    FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
@@ -384,7 +384,7 @@ class Accelerator:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
-        
+
         if fsdp_plugin is not None and fsdp_plugin.version == 2:
             if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
                 raise ValueError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
