@@ -303,7 +303,12 @@ class FSDPIntegrationTest(TempDirTestCase):
 
     def setUp(self):
         super().setUp()
-        self.performance_lower_bound = 0.82
+        if is_hpu_available():
+            # different lower bound for HPU
+            self.performance_lower_bound = None
+        else:
+            # lower bound for CUDA GPUs
+            self.performance_lower_bound = 0.82
         self.performance_configs = [
             "fsdp_shard_grad_op_transformer_based_wrap",
             "fsdp_full_shard_transformer_based_wrap",
@@ -347,13 +352,10 @@ class FSDPIntegrationTest(TempDirTestCase):
             elif policy == "SIZE_BASED_WRAP":
                 cmd_config.append("--fsdp_min_num_params=2000")
 
-            cmd_config.extend(
-                [
-                    self.test_file_path,
-                    f"--output_dir={self.tmpdir}",
-                    f"--performance_lower_bound={self.performance_lower_bound}",
-                ]
-            )
+            cmd_config.extend([self.test_file_path, f"--output_dir={self.tmpdir}"])
+            if self.performance_lower_bound is not None:
+                cmd_config.append(f"--performance_lower_bound={self.performance_lower_bound}")
+
             with patch_environment(**ENV_DICT):
                 execute_subprocess_async(cmd_config)
 
