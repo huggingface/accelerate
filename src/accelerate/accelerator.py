@@ -33,6 +33,8 @@ import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
+from accelerate.utils.dataclasses import get_module_class_from_name
+
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -111,6 +113,7 @@ from .utils import (
 from .utils.constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
+    FSDP2_PYTORCH_VERSION,
     FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
 )
@@ -381,6 +384,10 @@ class Accelerator:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
+
+        if fsdp_plugin is not None and fsdp_plugin.fsdp_version == 2:
+            if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
+                raise ValueError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
 
         if torch_tp_plugin is None:
             torch_tp_plugin = (
@@ -1517,6 +1524,70 @@ class Accelerator:
                         and _tp_plan attribute to model class."
                     )
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
+            elif self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+                from torch.distributed.fsdp import FSDPModule, fully_shard
+
+                is_type_fsdp = isinstance(model, FSDPModule) or (
+                    is_compiled_module(model) and isinstance(model._orig_mod, FSDPModule)
+                )
+
+                if not is_type_fsdp:
+                    fsdp2_plugin = self.state.fsdp_plugin
+                    kwargs = {
+                        "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
+                        "offload_policy": fsdp2_plugin.cpu_offload,
+                        "mp_policy": fsdp2_plugin.mixed_precision_policy,
+                    }
+
+                    if (auto_wrap_policy := fsdp2_plugin.auto_wrap_policy) is not None:
+                        from torch.distributed.fsdp.wrap import (
+                            size_based_auto_wrap_policy,
+                            transformer_auto_wrap_policy,
+                        )
+
+                        # Simulate the behavior of the old auto_wrap_policy
+                        if auto_wrap_policy is transformer_auto_wrap_policy:
+                            no_split_modules = getattr(model, "_no_split_modules", [])
+                            transformer_cls_names_to_wrap = list(no_split_modules)
+                            if fsdp2_plugin.transformer_cls_names_to_wrap is not None:
+                                transformer_cls_names_to_wrap = fsdp2_plugin.transformer_cls_names_to_wrap
+                            transformer_cls_to_wrap = set()
+
+                            for layer_class in transformer_cls_names_to_wrap:
+                                transformer_cls = get_module_class_from_name(model, layer_class)
+                                if transformer_cls is None:
+                                    raise ValueError(
+                                        f"Could not find the transformer layer class {layer_class} in the model."
+                                    )
+                                transformer_cls_to_wrap.add(transformer_cls)
+
+                            def policy(module: torch.nn.Module) -> bool:
+                                if fsdp2_plugin.transformer_cls_names_to_wrap is None:
+                                    return False
+                                return isinstance(module, tuple(transformer_cls_to_wrap))
+
+                        elif auto_wrap_policy is size_based_auto_wrap_policy:
+
+                            def policy(module: torch.nn.Module) -> bool:
+                                return module.numel() > fsdp2_plugin.min_num_params
+
+                        stack = [model]
+                        ordered_modules = []
+                        while stack:
+                            current_module = stack.pop()
+                            for _, attr in current_module.named_children():
+                                if isinstance(attr, torch.nn.Module):
+                                    stack.append(attr)
+                            ordered_modules.append(current_module)
+
+                        for module in ordered_modules[::-1][
+                            :-1
+                        ]:  # Skip the top-most module, as that one is wrapped even without policy
+                            if policy(module):
+                                fully_shard(module, **kwargs)
+
+                    fully_shard(model, **kwargs)  # Wrap the top-most module nonetheless
+
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -1542,7 +1613,7 @@ class Accelerator:
                     )
 
                     kwargs = {
-                        "sharding_strategy": fsdp_plugin.sharding_strategy,
+                        "sharding_strategy": fsdp_plugin.reshard_after_forward,
                         "cpu_offload": fsdp_plugin.cpu_offload,
                         "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
                         "mixed_precision": fsdp_plugin.mixed_precision_policy,
@@ -2416,7 +2487,12 @@ class Accelerator:
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
-                    return model.clip_grad_norm_(max_norm, norm_type)
+                    if self.fsdp_version == 1:
+                        return model.clip_grad_norm_(max_norm, norm_type)
+                    else:
+                        return torch.nn.utils.clip_grad_norm_(
+                            parameters, max_norm, norm_type=norm_type
+                        )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
