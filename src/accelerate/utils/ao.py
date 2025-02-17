@@ -73,8 +73,10 @@ def filter_first_and_last_linear_layers(module, fqn: str) -> bool:
     A filter function which will filter out all linear layers except the first and last.
 
     <Tip>
-        For stability reasons, we skip the first and last linear layers
-        Otherwise can lead to the model not training or converging properly
+
+        For stability reasons, we skip the first and last linear layers Otherwise can lead to the model not training or
+        converging properly
+
     </Tip>
 
     Args:
@@ -85,6 +87,7 @@ def filter_first_and_last_linear_layers(module, fqn: str) -> bool:
     """
     first_linear, last_linear = find_first_last_linear_layers(module)
     return filter_linear_layers(module, fqn, layers_to_filter=[first_linear, last_linear])
+
 
 @torchao_required
 def has_ao_layers(model: torch.nn.Module):
