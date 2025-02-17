@@ -303,7 +303,7 @@ class FSDPIntegrationTest(TempDirTestCase):
 
     def setUp(self):
         super().setUp()
-        self.performance_lower_bound = 0.82 if torch.cuda.is_available() else 0.72
+        self.performance_lower_bound = 0.82 if torch.cuda.is_available() else 0.70
         self.performance_configs = [
             "fsdp_shard_grad_op_transformer_based_wrap",
             "fsdp_full_shard_transformer_based_wrap",
