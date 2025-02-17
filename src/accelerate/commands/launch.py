@@ -529,10 +529,10 @@ def launch_command_parser(subparsers=None):
         help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
     )
     fsdp_args.add_argument(
-        "--fsdp_sharding_strategy",
+        "--fsdp_reshard_after_forward", #  TODO(s1ro1): Maybe too harsh to rename to FSDP2 naming and not support FSDP1 naming
         type=str,
         default="FULL_SHARD",
-        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
+        help="FSDP's Reshard After Forward Strategy. (useful only when `use_fsdp` flag is passed). Supports either boolean (FSDP2) or `FULL_SHARD | SHARD_GRAD_OP | NO_RESHARD` (FSDP1).",
     )
     fsdp_args.add_argument(
         "--fsdp_auto_wrap_policy",

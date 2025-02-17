@@ -267,7 +267,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
         for flag in [True, False]:
             env = self.fsdp_env.copy()
-            env["FSDP_OFFLOAD_POLICY"] = str(flag).lower()
+            env["FSDP_OFFLOAD_PARAMS"] = str(flag).lower()
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert fsdp_plugin.cpu_offload == CPUOffload(offload_params=flag)
@@ -318,7 +318,7 @@ class FSDPIntegrationTest(TempDirTestCase):
             cmd_config = cmd.copy()
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                 if strategy.lower() in config:
-                    cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
+                    cmd_config.append(f"--fsdp_reshard_after_forward={strategy}")
                     break
 
             if "fp32" in config:
@@ -362,7 +362,7 @@ class FSDPIntegrationTest(TempDirTestCase):
 
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             cmd_config = cmd.copy()
-            cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
+            cmd_config.append(f"--fsdp_reshard_after_forward={strategy}")
             if strategy != "FULL_SHARD":
                 continue
             state_dict_config_index = len(cmd_config)
@@ -410,7 +410,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                 cmd_config.extend(["--use_fsdp"])
                 for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                     if strategy.lower() in spec:
-                        cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
+                        cmd_config.append(f"--fsdp_reshard_after_forward={strategy}")
                         break
 
                 if "cpu_offload" in spec:

@@ -385,7 +385,7 @@ class Accelerator:
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
 
-        if fsdp_plugin is not None and fsdp_plugin.version == 2:
+        if fsdp_plugin is not None and fsdp_plugin.fsdp_version == 2:
             if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
                 raise ValueError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
 
