@@ -2487,7 +2487,12 @@ class Accelerator:
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
-                    return model.clip_grad_norm_(max_norm, norm_type)
+                    if self.fsdp_version == 1:
+                        return model.clip_grad_norm_(max_norm, norm_type)
+                    else:
+                        return torch.nn.utils.clip_grad_norm_(
+                            parameters, max_norm, norm_type=norm_type
+                        )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
