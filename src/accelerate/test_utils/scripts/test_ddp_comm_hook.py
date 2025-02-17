@@ -14,7 +14,6 @@
 import torch
 
 from accelerate import Accelerator, DDPCommunicationHookType, DistributedDataParallelKwargs, PartialState
-from accelerate.utils import is_hpu_available
 
 
 class MockModel(torch.nn.Module):
@@ -70,13 +69,6 @@ def main():
         (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.FP16, {}),
         (DDPCommunicationHookType.BATCHED_POWER_SGD, DDPCommunicationHookType.BF16, {}),
     ]:
-        if is_hpu_available():
-            HALF_PRECISION_COMM_HOOKS = {DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16}
-
-            if comm_hook in HALF_PRECISION_COMM_HOOKS or comm_wrapper in HALF_PRECISION_COMM_HOOKS:
-                print(f"Skipping test DDP comm hook: {comm_hook}, comm wrapper: {comm_wrapper} on HPU")
-                continue
-
         print(f"Test DDP comm hook: {comm_hook}, comm wrapper: {comm_wrapper}")
         test_ddp_comm_hook(comm_hook, comm_wrapper, comm_state_option)
     PartialState().destroy_process_group()
