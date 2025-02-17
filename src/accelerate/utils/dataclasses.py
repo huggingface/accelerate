@@ -1707,7 +1707,7 @@ class FullyShardedDataParallelPlugin:
                 device = torch.cuda.current_device()
             elif is_xpu_available():
                 device = torch.xpu.current_device()
-            elif is_hpu_available():
+            elif is_hpu_available(patch_torch=True):
                 device = torch.hpu.current_device()
             else:
                 raise RuntimeError(

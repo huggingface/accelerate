@@ -157,7 +157,7 @@ def save_accelerator_state(
         states["torch_mlu_manual_seed"] = torch.mlu.get_rng_state_all()
     if is_musa_available():
         states["torch_musa_manual_seed"] = torch.musa.get_rng_state_all()
-    if is_hpu_available():
+    if is_hpu_available(patch_torch=True):
         states["torch_hpu_manual_seed"] = torch.hpu.get_rng_state_all()
     if is_cuda_available():
         states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()

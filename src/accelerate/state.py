@@ -65,9 +65,6 @@ if is_musa_available(check_device=False):
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
 
-if is_hpu_available(check_device=False):
-    import habana_frameworks.torch  # noqa: F401
-    import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -744,7 +741,7 @@ class PartialState:
             elif is_npu_available():
                 backend = "hccl"
                 distributed_type = DistributedType.MULTI_NPU
-            elif is_hpu_available():
+            elif is_hpu_available(init_hccl=True):
                 backend = "hccl"
                 distributed_type = DistributedType.MULTI_HPU
             elif torch.cuda.is_available():
@@ -798,7 +795,7 @@ class PartialState:
         if device == "xla":
             self.device = xm.xla_device()
         elif device == "hpu":
-            self.device = torch.device("hpu", index=torch.hpu.current_device())
+            self.device = torch.device("hpu")
         else:
             if device == "gpu":
                 device = "cuda"

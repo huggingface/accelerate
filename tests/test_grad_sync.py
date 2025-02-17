@@ -25,7 +25,7 @@ from accelerate.test_utils import (
     require_non_cpu,
     test_sync,
 )
-from accelerate.utils import is_hpu_available, patch_environment
+from accelerate.utils import patch_environment
 
 
 class SyncScheduler(unittest.TestCase):
@@ -45,17 +45,6 @@ class SyncScheduler(unittest.TestCase):
 
     @require_multi_device
     def test_gradient_sync_gpu_multi(self):
-        if is_hpu_available():
-            import habana_frameworks.torch.hpu as torch_hpu
-
-            # This test should run without initializing the HPU in the current process.
-            # because if an HPU is initialized, it can't be aquired by another process (subprocess).
-            if torch_hpu.is_initialized():
-                raise Exception(
-                    "HPU is already initialized. Please run this test in isolation "
-                    "`pytest tests/test_grad_sync.py::SyncScheduler::test_gradient_sync_gpu_multi`."
-                )
-
         print(f"Found {device_count} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [self.test_file_path]
         with patch_environment(omp_num_threads=1):

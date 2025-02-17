@@ -82,7 +82,7 @@ def get_backend():
         return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
         return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
-    elif is_hpu_available():
+    elif is_hpu_available(patch_torch=True):
         return "hpu", torch.hpu.device_count(), torch.hpu.memory_allocated
     else:
         return "cpu", 1, lambda: 0

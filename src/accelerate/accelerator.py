@@ -85,7 +85,6 @@ from .utils import (
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
-    is_hpu_available,
     is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
@@ -151,10 +150,6 @@ if is_torch_xla_available():
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
-
-if is_hpu_available(check_device=False):
-    import habana_frameworks.torch  # noqa: F401
-    import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
 
 
 try:
@@ -1426,8 +1421,6 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
-            if not evaluation_mode and self.distributed_type == DistributedType.MULTI_HPU:
-                device_placement = None
 
         self._models.append(model)
 
@@ -1512,11 +1505,6 @@ class Accelerator:
                         device_ids, output_device = [self.local_process_index], self.local_process_index
                     else:
                         device_ids, output_device = None, None
-
-                    if self.distributed_type == DistributedType.MULTI_HPU:
-                        # For hpu, model needs to be on the device before wrapping with DDP
-                        device_ids, output_device = None, None
-                        model = model.to(self.device)
 
                     model = torch.nn.parallel.DistributedDataParallel(
                         model, device_ids=device_ids, output_device=output_device, **kwargs
