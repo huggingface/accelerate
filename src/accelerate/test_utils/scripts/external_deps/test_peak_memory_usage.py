@@ -61,8 +61,9 @@ class TorchTracemalloc:
             torch.xpu.reset_max_memory_allocated()  # reset the peak gauge to zero
             self.begin = torch.xpu.memory_allocated()
         elif is_hpu_available(patch_torch=True):
-            torch.hpu.empty_cache()
+            # torch.hpu.empty_cache()
             torch.hpu.reset_max_memory_allocated()
+            self.begin = torch.hpu.memory_allocated()
         return self
 
     def __exit__(self, *exc):
@@ -88,7 +89,7 @@ class TorchTracemalloc:
             self.end = torch.xpu.memory_allocated()
             self.peak = torch.xpu.max_memory_allocated()
         elif is_hpu_available(patch_torch=True):
-            torch.hpu.empty_cache()
+            # torch.hpu.empty_cache
             self.end = torch.hpu.memory_allocated()
             self.peak = torch.hpu.max_memory_allocated()
         self.used = b2mb(self.end - self.begin)
@@ -239,9 +240,9 @@ def training_function(config, args):
         )
         train_total_peak_memory[f"epoch-{epoch}"] = tracemalloc.peaked + b2mb(tracemalloc.begin)
         if args.peak_memory_upper_bound is not None:
-            assert (
-                train_total_peak_memory[f"epoch-{epoch}"] <= args.peak_memory_upper_bound
-            ), "Peak memory usage exceeded the upper bound"
+            assert train_total_peak_memory[f"epoch-{epoch}"] <= args.peak_memory_upper_bound, (
+                "Peak memory usage exceeded the upper bound"
+            )
 
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
