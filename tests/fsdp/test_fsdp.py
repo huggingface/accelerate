@@ -16,6 +16,7 @@
 import functools
 import os
 
+import pytest
 import torch
 from transformers import AutoModel
 from transformers.testing_utils import mockenv_context
@@ -285,7 +286,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
         assert fsdp_plugin.cpu_ram_efficient_loading is False
         assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
-
+# In so ASIC like HPU, a device can only be allocated to a single process.
+# So we run the tests that launch subprocesses first.
+@pytest.mark.order(1)
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
 @require_non_torch_xla
 @require_multi_device
