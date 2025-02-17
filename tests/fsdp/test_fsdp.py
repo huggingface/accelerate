@@ -46,18 +46,19 @@ from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enable_fsdp_ram_efficient_loading
 
 
+ENV_DICT = {"OMP_NUM_THREADS": "1"}
+if is_hpu_available():
+    ENV_DICT["PT_ENABLE_INT64_SUPPORT"] = "1"
+    ENV_DICT["PT_HPU_LAZY_MODE"] = "0"
+
 set_seed(42)
+
 
 BERT_BASE_CASED = "bert-base-cased"
 LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 FP16 = "fp16"
 BF16 = "bf16"
 dtypes = [FP16, BF16]
-
-ENV_DICT = {"OMP_NUM_THREADS": "1"}
-if is_hpu_available():
-    ENV_DICT["PT_ENABLE_INT64_SUPPORT"] = "1"
-    ENV_DICT["PT_HPU_LAZY_MODE"] = "0"
 
 
 @require_non_cpu

@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import is_mlu_available, is_musa_available, is_npu_available, is_xpu_available
+from accelerate.utils import is_hpu_available, is_mlu_available, is_musa_available, is_npu_available, is_xpu_available
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
@@ -60,6 +60,9 @@ class TorchTracemalloc:
             torch.xpu.empty_cache()
             torch.xpu.reset_max_memory_allocated()  # reset the peak gauge to zero
             self.begin = torch.xpu.memory_allocated()
+        elif is_hpu_available(patch_torch=True):
+            torch.hpu.empty_cache()
+            torch.hpu.reset_max_memory_allocated()
         return self
 
     def __exit__(self, *exc):
@@ -84,6 +87,10 @@ class TorchTracemalloc:
             torch.xpu.empty_cache()
             self.end = torch.xpu.memory_allocated()
             self.peak = torch.xpu.max_memory_allocated()
+        elif is_hpu_available(patch_torch=True):
+            torch.hpu.empty_cache()
+            self.end = torch.hpu.memory_allocated()
+            self.peak = torch.hpu.max_memory_allocated()
         self.used = b2mb(self.end - self.begin)
         self.peaked = b2mb(self.peak - self.begin)
         # print(f"delta used/peak {self.used:4d}/{self.peaked:4d}")
