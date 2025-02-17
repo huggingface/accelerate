@@ -1750,10 +1750,10 @@ class FullyShardedDataParallelPlugin:
             self.set_mixed_precision(self.mixed_precision_policy)
         if self.fsdp_version == 2 and self.mixed_precision_policy is None:
             from torch.distributed.fsdp import (
-                MixedPrecisionPolicy,  # TODO(S1ro1): Cleanup and versions, fsdp2 doesn't support None
+                MixedPrecisionPolicy,
             )
 
-            self.mixed_precision_policy = MixedPrecisionPolicy()
+            self.mixed_precision_policy = MixedPrecisionPolicy() # FSDP2 requires an `empty` policy as it does not support `None`
         if self.mixed_precision_policy is not None:
             self.validate_mixed_precision_policy()
 
@@ -1865,13 +1865,20 @@ class FullyShardedDataParallelPlugin:
 
         buffer_type = torch.float32 if buffer_autocast else dtype
 
-        from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
-        # TODO: FSDP2
+        if self.fsdp_version == 1:
+            from torch.distributed.fsdp import MixedPrecision
+        elif self.fsdp_version == 2:
+            from torch.distributed.fsdp import MixedPrecisionPolicy
 
         if override or self.mixed_precision_policy is None:
-            self.mixed_precision_policy = MixedPrecision(
-                param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
-            )
+            if self.fsdp_version == 1:
+                self.mixed_precision_policy = MixedPrecision(
+                    param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
+                )
+            elif self.fsdp_version == 2: # at this point we're sure we are at a version that supports it
+                self.mixed_precision_policy = MixedPrecisionPolicy(
+                    param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
+                )
         elif isinstance(self.mixed_precision_policy, dict):
             # Check for incompatible types
             missing_keys = [
@@ -1886,20 +1893,25 @@ class FullyShardedDataParallelPlugin:
                     f"Must be a `dict` with keys `param_dtype`, `reduce_dtype`, and `buffer_dtype`. "
                     f"Values must be one of {list(mixed_precision_mapping.values())}"
                 )
-            self.mixed_precision_policy = MixedPrecision(**self.mixed_precision_policy)
+            if self.fsdp_version == 1:
+                self.mixed_precision_policy = MixedPrecision(**self.mixed_precision_policy)
+            elif self.fsdp_version == 2:
+                self.mixed_precision_policy = MixedPrecisionPolicy(**self.mixed_precision_policy)
 
     def validate_mixed_precision_policy(self):
         """
         Validates the mixed precision policy, abstracted away to not bring in the imports if not needed.
         """
-        from torch.distributed.fsdp import MixedPrecision, MixedPrecisionPolicy  # TODO(S1ro1): handle versions
-
         if self.fsdp_version == 2:
+            from torch.distributed.fsdp import MixedPrecisionPolicy # at this point we're sure we are at a version that supports it
+
             if not isinstance(self.mixed_precision_policy, MixedPrecisionPolicy):
                 raise ValueError(
                     "mixed_precision_policy must be an instance of `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2"
                 )
         if self.fsdp_version == 1:
+            from torch.distributed.fsdp import MixedPrecision
+
             if not isinstance(self.mixed_precision_policy, MixedPrecision):
                 raise ValueError(
                     "mixed_precision_policy must be an instance of `torch.distributed.fsdp.MixedPrecision` if `fsdp_version` is set to 1"
