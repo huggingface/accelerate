@@ -172,7 +172,9 @@ def train_integration(zero_stage: int = 1):
 if __name__ == "__main__":
     for zero_stage in [1, 2, 3]:
         baseline_not_trained, baseline_trained, baseline_outputs, baseline_data = train_baseline(zero_stage)
-        accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(zero_stage)
+        accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(
+            zero_stage
+        )
         assert (
             baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
         ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
