@@ -63,7 +63,6 @@ ARGUMENT_VALUE_MAPPING = {
         "HYBRID_SHARD_ZERO2": False,
         "NO_SHARD": False,
     },
-    #  TODO: do we need to handle mp/offload policy
 }
 
 logger = logging.getLogger(__name__)

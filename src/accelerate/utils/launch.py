@@ -269,7 +269,6 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
 
     if args.use_fsdp:
-        # TODO: Move to fsdp2
         current_env["ACCELERATE_USE_FSDP"] = "true"
         if args.fsdp_cpu_ram_efficient_loading and not args.fsdp_sync_module_states:
             raise ValueError("When using `--fsdp_cpu_ram_efficient_loading` set `--fsdp_sync_module_states` to `True`")
