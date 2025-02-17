@@ -109,9 +109,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
             env["FSDP_BACKWARD_PREFETCH"] = prefetch_policy
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert (
-                    fsdp_plugin.backward_prefetch == expected_value
-                ), f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
+                assert fsdp_plugin.backward_prefetch == expected_value, (
+                    f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
+                )
 
             # Check if torch enum works
             if prefetch_policy != "NO_PREFETCH":
@@ -303,12 +303,7 @@ class FSDPIntegrationTest(TempDirTestCase):
 
     def setUp(self):
         super().setUp()
-        if is_hpu_available():
-            # different lower bound for HPU
-            self.performance_lower_bound = None
-        else:
-            # lower bound for CUDA GPUs
-            self.performance_lower_bound = 0.82
+        self.performance_lower_bound = 0.82 if torch.cuda.is_available() else 0.72
         self.performance_configs = [
             "fsdp_shard_grad_op_transformer_based_wrap",
             "fsdp_full_shard_transformer_based_wrap",
@@ -352,9 +347,13 @@ class FSDPIntegrationTest(TempDirTestCase):
             elif policy == "SIZE_BASED_WRAP":
                 cmd_config.append("--fsdp_min_num_params=2000")
 
-            cmd_config.extend([self.test_file_path, f"--output_dir={self.tmpdir}"])
-            if self.performance_lower_bound is not None:
-                cmd_config.append(f"--performance_lower_bound={self.performance_lower_bound}")
+            cmd_config.extend(
+                [
+                    self.test_file_path,
+                    f"--output_dir={self.tmpdir}",
+                    f"--performance_lower_bound={self.performance_lower_bound}",
+                ]
+            )
 
             with patch_environment(**ENV_DICT):
                 execute_subprocess_async(cmd_config)
