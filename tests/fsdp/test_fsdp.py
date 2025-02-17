@@ -35,7 +35,7 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     slow,
 )
-from accelerate.utils import patch_environment
+from accelerate.utils import is_hpu_available, patch_environment
 from accelerate.utils.constants import (
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -53,6 +53,11 @@ LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 FP16 = "fp16"
 BF16 = "bf16"
 dtypes = [FP16, BF16]
+
+ENV_DICT = {"OMP_NUM_THREADS": "1"}
+if is_hpu_available():
+    ENV_DICT["PT_ENABLE_INT64_SUPPORT"] = "1"
+    ENV_DICT["PT_HPU_LAZY_MODE"] = "0"
 
 
 @require_non_cpu
@@ -286,8 +291,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         assert fsdp_plugin.cpu_ram_efficient_loading is False
         assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
-# In so ASIC like HPU, a device can only be allocated to a single process.
-# So we run the tests that launch subprocesses first.
+
 @pytest.mark.order(1)
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
 @require_non_torch_xla
@@ -349,7 +353,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                     f"--performance_lower_bound={self.performance_lower_bound}",
                 ]
             )
-            with patch_environment(omp_num_threads=1):
+            with patch_environment(**ENV_DICT):
                 execute_subprocess_async(cmd_config)
 
     def test_checkpointing(self):
@@ -384,7 +388,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                         "--partial_train_epoch=1",
                     ]
                 )
-                with patch_environment(omp_num_threads=1):
+                with patch_environment(**ENV_DICT):
                     execute_subprocess_async(cmd_config)
 
                 cmd_config = cmd_config[:-1]
@@ -394,7 +398,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                         f"--resume_from_checkpoint={resume_from_checkpoint}",
                     ]
                 )
-                with patch_environment(omp_num_threads=1):
+                with patch_environment(**ENV_DICT):
                     execute_subprocess_async(cmd_config)
 
     def test_peak_memory_usage(self):
@@ -438,5 +442,5 @@ class FSDPIntegrationTest(TempDirTestCase):
                     f"--n_val={self.n_val}",
                 ]
             )
-            with patch_environment(omp_num_threads=1):
+            with patch_environment(**ENV_DICT):
                 execute_subprocess_async(cmd_config)
