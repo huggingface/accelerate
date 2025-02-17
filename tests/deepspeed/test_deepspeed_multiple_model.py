@@ -178,6 +178,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
     @slow
     def test_train_multiple_models(self):
         self.test_file_path = self.test_scripts_folder / "test_ds_multiple_model.py"
-        args = ["--num_processes=2", "--num_machines=1", "--main_process_port=0", str(self.test_file_path)]
+        args = ["--num_processes=2", "--num_machines=1", str(self.test_file_path)]
         args = self.parser.parse_args(args)
         launch_command(args)

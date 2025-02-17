@@ -1894,6 +1894,10 @@ class Accelerator:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
 
+            if self.device.type == "hpu":
+                # here for now
+                os.environ["DEEPSPEED_USE_HPU"] = "true"
+
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()

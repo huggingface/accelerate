@@ -888,6 +888,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd)
 
+
 @pytest.mark.order(1)
 @require_deepspeed
 @require_multi_device

@@ -109,9 +109,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
             env["FSDP_BACKWARD_PREFETCH"] = prefetch_policy
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert fsdp_plugin.backward_prefetch == expected_value, (
-                    f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
-                )
+                assert (
+                    fsdp_plugin.backward_prefetch == expected_value
+                ), f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
 
             # Check if torch enum works
             if prefetch_policy != "NO_PREFETCH":
