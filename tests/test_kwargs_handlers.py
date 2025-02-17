@@ -17,6 +17,7 @@ import os
 import unittest
 from dataclasses import dataclass
 
+import pytest
 import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
@@ -83,6 +84,7 @@ class KwargsHandlerTester(unittest.TestCase):
         assert scaler._growth_interval == 2000
         assert scaler._enabled is True
 
+    @pytest.mark.order(1)
     @require_multi_device
     def test_ddp_kwargs(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
@@ -170,6 +172,7 @@ class KwargsHandlerTester(unittest.TestCase):
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
+    @pytest.mark.order(1)
     @require_multi_device
     def test_ddp_comm_hook(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]

@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import pytest
 from packaging import version
 
 from accelerate import debug_launcher
@@ -53,6 +54,7 @@ class MetricTester(unittest.TestCase):
     def test_metric_accelerator(self):
         self.test_metrics.main()
 
+    @pytest.mark.order(1)
     @require_multi_device
     def test_metric_accelerator_multi(self):
         print(f"Found {device_count} devices.")

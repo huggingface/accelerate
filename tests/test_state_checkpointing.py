@@ -376,6 +376,7 @@ class CheckpointTest(unittest.TestCase):
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
 
+    @pytest.mark.order(1)
     @require_non_cpu
     @require_non_torch_xla
     def test_map_location(self):
