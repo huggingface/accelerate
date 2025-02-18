@@ -388,11 +388,11 @@ def is_hpu_available(patch_torch=True, init_hccl=False):
         import habana_frameworks.torch.hpu as torch_hpu  # noqa: F401
 
         # for some reason torch.hpu.device_count is not updated when HABANA_VISIBLE_DEVICES or HABANA_VISIBLE_MODULES is set
-        torch.hpu.device_count = lambda: (
-            len(os.environ.get("HABANA_VISIBLE_MODULES", "").split(","))
-            or len(os.environ.get("HABANA_VISIBLE_MODULES", "").split(","))
-            or torch.hpu.device_count()
-        )
+        # torch.hpu.device_count = lambda: (
+        #     len(os.environ.get("HABANA_VISIBLE_MODULES", "").split(","))
+        #     or len(os.environ.get("HABANA_VISIBLE_MODULES", "").split(","))
+        #     or torch.hpu.device_count()
+        # )
 
     if init_hccl:
         import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
