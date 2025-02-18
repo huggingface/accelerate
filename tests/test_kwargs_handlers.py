@@ -28,6 +28,7 @@ from accelerate.test_utils import (
     path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
+    require_non_hpu,
 )
 from accelerate.test_utils.testing import slow
 from accelerate.utils import (
@@ -165,6 +166,7 @@ class KwargsHandlerTester(unittest.TestCase):
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
+    @require_non_hpu
     @launches_subprocesses
     @require_multi_device
     def test_ddp_comm_hook(self):
