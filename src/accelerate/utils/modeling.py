@@ -33,6 +33,7 @@ from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
+    is_hpu_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
@@ -2038,6 +2039,8 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
         return torch.musa.amp.GradScaler(**kwargs)
     elif is_npu_available():
         return torch.npu.amp.GradScaler(**kwargs)
+    elif is_hpu_available():
+        return torch.amp.GradScaler("hpu", **kwargs)
     elif is_xpu_available():
         return torch.amp.GradScaler("xpu", **kwargs)
     else:

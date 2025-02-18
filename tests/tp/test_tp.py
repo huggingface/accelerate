@@ -20,6 +20,7 @@ from accelerate.test_utils.testing import (
     launches_subprocesses,
     path_in_accelerate_package,
     require_multi_device,
+    require_non_hpu,
     require_non_torch_xla,
     require_tp,
     require_transformers,
@@ -45,6 +46,7 @@ class TPIntegrationTest(TempDirTestCase):
 
         set_seed(42)
 
+    @require_non_hpu
     @launches_subprocesses
     def test_working_of_tp(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"

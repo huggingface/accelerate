@@ -1501,7 +1501,7 @@ class Accelerator:
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                     # TODO: Look at enabling native TP training directly with a proper config
-                    if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true" and self.device.type != "hpu":
+                    if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true":
                         device_ids, output_device = [self.local_process_index], self.local_process_index
                     else:
                         device_ids, output_device = None, None
