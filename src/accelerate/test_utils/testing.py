@@ -200,6 +200,13 @@ def require_non_hpu(test_case):
     return unittest.skipUnless(torch_device != "hpu", "test requires a non-HPU")(test_case)
 
 
+def require_non_gaudi1(test_case):
+    """
+    Decorator marking a test that should be skipped for Gaudi-1.
+    """
+    return unittest.skipUnless(os.environ.get("IS_GAUDI1", "0") != "1", "test requires a non-Gaudi-1")(test_case)
+
+
 def require_mlu(test_case):
     """
     Decorator marking a test that requires MLU. These tests are skipped when there are no MLU available.
