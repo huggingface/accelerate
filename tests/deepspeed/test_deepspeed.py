@@ -19,7 +19,6 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 
-import pytest
 import torch
 from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, RandomSampler, SequentialSampler
@@ -32,6 +31,7 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
+    launches_subprocesses,
     path_in_accelerate_package,
     require_deepspeed,
     require_huggingface_suite,
@@ -889,7 +889,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 execute_subprocess_async(cmd)
 
 
-@pytest.mark.order(1)
+@launches_subprocesses
 @require_deepspeed
 @require_multi_device
 @slow

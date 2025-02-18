@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import List, Union
 from unittest import mock
 
+import pytest
 import torch
 
 import accelerate
@@ -82,7 +83,7 @@ def get_backend():
         return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
         return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
-    elif is_hpu_available(patch_torch=True):
+    elif is_hpu_available():
         return "hpu", torch.hpu.device_count(), torch.hpu.memory_allocated
     else:
         return "cpu", 1, lambda: 0
@@ -461,6 +462,13 @@ def require_torchdata_stateful_dataloader(test_case):
     return unittest.skipUnless(
         is_torchdata_stateful_dataloader_available(), "test requires torchdata.stateful_dataloader"
     )(test_case)
+
+
+def launches_subprocesses(test_case):
+    """
+    Decorator marking a test that launches subprocesses. These tests run first in the test suite.
+    """
+    return pytest.mark.order(1)(test_case)
 
 
 class TempDirTestCase(unittest.TestCase):

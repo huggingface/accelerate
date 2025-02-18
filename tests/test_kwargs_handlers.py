@@ -17,7 +17,6 @@ import os
 import unittest
 from dataclasses import dataclass
 
-import pytest
 import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
@@ -25,6 +24,7 @@ from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
+    launches_subprocesses,
     path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
@@ -37,17 +37,12 @@ from accelerate.utils import (
     ProfileKwargs,
     TorchDynamoPlugin,
     clear_environment,
-    is_hpu_available,
 )
 from accelerate.utils.dataclasses import DistributedType
 
 
 MIXED_PRECISION = "fp16"
 MIXED_PRECISION_DTYPE = torch.float16
-
-if is_hpu_available():
-    MIXED_PRECISION = "bf16"
-    MIXED_PRECISION_DTYPE = torch.bfloat16
 
 
 @dataclass
@@ -84,7 +79,7 @@ class KwargsHandlerTester(unittest.TestCase):
         assert scaler._growth_interval == 2000
         assert scaler._enabled is True
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_multi_device
     def test_ddp_kwargs(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
@@ -172,7 +167,7 @@ class KwargsHandlerTester(unittest.TestCase):
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_multi_device
     def test_ddp_comm_hook(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]

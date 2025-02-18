@@ -60,7 +60,7 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
         torch.mlu.manual_seed_all(seed)
     elif is_musa_available():
         torch.musa.manual_seed_all(seed)
-    elif is_hpu_available(patch_torch=True):
+    elif is_hpu_available():
         torch.hpu.manual_seed_all(seed)
     else:
         torch.cuda.manual_seed_all(seed)
@@ -94,7 +94,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         assert is_xpu_available(), "Can't synchronize XPU seeds on an environment without XPUs."
         rng_state = torch.xpu.get_rng_state()
     elif rng_type == RNGType.HPU:
-        assert is_hpu_available(patch_torch=True), "Can't synchronize HPU seeds on an environment without HPUs."
+        assert is_hpu_available(), "Can't synchronize HPU seeds on an environment without HPUs."
         rng_state = torch.hpu.get_rng_state()
     elif rng_type == RNGType.GENERATOR:
         assert generator is not None, "Need a generator to synchronize its seed."

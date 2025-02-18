@@ -15,7 +15,6 @@
 import inspect
 import unittest
 
-import pytest
 import torch
 
 from accelerate import Accelerator
@@ -26,6 +25,7 @@ from accelerate.test_utils import (
     device_count,
     execute_subprocess_async,
     get_launch_command,
+    launches_subprocesses,
     path_in_accelerate_package,
     require_huggingface_suite,
     require_multi_device,
@@ -36,7 +36,7 @@ from accelerate.test_utils import (
     require_torchvision,
     torch_device,
 )
-from accelerate.utils import patch_environment
+from accelerate.utils import is_hpu_available, patch_environment
 
 
 class MultiDeviceTester(unittest.TestCase):
@@ -46,7 +46,7 @@ class MultiDeviceTester(unittest.TestCase):
     pippy_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_pippy.py")
     merge_weights_file_path = path_in_accelerate_package("test_utils", "scripts", "test_merge_weights.py")
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_multi_device
     def test_multi_device(self):
         print(f"Found {device_count} devices.")
@@ -54,7 +54,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_multi_device
     def test_multi_device_ops(self):
         print(f"Found {device_count} devices.")
@@ -62,7 +62,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_multi_device
     def test_pad_across_processes(self):
         print(f"Found {device_count} devices.")
@@ -70,7 +70,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_multi_device
     def test_multi_device_merge_fsdp_weights(self):
         print(f"Found {device_count} devices.")
@@ -80,7 +80,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_non_torch_xla
     @require_multi_device
     def test_distributed_data_loop(self):
@@ -106,7 +106,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_non_xpu
     @require_multi_gpu
     @require_pippy
@@ -163,8 +163,8 @@ if __name__ == "__main__":
         def forward(self, x):
             return self.linear2(self.batchnorm(self.linear1(x)))
 
-    if torch_device == "hpu":
-        device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
+    if is_hpu_available():
+        device_map = {"linear1": 0, "batchnorm": "hpu", "linear2": "cpu"}
     else:
         device_map = {"linear1": 0, "batchnorm": "cuda", "linear2": 1}
 

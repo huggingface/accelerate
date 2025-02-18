@@ -32,9 +32,9 @@ from accelerate import Accelerator
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
+    launches_subprocesses,
     require_non_cpu,
     require_non_torch_xla,
-    torch_device,
 )
 from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
 
@@ -376,16 +376,13 @@ class CheckpointTest(unittest.TestCase):
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_non_cpu
     @require_non_torch_xla
     def test_map_location(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
 
         env_kwargs = dict(use_safe_tensors=str(self.use_safetensors), omp_num_threads="1")
-        if torch_device == "hpu":
-            env_kwargs.update(pt_hpu_lazy_mode="0")
-
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 

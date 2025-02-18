@@ -379,7 +379,7 @@ def is_npu_available(check_device=False):
 
 
 @lru_cache
-def is_hpu_available(check_device=False, patch_torch=False, init_hccl=False):
+def is_hpu_available(check_device=False, patch_torch=True, init_hccl=False):
     "Checks if `torch.hpu` is installed and potentially if a HPU is in the environment"
     if importlib.util.find_spec("habana_frameworks") is None:
         return False

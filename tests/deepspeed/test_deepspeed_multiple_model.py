@@ -17,7 +17,6 @@ import json
 from functools import partial
 from pathlib import Path
 
-import pytest
 import torch
 from transformers import AutoModelForCausalLM
 
@@ -25,6 +24,7 @@ from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.commands.launch import launch_command, launch_command_parser
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
+    launches_subprocesses,
     path_in_accelerate_package,
     require_deepspeed,
     require_huggingface_suite,
@@ -172,7 +172,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
             assert accelerator.deepspeed_engine_wrapped.engine is model1
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_huggingface_suite
     @require_multi_device
     @slow

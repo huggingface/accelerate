@@ -1707,7 +1707,7 @@ class FullyShardedDataParallelPlugin:
                 device = torch.cuda.current_device()
             elif is_xpu_available():
                 device = torch.xpu.current_device()
-            elif is_hpu_available(patch_torch=True):
+            elif is_hpu_available():
                 device = torch.hpu.current_device()
             else:
                 raise RuntimeError(
@@ -1855,7 +1855,7 @@ class TorchTensorParallelPlugin:
         from torch.distributed.device_mesh import init_device_mesh
 
         # support for other devices has to be investigated
-        if is_hpu_available():
+        if is_hpu_available(init_hccl=True):
             device = "hpu"
         else:
             device = "cuda"

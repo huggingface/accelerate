@@ -60,7 +60,6 @@ def clear_device_cache(garbage_collection=False):
     elif is_cuda_available():
         torch.cuda.empty_cache()
     elif is_hpu_available():
-        # doesn't have an empty_cache method
         pass
 
 

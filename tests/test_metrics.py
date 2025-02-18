@@ -15,7 +15,6 @@
 import unittest
 
 import numpy as np
-import pytest
 from packaging import version
 
 from accelerate import debug_launcher
@@ -23,6 +22,7 @@ from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     device_count,
     execute_subprocess_async,
+    launches_subprocesses,
     path_in_accelerate_package,
     require_cpu,
     require_huggingface_suite,
@@ -54,7 +54,7 @@ class MetricTester(unittest.TestCase):
     def test_metric_accelerator(self):
         self.test_metrics.main()
 
-    @pytest.mark.order(1)
+    @launches_subprocesses
     @require_multi_device
     def test_metric_accelerator_multi(self):
         print(f"Found {device_count} devices.")

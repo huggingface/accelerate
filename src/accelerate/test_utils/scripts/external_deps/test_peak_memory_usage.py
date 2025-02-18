@@ -60,7 +60,7 @@ class TorchTracemalloc:
             torch.xpu.empty_cache()
             torch.xpu.reset_max_memory_allocated()  # reset the peak gauge to zero
             self.begin = torch.xpu.memory_allocated()
-        elif is_hpu_available(patch_torch=True):
+        elif is_hpu_available():
             # torch.hpu.empty_cache()
             # torch.hpu.reset_max_memory_allocated()
             self.begin = torch.hpu.memory_allocated()
@@ -88,7 +88,7 @@ class TorchTracemalloc:
             torch.xpu.empty_cache()
             self.end = torch.xpu.memory_allocated()
             self.peak = torch.xpu.max_memory_allocated()
-        elif is_hpu_available(patch_torch=True):
+        elif is_hpu_available():
             # torch.hpu.empty_cache
             self.end = torch.hpu.memory_allocated()
             self.peak = torch.hpu.max_memory_allocated()
