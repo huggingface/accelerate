@@ -180,12 +180,29 @@ accelerate merge-weights pytorch_model_fsdp_0/ output_path
 
 ## Mapping between FSDP sharding strategies and DeepSpeed ZeRO Stages
 * `FULL_SHARD` maps to the DeepSpeed `ZeRO Stage-3`. Shards optimizer states, gradients and parameters.
-* `SHARD_GRAD_OP` maps to the DeepSpeed `ZeRO Stage-2`. Shards optimizer states and gradients.
+* `SHARD_GRAD_OP` maps to DeepSpeed `ZeRO Stage-2`. Shards optimizer states and gradients. A key difference from `ZeRO Stage-2` is that `SHARD_GRAD_OP` also shards the model parameters outside of computation (forward/backward passes).
 * `NO_SHARD` maps to `ZeRO Stage-0`. No sharding wherein each GPU has full copy of model, optimizer states and gradients.
 * `HYBRID_SHARD` maps to `ZeRO++ Stage-3` wherein `zero_hpz_partition_size=<num_gpus_per_node>`. Here, this will shard optimizer states, gradients and parameters within each node while each node has full copy.
 
 ## A few caveats to be aware of
 
+- PyTorch FSDP auto wraps sub-modules. With `use_orig_params=False`, it flattens the parameters in each sub-module and shards them in place.
+  Due to this, any optimizer created before model wrapping gets broken and occupies more memory. Further, you might also observe correctness issues during training. 
+  Hence, it is highly recommended and efficient to prepare the model before creating the optimizer. Example: 
+```diff
+  model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
++ model = accelerator.prepare(model)
+
+  optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
+
+- model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+-    )
+
++ optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
++         optimizer, train_dataloader, eval_dataloader, lr_scheduler
++    )
+```
 - In case of multiple models, pass the optimizers to the prepare call in the same order as corresponding models else `accelerator.save_state()` and `accelerator.load_state()` will result in wrong/unexpected behaviour.
 - This feature is incompatible with `--predict_with_generate` in the `run_translation.py` script of `Transformers` library.
 
