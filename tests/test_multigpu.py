@@ -30,6 +30,7 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
+    require_non_hpu,
     require_non_torch_xla,
     require_non_xpu,
     require_pippy,
@@ -70,6 +71,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
+    @require_non_hpu
     @launches_subprocesses
     @require_multi_device
     def test_multi_device_merge_fsdp_weights(self):
