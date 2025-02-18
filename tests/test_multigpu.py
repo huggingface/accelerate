@@ -102,7 +102,7 @@ class MultiDeviceTester(unittest.TestCase):
         elif torch_device == "mlu":
             env_kwargs.update(mlu_visible_devices="0,1")
         elif torch_device == "hpu":
-            env_kwargs.update(habana_visible_devices="0,1")
+            env_kwargs.update(habana_visible_modules="0,1")
         else:
             env_kwargs.update(cuda_visible_devices="0,1")
 

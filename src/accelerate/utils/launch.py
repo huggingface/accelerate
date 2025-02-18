@@ -141,7 +141,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_hpu_available(patch_torch=False):
-            current_env["HABANA_VISIBLE_DEVICES"] = args.gpu_ids
+            current_env["HABANA_VISIBLE_MODULES"] = args.gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
@@ -245,7 +245,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         elif is_hpu_available(patch_torch=False):
-            current_env["HABANA_VISIBLE_DEVICES"] = gpu_ids
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -413,7 +413,7 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         elif is_hpu_available(patch_torch=False):
-            current_env["HABANA_VISIBLE_DEVICES"] = gpu_ids
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
