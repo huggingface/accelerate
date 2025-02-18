@@ -1895,8 +1895,20 @@ class Accelerator:
                             kwargs["lr_scheduler"] = scheduler
 
             if self.device.type == "hpu":
-                # here for now
+                # This env variable is initialized here to make sure it is set to "true"
+                # It should be done by the launcher but it does not work for multi-node runs
                 os.environ["DEEPSPEED_USE_HPU"] = "true"
+
+                # This should be verified in the config validation and not here
+                if (
+                    self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get("device", "none")
+                    != "none"
+                    and os.environ.get("PT_HPU_LAZY_MODE", "1") != "1"
+                ):
+                    raise ValueError(
+                        "You can't use an Offload Optimizer with HPU in Lazy Mode. "
+                        "Please set the environment variable `PT_HPU_LAZY_MODE` to `0`."
+                    )
 
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
