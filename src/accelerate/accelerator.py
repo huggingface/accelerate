@@ -1547,7 +1547,7 @@ class Accelerator:
 
                         # Simulate the behavior of the old auto_wrap_policy
                         if auto_wrap_policy is transformer_auto_wrap_policy:
-                            no_split_modules = getattr(model, "_no_split_modules")
+                            no_split_modules = model._no_split_modules
                             if no_split_modules is None:
                                 no_split_modules = []
                             transformer_cls_names_to_wrap = list(no_split_modules)

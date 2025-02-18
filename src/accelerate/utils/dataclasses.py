@@ -1610,8 +1610,6 @@ class FullyShardedDataParallelPlugin:
     def __post_init__(self):
         from torch.distributed.fsdp import (
             BackwardPrefetch,
-            CPUOffload,
-            CPUOffloadPolicy,
             ShardingStrategy,
         )
 
@@ -1643,23 +1641,9 @@ class FullyShardedDataParallelPlugin:
 
         if self.cpu_offload is None:
             self.cpu_offload = str_to_bool(os.environ.get(env_prefix + "OFFLOAD_PARAMS", "False")) == 1
-        if isinstance(self.cpu_offload, bool):
-            if self.fsdp_version == 2:
-                if not self.cpu_offload:
-                    warnings.warn(
-                        "Offload_params is set to False, however FSDP2 always offloads parameters and runs optimizer step on CPU. This will be overridden to True."
-                    )
-                self.cpu_offload = CPUOffloadPolicy()  # TODO: enable pin memory config
-            else:
-                self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
-        if isinstance(self.cpu_offload, CPUOffloadPolicy) and self.fsdp_version == 1:
-            raise ValueError(
-                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.CPUOffloadPolicy` in FSDP1, got {self.cpu_offload}"
-            )
-        if isinstance(self.cpu_offload, CPUOffload) and self.fsdp_version == 2:
-            raise ValueError(
-                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.CPUOffload` in FSDP2, got {self.cpu_offload}"
-            )
+
+        self.set_cpu_offload()  # abstracted away to hide imports due to version checks
+        self.validate_cpu_offload()
 
         if self.backward_prefetch is None:
             self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
@@ -1920,6 +1904,36 @@ class FullyShardedDataParallelPlugin:
                 raise ValueError(
                     "mixed_precision_policy must be an instance of `torch.distributed.fsdp.MixedPrecision` if `fsdp_version` is set to 1"
                 )
+
+    def set_cpu_offload(self):
+        if self.fsdp_version == 2:
+            from torch.distributed.fsdp import CPUOffloadPolicy, OffloadPolicy
+        else:
+            from torch.distributed.fsdp import CPUOffload
+
+        if isinstance(self.cpu_offload, bool):
+            if self.fsdp_version == 2:
+                if self.cpu_offload:
+                    self.cpu_offload = OffloadPolicy()
+                else:
+                    self.cpu_offload = CPUOffloadPolicy()
+            else:
+                self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
+
+    def validate_cpu_offload(self):
+        if self.fsdp_version == 2:
+            from torch.distributed.fsdp import OffloadPolicy
+        else:
+            from torch.distributed.fsdp import CPUOffload
+
+        if self.fsdp_version == 2 and not isinstance(self.cpu_offload, OffloadPolicy):
+            raise ValueError(
+                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.OffloadPolicy` in FSDP2, got {self.cpu_offload}"
+            )
+        if self.fsdp_version == 1 and not isinstance(self.cpu_offload, CPUOffload):
+            raise ValueError(
+                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.CPUOffload` in FSDP1, got {self.cpu_offload}"
+            )
 
 
 @dataclass
