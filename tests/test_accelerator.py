@@ -456,7 +456,6 @@ class AcceleratorTester(AccelerateTestCase):
         ), "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
 
     @require_cuda_or_xpu
-    @require_non_hpu
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
@@ -473,7 +472,6 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         model = accelerator.prepare(model)
 
-    @require_non_hpu
     @require_cuda_or_xpu
     @slow
     @require_bnb
@@ -589,7 +587,6 @@ class AcceleratorTester(AccelerateTestCase):
         model_loaded(inputs)
 
     @require_non_cpu
-    @require_non_hpu
     def test_can_unwrap_model_fp16(self):
         # test for a regression introduced in #872
         # before the fix, after unwrapping with keep_fp32_wrapper=False, there would be the following error:

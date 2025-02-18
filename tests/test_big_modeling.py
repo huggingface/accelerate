@@ -613,7 +613,6 @@ class BigModelingTester(unittest.TestCase):
             assert (free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130
 
     @require_multi_device
-    @require_non_hpu
     def test_dispatch_model_multi_devices(self):
         model = BiggerModelForTest()
 
@@ -673,9 +672,9 @@ class BigModelingTester(unittest.TestCase):
                 x = torch.randn(2, 3)
                 model(x)
 
+    @require_non_hpu
     @slow
     @require_multi_device
-    @require_non_hpu
     def test_dispatch_model_gpt2_on_two_devices(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
         inputs = tokenizer("Hello world! My name is", return_tensors="pt").to(torch_device)
@@ -906,11 +905,11 @@ class BigModelingTester(unittest.TestCase):
         hook2.offload()
         assert model2.weight.device == torch.device("cpu")
 
+    @require_non_hpu
     @require_non_torch_xla
     @slow
     @require_bnb
     @require_multi_device
-    @require_non_hpu
     def test_dispatch_model_bnb(self):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download

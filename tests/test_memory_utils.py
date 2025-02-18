@@ -110,9 +110,9 @@ class MemoryTest(unittest.TestCase):
             mock_training_loop_function()
             assert "Oops, we had an error!" in cm.exception.args[0]
 
+    @require_non_hpu
     @require_non_cpu
     @require_non_torch_xla
-    @require_non_hpu  # can't release memory on HPU
     def test_release_memory(self):
         starting_memory = memory_allocated_func()
         model = ModelForTest()
