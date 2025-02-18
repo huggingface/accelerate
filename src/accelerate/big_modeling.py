@@ -128,7 +128,14 @@ def init_on_device(device: torch.device, include_buffers: bool = None):
             param_cls = type(module._parameters[name])
             kwargs = module._parameters[name].__dict__
             kwargs["requires_grad"] = param.requires_grad
-            module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
+            # When we have a case of tensor2 = tensor1, it would call the set_attr
+            # of param, which in turn would call the register_parameter API.
+            # In this case, the new param is already on meta-device, since it was moved
+            # previously when it was initialized. Hence, when resetting, you can
+            # directly assign that tensor instead of re-init. If you re-init you would
+            # lose the relationship.
+            module._parameters[name] = param if param.device == device else \
+                            param_cls(module._parameters[name].to(device), **kwargs)
 
     def register_empty_buffer(module, name, buffer, persistent=True):
         old_register_buffer(module, name, buffer, persistent=persistent)
