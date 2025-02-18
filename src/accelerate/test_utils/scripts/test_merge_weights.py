@@ -26,7 +26,7 @@ from accelerate import Accelerator, FullyShardedDataParallelPlugin
 from accelerate.commands.merge import merge_command, merge_command_parser
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.training import RegressionDataset
-from accelerate.utils import is_hpu_available, merge_fsdp_weights, patch_environment, save_fsdp_model
+from accelerate.utils import merge_fsdp_weights, patch_environment, save_fsdp_model
 
 
 logging.basicConfig(level=logging.INFO)
