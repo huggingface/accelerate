@@ -317,6 +317,8 @@ def set_module_tensor_to_device(
                 device = f"musa:{device}"
             elif is_xpu_available():
                 device = f"xpu:{device}"
+            elif is_hpu_available():
+                device = f"hpu:{device}"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
@@ -328,7 +330,11 @@ def set_module_tensor_to_device(
                 if not is_buffer:
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
-            new_value = value.to(device)
+            try:
+                new_value = value.to(device)
+            except Exception:
+                print(f"Error moving {value} to {device}")
+                raise
         else:
             new_value = torch.tensor(value, device=device)
         if device_quantization is not None:
@@ -779,6 +785,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
+        elif is_hpu_available():
+            for i in range(torch.hpu.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device("hpu", i))
+                    max_memory[i] = torch.hpu.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         else:
             for i in range(torch.cuda.device_count()):
                 try:
@@ -811,6 +825,8 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.musa.device_count()
     elif is_xpu_available():
         num_devices = torch.xpu.device_count()
+    elif is_hpu_available():
+        num_devices = torch.hpu.device_count()
     else:
         num_devices = torch.cuda.device_count()
     for device in gpu_devices:
@@ -940,6 +956,8 @@ def get_balanced_memory(
         expected_device_type = "musa"
     elif is_xpu_available():
         expected_device_type = "xpu"
+    elif is_hpu_available():
+        expected_device_type = "hpu"
     else:
         expected_device_type = "cuda"
     num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
@@ -1622,6 +1640,8 @@ def load_state_dict(checkpoint_file, device_map=None):
                         target_device = f"xpu:{device}"
                     elif is_npu_available():
                         target_device = f"npu:{device}"
+                    elif is_hpu_available():
+                        target_device = f"hpu:{device}"
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1658,6 +1678,8 @@ def load_state_dict(checkpoint_file, device_map=None):
                         target_device = f"xpu:{device}"
                     elif is_npu_available():
                         target_device = f"npu:{device}"
+                    elif is_hpu_available():
+                        target_device = f"hpu:{device}"
 
                 with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
                     for key in device_weights[device]:
