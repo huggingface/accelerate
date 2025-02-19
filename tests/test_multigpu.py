@@ -165,9 +165,9 @@ if __name__ == "__main__":
             return self.linear2(self.batchnorm(self.linear1(x)))
 
     if is_hpu_available():
-        device_map = {"linear1": 0, "batchnorm": "hpu", "linear2": "cpu"}
+        device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 0}
     else:
-        device_map = {"linear1": 0, "batchnorm": "cuda", "linear2": 1}
+        device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
 
     model = ModelForTest()
     dispatch_model(model, device_map=device_map)
