@@ -197,8 +197,8 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
         storage_ptr = tensor.untyped_storage().data_ptr()
         storage_size = tensor.untyped_storage().nbytes()
     except Exception:
-        # Fallback for torch==1.10
         try:
+            # Fallback for torch==1.10
             storage_ptr = tensor.storage().data_ptr()
             storage_size = tensor.storage().size() * _SIZE[tensor.dtype]
         except NotImplementedError:

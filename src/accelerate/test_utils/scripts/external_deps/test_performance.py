@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import set_seed
+from accelerate.utils import SAFE_WEIGHTS_NAME, WEIGHTS_NAME, set_seed
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
@@ -213,11 +213,19 @@ def training_function(config, args):
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
             json.dump(performance_metric, f)
 
+    safe_serialization = True
+    if accelerator.distributed_type == DistributedType.TP and accelerator.device.type == "hpu":
+        # HPU DTensor fails on safe serialization
+        safe_serialization = False
+
     # Finally try saving the model
-    accelerator.save_model(model, args.output_dir)
+    accelerator.save_model(model, args.output_dir, safe_serialization=safe_serialization)
     accelerator.wait_for_everyone()
+    if not safe_serialization:
+        # torch.save is not blocking ?
+        torch.hpu.synchronize()
     assert Path(
-        args.output_dir, "model.safetensors"
+        args.output_dir, SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
     ).exists(), "Model was not saved when calling `Accelerator.save_model`"
     accelerator.end_training()
 
