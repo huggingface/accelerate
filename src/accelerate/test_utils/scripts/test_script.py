@@ -695,13 +695,12 @@ def test_split_between_processes_nested_dict():
 def test_split_between_processes_tensor():
     state = AcceleratorState()
     if state.num_processes > 1:
-        # some accelerators like HPUs don't support int64
-        data = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]], dtype=torch.int32).to(state.device)
+        data = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]]).to(state.device)
         with state.split_between_processes(data) as results:
             if state.process_index == 0:
-                expected = torch.tensor([[0, 1, 2, 3]], dtype=torch.int32).to(state.device)
+                expected = torch.tensor([[0, 1, 2, 3]]).to(state.device)
             else:
-                expected = torch.tensor([[4, 5, 6, 7]], dtype=torch.int32).to(state.device)
+                expected = torch.tensor([[4, 5, 6, 7]]).to(state.device)
             torch.testing.assert_close(results, expected)
     state.wait_for_everyone()
 
