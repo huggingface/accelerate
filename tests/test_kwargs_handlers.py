@@ -88,7 +88,7 @@ class KwargsHandlerTester(unittest.TestCase):
     def test_autocast_kwargs(self):
         kwargs = AutocastKwargs(enabled=False)
         AcceleratorState._reset_state()
-        accelerator = Accelerator(mixed_precision=MIXED_PRECISION)
+        accelerator = Accelerator(mixed_precision="fp16")
 
         a_float32 = torch.rand((8, 8), device=accelerator.device)
         b_float32 = torch.rand((8, 8), device=accelerator.device)
@@ -96,17 +96,17 @@ class KwargsHandlerTester(unittest.TestCase):
         d_float32 = torch.rand((8, 8), device=accelerator.device)
 
         with accelerator.autocast():
-            e_mixed = torch.mm(a_float32, b_float32)
-            assert e_mixed.dtype == MIXED_PRECISION_DTYPE
+            e_float16 = torch.mm(a_float32, b_float32)
+            assert e_float16.dtype == torch.float16
 
             with accelerator.autocast(autocast_handler=kwargs):
                 # Convert e_float16 to float32
-                f_float32 = torch.mm(c_float32, e_mixed.float())
+                f_float32 = torch.mm(c_float32, e_float16.float())
                 assert f_float32.dtype == torch.float32
 
-            g_mixed = torch.mm(d_float32, f_float32)
+            g_float16 = torch.mm(d_float32, f_float32)
             # We should be back in fp16
-            assert g_mixed.dtype == MIXED_PRECISION_DTYPE
+            assert g_float16.dtype == torch.float16
 
     @slow
     def test_profile_kwargs(self):
