@@ -318,7 +318,7 @@ def set_module_tensor_to_device(
             elif is_xpu_available():
                 device = f"xpu:{device}"
             elif is_hpu_available():
-                device = f"hpu:{device}"
+                device = "hpu"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
@@ -1641,7 +1641,7 @@ def load_state_dict(checkpoint_file, device_map=None):
                     elif is_npu_available():
                         target_device = f"npu:{device}"
                     elif is_hpu_available():
-                        target_device = f"hpu:{device}"
+                        target_device = "hpu"
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1679,7 +1679,7 @@ def load_state_dict(checkpoint_file, device_map=None):
                     elif is_npu_available():
                         target_device = f"npu:{device}"
                     elif is_hpu_available():
-                        target_device = f"hpu:{device}"
+                        target_device = "hpu"
 
                 with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
                     for key in device_weights[device]:
