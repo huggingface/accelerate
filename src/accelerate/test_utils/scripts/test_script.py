@@ -808,7 +808,7 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
-    if state.distributed_type not in [DistributedType.XLA, DistributedType.MULTI_HPU]:
+    if state.distributed_type != DistributedType.XLA:
         central_dl_preparation_check()
         custom_sampler_check()
         check_seedable_sampler()
