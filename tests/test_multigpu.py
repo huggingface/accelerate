@@ -63,7 +63,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @require_non_hpu
+    @require_non_hpu  # TODO: Investigate why this test is failing on HPU
     @launches_subprocesses
     @require_multi_device
     def test_pad_across_processes(self):
@@ -72,7 +72,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @require_non_hpu
+    @require_non_hpu  # TODO: Investigate why this test is failing on HPU
     @launches_subprocesses
     @require_multi_device
     def test_multi_device_merge_fsdp_weights(self):
