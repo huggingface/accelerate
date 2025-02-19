@@ -1906,7 +1906,7 @@ class Accelerator:
                 if (
                     self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get("device", "none")
                     != "none"
-                    and os.environ.get("PT_HPU_LAZY_MODE", "1") != "1"
+                    and os.environ.get("PT_HPU_LAZY_MODE", "1") == "1"
                 ):
                     raise ValueError(
                         "You can't use an Offload Optimizer with HPU in Lazy Mode. "
