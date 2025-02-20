@@ -27,6 +27,7 @@ from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     get_launch_command,
+    require_fp16,
     require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
@@ -266,6 +267,7 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/profiler.py"]
         run_command(self.launch_args + testargs)
 
+    @require_fp16
     @require_multi_device
     def test_ddp_comm_hook(self):
         testargs = ["examples/by_feature/ddp_comm_hook.py", "--ddp_comm_hook", "fp16"]
@@ -279,6 +281,7 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
         run_command(self.launch_args + testargs)
 
+    @require_fp16
     @require_multi_device
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
