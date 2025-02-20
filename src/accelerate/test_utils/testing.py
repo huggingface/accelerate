@@ -200,6 +200,21 @@ def require_non_hpu(test_case):
     return unittest.skipUnless(torch_device != "hpu", "test requires a non-HPU")(test_case)
 
 
+def require_fp16(test_case):
+    """
+    Decorator marking a test that requires FP16. These tests are skipped when FP16 is not supported.
+    """
+    if is_hpu_available(patch_torch=False):
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        return unittest.skipIf(
+            htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi,
+            "test requires FP16 (not supported on Gaudi1)",
+        )(test_case)
+
+    return test_case
+
+
 def require_mlu(test_case):
     """
     Decorator marking a test that requires MLU. These tests are skipped when there are no MLU available.

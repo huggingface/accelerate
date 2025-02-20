@@ -19,7 +19,7 @@ import torch
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import require_cpu, require_non_cpu
+from accelerate.test_utils import require_cpu, require_fp16, require_non_cpu
 
 
 @require_cpu
@@ -36,7 +36,7 @@ class CPUOptimizerTester(unittest.TestCase):
         AcceleratorState._reset_state()
 
 
-# @require_non_hpu  # TODO: Investigate why this test is failing on HPU (hpu doesn't seem to overflow)
+@require_fp16
 @require_non_cpu
 class OptimizerTester(unittest.TestCase):
     def test_accelerated_optimizer_step_was_skipped(self):
