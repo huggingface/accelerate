@@ -31,6 +31,7 @@ from accelerate.test_utils.testing import (
     require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
+    require_non_hpu,
     require_non_xpu,
     require_pippy,
     require_schedulefree,
@@ -281,7 +282,7 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
         run_command(self.launch_args + testargs)
 
-    @require_fp16
+    @require_non_hpu  # Error in generate: synNodeCreateWithId failed for node: masked_fill_fwd_i64
     @require_multi_device
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
