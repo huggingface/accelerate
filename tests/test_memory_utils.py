@@ -41,6 +41,15 @@ class ModelForTest(nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
+class BigModelForTest(ModelForTest):
+    def __init__(self):
+        super().__init__()
+        self.linear3 = nn.Linear(5, 1000)
+
+    def forward(self, x):
+        return self.linear3(super().forward(x))
+
+
 class MemoryTest(unittest.TestCase):
     def test_memory_implicit(self):
         batch_sizes = []
@@ -110,12 +119,18 @@ class MemoryTest(unittest.TestCase):
             mock_training_loop_function()
             assert "Oops, we had an error!" in cm.exception.args[0]
 
-    @require_non_hpu
     @require_non_cpu
     @require_non_torch_xla
     def test_release_memory(self):
         starting_memory = memory_allocated_func()
-        model = ModelForTest()
+
+        if torch_device.startswith("hpu"):
+            # hpu has a minimum memory allocation that cannot be released,
+            # we need to surpass it by using a bigger model (>5767296 bytes)
+            model = BigModelForTest()
+        else:
+            model = ModelForTest()
+
         model.to(torch_device)
         assert memory_allocated_func() > starting_memory
         model = release_memory(model)
