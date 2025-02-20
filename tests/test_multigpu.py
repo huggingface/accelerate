@@ -62,7 +62,6 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    # @require_non_hpu  # TODO: Investigate why this test is failing on HPU
     @launches_subprocesses
     @require_multi_device
     def test_pad_across_processes(self):
@@ -132,12 +131,13 @@ if __name__ == "__main__":
     tensor1 = accelerator.pad_across_processes(tensor)
     if tensor1.shape[0] != accelerator.state.num_processes + 1:
         error_msg += f"Found shape {tensor1.shape} but should have {accelerator.state.num_processes + 1} at dim 0."
-    if not torch.equal(tensor1[: accelerator.state.process_index + 2], tensor):
+    index = accelerator.state.process_index + 2
+    if not torch.equal(tensor1[:index], tensor):
         error_msg += "Tensors have different values."
-    if not torch.all(tensor1[accelerator.state.process_index + 2 :] == 0):
+    if not torch.all(tensor1[index:] == 0):
         error_msg += "Padding was not done with the right value (0)."
 
-    tensor2 = accelerator.pad_across_processes(tensor, pad_first=True)
+    tensor2 = accelerator.pad_across_processes(tensor.clone(), pad_first=True)
     if tensor2.shape[0] != accelerator.state.num_processes + 1:
         error_msg += f"Found shape {tensor2.shape} but should have {accelerator.state.num_processes + 1} at dim 0."
     index = accelerator.state.num_processes - accelerator.state.process_index - 1
