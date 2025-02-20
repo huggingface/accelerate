@@ -27,6 +27,7 @@ from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     get_launch_command,
+    is_hpu_available,
     require_fp16,
     require_huggingface_suite,
     require_multi_device,
@@ -199,10 +200,13 @@ class FeatureExamplesTests(TempDirTestCase):
         --resume_from_checkpoint {self.tmpdir / "step_2"}
         """.split()
         output = run_command(self.launch_args + testargs, return_stdout=True)
-        if torch.cuda.is_available():
+        if is_hpu_available():
+            num_processes = torch.hpu.device_count()
+        elif torch.cuda.is_available():
             num_processes = torch.cuda.device_count()
         else:
             num_processes = 1
+
         if num_processes > 1:
             assert "epoch 0:" not in output
             assert "epoch 1:" in output
