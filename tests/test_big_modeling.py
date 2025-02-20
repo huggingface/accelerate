@@ -240,7 +240,7 @@ class BigModelingTester(unittest.TestCase):
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @slow
-    @require_non_hpu  # TODO: Investigate why this test is failing on HPU
+    # @require_non_hpu  # Error in generate: synNodeCreateWithId failed for node: masked_fill_fwd_i64
     @require_non_cpu
     def test_cpu_offload_gpt2(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -300,8 +300,8 @@ class BigModelingTester(unittest.TestCase):
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @slow
+    # @require_non_hpu  # Error in generate: synNodeCreateWithId failed for node: masked_fill_fwd_i64
     @require_non_cpu
-    @require_non_hpu  # TODO: Investigate why this test is failing on HPU
     def test_disk_offload_gpt2(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
         inputs = tokenizer("Hello world! My name is", return_tensors="pt").to(torch_device)
@@ -663,8 +663,8 @@ class BigModelingTester(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 model.to(0)
 
-    @require_multi_device
     @require_non_hpu
+    @require_multi_device
     def test_dispatch_model_move_model_warning(self):
         model = ModelForTest()
         device_map = {"linear1": 0, "batchnorm": 0, "linear2": 1}
@@ -678,8 +678,8 @@ class BigModelingTester(unittest.TestCase):
                 x = torch.randn(2, 3)
                 model(x)
 
-    @require_non_hpu
     @slow
+    @require_non_hpu
     @require_multi_device
     def test_dispatch_model_gpt2_on_two_devices(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")

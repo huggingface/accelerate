@@ -26,6 +26,7 @@ from accelerate.commands.launch import _validate_launch_command, launch_command,
 from accelerate.commands.tpu import tpu_command_launcher, tpu_command_parser
 from accelerate.test_utils.testing import (
     capture_call_output,
+    launches_subprocesses,
     path_in_accelerate_package,
     require_multi_device,
     require_non_hpu,
@@ -95,6 +96,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         accelerate_test_cmd.test_command(args)
 
     @require_non_hpu
+    @launches_subprocesses
     @require_multi_device
     def test_notebook_launcher(self):
         """

@@ -36,7 +36,7 @@ class CPUOptimizerTester(unittest.TestCase):
         AcceleratorState._reset_state()
 
 
-@require_non_hpu  # TODO: Investigate why this test is failing on HPU
+# @require_non_hpu  # TODO: Investigate why this test is failing on HPU (hpu doesn't seem to overflow)
 @require_non_cpu
 class OptimizerTester(unittest.TestCase):
     def test_accelerated_optimizer_step_was_skipped(self):
