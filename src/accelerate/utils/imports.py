@@ -163,6 +163,16 @@ def is_bf16_available(ignore_tpu=False):
     return True
 
 
+def is_fp16_available():
+    "Checks if fp16 is supported"
+    if is_hpu_available(patch_torch=False):
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        return htexp._get_device_type() != htexp.synDeviceType.synDeviceGaudi
+
+    return True
+
+
 def is_4bit_bnb_available():
     package_exists = _is_package_available("bitsandbytes")
     if package_exists:
