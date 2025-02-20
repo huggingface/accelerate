@@ -60,6 +60,8 @@ class KwargsHandlerTester(unittest.TestCase):
         assert MockClass(a=2, b=True).to_kwargs() == {"a": 2, "b": True}
         assert MockClass(a=2, c=2.25).to_kwargs() == {"a": 2, "c": 2.25}
 
+    # this test leaking its mixed precision to all next ones (shoudl the state be reset at the end of the test?)
+    @require_fp16
     @require_non_cpu
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
