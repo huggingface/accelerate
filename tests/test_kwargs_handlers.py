@@ -166,7 +166,6 @@ class KwargsHandlerTester(unittest.TestCase):
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
-    @require_non_hpu  # TODO: Investigate why this test is failing on HPU
     @launches_subprocesses
     @require_multi_device
     def test_ddp_comm_hook(self):

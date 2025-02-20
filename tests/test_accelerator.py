@@ -31,6 +31,7 @@ from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
     require_cuda_or_xpu,
+    require_fp16,
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
@@ -216,7 +217,6 @@ class AcceleratorTester(AccelerateTestCase):
         assert prepared_train_dl in accelerator._dataloaders
         assert prepared_valid_dl in accelerator._dataloaders
 
-    @require_non_hpu
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
         # Free up refs with empty_cache() and gc.collect()
@@ -586,6 +586,7 @@ class AcceleratorTester(AccelerateTestCase):
         model_loaded = pickle.loads(pickle.dumps(model))
         model_loaded(inputs)
 
+    @require_fp16
     @require_non_cpu
     def test_can_unwrap_model_fp16(self):
         # test for a regression introduced in #872
