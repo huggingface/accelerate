@@ -30,7 +30,6 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
-    require_non_hpu,
     require_non_torch_xla,
     require_non_xpu,
     require_pippy,
