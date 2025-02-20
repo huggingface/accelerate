@@ -26,9 +26,9 @@ from accelerate.test_utils import (
     execute_subprocess_async,
     launches_subprocesses,
     path_in_accelerate_package,
+    require_fp16,
     require_multi_device,
     require_non_cpu,
-    require_non_hpu,
 )
 from accelerate.test_utils.testing import slow
 from accelerate.utils import (
@@ -84,6 +84,7 @@ class KwargsHandlerTester(unittest.TestCase):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd)
 
+    @require_fp16
     @require_non_cpu
     def test_autocast_kwargs(self):
         kwargs = AutocastKwargs(enabled=False)
