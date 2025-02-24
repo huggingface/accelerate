@@ -66,6 +66,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         if cls.changed_path.is_file():
             cls.changed_path.rename(cls.config_path)
 
+    @launches_subprocesses
     def test_no_config(self):
         args = ["--monitor_interval", "0.1", str(self.test_file_path)]
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
@@ -73,6 +74,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         args = self.parser.parse_args(["--monitor_interval", "0.1", str(self.test_file_path)])
         launch_command(args)
 
+    @launches_subprocesses
     def test_config_compatibility(self):
         invalid_configs = ["fp8", "invalid", "mpi", "sagemaker"]
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
@@ -82,6 +84,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                 args = self.parser.parse_args(["--config_file", str(config), str(self.test_file_path)])
                 launch_command(args)
 
+    @launches_subprocesses
     def test_invalid_keys(self):
         config_path = self.test_config_path / "invalid_keys.yaml"
         with self.assertRaises(
@@ -91,6 +94,7 @@ class AccelerateLauncherTester(unittest.TestCase):
             args = self.parser.parse_args(["--config_file", str(config_path), str(self.test_file_path)])
             launch_command(args)
 
+    @launches_subprocesses
     def test_accelerate_test(self):
         args = accelerate_test_cmd.test_command_parser().parse_args([])
         accelerate_test_cmd.test_command(args)

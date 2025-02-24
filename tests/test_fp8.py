@@ -22,6 +22,7 @@ from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     get_launch_command,
+    launches_subprocesses,
     require_cuda_or_hpu,
     require_multi_device,
     require_transformer_engine,
@@ -48,7 +49,7 @@ def maintain_proper_deepspeed_config(expected_version):
         AcceleratorState().deepspeed_plugin.zero_stage == expected_version
     ), f"Expected zero stage {expected_version} but got {AcceleratorState().deepspeed_plugin.zero_stage}"
 
-
+@launches_subprocesses
 @require_transformer_engine
 class TestTransformerEngine(unittest.TestCase):
     @require_cuda_or_hpu
