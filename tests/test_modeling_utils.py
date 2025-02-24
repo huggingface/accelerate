@@ -563,6 +563,28 @@ class ModelingUtilsTester(unittest.TestCase):
         )
         assert device_map == {"0": 0, "1": 1, "2": 1}
 
+        # Setting reserve_max_layer to False prevents unnecessary offloading
+        model = nn.Sequential(nn.Linear(10,5), nn.Linear(5,5), nn.Linear(5,15))
+        gpu_0_mem = 145 * 4
+        gpu_1_mem = 100 * 4
+        cpu_mem = 700 * 4 # large enough mem
+        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu':cpu_mem}, reserve_max_layer=True)
+        assert device_map == {'0': 0, '1': 1, '2': 'cpu'}
+
+        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu':cpu_mem}, reserve_max_layer=False)
+        assert device_map == {'0': 0, '1': 0, '2': 1}
+
+        # Setting reserve_max_layer to False doesn't prevent necessary offloading
+        model = nn.Sequential(nn.Linear(10,5), nn.Linear(5,5), nn.Linear(5,15), nn.Linear(5,15))
+
+        expected_device_map = {'0': 0, '1': 1, '2': 'cpu', '3': 'cpu'}
+        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu':cpu_mem}, reserve_max_layer=True)
+        assert device_map == expected_device_map
+
+        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu':cpu_mem}, reserve_max_layer=False)
+        assert device_map == expected_device_map
+
+
     def test_infer_auto_device_map_with_tied_weights(self):
         model = nn.Sequential(
             OrderedDict([("layer1", ModelForTest()), ("layer2", ModelForTest()), ("layer3", ModelForTest())])
