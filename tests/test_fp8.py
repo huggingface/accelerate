@@ -23,9 +23,11 @@ from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     get_launch_command,
     launches_subprocesses,
+    require_cuda,
     require_cuda_or_hpu,
     require_huggingface_suite,
     require_multi_device,
+    require_multi_gpu,
     require_torchao,
     require_transformer_engine,
 )
@@ -123,6 +125,7 @@ class TestTransformerEngine(unittest.TestCase):
 
 
 @require_torchao
+@launches_subprocesses
 @require_huggingface_suite
 class TestTorchAO(unittest.TestCase):
     @require_cuda
