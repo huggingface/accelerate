@@ -400,7 +400,7 @@ class BigModelingTester(unittest.TestCase):
         # We should need only 5000 * 5000 * 32 // 8 * 1e-6 = 100 MB on the device 0 for the four linear weights.
         device_map = {"linear0": 0, "linear1": 1, "linear2": 0, "linear3": 0, "linear4": 0}
 
-        # Just to intialize CUDA context.
+        # Just to initialize CUDA context.
         a = torch.rand(5).to("cuda:0")  # noqa: F841
 
         free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
@@ -473,7 +473,7 @@ class BigModelingTester(unittest.TestCase):
         with torch.no_grad():
             expected = model(x)
 
-        # Just to intialize CUDA context.
+        # Just to initialize CUDA context.
         a = torch.rand(5).to("cuda:0")  # noqa: F841
 
         free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
@@ -570,7 +570,7 @@ class BigModelingTester(unittest.TestCase):
         with torch.no_grad():
             expected = model(x)
 
-        # Just to intialize CUDA context.
+        # Just to initialize CUDA context.
         a = torch.rand(5).to("cuda:0")  # noqa: F841
 
         free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]

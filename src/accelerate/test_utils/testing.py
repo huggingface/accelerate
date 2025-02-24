@@ -55,6 +55,7 @@ from ..utils import (
     is_timm_available,
     is_torch_version,
     is_torch_xla_available,
+    is_torchao_available,
     is_torchdata_stateful_dataloader_available,
     is_torchvision_available,
     is_transformer_engine_available,
@@ -459,6 +460,13 @@ def require_transformer_engine(test_case):
     engine isn't installed
     """
     return unittest.skipUnless(is_transformer_engine_available(), "test requires transformers engine")(test_case)
+
+
+def require_torchao(test_case):
+    """
+    Decorator marking a test that requires torchao installed. These tests are skipped when torchao isn't installed
+    """
+    return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
 
 
 _atleast_one_tracker_available = (

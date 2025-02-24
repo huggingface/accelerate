@@ -69,7 +69,7 @@ def lambda_test(num_processes=2, step_scheduler_with_optimizer=True, split_batch
 
 def accumulation_test(num_processes: int = 2):
     """
-    With this test, an observed batch size of 64 should result in neglible
+    With this test, an observed batch size of 64 should result in negligible
     differences in the scheduler after going through the correct number of steps.
 
     Uses single, two, and four steps to test.

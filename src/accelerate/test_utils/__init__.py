@@ -45,6 +45,7 @@ from .testing import (
     require_single_gpu,
     require_single_xpu,
     require_torch_min_version,
+    require_torchao,
     require_torchvision,
     require_tpu,
     require_transformer_engine,
