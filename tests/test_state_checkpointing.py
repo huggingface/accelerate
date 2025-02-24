@@ -408,7 +408,7 @@ if __name__ == "__main__":
     )
     model, optimizer = accelerator.prepare(model, optimizer)
     train(3, model, train_dataloader, optimizer, accelerator, scheduler)
-    # Check that the intial optimizer is loaded on the GPU
+    # Check that the initial optimizer is loaded on the GPU
     for group in optimizer.param_groups:
         param_device = group["params"][0].device
         break

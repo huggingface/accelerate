@@ -20,16 +20,18 @@ import argparse
 import copy
 import enum
 import functools
+import logging
 import os
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args
 
 import torch
 
 from .constants import (
+    BETA_TP_AVAILABLE_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
@@ -47,6 +49,13 @@ from .imports import (
     is_xpu_available,
 )
 from .versions import compare_versions, is_torch_version
+
+
+if TYPE_CHECKING:
+    # Mock imports for type checking
+    from torchao.float8 import Float8LinearConfig
+
+logger = logging.getLogger(__name__)
 
 
 class KwargsHandler:
@@ -280,40 +289,48 @@ FP8Format = Literal["E4M3", "HYBRID"]
 AmaxComputeAlgorithm = Literal["max", "most_recent"]
 
 
+# FP8 training recipe kwargs
 @dataclass
-class FP8RecipeKwargs(KwargsHandler):
+class AORecipeKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
-    training with `transformer-engine` or `ms-amp`.
+    training with `torchao` FP8.
+
+    Args:
+        config (`torchao.float8.Float8LinearConfig`, *optional*, default to `None`):
+            The configuration for the FP8 training. In general, the default config should be sufficient.
+        module_filter_func (`Callable`, *optional*, default to `None`):
+            Optional function that must take in a module and layer name, and returns a boolean indicating whether the
+            module should be converted to FP8. Defaults to `accelerate.utils.ao.filter_linear_layers`. See it for an
+            example.
+    """
+
+    config: Optional["Float8LinearConfig"] = None
+    module_filter_func: Optional[Callable] = None
+
+
+@dataclass
+class TERecipeKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
+    training with `transformer-engine`.
 
     <Tip>
 
-        For more information on `transformer-engine` args, please refer to the API
+        For more information on the args, please refer to the API
         [documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html).
-
-        For more information on the `ms-amp` args, please refer to the Optimization Level
-        [documentation](https://azure.github.io/MS-AMP/docs/user-tutorial/optimization-level).
 
     </Tip>
 
     ```python
     from accelerate import Accelerator
-    from accelerate.utils import FP8RecipeKwargs
+    from accelerate.utils import TERecipeKwargs
 
-    kwargs = FP8RecipeKwargs(backend="te", fp8_format="HYBRID")
+    kwargs = TERecipeKwargs(fp8_format="HYBRID")
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
     ```
 
-    To use MS-AMP as an engine, pass `backend="msamp"` and the `optimization_level`:
-
-    ```python
-    kwargs = FP8RecipeKwargs(backend="msamp", optimization_level="02")
-    ```
-
     Args:
-        backend (`str`, *optional*):
-            Which FP8 engine to use. Must be one of `"msamp"` (MS-AMP) or `"te"` (TransformerEngine). If not passed,
-            will use whichever is available in the environment, prioritizing MS-AMP.
         use_autocast_during_eval (`bool`, *optional*, default to `False`):
             Whether to use FP8 autocast during eval mode. Generally better metrics are found when this is `False`.
         margin (`int`, *optional*, default to 0):
@@ -329,21 +346,9 @@ class FP8RecipeKwargs(KwargsHandler):
             The algorithm to use for the scaling factor computation. Must be one of `max` or `most_recent`.
         override_linear_precision (`tuple` of three `bool`, *optional*, default to `(False, False, False)`):
             Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
-        optimization_level (`str`), one of `O1`, `O2`. (default is `O2`):
-            What level of 8-bit collective communication should be used with MS-AMP. In general:
-                * O1: Weight gradients and `all_reduce` communications are done in fp8, reducing GPU
-                    memory usage and communication bandwidth
-                * O2: First-order optimizer states are in 8-bit, and second order states are in FP16.
-                    Only available when using Adam or AdamW. This maintains accuracy and can potentially save the
-                    highest memory.
-                * 03: Specifically for DeepSpeed, implements capabilities so weights and master weights of models
-                    are stored in FP8. If `fp8` is selected and deepspeed is enabled, will be used by default. (Not
-                    available currently).
     """
 
-    backend: Backend = None
     use_autocast_during_eval: bool = None
-    opt_level: OptLevel = None
     margin: int = None
     interval: int = None
     fp8_format: FP8Format = None
@@ -353,50 +358,73 @@ class FP8RecipeKwargs(KwargsHandler):
 
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
+        if not is_transformer_engine_available():
+            raise ImportError("TransformerEngine is not available. Please install it or use a different backend.")
+        if self.use_autocast_during_eval is None:
+            self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
+        if self.margin is None:
+            self.margin = int(os.environ.get(env_prefix + "MARGIN", 0))
+        if self.interval is None:
+            self.interval = int(os.environ.get(env_prefix + "INTERVAL", 1))
+        if self.fp8_format is None:
+            self.fp8_format = os.environ.get(env_prefix + "FORMAT", "HYBRID")
+        self.fp8_format = self.fp8_format.upper()
+        if self.fp8_format not in get_args(FP8Format):
+            raise ValueError(f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}.")
+        if self.amax_compute_algo is None:
+            self.amax_compute_algo = os.environ.get(env_prefix + "AMAX_COMPUTE_ALGO", "most_recent")
+        self.amax_compute_algo = self.amax_compute_algo.lower()
+        if self.amax_compute_algo not in get_args(AmaxComputeAlgorithm):
+            raise ValueError(f"`amax_compute_algo` must be one of {' or '.join(get_args(AmaxComputeAlgorithm))}")
+        if self.amax_history_len is None:
+            self.amax_history_len = int(os.environ.get(env_prefix + "AMAX_HISTORY_LEN", 1024))
+        if self.override_linear_precision is None:
+            fprop = parse_flag_from_env(env_prefix + "OVERRIDE_FPROP")
+            dgrad = parse_flag_from_env(env_prefix + "OVERRIDE_DGRAD")
+            wgrad = parse_flag_from_env(env_prefix + "OVERRIDE_WGRAD")
+            self.override_linear_precision = (fprop, dgrad, wgrad)
+
+
+@dataclass
+class MSAMPRecipeKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
+    training with `ms-amp`.
+    """
+
+    opt_level: OptLevel = None
+
+    def __post_init__(self):
+        env_prefix = "ACCELERATE_FP8_"
+        if self.opt_level is None:
+            self.opt_level = os.environ.get(env_prefix + "OPT_LEVEL", "O2")
+        if self.opt_level not in get_args(OptLevel):
+            raise ValueError(f"`opt_level` must be one of {' or '.join(get_args(OptLevel))}")
+
+
+@dataclass
+class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
+    """
+    Deprecated. Please use one of the proper FP8 recipe kwargs classes such as `TERecipeKwargs` or `MSAMPRecipeKwargs`
+    instead.
+    """
+
+    backend: Backend = None
+
+    def __post_init__(self):
+        env_prefix = "ACCELERATE_FP8_"
+        warnings.warn(
+            "FP8RecipeKwargs is deprecated and will be removed in Accelerate v2.0.0. "
+            "Please use one of the proper FP8 recipe kwargs classes such as TERecipeKwargs or MSAMPRecipeKwargs instead.",
+            FutureWarning,
+        )
         default_backend = "msamp" if is_msamp_available() else "te"
         if self.backend is None:
             self.backend = os.environ.get(env_prefix + "BACKEND", default_backend)
         self.backend = self.backend.upper()
         if self.backend not in get_args(Backend):
-            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
-        # Check TE args
-        if self.backend == "TE":
-            if not is_transformer_engine_available():
-                raise ValueError(
-                    "TransformerEngine is not available. Please either install it, or use the 'MSAMP' backend (if installed)."
-                )
-            if self.use_autocast_during_eval is None:
-                self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
-            if self.margin is None:
-                self.margin = int(os.environ.get(env_prefix + "MARGIN", 0))
-            if self.interval is None:
-                self.interval = int(os.environ.get(env_prefix + "INTERVAL", 1))
-            if self.fp8_format is None:
-                self.fp8_format = os.environ.get(env_prefix + "FORMAT", "HYBRID")
-            self.fp8_format = self.fp8_format.upper()
-            if self.fp8_format not in get_args(FP8Format):
-                raise ValueError(f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}.")
-            if self.amax_compute_algo is None:
-                self.amax_compute_algo = os.environ.get(env_prefix + "AMAX_COMPUTE_ALGO", "most_recent")
-            self.amax_compute_algo = self.amax_compute_algo.lower()
-            if self.amax_compute_algo not in get_args(AmaxComputeAlgorithm):
-                raise ValueError(f"`amax_compute_algo` must be one of {' or '.join(get_args(AmaxComputeAlgorithm))}")
-            if self.amax_history_len is None:
-                self.amax_history_len = int(os.environ.get(env_prefix + "AMAX_HISTORY_LEN", 1024))
-            if self.override_linear_precision is None:
-                fprop = parse_flag_from_env(env_prefix + "OVERRIDE_FPROP")
-                dgrad = parse_flag_from_env(env_prefix + "OVERRIDE_DGRAD")
-                wgrad = parse_flag_from_env(env_prefix + "OVERRIDE_WGRAD")
-                self.override_linear_precision = (fprop, dgrad, wgrad)
-        elif self.backend == "MSAMP":
-            if not is_msamp_available():
-                raise ValueError(
-                    "MS-AMP is not available. Please either install it, or use the 'TE' backend (if installed)."
-                )
-            if self.opt_level is None:
-                self.opt_level = os.environ.get(env_prefix + "OPT_LEVEL", "O2")
-            if self.opt_level not in get_args(OptLevel):
-                raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
+            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine) to use `FP8RecipeKwargs`.")
+        super().__post_init__()
 
 
 # Literal
@@ -541,6 +569,7 @@ class DistributedType(str, enum.Enum):
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
+    TP = "TP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
 
@@ -1811,6 +1840,36 @@ class FullyShardedDataParallelPlugin:
                     f"Values must be one of {list(mixed_precision_mapping.values())}"
                 )
             self.mixed_precision_policy = MixedPrecision(**self.mixed_precision_policy)
+
+
+@dataclass
+class TorchTensorParallelPlugin:
+    """
+    This plugin is used to enable tensor parallelism using PyTorch >= 2.0.
+    """
+
+    tp_size: int = field(
+        default=1,
+        metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
+    )
+
+    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
+    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
+
+    def __post_init__(self):
+        self.tp_size = self.tp_size if os.environ.get("TP_SIZE", "1") == "1" else int(os.environ.get("TP_SIZE", "1"))
+        if self.tp_size == 1:
+            raise ValueError("Provide TP degree > 1.")
+
+        if is_torch_version("<", BETA_TP_AVAILABLE_PYTORCH_VERSION):
+            raise ValueError(
+                f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
+            )
+        from torch.distributed.device_mesh import init_device_mesh
+
+        mesh_dim_name = "tp"
+        device = "cuda"  # support for other devices has to be investigated
+        self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
 
 
 @dataclass

@@ -14,6 +14,7 @@
 
 import random
 import unittest
+import weakref
 
 import pytest
 import torch
@@ -497,6 +498,35 @@ class DataLoaderTester(unittest.TestCase):
         assert batch_sampler.epoch == 0
         dataloader.set_epoch(1)
         assert batch_sampler.epoch == 1
+
+    def test_ensure_dataloader_gets_cleaned_up(self):
+        # Ensure that the dataloader gets cleaned up properly
+        class Dummy:
+            def __init__(self):
+                dataset = list(range(16))
+                dataloader = DataLoader(dataset, batch_size=4)
+
+                self.accelerator = Accelerator()
+                self.dataloader = self.accelerator.prepare_data_loader(dataloader)
+
+                self.iter = iter(self.dataloader)
+
+            def __call__(self, *args, **kwds):
+                return next(self.iter)
+
+        instance = Dummy()
+        assert instance().tolist() == [0, 1, 2, 3]
+
+        # Create weak references to the objects that *should* be cleaned up if the instance is deleted
+        accelerator_ref = weakref.ref(instance.accelerator)
+        dataloader_ref = weakref.ref(instance.dataloader)
+        gradient_state_ref = weakref.ref(instance.dataloader.gradient_state)
+
+        del instance
+
+        assert accelerator_ref() is None
+        assert dataloader_ref() is None
+        assert gradient_state_ref() is None
 
 
 class StatefulDataLoaderTester(unittest.TestCase):

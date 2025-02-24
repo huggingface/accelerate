@@ -18,6 +18,7 @@ import logging
 import os
 import threading
 import warnings
+import weakref
 from contextlib import contextmanager
 from functools import partial
 from typing import Any, Callable, Optional
@@ -850,6 +851,7 @@ class AcceleratorState:
         dynamo_plugin=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
+        torch_tp_plugin=None,
         megatron_lm_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
@@ -864,6 +866,7 @@ class AcceleratorState:
         if not self.initialized:
             self.deepspeed_plugins = None
             self.use_ipex = None
+            self.torch_tp_plugin = torch_tp_plugin
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
@@ -921,6 +924,8 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
+                if os.environ.get("ACCELERATE_USE_TP", "false") == "true" or self.torch_tp_plugin is not None:
+                    self.distributed_type = DistributedType.TP
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
                 if is_ipex_available():
                     # check if user disables it explicitly
@@ -1160,8 +1165,7 @@ class GradientState:
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True
-            self.active_dataloader = None
-            self.dataloader_references = [None]
+            self._dataloader_references_ref = [None]
             self.plugin_kwargs = (
                 gradient_accumulation_plugin.to_kwargs() if gradient_accumulation_plugin is not None else {}
             )
@@ -1238,13 +1242,31 @@ class GradientState:
 
     def _add_dataloader(self, dataloader):
         "Private function that adds a dataloader to `self.dataloader_references` and sets `in_dataloader` to `True`. Users should not have to call this."
-        self.active_dataloader = dataloader
-        self.dataloader_references.append(self.active_dataloader)
+        # We explicitly use assignment to ensure that the property setter is triggered, which is required for garbage collection.
+        # Avoid using self.dataloader_references.append as it will not trigger the setter.
+        self.dataloader_references += [dataloader]
 
     def _remove_dataloader(self, dataloader):
         "Private function that removes a dataloader from `self.dataloader_references` and sets `in_dataloader` to `False` if there are no more dataloaders. Users should not have to call this."
-        self.dataloader_references.remove(dataloader)
-        self.active_dataloader = self.dataloader_references[-1]
+        # We explicitly use assignment to ensure that the property setter is triggered.
+        self.dataloader_references = [
+            dataloader_ref for dataloader_ref in self.dataloader_references if dataloader_ref != dataloader
+        ]
+
+    @property
+    def active_dataloader(self):
+        return self.dataloader_references[-1]
+
+    @property
+    def dataloader_references(self):
+        # We use a property getter and setter with weakrefs to avoid circular references that prevent garbage collection
+        return [reference() if reference is not None else reference for reference in self._dataloader_references_ref]
+
+    @dataloader_references.setter
+    def dataloader_references(self, references):
+        self._dataloader_references_ref = [
+            weakref.ref(dataloader) if dataloader is not None else dataloader for dataloader in references
+        ]
 
     @property
     def in_dataloader(self) -> bool:

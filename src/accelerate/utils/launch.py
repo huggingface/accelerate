@@ -83,7 +83,13 @@ def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
         if arg.startswith("fp8_"):
             value = getattr(args, arg)
             if value is not None:
-                current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
+                if arg == "fp8_override_linear_precision":
+                    values = value.strip("()").split(",")
+                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = values[0].strip()
+                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = values[1].strip()
+                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = values[2].strip()
+                else:
+                    current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
     return current_env
 
 
@@ -283,6 +289,10 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
+
+    if args.use_tp:
+        current_env["ACCELERATE_USE_TP"] = "true"
+        current_env["TP_SIZE"] = str(args.tp_size)
 
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"

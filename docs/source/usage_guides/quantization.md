@@ -86,7 +86,7 @@ To quantize your empty model with the selected configuration, you need to use [`
 
 ```py
 from accelerate.utils import load_and_quantize_model
-quantized_model = load_and_quantize_model(empty_model, weights_location=weights_location, bnb_quantization_config=bnb_quantization_config, device_map = "auto")
+quantized_model = load_and_quantize_model(empty_model, weights_location=weights_location, bnb_quantization_config=bnb_quantization_config)
 ```
 
 ### Saving and loading 8-bit model
