@@ -1043,35 +1043,20 @@ def _validate_launch_command(args):
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
                 if isinstance(attr, dict):
-                    for k in defaults.deepspeed_config:
-                        setattr(args, k, defaults.deepspeed_config[k])
-                    for k in defaults.fsdp_config:
-                        arg_to_set = k
-                        if "fsdp" not in arg_to_set:
-                            arg_to_set = "fsdp_" + arg_to_set
-                        setattr(args, arg_to_set, defaults.fsdp_config[k])
-                    for k in defaults.tp_config:
-                        setattr(args, k, defaults.tp_config[k])
-                    for k in defaults.megatron_lm_config:
-                        setattr(args, k, defaults.megatron_lm_config[k])
-                    for k in defaults.dynamo_config:
-                        setattr(args, k, defaults.dynamo_config[k])
-                    for k in defaults.ipex_config:
-                        setattr(args, k, defaults.ipex_config[k])
-                    for k in defaults.mpirun_config:
-                        setattr(args, k, defaults.mpirun_config[k])
-                    for k in defaults.fp8_config:
-                        arg_to_set = k
-                        if "fp8" not in arg_to_set:
-                            arg_to_set = "fp8_" + arg_to_set
-                        setattr(args, arg_to_set, defaults.fp8_config[k])
-                    continue
-
-                # Those args are handled separately
-                if (
+                    # Copy defaults.somedict.somearg to args.somearg and
+                    # defaults.fsdp_config.x to args.fsdp_x
+                    for key, value in attr.items():
+                        if name == "fsdp_config" and not key.startswith("fsdp"):
+                            key = "fsdp_" + key
+                        elif name == "fp8_config" and not key.startswith("fp8"):
+                            key = "fp8_" + key
+                        if hasattr(args, 'nondefault') and key not in args.nondefault:
+                            setattr(args, key, value)
+                elif (
                     name not in ["compute_environment", "mixed_precision", "distributed_type"]
                     and getattr(args, name, None) is None
                 ):
+                    # Those args are handled separately
                     setattr(args, name, attr)
         if not args.debug:
             args.debug = defaults.debug
