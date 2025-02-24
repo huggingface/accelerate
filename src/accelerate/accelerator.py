@@ -1478,9 +1478,12 @@ class Accelerator:
                 )
             elif len(model_devices) == 1:
                 current_device = list(model_devices)[0]
-                current_device_index = (
-                    current_device.index if isinstance(current_device, torch.device) else current_device
-                )
+                if isinstance(current_device, torch.device):
+                    current_device_index = current_device.index
+                elif isinstance(current_device, str):
+                    current_device_index = torch.device(current_device).index
+                else:
+                    current_device_index = current_device
 
                 if self.device.type == "cpu" and is_bitsandbytes_multi_backend_available():
                     # bnb with multi-backend supports CPU which don't need to check index.
