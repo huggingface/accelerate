@@ -16,7 +16,7 @@ from types import MethodType
 
 import torch.nn as nn
 
-from .imports import is_fp8_available
+from .imports import is_fp8_available, is_hpu_available
 from .operations import GatheredParameters
 
 
@@ -29,7 +29,11 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
     """
     if not is_fp8_available():
         raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
-    import transformer_engine.pytorch as te
+
+    if is_hpu_available():
+        import intel_transformer_engine as te
+    else:
+        import transformer_engine.pytorch as te
 
     for name, module in model.named_children():
         if isinstance(module, nn.Linear) and to_transformer_engine and _convert_linear:
@@ -88,11 +92,20 @@ def has_transformer_engine_layers(model):
     """
     if not is_fp8_available():
         raise ImportError("Using `has_transformer_engine_layers` requires transformer_engine to be installed.")
-    import transformer_engine.pytorch as te
 
-    for m in model.modules():
-        if isinstance(m, (te.LayerNorm, te.Linear, te.TransformerLayer)):
-            return True
+    if is_hpu_available():
+        import intel_transformer_engine as te
+
+        for m in model.modules():
+            if isinstance(m, (te.Linear)):
+                return True
+    else:
+        import transformer_engine.pytorch as te
+
+        for m in model.modules():
+            if isinstance(m, (te.LayerNorm, te.Linear, te.TransformerLayer)):
+                return True
+
     return False
 
 
@@ -103,7 +116,11 @@ def contextual_fp8_autocast(model_forward, fp8_recipe, use_during_eval=False):
     """
     if not is_fp8_available():
         raise ImportError("Using `contextual_fp8_autocast` requires transformer_engine to be installed.")
-    from transformer_engine.pytorch import fp8_autocast
+
+    if is_hpu_available():
+        from intel_transformer_engine import fp8_autocast
+    else:
+        from transformer_engine.pytorch import fp8_autocast
 
     def forward(self, *args, **kwargs):
         enabled = use_during_eval or self.training
@@ -122,7 +139,11 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
     """
     if not is_fp8_available():
         raise ImportError("Using `apply_fp8_autowrap` requires transformer_engine to be installed.")
-    import transformer_engine.common.recipe as te_recipe
+
+    if is_hpu_available():
+        import intel_transformer_engine.recipe as te_recipe
+    else:
+        import transformer_engine.common.recipe as te_recipe
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
     if "fp8_format" in kwargs:

@@ -169,6 +169,16 @@ def require_cuda(test_case):
     return unittest.skipUnless(is_cuda_available() and not is_torch_xla_available(), "test requires a GPU")(test_case)
 
 
+def require_cuda_or_hpu(test_case):
+    """
+    Decorator marking a test that requires CUDA or HPU. These tests are skipped when there are no GPU available or when
+    TorchXLA is available.
+    """
+    return unittest.skipUnless(
+        (is_cuda_available() and not is_torch_xla_available()) or is_hpu_available(), "test requires a GPU or HPU"
+    )(test_case)
+
+
 def require_xpu(test_case):
     """
     Decorator marking a test that requires XPU. These tests are skipped when there are no XPU available.

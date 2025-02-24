@@ -20,7 +20,12 @@ import torch
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import get_launch_command, require_cuda, require_multi_gpu, require_transformer_engine
+from accelerate.test_utils import (
+    get_launch_command,
+    require_cuda_or_hpu,
+    require_multi_device,
+    require_transformer_engine,
+)
 from accelerate.test_utils.testing import require_deepspeed, run_command
 from accelerate.utils import FP8RecipeKwargs, has_transformer_engine_layers
 
@@ -46,20 +51,22 @@ def maintain_proper_deepspeed_config(expected_version):
 
 @require_transformer_engine
 class TestTransformerEngine(unittest.TestCase):
-    @require_cuda
+    @require_cuda_or_hpu
     def test_can_prepare_model_single_gpu(self):
         command = get_launch_command(num_processes=1, monitor_interval=0.1)
         command += ["-m", "tests.test_fp8"]
         run_command(command)
 
-    @require_multi_gpu
+    @require_cuda_or_hpu
+    @require_multi_device
     def test_can_prepare_model_multi_gpu(self):
         command = get_launch_command(num_processes=2, monitor_interval=0.1)
         command += ["-m", "tests.test_fp8"]
         run_command(command)
 
     @require_deepspeed
-    @require_multi_gpu
+    @require_cuda_or_hpu
+    @require_multi_device
     def test_can_prepare_model_multigpu_deepspeed(self):
         for zero_stage in [1, 2, 3]:
             os.environ["ZERO_STAGE"] = str(zero_stage)

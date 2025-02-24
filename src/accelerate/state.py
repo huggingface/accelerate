@@ -890,7 +890,7 @@ class AcceleratorState:
                     raise ValueError(
                         "Using `fp8` precision requires `transformer_engine` or `MS-AMP` to be installed."
                     )
-                elif not check_fp8_capability():
+                elif torch.cuda.is_available() and not check_fp8_capability():
                     logger.warning(
                         f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
                         "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
