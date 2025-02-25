@@ -1,4 +1,4 @@
-name: Gaudi1 tests
+name: Gaudi1 tests (scheduled)
 
 on:
   workflow_dispatch:
@@ -30,9 +30,6 @@ jobs:
 
       - name: Checkout to Accelerate
         uses: actions/checkout@v4
-        with:
-          ref: hpu-support
-          repository: huggingface/accelerate
 
       - name: Install Accelerate with DeepSpeed
         run: |
@@ -50,11 +47,6 @@ jobs:
           git checkout fa833511664338bfc927fc02653ddb7d38d40be9
           pip install -e bindings/python
           cd ..
-
-      # move to the end of the file
-      - name: Run Examples tests
-        run: |
-          make test_examples
 
       - name: Run CLI tests
         run: |
@@ -75,3 +67,7 @@ jobs:
       - name: Run DeepSpeed integration tests
         run: |
           make test_deepspeed
+
+      - name: Run Examples tests
+        run: |
+          make test_examples
