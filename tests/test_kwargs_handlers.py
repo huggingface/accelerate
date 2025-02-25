@@ -24,11 +24,11 @@ from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
-    run_first,
     path_in_accelerate_package,
     require_fp16,
     require_multi_device,
     require_non_cpu,
+    run_first,
 )
 from accelerate.test_utils.testing import slow
 from accelerate.utils import (

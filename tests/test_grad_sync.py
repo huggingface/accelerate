@@ -19,11 +19,11 @@ from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     device_count,
     execute_subprocess_async,
-    run_first,
     path_in_accelerate_package,
     require_cpu,
     require_multi_device,
     require_non_cpu,
+    run_first,
     test_sync,
 )
 from accelerate.utils import patch_environment

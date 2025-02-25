@@ -17,12 +17,12 @@ from accelerate.test_utils.testing import (
     TempDirTestCase,
     execute_subprocess_async,
     get_launch_command,
-    run_first,
     path_in_accelerate_package,
     require_multi_device,
     require_non_torch_xla,
     require_tp,
     require_transformers,
+    run_first,
     slow,
 )
 from accelerate.utils import patch_environment

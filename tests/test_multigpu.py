@@ -25,7 +25,6 @@ from accelerate.test_utils import (
     device_count,
     execute_subprocess_async,
     get_launch_command,
-    run_first,
     path_in_accelerate_package,
     require_huggingface_suite,
     require_multi_device,
@@ -35,6 +34,7 @@ from accelerate.test_utils import (
     require_non_xpu,
     require_pippy,
     require_torchvision,
+    run_first,
     torch_device,
 )
 from accelerate.utils import is_hpu_available, patch_environment

@@ -26,13 +26,13 @@ from accelerate.commands.launch import _validate_launch_command, launch_command,
 from accelerate.commands.tpu import tpu_command_launcher, tpu_command_parser
 from accelerate.test_utils.testing import (
     capture_call_output,
-    run_first,
     path_in_accelerate_package,
     require_multi_device,
     require_non_hpu,
     require_timm,
     require_transformers,
     run_command,
+    run_first,
 )
 from accelerate.utils import patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env

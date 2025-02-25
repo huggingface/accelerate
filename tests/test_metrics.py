@@ -22,12 +22,12 @@ from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     device_count,
     execute_subprocess_async,
-    run_first,
     path_in_accelerate_package,
     require_cpu,
     require_huggingface_suite,
     require_multi_device,
     require_single_device,
+    run_first,
 )
 from accelerate.utils import patch_environment
 

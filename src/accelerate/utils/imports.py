@@ -179,7 +179,9 @@ def is_fp16_available():
     if is_hpu_available(patch_torch=False):
         import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
 
-        return htexp._get_device_type() != htexp.synDeviceType.synDeviceGaudi
+        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+            # Gaudi1 does not support FP16
+            return False
 
     return True
 

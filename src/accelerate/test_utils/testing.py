@@ -42,6 +42,7 @@ from ..utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_dvclive_available,
+    is_fp16_available,
     is_hpu_available,
     is_import_timer_available,
     is_mlu_available,
@@ -215,15 +216,8 @@ def require_fp16(test_case):
     """
     Decorator marking a test that requires FP16. These tests are skipped when FP16 is not supported.
     """
-    if is_hpu_available(patch_torch=False):
-        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
 
-        return unittest.skipIf(
-            htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi,
-            "test requires FP16 (not supported on Gaudi1)",
-        )(test_case)
-
-    return test_case
+    return unittest.skipUnless(is_fp16_available(), "test requires FP16 support")(test_case)
 
 
 def require_mlu(test_case):
@@ -502,8 +496,8 @@ def run_first(test_case):
     Decorator marking a test with order(1). When pytest-ordering plugin is installed, tests marked with this decorator
     are garanteed to run first.
 
-    This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used
-    by a single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
+    This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
+    single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
     allocation conflicts.
     """
     return pytest.mark.order(1)(test_case)

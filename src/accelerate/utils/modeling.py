@@ -89,12 +89,12 @@ def check_device_same(first_device, second_device):
     if first_device.type != second_device.type:
         return False
 
-    if first_device.type in ["cuda", "hpu"] and first_device.index is None:
+    if first_device.type != "cpu" and first_device.index is None:
         # In case the first_device is a cuda device and have
         # the index attribute set to `None`, default it to `0`
         first_device = torch.device(first_device.type, index=0)
 
-    if second_device.type in ["cuda", "hpu"] and second_device.index is None:
+    if second_device.type != "cpu" and second_device.index is None:
         # In case the second_device is a cuda device and have
         # the index attribute set to `None`, default it to `0`
         second_device = torch.device(second_device.type, index=0)

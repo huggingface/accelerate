@@ -215,10 +215,6 @@ def load_accelerator_state(
     elif map_location == "on_device":
         map_location = PartialState().device
 
-        if map_location.type == "hpu":
-            # safetensors doesn't accept hpu:0 (should be fixed in a PR)
-            map_location = torch.device("hpu")
-
     input_dir = Path(input_dir)
     # Model states
     for i, model in enumerate(models):

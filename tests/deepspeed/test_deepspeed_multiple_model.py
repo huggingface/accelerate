@@ -24,12 +24,12 @@ from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.commands.launch import launch_command, launch_command_parser
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
-    run_first,
     path_in_accelerate_package,
     require_deepspeed,
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    run_first,
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset

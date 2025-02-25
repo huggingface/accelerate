@@ -32,9 +32,9 @@ from accelerate import Accelerator
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
-    run_first,
     require_non_cpu,
     require_non_torch_xla,
+    run_first,
 )
 from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
 

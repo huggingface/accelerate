@@ -22,7 +22,6 @@ from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     get_launch_command,
-    run_first,
     require_cuda,
     require_cuda_or_hpu,
     require_huggingface_suite,
@@ -30,6 +29,7 @@ from accelerate.test_utils import (
     require_multi_gpu,
     require_torchao,
     require_transformer_engine,
+    run_first,
 )
 from accelerate.test_utils.testing import require_deepspeed, run_command
 from accelerate.utils import (

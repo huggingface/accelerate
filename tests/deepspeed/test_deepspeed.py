@@ -31,12 +31,12 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
-    run_first,
     path_in_accelerate_package,
     require_deepspeed,
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    run_first,
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset, RegressionModel
