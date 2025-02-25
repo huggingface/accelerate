@@ -1050,7 +1050,7 @@ def _validate_launch_command(args):
                             key = "fsdp_" + key
                         elif name == "fp8_config" and not key.startswith("fp8"):
                             key = "fp8_" + key
-                        if hasattr(args, 'nondefault') and key not in args.nondefault:
+                        if hasattr(args, "nondefault") and key not in args.nondefault:
                             setattr(args, key, value)
                 elif (
                     name not in ["compute_environment", "mixed_precision", "distributed_type"]

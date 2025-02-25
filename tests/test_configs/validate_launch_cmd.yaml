@@ -1,0 +1,8 @@
+compute_environment: LOCAL_MACHINE
+debug: true
+num_processes: 1
+distributed_type: 'NO'
+fsdp_config:
+  fsdp_sync_module_states: false
+deepspeed_config:
+  deepspeed_config_file: path/to/be/ignored

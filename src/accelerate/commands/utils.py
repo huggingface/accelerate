@@ -32,8 +32,8 @@ class _StoreAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest, values)
-        if not hasattr(namespace, 'nondefault'):
-            setattr(namespace, 'nondefault', set())
+        if not hasattr(namespace, "nondefault"):
+            namespace.nondefault = set()
         namespace.nondefault.add(self.dest)
 
 
