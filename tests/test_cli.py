@@ -137,9 +137,6 @@ class AccelerateLauncherTester(unittest.TestCase):
     def test_validate_launch_command(self):
         """Test that the validation function combines args and defaults."""
         parser = launch_command_parser()
-
-        # If an option isn't specified on the CLI
-        # the config file should be used.
         args = parser.parse_args(
             [
                 "--num-processes",
