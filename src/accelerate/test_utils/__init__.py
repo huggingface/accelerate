@@ -19,7 +19,7 @@ from .testing import (
     device_count,
     execute_subprocess_async,
     get_launch_command,
-    launches_subprocesses,
+    run_first,
     memory_allocated_func,
     path_in_accelerate_package,
     require_bnb,

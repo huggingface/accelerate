@@ -18,8 +18,6 @@ import os
 
 import torch
 from transformers import AutoModel
-from transformers.testing_utils import mockenv_context
-from transformers.trainer_utils import set_seed
 
 from accelerate.accelerator import Accelerator
 from accelerate.state import AcceleratorState
@@ -28,14 +26,14 @@ from accelerate.test_utils.testing import (
     TempDirTestCase,
     execute_subprocess_async,
     get_launch_command,
-    launches_subprocesses,
+    run_first,
     path_in_accelerate_package,
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
     slow,
 )
-from accelerate.utils import patch_environment
+from accelerate.utils import is_hpu_available, patch_environment, set_seed
 from accelerate.utils.constants import (
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -79,7 +77,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             env = self.fsdp_env.copy()
             env["FSDP_SHARDING_STRATEGY"] = f"{i + 1}"
-            with mockenv_context(**env):
+            with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
             fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=ShardingStrategy(i + 1))
@@ -89,7 +87,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             env = self.fsdp_env.copy()
             env["FSDP_SHARDING_STRATEGY"] = strategy
-            with mockenv_context(**env):
+            with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
             fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=strategy)
@@ -102,7 +100,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
             expected_value = None if prefetch_policy == "NO_PREFETCH" else BackwardPrefetch(i + 1)
             env = self.fsdp_env.copy()
             env["FSDP_BACKWARD_PREFETCH"] = prefetch_policy
-            with mockenv_context(**env):
+            with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert (
                     fsdp_plugin.backward_prefetch == expected_value
@@ -123,7 +121,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         for i, state_dict_type in enumerate(FSDP_STATE_DICT_TYPE):
             env = self.fsdp_env.copy()
             env["FSDP_STATE_DICT_TYPE"] = state_dict_type
-            with mockenv_context(**env):
+            with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert fsdp_plugin.state_dict_type == StateDictType(i + 1)
                 if state_dict_type == "FULL_STATE_DICT":
@@ -160,7 +158,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                     env["FSDP_MIN_NUM_PARAMS"] = "2000"
                     min_num_params = 2000
                 # First test via env
-                with mockenv_context(**env):
+                with patch_environment(**env):
                     fsdp_plugin = FullyShardedDataParallelPlugin()
                     fsdp_plugin.set_auto_wrap_policy(model)
                 if policy == "NO_WRAP":
@@ -183,7 +181,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         env = self.fsdp_env.copy()
         env["FSDP_AUTO_WRAP_POLICY"] = "TRANSFORMER_BASED_WRAP"
         env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = "T5Layer"
-        with mockenv_context(**env):
+        with patch_environment(**env):
             fsdp_plugin = FullyShardedDataParallelPlugin()
             with self.assertRaises(Exception) as cm:
                 fsdp_plugin.set_auto_wrap_policy(model)
@@ -200,7 +198,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         env = self.fsdp_env.copy()
         env["FSDP_AUTO_WRAP_POLICY"] = "SIZE_BASED_WRAP"
         env["FSDP_MIN_NUM_PARAMS"] = "0"
-        with mockenv_context(**env):
+        with patch_environment(**env):
             fsdp_plugin = FullyShardedDataParallelPlugin()
             fsdp_plugin.set_auto_wrap_policy(model)
             assert fsdp_plugin.auto_wrap_policy is None
@@ -219,7 +217,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         for mp_dtype in dtypes:
             env = self.fsdp_env.copy()
             env["ACCELERATE_MIXED_PRECISION"] = mp_dtype
-            with mockenv_context(**env):
+            with patch_environment(**env):
                 accelerator = Accelerator()
                 if mp_dtype == "fp16":
                     dtype = torch.float16
@@ -236,7 +234,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, "buffer_dtype": dtype}
             )
             assert plugin.mixed_precision_policy == mp_policy
-            with mockenv_context(**self.dist_env):
+            with patch_environment(**self.dist_env):
                 accelerator = Accelerator(fsdp_plugin=plugin)
                 assert accelerator.state.fsdp_plugin.mixed_precision_policy == mp_policy
             AcceleratorState._reset_state(True)
@@ -254,7 +252,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
             env = self.fsdp_env.copy()
             env["ACCELERATE_MIXED_PRECISION"] = mp_dtype
-            with mockenv_context(**env):
+            with patch_environment(**env):
                 accelerator = Accelerator()
                 accelerator.state.fsdp_plugin.set_mixed_precision(dtype, buffer_autocast=True, override=True)
                 assert accelerator.state.fsdp_plugin.mixed_precision_policy == mp_policy
@@ -270,7 +268,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         for flag in [True, False]:
             env = self.fsdp_env.copy()
             env["FSDP_OFFLOAD_PARAMS"] = str(flag).lower()
-            with mockenv_context(**env):
+            with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert fsdp_plugin.cpu_offload == CPUOffload(offload_params=flag)
 
@@ -288,7 +286,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
         assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
 
-@launches_subprocesses
+@run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
 @require_non_torch_xla
 @require_multi_device
@@ -298,7 +296,7 @@ class FSDPIntegrationTest(TempDirTestCase):
 
     def setUp(self):
         super().setUp()
-        self.performance_lower_bound = 0.82 if torch.cuda.is_available() else 0.70
+        self.performance_lower_bound = 0.70 if is_hpu_available() else 0.82
         self.performance_configs = [
             "fsdp_shard_grad_op_transformer_based_wrap",
             "fsdp_full_shard_transformer_based_wrap",

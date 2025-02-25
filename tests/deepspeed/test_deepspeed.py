@@ -31,7 +31,7 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
-    launches_subprocesses,
+    run_first,
     path_in_accelerate_package,
     require_deepspeed,
     require_huggingface_suite,
@@ -865,7 +865,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 if isinstance(module, Qwen2MoeSparseMoeBlock):
                     assert hasattr(module, "_z3_leaf") and module._z3_leaf
 
-    @launches_subprocesses
+    @run_first
     def test_basic_run(self):
         test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")
         with tempfile.TemporaryDirectory() as dirpath:
@@ -890,7 +890,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 execute_subprocess_async(cmd)
 
 
-@launches_subprocesses
+@run_first
 @require_deepspeed
 @require_multi_device
 @slow
@@ -923,7 +923,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.n_train = 160
         self.n_val = 160
 
-    @launches_subprocesses
+    @run_first
     def test_performance(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
@@ -968,7 +968,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage)
 
-    @launches_subprocesses
+    @run_first
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = [
@@ -1023,7 +1023,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage)
 
-    @launches_subprocesses
+    @run_first
     def test_peak_memory_usage(self):
         if compare_versions("deepspeed", ">", "0.12.6"):
             self.skipTest(
@@ -1092,7 +1092,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage)
 
-    @launches_subprocesses
+    @run_first
     def test_lr_scheduler(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
@@ -1117,7 +1117,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @launches_subprocesses
+    @run_first
     @require_huggingface_suite
     def test_zero3_integration(self):
         self.test_file_path = self.test_scripts_folder / "test_zero3_integration.py"

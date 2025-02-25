@@ -19,7 +19,7 @@ from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     device_count,
     execute_subprocess_async,
-    launches_subprocesses,
+    run_first,
     path_in_accelerate_package,
     require_cpu,
     require_multi_device,
@@ -44,7 +44,7 @@ class SyncScheduler(unittest.TestCase):
     def test_gradient_sync_gpu(self):
         test_sync.main()
 
-    @launches_subprocesses
+    @run_first
     @require_multi_device
     def test_gradient_sync_gpu_multi(self):
         print(f"Found {device_count} devices.")

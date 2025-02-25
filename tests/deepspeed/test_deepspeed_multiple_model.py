@@ -24,7 +24,7 @@ from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.commands.launch import launch_command, launch_command_parser
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
-    launches_subprocesses,
+    run_first,
     path_in_accelerate_package,
     require_deepspeed,
     require_huggingface_suite,
@@ -172,7 +172,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
             assert accelerator.deepspeed_engine_wrapped.engine is model1
 
-    @launches_subprocesses
+    @run_first
     @require_huggingface_suite
     @require_multi_device
     @slow

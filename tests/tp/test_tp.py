@@ -17,7 +17,7 @@ from accelerate.test_utils.testing import (
     TempDirTestCase,
     execute_subprocess_async,
     get_launch_command,
-    launches_subprocesses,
+    run_first,
     path_in_accelerate_package,
     require_multi_device,
     require_non_torch_xla,
@@ -45,7 +45,7 @@ class TPIntegrationTest(TempDirTestCase):
 
         set_seed(42)
 
-    @launches_subprocesses
+    @run_first
     def test_working_of_tp(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = get_launch_command(

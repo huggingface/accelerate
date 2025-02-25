@@ -32,7 +32,7 @@ from accelerate import Accelerator
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
-    launches_subprocesses,
+    run_first,
     require_non_cpu,
     require_non_torch_xla,
 )
@@ -376,7 +376,7 @@ class CheckpointTest(unittest.TestCase):
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
 
-    @launches_subprocesses
+    @run_first
     @require_non_cpu
     @require_non_torch_xla
     def test_map_location(self):

@@ -25,7 +25,7 @@ from accelerate.test_utils import (
     device_count,
     execute_subprocess_async,
     get_launch_command,
-    launches_subprocesses,
+    run_first,
     path_in_accelerate_package,
     require_huggingface_suite,
     require_multi_device,
@@ -47,7 +47,7 @@ class MultiDeviceTester(unittest.TestCase):
     pippy_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_pippy.py")
     merge_weights_file_path = path_in_accelerate_package("test_utils", "scripts", "test_merge_weights.py")
 
-    @launches_subprocesses
+    @run_first
     @require_multi_device
     def test_multi_device(self):
         print(f"Found {device_count} devices.")
@@ -55,7 +55,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @launches_subprocesses
+    @run_first
     @require_multi_device
     def test_multi_device_ops(self):
         print(f"Found {device_count} devices.")
@@ -63,7 +63,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @launches_subprocesses
+    @run_first
     @require_multi_device
     def test_pad_across_processes(self):
         print(f"Found {device_count} devices.")
@@ -72,7 +72,7 @@ class MultiDeviceTester(unittest.TestCase):
             execute_subprocess_async(cmd)
 
     @require_non_hpu
-    @launches_subprocesses
+    @run_first
     @require_multi_device
     def test_multi_device_merge_fsdp_weights(self):
         print(f"Found {device_count} devices.")
@@ -82,7 +82,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
-    @launches_subprocesses
+    @run_first
     @require_non_torch_xla
     @require_multi_device
     def test_distributed_data_loop(self):
@@ -106,7 +106,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
-    @launches_subprocesses
+    @run_first
     @require_non_xpu
     @require_multi_gpu
     @require_pippy

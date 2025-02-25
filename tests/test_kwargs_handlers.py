@@ -24,7 +24,7 @@ from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
-    launches_subprocesses,
+    run_first,
     path_in_accelerate_package,
     require_fp16,
     require_multi_device,
@@ -80,7 +80,7 @@ class KwargsHandlerTester(unittest.TestCase):
         assert scaler._growth_interval == 2000
         assert scaler._enabled is True
 
-    @launches_subprocesses
+    @run_first
     @require_multi_device
     def test_ddp_kwargs(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
@@ -169,7 +169,7 @@ class KwargsHandlerTester(unittest.TestCase):
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
-    @launches_subprocesses
+    @run_first
     @require_multi_device
     def test_ddp_comm_hook(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]

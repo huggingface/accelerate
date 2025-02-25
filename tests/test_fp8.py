@@ -22,7 +22,7 @@ from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     get_launch_command,
-    launches_subprocesses,
+    run_first,
     require_cuda,
     require_cuda_or_hpu,
     require_huggingface_suite,
@@ -74,7 +74,7 @@ def can_convert_ao_model():
     assert has_ao_layers(model)
 
 
-@launches_subprocesses
+@run_first
 @require_transformer_engine
 class TestTransformerEngine(unittest.TestCase):
     @require_cuda_or_hpu
@@ -125,7 +125,7 @@ class TestTransformerEngine(unittest.TestCase):
 
 
 @require_torchao
-@launches_subprocesses
+@run_first
 @require_huggingface_suite
 class TestTorchAO(unittest.TestCase):
     @require_cuda
