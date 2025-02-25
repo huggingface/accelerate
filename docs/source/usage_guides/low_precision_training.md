@@ -26,7 +26,7 @@ This is only enabled on specific NVIDIA hardware, namely:
 * Anything after the 3000 series consumer graphics cards (such as the 4090)
 * Hopper-based GPU architectures (such as the `H100` and `H200`)
 
-What this will result in is some gain in the memory used (as we've cut the needed memory in half for some parts of training) and an increase in throughput *should* be seen as well for larger models that can replace certain layers with FP8-enabled ones.
+What this will result in is some reduction in the memory used (as we've cut the needed memory in half for some parts of training) and an increase in throughput *should* be seen as well for larger models that can replace certain layers with FP8-enabled ones.
 
 ## Configuring the Accelerator
 
@@ -96,7 +96,7 @@ fp8_config:
 
 ## Configuring TransformersEngine
 
-TransformersEngine has much more available for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
+TransformersEngine has many options for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
 
 Accelerate tries to set sensible defaults, but exploring and tweaking the various parameters yourself can lead to better performance potentially.
 
