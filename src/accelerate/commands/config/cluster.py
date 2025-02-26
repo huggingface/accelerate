@@ -416,14 +416,13 @@ def get_cluster_input():
                     error_message="Please enter yes or no.",
                 )
 
-            fsdp_config["fsdp_offload_params"] = True  # Default to True for FSDP2, ask for user input for FSDP1
-            if fsdp_version == 1:
-                fsdp_config["fsdp_offload_params"] = _ask_field(
-                    "Do you want to offload parameters and gradients to CPU? [yes/NO]: ",
-                    _convert_yes_no_to_bool,
-                    default=False,
-                    error_message="Please enter yes or no.",
-                )
+            fsdp_config["fsdp_offload_params"] = _ask_field(
+                "Do you want to offload parameters and gradients to CPU? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+
             fsdp_wrap_query = "What should be your auto wrap policy?"
             fsdp_config["fsdp_auto_wrap_policy"] = _ask_options(
                 fsdp_wrap_query,

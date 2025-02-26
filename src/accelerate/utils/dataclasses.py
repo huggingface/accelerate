@@ -1913,7 +1913,7 @@ class FullyShardedDataParallelPlugin:
 
         if isinstance(self.cpu_offload, bool):
             if self.fsdp_version == 2:
-                if self.cpu_offload:
+                if not self.cpu_offload:
                     self.cpu_offload = OffloadPolicy()
                 else:
                     self.cpu_offload = CPUOffloadPolicy()
