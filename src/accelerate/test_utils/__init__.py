@@ -26,6 +26,7 @@ from .testing import (
     require_cuda,
     require_cuda_or_hpu,
     require_cuda_or_xpu,
+    require_fp8,
     require_fp16,
     require_huggingface_suite,
     require_mlu,

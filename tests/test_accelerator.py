@@ -31,6 +31,7 @@ from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
     require_cuda_or_xpu,
+    require_fp8,
     require_fp16,
     require_huggingface_suite,
     require_multi_device,
@@ -570,6 +571,7 @@ class AcceleratorTester(AccelerateTestCase):
         accelerator = Accelerator(cpu=True)
         _ = accelerator.prepare(sgd)
 
+    @require_fp8
     @require_transformer_engine
     def test_can_unwrap_model_te(self):
         model, optimizer, *_ = create_components()

@@ -112,10 +112,6 @@ def is_lomo_available():
     return _is_package_available("lomo_optim")
 
 
-def is_fp8_available():
-    return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
-
-
 def is_cuda_available():
     """
     Checks if `cuda` is available via an `nvml-based` check which won't trigger the drivers and leave cuda
@@ -184,6 +180,17 @@ def is_fp16_available():
             return False
 
     return True
+
+
+def is_fp8_available():
+    if is_hpu_available():
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+            # Gaudi1 does not support FP8
+            return is_transformer_engine_available()
+
+    return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
 
 
 def is_4bit_bnb_available():

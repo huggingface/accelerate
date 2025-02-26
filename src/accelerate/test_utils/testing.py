@@ -42,6 +42,7 @@ from ..utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_dvclive_available,
+    is_fp8_available,
     is_fp16_available,
     is_hpu_available,
     is_import_timer_available,
@@ -218,6 +219,14 @@ def require_fp16(test_case):
     """
 
     return unittest.skipUnless(is_fp16_available(), "test requires FP16 support")(test_case)
+
+
+def require_fp8(test_case):
+    """
+    Decorator marking a test that requires FP8. These tests are skipped when FP8 is not supported.
+    """
+
+    return unittest.skipUnless(is_fp8_available(), "test requires FP8 support")(test_case)
 
 
 def require_mlu(test_case):
