@@ -176,7 +176,7 @@ def is_bf16_available(ignore_tpu=False):
 
 def is_fp16_available():
     "Checks if fp16 is supported"
-    if is_hpu_available(patch_torch=False):
+    if is_hpu_available():
         import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
 
         if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
@@ -402,28 +402,28 @@ def is_npu_available(check_device=False):
 
 
 @lru_cache
-def is_hpu_available(patch_torch=True, init_hccl=False):
+def is_hpu_available(patch_device_count=True, init_hccl=False):
     "Checks if `torch.hpu` is installed and potentially if a HPU is in the environment"
     if importlib.util.find_spec("habana_frameworks.torch") is None:
         return False
 
-    if patch_torch:
-        import habana_frameworks.torch.hpu as torch_hpu  # noqa: F401
+    import habana_frameworks.torch  # noqa: F401
 
+    if patch_device_count:
         if os.environ.get("HABANA_VISIBLE_MODULES", "") != "":
             true_device_count = len(os.environ.get("HABANA_VISIBLE_MODULES").split(","))
-            if true_device_count != torch_hpu.device_count():
+            if true_device_count != torch.hpu.device_count():
                 warnings.warn(
-                    f"Detected {torch_hpu.device_count()} HPU devices, but HABANA_VISIBLE_MODULES is set to "
+                    f"Detected {torch.hpu.device_count()} HPU devices, but HABANA_VISIBLE_MODULES is set to "
                     f"{os.environ.get('HABANA_VISIBLE_MODULES')} (i.e. {true_device_count} devices). "
                     "Patching torch.hpu.device_count() to return the correct number of devices."
                 )
-                torch_hpu.device_count = lambda: true_device_count
+                torch.hpu.device_count = lambda: true_device_count
 
     if init_hccl:
         import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
 
-    return True
+    return hasattr(torch, "hpu") and torch.hpu.is_available()
 
 
 @lru_cache

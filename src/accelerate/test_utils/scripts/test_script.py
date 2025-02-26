@@ -53,7 +53,7 @@ if is_xpu_available():
 else:
     from accelerate.test_utils import RegressionModel
 
-if is_hpu_available(patch_torch=False):
+if is_hpu_available():
     ATOL = 1e-3
     RTOL = 1e-3
 else:

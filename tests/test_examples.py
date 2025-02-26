@@ -292,9 +292,8 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/inference/distributed/phi2.py"]
 
         env = {}
-        if is_hpu_available(patch_torch=False):
-            # We get an error in non-lazy mode:
-            # synNodeCreateWithId failed for node: masked_fill_fwd_i64
+        if is_hpu_available():
+            # We get an error in non-lazy mode: synNodeCreateWithId failed for node: masked_fill_fwd_i64
             env["PT_HPU_LAZY_MODE"] = "1"
 
         with patch_environment(**env):
