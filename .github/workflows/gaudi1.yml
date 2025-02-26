@@ -2,6 +2,9 @@ name: Gaudi1 tests (scheduled)
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   schedule:
     - cron: "0 2 * * *"
 
@@ -34,19 +37,6 @@ jobs:
       - name: Install Accelerate with DeepSpeed
         run: |
           pip install -e .[testing] git+https://github.com/HabanaAI/DeepSpeed.git@1.19.0
-
-      # Remove when safetensors is released
-      - name: Install Rust and build Safetensors
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          . "$HOME/.cargo/env"
-          rustup update
-          git clone https://github.com/huggingface/safetensors
-          cd safetensors
-          pip install setuptools_rust
-          git checkout fa833511664338bfc927fc02653ddb7d38d40be9
-          pip install -e bindings/python
-          cd ..
 
       - name: Run CLI tests
         run: |
