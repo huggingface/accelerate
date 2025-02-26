@@ -414,14 +414,15 @@ def is_hpu_available(patch_device_count=True, init_hccl=False):
 
     if patch_device_count:
         if os.environ.get("HABANA_VISIBLE_MODULES", "") != "":
-            true_device_count = len(os.environ.get("HABANA_VISIBLE_MODULES").split(","))
-            if true_device_count != torch.hpu.device_count():
+            torch_device_count = torch.hpu.device_count()
+            habana_device_count = len(os.environ.get("HABANA_VISIBLE_MODULES").split(","))
+            if habana_device_count != torch_device_count:
                 warnings.warn(
-                    f"Detected {torch.hpu.device_count()} HPU devices, but HABANA_VISIBLE_MODULES is set to "
-                    f"{os.environ.get('HABANA_VISIBLE_MODULES')} (i.e. {true_device_count} devices). "
+                    f"Torch detected {torch_device_count} HPU devices, but HABANA_VISIBLE_MODULES is set to "
+                    f"{os.environ.get('HABANA_VISIBLE_MODULES')} (i.e. {habana_device_count} devices). "
                     "Patching torch.hpu.device_count() to return the correct number of devices."
                 )
-                torch.hpu.device_count = lambda: true_device_count
+                torch.hpu.device_count = lambda: habana_device_count
 
     if init_hccl:
         import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
