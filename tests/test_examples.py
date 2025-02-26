@@ -40,7 +40,7 @@ from accelerate.test_utils.testing import (
     run_command,
     slow,
 )
-from accelerate.utils import write_basic_config
+from accelerate.utils import patch_environment, write_basic_config
 
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
@@ -286,21 +286,31 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
         run_command(self.launch_args + testargs)
 
-    @require_non_hpu  # Error in generate: synNodeCreateWithId failed for node: masked_fill_fwd_i64
+    @require_fp16
     @require_multi_device
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
-        run_command(self.launch_args + testargs)
 
-    @require_non_xpu
+        env = {}
+        if is_hpu_available(patch_torch=False):
+            # We get an error in non-lazy mode:
+            # synNodeCreateWithId failed for node: masked_fill_fwd_i64
+            env["PT_HPU_LAZY_MODE"] = "1"
+
+        with patch_environment(**env):
+            run_command(self.launch_args + testargs)
+
     @require_pippy
+    @require_non_hpu
+    @require_non_xpu
     @require_multi_gpu
     def test_pippy_examples_bert(self):
         testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
-    @require_non_xpu
     @require_pippy
+    @require_non_hpu
+    @require_non_xpu
     @require_multi_gpu
     def test_pippy_examples_gpt2(self):
         testargs = ["examples/inference/pippy/gpt2.py"]

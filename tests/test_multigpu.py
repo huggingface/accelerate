@@ -71,8 +71,8 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @require_non_hpu
     @run_first
+    @require_non_hpu
     @require_multi_device
     def test_multi_device_merge_fsdp_weights(self):
         print(f"Found {device_count} devices.")
@@ -107,9 +107,10 @@ class MultiDeviceTester(unittest.TestCase):
             execute_subprocess_async(cmd)
 
     @run_first
+    @require_pippy
+    @require_non_hpu
     @require_non_xpu
     @require_multi_gpu
-    @require_pippy
     @require_torchvision
     @require_huggingface_suite
     def test_pippy(self):

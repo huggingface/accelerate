@@ -75,15 +75,14 @@ def can_convert_ao_model():
 
 
 @run_first
+@require_cuda_or_hpu
 @require_transformer_engine
 class TestTransformerEngine(unittest.TestCase):
-    @require_cuda_or_hpu
     def test_can_prepare_model_single_gpu(self):
         command = get_launch_command(num_processes=1, monitor_interval=0.1)
         command += ["-m", "tests.test_fp8"]
         run_command(command)
 
-    @require_cuda_or_hpu
     @require_multi_device
     def test_can_prepare_model_multi_gpu(self):
         command = get_launch_command(num_processes=2, monitor_interval=0.1)
@@ -91,7 +90,6 @@ class TestTransformerEngine(unittest.TestCase):
         run_command(command)
 
     @require_deepspeed
-    @require_cuda_or_hpu
     @require_multi_device
     def test_can_prepare_model_multigpu_deepspeed(self):
         for zero_stage in [1, 2, 3]:
@@ -125,7 +123,6 @@ class TestTransformerEngine(unittest.TestCase):
 
 
 @require_torchao
-@run_first
 @require_huggingface_suite
 class TestTorchAO(unittest.TestCase):
     @require_cuda
