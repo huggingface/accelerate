@@ -29,6 +29,7 @@ from accelerate.test_utils.testing import (
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    run_first,
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset
@@ -171,11 +172,12 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
             assert accelerator.deepspeed_engine_wrapped.engine is model1
 
+    @run_first
     @require_huggingface_suite
     @require_multi_device
     @slow
     def test_train_multiple_models(self):
         self.test_file_path = self.test_scripts_folder / "test_ds_multiple_model.py"
-        args = ["--num_processes=2", "--num_machines=1", "--main_process_port=0", str(self.test_file_path)]
+        args = ["--num_processes=2", "--num_machines=1", str(self.test_file_path)]
         args = self.parser.parse_args(args)
         launch_command(args)

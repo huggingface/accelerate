@@ -27,6 +27,7 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_device,
     require_single_device,
+    run_first,
 )
 from accelerate.utils import patch_environment
 
@@ -53,6 +54,7 @@ class MetricTester(unittest.TestCase):
     def test_metric_accelerator(self):
         self.test_metrics.main()
 
+    @run_first
     @require_multi_device
     def test_metric_accelerator_multi(self):
         print(f"Found {device_count} devices.")

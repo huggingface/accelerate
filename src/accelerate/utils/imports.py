@@ -102,7 +102,10 @@ def is_schedulefree_available():
 
 
 def is_transformer_engine_available():
-    return _is_package_available("transformer_engine", "transformer-engine")
+    if is_hpu_available():
+        return _is_package_available("intel_transformer_engine", "intel-transformer-engine")
+    else:
+        return _is_package_available("transformer_engine", "transformer-engine")
 
 
 def is_lomo_available():
@@ -168,6 +171,18 @@ def is_bf16_available(ignore_tpu=False):
         return torch.cuda.is_bf16_supported()
     if is_mps_available():
         return False
+    return True
+
+
+def is_fp16_available():
+    "Checks if fp16 is supported"
+    if is_hpu_available():
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+            # Gaudi1 does not support FP16
+            return False
+
     return True
 
 
@@ -384,6 +399,35 @@ def is_npu_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "npu") and torch.npu.is_available()
+
+
+@lru_cache
+def is_hpu_available(patch_device_count=True, init_hccl=False):
+    "Checks if `torch.hpu` is installed and potentially if a HPU is in the environment"
+    if (
+        importlib.util.find_spec("habana_frameworks") is None
+        or importlib.util.find_spec("habana_frameworks.torch") is None
+    ):
+        return False
+
+    import habana_frameworks.torch  # noqa: F401
+
+    if patch_device_count:
+        if os.environ.get("HABANA_VISIBLE_MODULES", "") != "":
+            torch_device_count = torch.hpu.device_count()
+            habana_device_count = len(os.environ.get("HABANA_VISIBLE_MODULES").split(","))
+            if habana_device_count != torch_device_count:
+                warnings.warn(
+                    f"Torch detected {torch_device_count} HPU devices, but HABANA_VISIBLE_MODULES is set to "
+                    f"{os.environ.get('HABANA_VISIBLE_MODULES')} (i.e. {habana_device_count} devices). "
+                    "Patching torch.hpu.device_count() to return the correct number of devices."
+                )
+                torch.hpu.device_count = lambda: habana_device_count
+
+    if init_hccl:
+        import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
+
+    return hasattr(torch, "hpu") and torch.hpu.is_available()
 
 
 @lru_cache

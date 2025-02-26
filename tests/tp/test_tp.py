@@ -22,6 +22,7 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     require_tp,
     require_transformers,
+    run_first,
     slow,
 )
 from accelerate.utils import patch_environment
@@ -44,6 +45,7 @@ class TPIntegrationTest(TempDirTestCase):
 
         set_seed(42)
 
+    @run_first
     def test_working_of_tp(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = get_launch_command(

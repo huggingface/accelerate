@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import List, Union
 from unittest import mock
 
+import pytest
 import torch
 
 import accelerate
@@ -41,6 +42,8 @@ from ..utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_dvclive_available,
+    is_fp16_available,
+    is_hpu_available,
     is_import_timer_available,
     is_mlu_available,
     is_mps_available,
@@ -82,6 +85,8 @@ def get_backend():
         return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
         return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
+    elif is_hpu_available():
+        return "hpu", torch.hpu.device_count(), torch.hpu.memory_allocated
     else:
         return "cpu", 1, lambda: 0
 
@@ -166,6 +171,16 @@ def require_cuda(test_case):
     return unittest.skipUnless(is_cuda_available() and not is_torch_xla_available(), "test requires a GPU")(test_case)
 
 
+def require_cuda_or_hpu(test_case):
+    """
+    Decorator marking a test that requires CUDA or HPU. These tests are skipped when there are no GPU available or when
+    TorchXLA is available.
+    """
+    return unittest.skipUnless(
+        (is_cuda_available() and not is_torch_xla_available()) or is_hpu_available(), "test requires a GPU or HPU"
+    )(test_case)
+
+
 def require_xpu(test_case):
     """
     Decorator marking a test that requires XPU. These tests are skipped when there are no XPU available.
@@ -188,6 +203,21 @@ def require_non_xpu(test_case):
     Decorator marking a test that should be skipped for XPU.
     """
     return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
+
+
+def require_non_hpu(test_case):
+    """
+    Decorator marking a test that should be skipped for HPU.
+    """
+    return unittest.skipUnless(torch_device != "hpu", "test requires a non-HPU")(test_case)
+
+
+def require_fp16(test_case):
+    """
+    Decorator marking a test that requires FP16. These tests are skipped when FP16 is not supported.
+    """
+
+    return unittest.skipUnless(is_fp16_available(), "test requires FP16 support")(test_case)
 
 
 def require_mlu(test_case):
@@ -459,6 +489,18 @@ def require_torchdata_stateful_dataloader(test_case):
     return unittest.skipUnless(
         is_torchdata_stateful_dataloader_available(), "test requires torchdata.stateful_dataloader"
     )(test_case)
+
+
+def run_first(test_case):
+    """
+    Decorator marking a test with order(1). When pytest-ordering plugin is installed, tests marked with this decorator
+    are garanteed to run first.
+
+    This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
+    single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
+    allocation conflicts.
+    """
+    return pytest.mark.order(1)(test_case)
 
 
 class TempDirTestCase(unittest.TestCase):

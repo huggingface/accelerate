@@ -27,9 +27,12 @@ from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     get_launch_command,
+    is_hpu_available,
+    require_fp16,
     require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
+    require_non_hpu,
     require_non_xpu,
     require_pippy,
     require_schedulefree,
@@ -37,7 +40,7 @@ from accelerate.test_utils.testing import (
     run_command,
     slow,
 )
-from accelerate.utils import write_basic_config
+from accelerate.utils import patch_environment, write_basic_config
 
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
@@ -197,10 +200,13 @@ class FeatureExamplesTests(TempDirTestCase):
         --resume_from_checkpoint {self.tmpdir / "step_2"}
         """.split()
         output = run_command(self.launch_args + testargs, return_stdout=True)
-        if torch.cuda.is_available():
+        if is_hpu_available():
+            num_processes = torch.hpu.device_count()
+        elif torch.cuda.is_available():
             num_processes = torch.cuda.device_count()
         else:
             num_processes = 1
+
         if num_processes > 1:
             assert "epoch 0:" not in output
             assert "epoch 1:" in output
@@ -266,6 +272,7 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/profiler.py"]
         run_command(self.launch_args + testargs)
 
+    @require_fp16
     @require_multi_device
     def test_ddp_comm_hook(self):
         testargs = ["examples/by_feature/ddp_comm_hook.py", "--ddp_comm_hook", "fp16"]
@@ -279,20 +286,30 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
         run_command(self.launch_args + testargs)
 
+    @require_fp16
     @require_multi_device
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
-        run_command(self.launch_args + testargs)
 
-    @require_non_xpu
+        env = {}
+        if is_hpu_available():
+            # We get an error in non-lazy mode: synNodeCreateWithId failed for node: masked_fill_fwd_i64
+            env["PT_HPU_LAZY_MODE"] = "1"
+
+        with patch_environment(**env):
+            run_command(self.launch_args + testargs)
+
     @require_pippy
+    @require_non_hpu
+    @require_non_xpu
     @require_multi_gpu
     def test_pippy_examples_bert(self):
         testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
-    @require_non_xpu
     @require_pippy
+    @require_non_hpu
+    @require_non_xpu
     @require_multi_gpu
     def test_pippy_examples_gpt2(self):
         testargs = ["examples/inference/pippy/gpt2.py"]
