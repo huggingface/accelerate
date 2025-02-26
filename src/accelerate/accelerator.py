@@ -1533,20 +1533,52 @@ class Accelerator:
 
                 if not is_type_fsdp:
                     fsdp2_plugin = self.state.fsdp_plugin
+
+                    from torch.distributed.fsdp.wrap import (
+                        size_based_auto_wrap_policy,
+                        transformer_auto_wrap_policy,
+                    )
+
+                    auto_wrap_policy_type = None  # extract the original type to create custom fn later
+                    if fsdp2_plugin.auto_wrap_policy is transformer_auto_wrap_policy:
+                        auto_wrap_policy_type = "transformer"
+                    elif fsdp2_plugin.auto_wrap_policy is size_based_auto_wrap_policy:
+                        auto_wrap_policy_type = "size"
+
+                    fsdp2_plugin.set_auto_wrap_policy(
+                        model
+                    )  # we set the auto_wrap policy to a functools.partial, so we can use it in apply_activation_checkpointing
+
                     kwargs = {
                         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
                         "offload_policy": fsdp2_plugin.cpu_offload,
                         "mp_policy": fsdp2_plugin.mixed_precision_policy,
                     }
 
-                    if (auto_wrap_policy := fsdp2_plugin.auto_wrap_policy) is not None:
+                    if fsdp2_plugin.activation_checkpointing:
+                        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+                            CheckpointImpl,
+                            apply_activation_checkpointing,
+                            checkpoint_wrapper,
+                        )
+
+                        apply_activation_checkpointing(
+                            model,
+                            checkpoint_wrapper_fn=functools.partial(
+                                checkpoint_wrapper,
+                                checkpoint_impl=CheckpointImpl.NO_REENTRANT,  # TODO(siro1): This breaks
+                            ),
+                            auto_wrap_policy=fsdp2_plugin.auto_wrap_policy,
+                        )
+                    if (auto_wrap_policy := auto_wrap_policy_type) is not None:
                         from torch.distributed.fsdp.wrap import (
                             size_based_auto_wrap_policy,
                             transformer_auto_wrap_policy,
                         )
 
                         # Simulate the behavior of the old auto_wrap_policy
-                        if auto_wrap_policy is transformer_auto_wrap_policy:
+                        # TODO(siro1): abstract this into a function together with `set_auto_wrap_policy`
+                        if auto_wrap_policy == "transformer":
                             no_split_modules = model._no_split_modules
                             if no_split_modules is None:
                                 no_split_modules = []
@@ -1568,7 +1600,7 @@ class Accelerator:
                                     return False
                                 return isinstance(module, tuple(transformer_cls_to_wrap))
 
-                        elif auto_wrap_policy is size_based_auto_wrap_policy:
+                        elif auto_wrap_policy == "size":
 
                             def policy(module: torch.nn.Module) -> bool:
                                 return module.numel() > fsdp2_plugin.min_num_params
