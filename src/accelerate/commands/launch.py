@@ -994,7 +994,6 @@ def _validate_launch_command(args):
 
     defaults = None
     warned = []
-    mp_from_config_flag = False
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
@@ -1081,7 +1080,6 @@ def _validate_launch_command(args):
                 args.mixed_precision = "no"
             else:
                 args.mixed_precision = defaults.mixed_precision
-                mp_from_config_flag = True
         else:
             if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
                 native_amp = True
@@ -1168,16 +1166,14 @@ def _validate_launch_command(args):
             "\nTo avoid this warning pass in values for each of the problematic parameters or run `accelerate config`."
         )
         logger.warning(message)
-    return args, defaults, mp_from_config_flag
+    return args, defaults
 
 
 def launch_command(args):
-    args, defaults, mp_from_config_flag = _validate_launch_command(args)
+    args, defaults = _validate_launch_command(args)
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
         args.deepspeed_fields_from_accelerate_config = list(defaults.deepspeed_config.keys()) if defaults else []
-        if mp_from_config_flag:
-            args.deepspeed_fields_from_accelerate_config.append("mixed_precision")
         args.deepspeed_fields_from_accelerate_config = ",".join(args.deepspeed_fields_from_accelerate_config)
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
