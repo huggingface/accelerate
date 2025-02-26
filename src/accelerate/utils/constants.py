@@ -42,6 +42,7 @@ FSDP_PYTORCH_VERSION = (
 )
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich", "mpich"]
+DEEPSPEED_MULTINODE_MPI_LAUNCHERS = ["openmpi", "mvapich", "mpich"]
 TORCH_DYNAMO_MODES = ["default", "reduce-overhead", "max-autotune"]
 ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION = "2.2.0"
 XPU_PROFILING_AVAILABLE_PYTORCH_VERSION = "2.4.0"
