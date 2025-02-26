@@ -343,6 +343,7 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_CPU,
     ):
@@ -356,6 +357,7 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
     ):
         for split_batch in [True, False]:
@@ -379,6 +381,7 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
     ):
         for split_batch in [True, False]:

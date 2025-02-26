@@ -534,7 +534,7 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "npu", "xla", "mlu", "musa") or is_torch_xla_available(
+            if self.device.type not in ("xpu", "cuda", "npu", "xla", "mlu", "musa", "sdaa") or is_torch_xla_available(
                 check_is_tpu=True
             ):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
@@ -1199,6 +1199,7 @@ class Accelerator:
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_XPU,
         ):
@@ -1510,6 +1511,7 @@ class Accelerator:
             if self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
+                DistributedType.MULTI_SDAA,
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
@@ -3313,6 +3315,7 @@ class Accelerator:
             if self.num_processes > 1 and self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
+                DistributedType.MULTI_SDAA,
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
             ):
