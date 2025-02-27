@@ -85,10 +85,9 @@ def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
             value = getattr(args, arg)
             if value is not None:
                 if arg == "fp8_override_linear_precision":
-                    values = value.strip("()").split(",")
-                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = values[0].strip()
-                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = values[1].strip()
-                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = values[2].strip()
+                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = value[0]
+                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = value[1]
+                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = value[2]
                 else:
                     current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
     return current_env
