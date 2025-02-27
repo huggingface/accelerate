@@ -172,23 +172,16 @@ def is_bf16_available(ignore_tpu=False):
 
 def is_fp16_available():
     "Checks if fp16 is supported"
-    if is_hpu_available():
-        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
-
-        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
-            # Gaudi1 does not support FP16
-            return False
+    if is_habana_gaudi1():
+        return False
 
     return True
 
 
 def is_fp8_available():
-    if is_hpu_available():
-        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
-
-        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
-            # Gaudi1 does not support FP8
-            return is_transformer_engine_available()
+    "Checks if fp8 is supported"
+    if is_habana_gaudi1():
+        return False
 
     return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
 
@@ -435,6 +428,16 @@ def is_hpu_available(patch_device_count=True, init_hccl=False):
         import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
 
     return hasattr(torch, "hpu") and torch.hpu.is_available()
+
+
+def is_habana_gaudi1():
+    if is_hpu_available():
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+            return True
+
+    return False
 
 
 @lru_cache

@@ -172,14 +172,26 @@ def check_cuda_p2p_ib_support():
     return True
 
 
+@lru_cache
 def check_fp8_capability():
     """
     Checks if all the current GPUs available support FP8.
 
-    Notably must initialize `torch.cuda` to check.
+    Notably might initialize `torch.cuda` to check.
     """
-    cuda_device_capacity = torch.cuda.get_device_capability()
-    return cuda_device_capacity >= (8, 9)
+
+    try:
+        # try to get the compute capability from nvidia-smi
+        output = subprocess.check_output(
+            [_nvidia_smi(), "--query-gpu=compute_capability", "--format=csv,noheader"], universal_newlines=True
+        )
+        output = output.strip()
+        # we take the first GPU's compute capability
+        compute_capability = tuple(map(int, output.split(os.linesep)[0].split(".")))
+    except Exception:
+        compute_capability = torch.cuda.get_device_capability()
+
+    return compute_capability >= (8, 9)
 
 
 @dataclass

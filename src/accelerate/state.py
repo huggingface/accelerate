@@ -39,6 +39,7 @@ from .utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
+    is_habana_gaudi1,
     is_hpu_available,
     is_ipex_available,
     is_mlu_available,
@@ -899,6 +900,12 @@ class AcceleratorState:
                         "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                     )
                     mixed_precision = "fp16"
+                elif is_habana_gaudi1():
+                    logger.warning(
+                        "The current HPU device is Gaudi1 which does not support FP8 mixed precision training (requires "
+                        "Gaudi2 or higher). Will use BF16 instead."
+                    )
+                    mixed_precision = "bf16"
 
             self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:

@@ -99,6 +99,7 @@ from .imports import (
     is_dvclive_available,
     is_fp8_available,
     is_fp16_available,
+    is_habana_gaudi1,
     is_hpu_available,
     is_import_timer_available,
     is_ipex_available,
