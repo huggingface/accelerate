@@ -402,7 +402,7 @@ def is_npu_available(check_device=False):
 
 
 @lru_cache
-def is_hpu_available(patch_device_count=True, init_hccl=False):
+def is_hpu_available(init_hccl=False):
     "Checks if `torch.hpu` is installed and potentially if a HPU is in the environment"
     if (
         importlib.util.find_spec("habana_frameworks") is None
@@ -411,18 +411,6 @@ def is_hpu_available(patch_device_count=True, init_hccl=False):
         return False
 
     import habana_frameworks.torch  # noqa: F401
-
-    if patch_device_count:
-        if os.environ.get("HABANA_VISIBLE_MODULES", "") != "":
-            torch_device_count = torch.hpu.device_count()
-            habana_device_count = len(os.environ.get("HABANA_VISIBLE_MODULES").split(","))
-            if habana_device_count != torch_device_count:
-                warnings.warn(
-                    f"Torch detected {torch_device_count} HPU devices, but HABANA_VISIBLE_MODULES is set to "
-                    f"{os.environ.get('HABANA_VISIBLE_MODULES')} (i.e. {habana_device_count} devices). "
-                    "Patching torch.hpu.device_count() to return the correct number of devices."
-                )
-                torch.hpu.device_count = lambda: habana_device_count
 
     if init_hccl:
         import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
