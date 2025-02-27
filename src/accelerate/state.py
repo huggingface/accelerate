@@ -743,7 +743,8 @@ class PartialState:
                 backend = "hccl"
                 distributed_type = DistributedType.MULTI_NPU
             elif is_hpu_available(init_hccl=True):
-                backend = "hccl"
+                if backend is None:
+                    backend = "hccl"
                 distributed_type = DistributedType.MULTI_HPU
             elif torch.cuda.is_available():
                 if backend is None:
