@@ -31,9 +31,12 @@ from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
     require_cuda_or_xpu,
+    require_fp8,
+    require_fp16,
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    require_non_hpu,
     require_transformer_engine,
     slow,
     torch_device,
@@ -173,7 +176,7 @@ class AcceleratorTester(AccelerateTestCase):
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
-        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla"]
+        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla", "hpu"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
@@ -497,6 +500,7 @@ class AcceleratorTester(AccelerateTestCase):
             model = accelerator.prepare(model)
 
     @require_non_torch_xla
+    @require_non_hpu
     @slow
     @require_bnb
     @require_multi_device
@@ -535,6 +539,7 @@ class AcceleratorTester(AccelerateTestCase):
         PartialState._reset_state()
 
     @require_non_torch_xla
+    @require_non_hpu
     @slow
     @require_bnb
     @require_multi_device
@@ -566,6 +571,7 @@ class AcceleratorTester(AccelerateTestCase):
         accelerator = Accelerator(cpu=True)
         _ = accelerator.prepare(sgd)
 
+    @require_fp8
     @require_transformer_engine
     def test_can_unwrap_model_te(self):
         model, optimizer, *_ = create_components()
@@ -582,6 +588,7 @@ class AcceleratorTester(AccelerateTestCase):
         model_loaded = pickle.loads(pickle.dumps(model))
         model_loaded(inputs)
 
+    @require_fp16
     @require_non_cpu
     def test_can_unwrap_model_fp16(self):
         # test for a regression introduced in #872

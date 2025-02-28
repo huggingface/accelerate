@@ -25,12 +25,24 @@ from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
     path_in_accelerate_package,
+    require_fp16,
     require_multi_device,
     require_non_cpu,
+    run_first,
 )
 from accelerate.test_utils.testing import slow
-from accelerate.utils import AutocastKwargs, KwargsHandler, ProfileKwargs, TorchDynamoPlugin, clear_environment
+from accelerate.utils import (
+    AutocastKwargs,
+    KwargsHandler,
+    ProfileKwargs,
+    TorchDynamoPlugin,
+    clear_environment,
+)
 from accelerate.utils.dataclasses import DistributedType
+
+
+MIXED_PRECISION = "fp16"
+MIXED_PRECISION_DTYPE = torch.float16
 
 
 @dataclass
@@ -48,6 +60,8 @@ class KwargsHandlerTester(unittest.TestCase):
         assert MockClass(a=2, b=True).to_kwargs() == {"a": 2, "b": True}
         assert MockClass(a=2, c=2.25).to_kwargs() == {"a": 2, "c": 2.25}
 
+    # this test leaking its mixed precision to all next ones (shoudl the state be reset at the end of the test?)
+    @require_fp16
     @require_non_cpu
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
@@ -66,11 +80,13 @@ class KwargsHandlerTester(unittest.TestCase):
         assert scaler._growth_interval == 2000
         assert scaler._enabled is True
 
+    @run_first
     @require_multi_device
     def test_ddp_kwargs(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd)
 
+    @require_fp16
     @require_non_cpu
     def test_autocast_kwargs(self):
         kwargs = AutocastKwargs(enabled=False)
@@ -153,6 +169,7 @@ class KwargsHandlerTester(unittest.TestCase):
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
+    @run_first
     @require_multi_device
     def test_ddp_comm_hook(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]
