@@ -59,6 +59,7 @@ from .utils import (
     DynamoBackend,
     FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    FullyShardedDataParallelPlugin2,
     GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -113,6 +114,7 @@ from .utils import (
     save_fsdp_model,
     save_fsdp_optimizer,
     wait_for_everyone,
+    prepare_nd_device_mesh,
 )
 from .utils.constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
@@ -201,6 +203,9 @@ class Accelerator:
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
+        fsdp2_plugin ([`~utils.FullyShardedDataParallelPlugin2`], *optional*):
+            Tweak your FSDPv2 related args using this argument. This argument is optional and can be configured directly
+            using *accelerate config*
         torch_tp_plugin ([`~utils.TorchTensorParallelPlugin`], *optional*):
             Tweak your torch tensor parallel. This argument is optional and can be configured directly using
             *accelerate config*
@@ -273,6 +278,7 @@ class Accelerator:
         dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
+        fsdp2_plugin: FullyShardedDataParallelPlugin | None = None,
         torch_tp_plugin: TorchTensorParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
@@ -379,6 +385,15 @@ class Accelerator:
             if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
                 raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
 
+        if os.environ.get("ACCELERATE_USE_FSDP2", "false") == "true" or isinstance(
+            fsdp2_plugin, FullyShardedDataParallelPlugin2
+        ):
+            if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
+                raise ValueError(f"FSDPv2 requires PyTorch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}")
+
+            if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
+                raise ValueError(f"FSDPv2 requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
                 FullyShardedDataParallelPlugin() if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" else None
@@ -396,6 +411,17 @@ class Accelerator:
             if not isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
                 raise TypeError("`torch_tp_plugin` must be a TorchTensorParallelPlugin object.")
             os.environ["ACCELERATE_USE_TP"] = "true"
+
+        if fsdp2_plugin is None:
+            fsdp2_plugin = (
+                FullyShardedDataParallelPlugin2()
+                if os.environ.get("ACCELERATE_USE_FSDP2", "false") == "true"
+                else None
+            )
+        else:
+            if not isinstance(fsdp2_plugin, FullyShardedDataParallelPlugin2):
+                raise TypeError("`fsdp2_plugin` must be a FullyShardedDataParallelPlugin2 object.")
+            os.environ["ACCELERATE_USE_FSDP2"] = "true"
 
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
@@ -456,6 +482,7 @@ class Accelerator:
             dynamo_plugin=dynamo_plugin,
             deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
+            fsdp2_plugin=fsdp2_plugin,
             torch_tp_plugin=torch_tp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
@@ -1437,6 +1464,7 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
+        device_mesh = None
 
         # TODO: Look at enabling native TP training directly with a proper config
         if (
@@ -1507,6 +1535,15 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
+            # motivation behind preparing device mesh at the start is to easily extend
+            # device preparation for any combination of parallelisms and pass it on
+            # neatly to respective parallelism distribution code snippets.
+            # function prepare_nd_device_mesh should be enough to extend logic for future combinations
+            # for now prepare_nd_device_mesh handles any combination of TP and FSDP/HSDP
+            device_mesh = prepare_nd_device_mesh(
+                self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1,
+                self.state.fsdp2_plugin is not None,
+            )
             if self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
@@ -1527,7 +1564,8 @@ class Accelerator:
                     )
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
-            elif self.distributed_type == DistributedType.TP:
+            elif self.distributed_type == DistributedType.TP or self.distributed_type == DistributedType.FSDP2_TP:
+                self.state.torch_tp_plugin.torch_device_mesh = device_mesh["tp"]
                 if hasattr(model, "supports_tp_plan") and not model.supports_tp_plan:
                     if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
                         raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
@@ -1537,6 +1575,37 @@ class Accelerator:
                         and _tp_plan attribute to model class."
                     )
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
+            if self.distributed_type == DistributedType.FSDP2 or self.distributed_type == DistributedType.FSDP2_TP:
+                self.state.fsdp2_plugin.torch_device_mesh = device_mesh["dp", "fsdp"]
+                from torch.distributed._composable.fsdp import fully_shard, FSDPModule
+
+                # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
+                # don't wrap it again
+                # In case the model is already compiled using PyTorch 2.0 and the wrapped model in it
+                # is a FSDP model, don't wrap it again
+                # We check for FSDPModule instead of FSDP class for FSDP v2
+                is_type_fsdp = isinstance(model, FSDPModule) or (
+                    is_compiled_module(model) and isinstance(model._orig_mod, FSDPModule)
+                )
+
+                if not is_type_fsdp:
+                    fsdp2_kwargs = {
+                        "mp_policy": self.state.fsdp2_plugin.mp_policy,
+                        "reshard_after_forward": self.state.fsdp2_plugin.reshard_after_forward,
+                        "offload_policy": self.state.fsdp2_plugin.offload_policy,
+                        # pretty recent feature so lets ignore it for now
+                        # "ignored_params": fsdp2_plugin.ignored_params,
+                        "mesh": self.state.fsdp2_plugin.torch_device_mesh,
+                    }
+
+                    for layer in model.model.layers:
+                        fully_shard(layer, **fsdp2_kwargs)
+                    fully_shard(model, **fsdp2_kwargs)
+
+                    #######
+                    # TODO: support activation_checkpointing for FSDP2 and nd parallel cases
+                    #######
+
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -2192,6 +2261,11 @@ class Accelerator:
             return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
+
+        nd_device_mesh = prepare_nd_device_mesh(
+            self.state.torch_tp_plugin.tp_size if self.state.torch_tp_plugin is not None else 1,
+            self.state.fsdp2_plugin is not None,
+        )
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2207,7 +2281,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
-            torch_device_mesh=self.state.torch_tp_plugin.torch_device_mesh if self.state.torch_tp_plugin else None,
+            torch_device_mesh=nd_device_mesh,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
@@ -2456,6 +2530,14 @@ class Accelerator:
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
                     return model.clip_grad_norm_(max_norm, norm_type)
+        elif self.distributed_type == DistributedType.FSDP2:
+            self.unscale_gradients()
+            parameters = [p for p in parameters]
+            for model in self._models:
+                if parameters == [p for p in model.parameters()]:
+                    return torch.nn.utils.clip_grad_norm_(
+                        parameters=parameters, max_norm=max_norm, norm_type=norm_type
+                    )
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
