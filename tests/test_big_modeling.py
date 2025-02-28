@@ -240,7 +240,6 @@ class BigModelingTester(unittest.TestCase):
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @slow
-    @require_non_hpu  # Error in generate: synNodeCreateWithId failed for node: masked_fill_fwd_i64
     @require_non_cpu
     def test_cpu_offload_gpt2(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -300,7 +299,6 @@ class BigModelingTester(unittest.TestCase):
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @slow
-    @require_non_hpu  # Error in generate: synNodeCreateWithId failed for node: masked_fill_fwd_i64
     @require_non_cpu
     def test_disk_offload_gpt2(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")

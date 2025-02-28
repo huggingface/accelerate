@@ -40,7 +40,7 @@ from accelerate.test_utils.testing import (
     run_command,
     slow,
 )
-from accelerate.utils import patch_environment, write_basic_config
+from accelerate.utils import write_basic_config
 
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
@@ -290,14 +290,7 @@ class FeatureExamplesTests(TempDirTestCase):
     @require_multi_device
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
-
-        env = {}
-        if is_hpu_available():
-            # We get an error in non-lazy mode: synNodeCreateWithId failed for node: masked_fill_fwd_i64
-            env["PT_HPU_LAZY_MODE"] = "1"
-
-        with patch_environment(**env):
-            run_command(self.launch_args + testargs)
+        run_command(self.launch_args + testargs)
 
     @require_pippy
     @require_non_hpu

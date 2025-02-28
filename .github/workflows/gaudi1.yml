@@ -36,7 +36,9 @@ jobs:
 
       - name: Install Accelerate with DeepSpeed
         run: |
-          pip install -e .[testing] git+https://github.com/HabanaAI/DeepSpeed.git@1.19.0
+          pip install -e .[testing] \
+            git+https://github.com/HabanaAI/DeepSpeed.git@1.19.0 \
+            git+https://github.com/huggingface/transformers.git@hpu-support
 
       - name: Run CLI tests
         run: |
