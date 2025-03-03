@@ -712,6 +712,48 @@ class MLflowTracker(GeneralTracker):
         logger.debug("Successfully logged to mlflow")
 
     @on_main_process
+    def log_figure(self,
+                  figure: Any,
+                  artifact_file: str,
+                  **save_kwargs):
+        """
+        Logs an image to the current run.
+
+        Args:
+            figure (Any):
+            The figure to be logged.
+            artifact_file (`str`, *optional*):
+            The run-relative artifact file path in posixpath format to which the image is saved.
+            If not provided, the image is saved to a default location.
+            **kwargs:
+            Additional keyword arguments passed to the underlying mlflow.log_image function.
+        """
+        import mlflow
+
+        mlflow.log_figure(figure=figure, artifact_file=artifact_file, **save_kwargs)
+        logger.debug("Successfully logged image to mlflow")
+
+    @on_main_process
+    def log_artifacts(self,
+                      local_dir: str,
+                      artifact_path: Optional[str] = None):
+        """
+        Logs an artifact (file) to the current run.
+
+            local_dir (`str`):
+                Path to the directory to be logged as an artifact.
+            artifact_path (`str`, *optional*):
+                Directory within the run's artifact directory where the artifact will be logged.
+                If omitted, the artifact will be logged to the root of the run's artifact directory.
+                The run step. If included, the artifact will be affiliated with this step.
+        """
+        import mlflow
+
+        mlflow.log_artifacts(local_dir=local_dir, artifact_path=artifact_path)
+        logger.debug("Successfully logged artofact to mlflow")
+
+
+    @on_main_process
     def finish(self):
         """
         End the active MLflow run.
