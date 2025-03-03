@@ -856,7 +856,6 @@ class ModelingUtilsTester(unittest.TestCase):
         assert device_map == expected_device_map
 
     @require_non_cpu
-    @require_non_hpu
     def test_get_balanced_memory(self):
         model = ModelForTest()
         # model has size 236: linear1 64, batchnorm 72, linear2 100
