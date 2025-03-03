@@ -1622,6 +1622,10 @@ class Accelerator:
 
                     fully_shard(model, **kwargs)  # Wrap the top-most module nonetheless
 
+                if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
+                    del self._models[-2]
+                self._models[-1] = model
+
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
