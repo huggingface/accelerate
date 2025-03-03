@@ -717,7 +717,7 @@ class MLflowTracker(GeneralTracker):
                   artifact_file: str,
                   **save_kwargs):
         """
-        Logs an image to the current run.
+        Logs an figure to the current run.
 
         Args:
             figure (Any):
@@ -738,7 +738,7 @@ class MLflowTracker(GeneralTracker):
                       local_dir: str,
                       artifact_path: Optional[str] = None):
         """
-        Logs an artifact (file) to the current run.
+        Logs an artifacts (all content of a dir) to the current run.
 
             local_dir (`str`):
                 Path to the directory to be logged as an artifact.
