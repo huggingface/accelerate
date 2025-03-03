@@ -752,6 +752,24 @@ class MLflowTracker(GeneralTracker):
         mlflow.log_artifacts(local_dir=local_dir, artifact_path=artifact_path)
         logger.debug("Successfully logged artofact to mlflow")
 
+    @on_main_process
+    def log_artifact(self,
+                      local_path: str,
+                      artifact_path: Optional[str] = None):
+        """
+        Logs an artifact (file) to the current run.
+
+            local_path (`str`):
+                Path to the file to be logged as an artifact.
+            artifact_path (`str`, *optional*):
+                Directory within the run's artifact directory where the artifact will be logged.
+                If omitted, the artifact will be logged to the root of the run's artifact directory.
+                The run step. If included, the artifact will be affiliated with this step.
+        """
+        import mlflow
+
+        mlflow.log_artifact(local_path=local_path, artifact_path=artifact_path)
+        logger.debug("Successfully logged artofact to mlflow")
 
     @on_main_process
     def finish(self):
