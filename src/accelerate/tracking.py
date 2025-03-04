@@ -712,10 +712,7 @@ class MLflowTracker(GeneralTracker):
         logger.debug("Successfully logged to mlflow")
 
     @on_main_process
-    def log_figure(self,
-                  figure: Any,
-                  artifact_file: str,
-                  **save_kwargs):
+    def log_figure(self, figure: Any, artifact_file: str, **save_kwargs):
         """
         Logs an figure to the current run.
 
@@ -734,9 +731,7 @@ class MLflowTracker(GeneralTracker):
         logger.debug("Successfully logged image to mlflow")
 
     @on_main_process
-    def log_artifacts(self,
-                      local_dir: str,
-                      artifact_path: Optional[str] = None):
+    def log_artifacts(self, local_dir: str, artifact_path: Optional[str] = None):
         """
         Logs an artifacts (all content of a dir) to the current run.
 
@@ -753,9 +748,7 @@ class MLflowTracker(GeneralTracker):
         logger.debug("Successfully logged artofact to mlflow")
 
     @on_main_process
-    def log_artifact(self,
-                      local_path: str,
-                      artifact_path: Optional[str] = None):
+    def log_artifact(self, local_path: str, artifact_path: Optional[str] = None):
         """
         Logs an artifact (file) to the current run.
 
