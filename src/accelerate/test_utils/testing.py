@@ -42,6 +42,7 @@ from ..utils import (
     is_deepspeed_available,
     is_dvclive_available,
     is_import_timer_available,
+    is_mlflow_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
@@ -401,6 +402,13 @@ def require_pandas(test_case):
     Decorator marking a test that requires pandas installed. These tests are skipped when pandas isn't installed
     """
     return unittest.skipUnless(is_pandas_available(), "test requires pandas")(test_case)
+
+
+def require_mlflow(test_case):
+    """
+    Decorator marking a test that requires mlflow installed. These tests are skipped when mlflow isn't installed
+    """
+    return unittest.skipUnless(is_mlflow_available(), "test requires mlflow")(test_case)
 
 
 def require_pippy(test_case):
