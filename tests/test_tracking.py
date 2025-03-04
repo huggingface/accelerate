@@ -210,10 +210,6 @@ class MLflowTrackingTest(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         mlflow.set_tracking_uri("file://" + self.tmpdir.name)
 
-    def init_tracker(self) -> MLflowTracker:
-        # Create an MLflowTracker instance using the temporary directory.
-        return MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
-
     def create_mock_figure(self):
         fig = plt.figure(figsize=(6, 4))
         return fig
@@ -221,11 +217,13 @@ class MLflowTrackingTest(unittest.TestCase):
     def test_log(self):
         """Test that log calls mlflow.log_metrics with only numeric values and the correct step."""
         values = {"accuracy": 0.95, "loss": 0.1, "non_numeric": "ignored"}
-        tracker = self.init_tracker()
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
         tracker.log(values, step=10)
 
         run_id = tracker.active_run.info.run_id
-        tracker.finish()
+        accelerator.end_training()
 
         # Retrieve the run and check the logged metrics.
         run = mlflow.get_run(run_id)
@@ -237,11 +235,13 @@ class MLflowTrackingTest(unittest.TestCase):
     def test_log_figure(self):
         """Test that log_figure calls mlflow.log_figure with the correct arguments."""
         dummy_figure = self.create_mock_figure()
-        tracker = self.init_tracker()
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
         tracker.log_figure(dummy_figure, artifact_file="dummy_figure.png")
 
         run_id = tracker.active_run.info.run_id
-        tracker.finish()
+        accelerator.end_training()
 
         self.assertIn(
             "dummy_figure.png",
@@ -253,11 +253,13 @@ class MLflowTrackingTest(unittest.TestCase):
         dummy_file_path = os.path.join(self.tmpdir.name, "dummy.txt")
         with open(dummy_file_path, "w") as f:
             f.write("dummy content")
-        tracker = self.init_tracker()
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
         tracker.log_artifact(dummy_file_path, artifact_path="artifact_dir")
 
         run_id = tracker.active_run.info.run_id
-        tracker.finish()
+        accelerator.end_training()
 
         self.assertIn(
             "artifact_dir/dummy.txt",
@@ -274,11 +276,13 @@ class MLflowTrackingTest(unittest.TestCase):
         dummy_file_path = os.path.join(dummy_dir, "dummy.txt")
         with open(dummy_file_path, "w") as f:
             f.write("dummy content")
-        tracker = self.init_tracker()
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
         tracker.log_artifacts(dummy_dir, artifact_path="artifact_dir")
 
         run_id = tracker.active_run.info.run_id
-        tracker.finish()
+        accelerator.end_training()
 
         self.assertIn(
             "artifact_dir/dummy.txt",
