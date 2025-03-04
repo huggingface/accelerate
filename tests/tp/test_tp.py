@@ -29,9 +29,10 @@ from accelerate.utils import patch_environment
 
 
 @require_non_torch_xla
-@require_tp
 @require_multi_device
 @require_transformers
+@require_tp
+@run_first
 @slow
 class TPIntegrationTest(TempDirTestCase):
     test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
@@ -45,7 +46,6 @@ class TPIntegrationTest(TempDirTestCase):
 
         set_seed(42)
 
-    @run_first
     def test_working_of_tp(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = get_launch_command(
