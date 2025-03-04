@@ -37,12 +37,13 @@ from accelerate.test_utils.testing import (
     require_clearml,
     require_comet_ml,
     require_dvclive,
+    require_mlflow,
     require_pandas,
     require_tensorboard,
     require_wandb,
     skip,
 )
-from accelerate.tracking import CometMLTracker, GeneralTracker
+from accelerate.tracking import CometMLTracker, GeneralTracker, MLflowTracker
 from accelerate.utils import (
     ProjectConfiguration,
     is_comet_ml_available,
@@ -199,6 +200,89 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         assert logged_items["iteration"] == "1"
         assert logged_items["my_text"] == "some_value"
         assert logged_items["_step"] == "0"
+
+
+@require_mlflow
+class MLflowTrackingTest(unittest.TestCase):
+    def _get_tracker(self, tmpdir: str) -> MLflowTracker:
+        """
+        Helper to instantiate a MLflowTracker.
+        We patch out the MLflow initialization functions so that the tracker can be created without side effects.
+        """
+        patch_search = mock.patch("mlflow.search_experiments", return_value=[])
+        patch_create = mock.patch("mlflow.create_experiment", return_value="exp_id")
+        patch_start = mock.patch("mlflow.start_run")
+        patch_end = mock.patch("mlflow.end_run")
+        self.addCleanup(patch_search.stop)
+        self.addCleanup(patch_create.stop)
+        self.addCleanup(patch_start.stop)
+        self.addCleanup(patch_end.stop)
+        mock_search = patch_search.start()
+        patch_create.start()
+        mock_start = patch_start.start()
+        patch_end.start()
+        # Return a dummy run from mlflow.start_run so that self.active_run is set.
+        dummy_run = mock.Mock()
+        mock_start.return_value = dummy_run
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=tmpdir)
+        return tracker
+
+    def test_log(self):
+        """Test that log calls mlflow.log_metrics with only numeric values and the correct step."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            values = {
+                "accuracy": 0.95,
+                "loss": 0.1,
+                "non_numeric": "text",  # This should be filtered out
+            }
+            with mock.patch("mlflow.log_metrics") as mock_log_metrics:
+                tracker = self._get_tracker(tmpdir)
+                tracker.log(values, step=5)
+                # Expect only numeric values to be logged
+                mock_log_metrics.assert_called_once_with({"accuracy": 0.95, "loss": 0.1}, step=5)
+
+    def test_log_figure(self):
+        """Test that log_figure calls mlflow.log_figure with the correct arguments."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dummy_figure = object()  # This could be any figure-like object (or a mock)
+            with mock.patch("mlflow.log_figure") as mock_log_figure:
+                tracker = self._get_tracker(tmpdir)
+                tracker.log_figure(dummy_figure, artifact_file="dummy_figure.png", dpi=300)
+                mock_log_figure.assert_called_once_with(
+                    figure=dummy_figure,
+                    artifact_file="dummy_figure.png",
+                    dpi=300,
+                )
+
+    def test_log_artifact(self):
+        """Test that log_artifact calls mlflow.log_artifact with the correct file path."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dummy_file_path = os.path.join(tmpdir, "dummy.txt")
+            with open(dummy_file_path, "w") as f:
+                f.write("dummy content")
+            with mock.patch("mlflow.log_artifact") as mock_log_artifact:
+                tracker = self._get_tracker(tmpdir)
+                tracker.log_artifact(dummy_file_path, artifact_path="artifact_dir")
+                mock_log_artifact.assert_called_once_with(
+                    local_path=dummy_file_path,
+                    artifact_path="artifact_dir",
+                )
+
+    def test_log_artifacts(self):
+        """Test that log_artifacts calls mlflow.log_artifacts with the correct directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dummy_dir = os.path.join(tmpdir, "dummy_dir")
+            os.mkdir(dummy_dir)
+            dummy_file_path = os.path.join(dummy_dir, "dummy.txt")
+            with open(dummy_file_path, "w") as f:
+                f.write("dummy content")
+            with mock.patch("mlflow.log_artifacts") as mock_log_artifacts:
+                tracker = self._get_tracker(tmpdir)
+                tracker.log_artifacts(dummy_dir, artifact_path="artifact_dir")
+                mock_log_artifacts.assert_called_once_with(
+                    local_dir=dummy_dir,
+                    artifact_path="artifact_dir",
+                )
 
 
 # Comet has a special `OfflineExperiment` we need to use for testing
