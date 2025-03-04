@@ -27,11 +27,9 @@ from unittest import mock
 
 import matplotlib.pyplot as plt
 import mlflow
-import mlflow.artifacts
 import numpy as np
 import torch
 from packaging import version
-from sqlalchemy import create_mock_engine
 
 # We use TF to parse the logs
 from accelerate import Accelerator
@@ -227,6 +225,7 @@ class MLflowTrackingTest(unittest.TestCase):
         values = {"accuracy": 0.95, "loss": 0.1, "non_numeric": "ignored"}
         tracker = self.init_tracker()
         tracker.log(values, step=10)
+
         run_id = tracker.active_run.info.run_id
         tracker.finish()
 
@@ -242,8 +241,10 @@ class MLflowTrackingTest(unittest.TestCase):
         dummy_figure = self.create_mock_figure()
         tracker = self.init_tracker()
         tracker.log_figure(dummy_figure, artifact_file="dummy_figure.png")
+
         run_id = tracker.active_run.info.run_id
         tracker.finish()
+
         self.assertIn(
             "dummy_figure.png",
             [artifact.path for artifact in mlflow.artifacts.list_artifacts(run_id=run_id)],
@@ -280,6 +281,7 @@ class MLflowTrackingTest(unittest.TestCase):
 
         run_id = tracker.active_run.info.run_id
         tracker.finish()
+
         self.assertIn(
             "artifact_dir/dummy.txt",
             [
