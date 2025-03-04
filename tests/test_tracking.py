@@ -25,10 +25,13 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
+import matplotlib.pyplot as plt
 import mlflow
+import mlflow.artifacts
 import numpy as np
 import torch
 from packaging import version
+from sqlalchemy import create_mock_engine
 
 # We use TF to parse the logs
 from accelerate import Accelerator
@@ -213,6 +216,11 @@ class MLflowTrackingTest(unittest.TestCase):
         # Create an MLflowTracker instance using the temporary directory.
         return MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
 
+    def create_mock_figure(self):
+        fig = plt.figure(figsize=(6, 4))
+
+        return fig
+
     def test_log(self):
         """Test that log calls mlflow.log_metrics with only numeric values and the correct step."""
         # tracker = self._get_tracker()
@@ -231,30 +239,34 @@ class MLflowTrackingTest(unittest.TestCase):
 
     def test_log_figure(self):
         """Test that log_figure calls mlflow.log_figure with the correct arguments."""
-        dummy_figure = object()  # This could be any figure-like object (or a mock)
-        with mock.patch("mlflow.log_figure") as mock_log_figure:
-            tracker = self.init_tracker()
-            tracker.log_figure(dummy_figure, artifact_file="dummy_figure.png", dpi=300)
-            mock_log_figure.assert_called_once_with(
-                figure=dummy_figure,
-                artifact_file="dummy_figure.png",
-                dpi=300,
-            )
-            tracker.finish()
+        dummy_figure = self.create_mock_figure()
+        tracker = self.init_tracker()
+        tracker.log_figure(dummy_figure, artifact_file="dummy_figure.png")
+        run_id = tracker.active_run.info.run_id
+        tracker.finish()
+        self.assertIn(
+            "dummy_figure.png",
+            [artifact.path for artifact in mlflow.artifacts.list_artifacts(run_id=run_id)],
+        )
 
     def test_log_artifact(self):
         """Test that log_artifact calls mlflow.log_artifact with the correct file path."""
         dummy_file_path = os.path.join(self.tmpdir.name, "dummy.txt")
         with open(dummy_file_path, "w") as f:
             f.write("dummy content")
-        with mock.patch("mlflow.log_artifact") as mock_log_artifact:
-            tracker = self.init_tracker()
-            tracker.log_artifact(dummy_file_path, artifact_path="artifact_dir")
-            mock_log_artifact.assert_called_once_with(
-                local_path=dummy_file_path,
-                artifact_path="artifact_dir",
-            )
-            tracker.finish()
+        tracker = self.init_tracker()
+        tracker.log_artifact(dummy_file_path, artifact_path="artifact_dir")
+
+        run_id = tracker.active_run.info.run_id
+        tracker.finish()
+
+        self.assertIn(
+            "artifact_dir/dummy.txt",
+            [
+                artifact.path
+                for artifact in mlflow.artifacts.list_artifacts(run_id=run_id, artifact_path="artifact_dir")
+            ],
+        )
 
     def test_log_artifacts(self):
         """Test that log_artifacts calls mlflow.log_artifacts with the correct directory."""
@@ -263,14 +275,18 @@ class MLflowTrackingTest(unittest.TestCase):
         dummy_file_path = os.path.join(dummy_dir, "dummy.txt")
         with open(dummy_file_path, "w") as f:
             f.write("dummy content")
-        with mock.patch("mlflow.log_artifacts") as mock_log_artifacts:
-            tracker = self.init_tracker()
-            tracker.log_artifacts(dummy_dir, artifact_path="artifact_dir")
-            mock_log_artifacts.assert_called_once_with(
-                local_dir=dummy_dir,
-                artifact_path="artifact_dir",
-            )
-            tracker.finish()
+        tracker = self.init_tracker()
+        tracker.log_artifacts(dummy_dir, artifact_path="artifact_dir")
+
+        run_id = tracker.active_run.info.run_id
+        tracker.finish()
+        self.assertIn(
+            "artifact_dir/dummy.txt",
+            [
+                artifact.path
+                for artifact in mlflow.artifacts.list_artifacts(run_id=run_id, artifact_path="artifact_dir")
+            ],
+        )
 
 
 # Comet has a special `OfflineExperiment` we need to use for testing
