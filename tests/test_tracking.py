@@ -216,12 +216,10 @@ class MLflowTrackingTest(unittest.TestCase):
 
     def create_mock_figure(self):
         fig = plt.figure(figsize=(6, 4))
-
         return fig
 
     def test_log(self):
         """Test that log calls mlflow.log_metrics with only numeric values and the correct step."""
-        # tracker = self._get_tracker()
         values = {"accuracy": 0.95, "loss": 0.1, "non_numeric": "ignored"}
         tracker = self.init_tracker()
         tracker.log(values, step=10)
