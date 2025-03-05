@@ -62,7 +62,7 @@ class TorchTracemalloc:
             self.begin = torch.xpu.memory_allocated()
         elif is_hpu_available():
             # torch.hpu.empty_cache()
-            # torch.hpu.reset_max_memory_allocated()
+            torch.hpu.reset_peak_memory_stats()
             self.begin = torch.hpu.memory_allocated()
         return self
 
