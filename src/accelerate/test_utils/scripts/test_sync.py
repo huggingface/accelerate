@@ -343,6 +343,7 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_CPU,
         DistributedType.MULTI_HPU,
@@ -357,6 +358,7 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_HPU,
     ):
@@ -381,6 +383,7 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_HPU,
     ):

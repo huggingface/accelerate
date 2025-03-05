@@ -43,6 +43,7 @@ from .imports import (
     is_cuda_available,
     is_hpu_available,
     is_mlu_available,
+    is_sdaa_available,
     is_msamp_available,
     is_musa_available,
     is_npu_available,
@@ -559,6 +560,7 @@ class DistributedType(str, enum.Enum):
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
         - **MULTI_MLU** -- Distributed on multiple MLUs.
+        - **MULTI_SDAA** -- Distributed on multiple SDAAs.
         - **MULTI_MUSA** -- Distributed on multiple MUSAs.
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
@@ -573,6 +575,7 @@ class DistributedType(str, enum.Enum):
     MULTI_GPU = "MULTI_GPU"
     MULTI_NPU = "MULTI_NPU"
     MULTI_MLU = "MULTI_MLU"
+    MULTI_SDAA = "MULTI_SDAA"
     MULTI_MUSA = "MULTI_MUSA"
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
@@ -728,6 +731,7 @@ class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
     MLU = "mlu"
+    SDAA = "sdaa"
     MUSA = "musa"
     NPU = "npu"
     XLA = "xla"

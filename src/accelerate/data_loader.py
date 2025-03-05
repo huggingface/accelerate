@@ -89,7 +89,7 @@ class SeedableRandomSampler(RandomSampler):
 
     def __iter__(self):
         if self.generator is None:
-            self.generator = torch.Generator()
+            self.generator = torch.Generator(device=torch.get_default_device())
             self.generator.manual_seed(self.initial_seed)
 
         # Allow `self.epoch` to modify the seed of the generator
@@ -1156,13 +1156,13 @@ def prepare_data_loader(
             data_source=sampler.data_source,
             replacement=sampler.replacement,
             num_samples=sampler._num_samples,
-            generator=getattr(sampler, "generator", torch.Generator()),
+            generator=getattr(sampler, "generator", torch.Generator(device=torch.get_default_device())),
             data_seed=data_seed,
         )
 
     if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
         # isinstance(dataloader.sampler, RandomSampler) indicates the original dataloader has `shuffle` enabled.
-        generator = torch.Generator().manual_seed(42)
+        generator = torch.Generator(device=torch.get_default_device()).manual_seed(42)
         dataloader.generator = generator
         dataloader.sampler.generator = generator
     # No change if no multiprocess
@@ -1181,7 +1181,7 @@ def prepare_data_loader(
         else:
             if not use_seedable_sampler and hasattr(sampler, "generator"):
                 if sampler.generator is None:
-                    sampler.generator = torch.Generator()
+                    sampler.generator = torch.Generator(device=torch.get_default_device())
                 synchronized_generator = sampler.generator
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(

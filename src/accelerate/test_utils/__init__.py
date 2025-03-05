@@ -30,6 +30,7 @@ from .testing import (
     require_fp16,
     require_huggingface_suite,
     require_mlu,
+    require_sdaa,
     require_mps,
     require_multi_device,
     require_multi_gpu,

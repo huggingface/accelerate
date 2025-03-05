@@ -100,6 +100,8 @@ class MultiDeviceTester(unittest.TestCase):
             env_kwargs.update(ascend_rt_visible_devices="0,1")
         elif torch_device == "mlu":
             env_kwargs.update(mlu_visible_devices="0,1")
+        elif torch_device == "sdaa":
+            env_kwargs.update(sdaa_visible_devices="0,1")
         else:
             env_kwargs.update(cuda_visible_devices="0,1")
 

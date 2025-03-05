@@ -142,6 +142,28 @@ class AccelerateLauncherTester(unittest.TestCase):
         self.assertEqual(python_script_cmd[1], str(self.test_file_path))
         self.assertEqual(python_script_cmd[2], test_file_arg)
 
+    def test_validate_launch_command(self):
+        """Test that the validation function combines args and defaults."""
+        parser = launch_command_parser()
+        args = parser.parse_args(
+            [
+                "--num-processes",
+                "2",
+                "--deepspeed_config_file",
+                "path/to/be/accepted",
+                "--config-file",
+                str(self.test_config_path / "validate_launch_cmd.yaml"),
+                "test.py",
+            ]
+        )
+        self.assertFalse(args.debug)
+        self.assertTrue(args.fsdp_sync_module_states)
+        _validate_launch_command(args)
+        self.assertTrue(args.debug)
+        self.assertEqual(2, args.num_processes)
+        self.assertFalse(args.fsdp_sync_module_states)
+        self.assertEqual("path/to/be/accepted", args.deepspeed_config_file)
+
 
 class LaunchArgTester(unittest.TestCase):
     """

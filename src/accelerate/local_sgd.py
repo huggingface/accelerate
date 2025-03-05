@@ -72,6 +72,7 @@ class LocalSGD:
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_HPU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
         ]:

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 
-from ...utils import is_hpu_available, is_mlu_available, is_musa_available, is_npu_available, is_xpu_available
+from ...utils import is_hpu_available, is_mlu_available, is_sdaa_available, is_musa_available, is_npu_available, is_xpu_available
 from .config_args import ClusterConfig, default_json_config_file
 from .config_utils import SubcommandHelpFormatter
 
@@ -63,6 +63,14 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         config["use_cpu"] = False
         if num_mlus > 1:
             config["distributed_type"] = "MULTI_MLU"
+        else:
+            config["distributed_type"] = "NO"
+    if is_sdaa_available():
+        num_sdaas = torch.sdaa.device_count()
+        config["num_processes"] = num_sdaas
+        config["use_cpu"] = False
+        if num_sdaas > 1:
+            config["distributed_type"] = "MULTI_SDAA"
         else:
             config["distributed_type"] = "NO"
     elif is_musa_available():
