@@ -41,6 +41,7 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_mlu_available,
+    is_sdaa_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
@@ -58,6 +59,9 @@ if is_torch_xla_available():
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_sdaa_available(check_device=False):
+    import torch_sdaa  # noqa: F401
 
 if is_musa_available(check_device=False):
     import torch_musa  # noqa: F401
@@ -202,6 +206,9 @@ class PartialState:
                         from deepspeed import comm as dist
 
                         if not dist.is_initialized():
+                            if self.backend == 'tccl':
+                                local_rank = os.environ.get("LOCAL_RANK", -1)
+                                torch.sdaa.set_device(f'sdaa:{local_rank}')
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
                         use_deepspeed = True
@@ -210,6 +217,9 @@ class PartialState:
                         self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU)
                         and not torch.distributed.is_initialized()
                     ):
+                        if self.backend == 'tccl':
+                            local_rank = os.environ.get("LOCAL_RANK", -1)
+                            torch.sdaa.set_device(f'sdaa:{local_rank}')
                         torch.distributed.init_process_group(backend=self.backend, **kwargs)
             # XPU and CPU require special env configs to be set
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
@@ -366,6 +376,7 @@ class PartialState:
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
@@ -686,6 +697,7 @@ class PartialState:
         - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
         - CUDA if `torch.cuda.is_available()`
         - MLU if `is_mlu_available()`
+        - SDAA if `is_sdaa_available()`
         - MUSA if `is_musa_available()`
         - NPU if `is_npu_available()`
         - CPU otherwise
@@ -695,6 +707,8 @@ class PartialState:
             return torch.device("mps")
         elif is_mlu_available():
             return torch.device("mlu")
+        elif is_sdaa_available():
+            return torch.device("sdaa")
         elif is_musa_available():
             return torch.device("musa")
         # NPU should be checked before CUDA when using `transfer_to_npu`
@@ -725,6 +739,9 @@ class PartialState:
             if is_mlu_available():
                 backend = "cncl"
                 distributed_type = DistributedType.MULTI_MLU
+            if is_sdaa_available():
+                backend = "tccl"
+                distributed_type = DistributedType.MULTI_SDAA
             elif is_musa_available():
                 backend = "mccl"
                 distributed_type = DistributedType.MULTI_MUSA
@@ -777,7 +794,7 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "sdaa"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
@@ -909,6 +926,7 @@ class AcceleratorState:
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
+                DistributedType.MULTI_SDAA,
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
