@@ -43,10 +43,10 @@ from .utils import (
     is_hpu_available,
     is_ipex_available,
     is_mlu_available,
-    is_sdaa_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
     parse_choice_from_env,
@@ -209,9 +209,9 @@ class PartialState:
                         from deepspeed import comm as dist
 
                         if not dist.is_initialized():
-                            if self.backend == 'tccl':
+                            if self.backend == "tccl":
                                 local_rank = os.environ.get("LOCAL_RANK", -1)
-                                torch.sdaa.set_device(f'sdaa:{local_rank}')
+                                torch.sdaa.set_device(f"sdaa:{local_rank}")
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
                         use_deepspeed = True
@@ -220,9 +220,9 @@ class PartialState:
                         self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU)
                         and not torch.distributed.is_initialized()
                     ):
-                        if self.backend == 'tccl':
+                        if self.backend == "tccl":
                             local_rank = os.environ.get("LOCAL_RANK", -1)
-                            torch.sdaa.set_device(f'sdaa:{local_rank}')
+                            torch.sdaa.set_device(f"sdaa:{local_rank}")
                         torch.distributed.init_process_group(backend=self.backend, **kwargs)
 
             # XPU and CPU require special env configs to be set

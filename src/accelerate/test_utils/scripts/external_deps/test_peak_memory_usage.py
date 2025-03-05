@@ -23,7 +23,17 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import is_hpu_available, is_mlu_available, is_sdaa_available, is_musa_available, is_npu_available, is_xpu_available
+from accelerate.utils import (
+    DummyOptim,
+    DummyScheduler,
+    is_hpu_available,
+    is_mlu_available,
+    is_musa_available,
+    is_npu_available,
+    is_sdaa_available,
+    is_xpu_available,
+)
+
 
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32

@@ -43,7 +43,6 @@ from .imports import (
     is_cuda_available,
     is_hpu_available,
     is_mlu_available,
-    is_sdaa_available,
     is_msamp_available,
     is_musa_available,
     is_npu_available,

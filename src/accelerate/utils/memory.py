@@ -31,10 +31,10 @@ from .imports import (
     is_hpu_available,
     is_ipex_available,
     is_mlu_available,
-    is_sdaa_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_xpu_available,
 )
 from .versions import compare_versions

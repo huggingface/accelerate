@@ -400,6 +400,7 @@ def is_npu_available(check_device=False):
             return False
     return hasattr(torch, "npu") and torch.npu.is_available()
 
+
 @lru_cache
 def is_sdaa_available(check_device=False):
     "Checks if `torch_sdaa` is installed and potentially if a SDAA is in the environment"

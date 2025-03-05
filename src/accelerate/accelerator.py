@@ -535,9 +535,16 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "npu", "xla", "mlu", "musa", "hpu", "sdaa") or is_torch_xla_available(
-                check_is_tpu=True
-            ):
+            if self.device.type not in (
+                "xpu",
+                "cuda",
+                "npu",
+                "xla",
+                "mlu",
+                "musa",
+                "hpu",
+                "sdaa",
+            ) or is_torch_xla_available(check_is_tpu=True):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
