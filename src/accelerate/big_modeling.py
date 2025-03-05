@@ -16,7 +16,7 @@ import logging
 import os
 from contextlib import contextmanager
 from functools import wraps
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple, Type
 
 import torch
 import torch.nn as nn
@@ -24,6 +24,7 @@ import torch.nn as nn
 from .hooks import (
     AlignDevicesHook,
     CpuOffload,
+    LayerwiseCastingHook,
     UserCpuOffloadHook,
     add_hook_to_module,
     attach_align_device_hook,
@@ -637,4 +638,60 @@ def load_checkpoint_and_dispatch(
         skip_keys=skip_keys,
         preload_module_classes=preload_module_classes,
         force_hooks=force_hooks,
+    )
+
+
+def apply_layerwise_casting(
+    module: torch.nn.Module,
+    storage_dtype: torch.dtype,
+    compute_dtype: torch.dtype,
+    skip_modules_pattern: Union[str, Tuple[str, ...]] = "auto",
+    skip_modules_classes: Optional[Tuple[Type[torch.nn.Module], ...]] = None,
+    non_blocking: bool = False,
+) -> None:
+    r"""
+    Applies layerwise casting to a given module. The module expected here is a Diffusers ModelMixin but it can be any
+    nn.Module using diffusers layers or pytorch primitives.
+
+    Example:
+
+    ```python
+    >>> import torch
+    >>> from diffusers import CogVideoXTransformer3DModel
+
+    >>> transformer = CogVideoXTransformer3DModel.from_pretrained(
+    ...     model_id, subfolder="transformer", torch_dtype=torch.bfloat16
+    ... )
+
+    >>> apply_layerwise_casting(
+    ...     transformer,
+    ...     storage_dtype=torch.float8_e4m3fn,
+    ...     compute_dtype=torch.bfloat16,
+    ...     skip_modules_pattern=["patch_embed", "norm", "proj_out"],
+    ...     non_blocking=True,
+    ... )
+    ```
+
+    Args:
+        module (`torch.nn.Module`):
+            The module whose leaf modules will be cast to a high precision dtype for computation, and to a low
+            precision dtype for storage.
+        storage_dtype (`torch.dtype`):
+            The dtype to cast the module to before/after the forward pass for storage.
+        compute_dtype (`torch.dtype`):
+            The dtype to cast the module to during the forward pass for computation.
+        skip_modules_pattern (`Tuple[str, ...]`, defaults to `"auto"`):
+            A list of patterns to match the names of the modules to skip during the layerwise casting process. If set
+            to `"auto"`, the default patterns are used. If set to `None`, no modules are skipped. If set to `None`
+            alongside `skip_modules_classes` being `None`, the layerwise casting is applied directly to the module
+            instead of its internal submodules.
+        skip_modules_classes (`Tuple[Type[torch.nn.Module], ...]`, defaults to `None`):
+            A list of module classes to skip during the layerwise casting process.
+        non_blocking (`bool`, defaults to `False`):
+            If `True`, the weight casting operations are non-blocking.
+    """
+    add_hook_to_module(
+        module, LayerwiseCastingHook(
+            storage_dtype=storage_dtype, compute_dtype=compute_dtype, non_blocking=non_blocking
+        ), append=True
     )
