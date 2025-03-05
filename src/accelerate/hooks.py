@@ -738,3 +738,38 @@ class UserCpuOffloadHook:
 
     def remove(self):
         remove_hook_from_module(self.model)
+
+
+class LayerwiseCastingHook(ModelHook):
+    r"""
+    A hook that casts the weights of a module to a high precision dtype for computation, and to a low precision dtype
+    for storage. This process may lead to quality loss in the output, but can significantly reduce the memory
+    footprint.
+    """
+
+    _is_stateful = False
+
+    def __init__(self, storage_dtype: torch.dtype, compute_dtype: torch.dtype, non_blocking: bool) -> None:
+        self.storage_dtype = storage_dtype
+        self.compute_dtype = compute_dtype
+        self.non_blocking = non_blocking
+
+    def initialize_hook(self, module: torch.nn.Module):
+        module.to(dtype=self.storage_dtype, non_blocking=self.non_blocking)
+        return module
+
+    def deinitalize_hook(self, module: torch.nn.Module):
+        raise NotImplementedError(
+            "LayerwiseCastingHook does not support deinitalization. A model once enabled with layerwise casting will "
+            "have casted its weights to a lower precision dtype for storage. Casting this back to the original dtype "
+            "will lead to precision loss, which might have an impact on the model's generation quality. The model should "
+            "be re-initialized and loaded in the original dtype."
+        )
+
+    def pre_forward(self, module: torch.nn.Module, *args, **kwargs):
+        module.to(dtype=self.compute_dtype, non_blocking=self.non_blocking)
+        return args, kwargs
+
+    def post_forward(self, module: torch.nn.Module, output):
+        module.to(dtype=self.storage_dtype, non_blocking=self.non_blocking)
+        return output
