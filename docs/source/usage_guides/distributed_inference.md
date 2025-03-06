@@ -69,6 +69,7 @@ to be padded) for you to use right away.
 Let's rewrite the above example using this context manager:
 
 ```python
+import torch
 from accelerate import PartialState  # Can also be Accelerator or AcceleratorState
 from diffusers import DiffusionPipeline
 
@@ -125,6 +126,7 @@ needs to be the same length. Basic inference does not require this.
 For instance:
 
 ```python
+import torch
 from accelerate import PartialState  # Can also be Accelerator or AcceleratorState
 from diffusers import DiffusionPipeline
 

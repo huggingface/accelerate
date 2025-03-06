@@ -33,6 +33,7 @@ from .imports import (
     is_mps_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_xpu_available,
 )
 from .versions import compare_versions
@@ -50,6 +51,8 @@ def clear_device_cache(garbage_collection=False):
         torch.xpu.empty_cache()
     elif is_mlu_available():
         torch.mlu.empty_cache()
+    elif is_sdaa_available():
+        torch.sdaa.empty_cache()
     elif is_musa_available():
         torch.musa.empty_cache()
     elif is_npu_available():

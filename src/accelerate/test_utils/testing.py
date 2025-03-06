@@ -49,10 +49,12 @@ from ..utils import (
     is_pandas_available,
     is_pippy_available,
     is_schedulefree_available,
+    is_sdaa_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
     is_torch_xla_available,
+    is_torchao_available,
     is_torchdata_stateful_dataloader_available,
     is_torchvision_available,
     is_transformer_engine_available,
@@ -75,6 +77,8 @@ def get_backend():
         return "mps", 1, lambda: 0
     elif is_mlu_available():
         return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
+    elif is_sdaa_available():
+        return "sdaa", torch.sdaa.device_count(), torch.sdaa.memory_allocated
     elif is_musa_available():
         return "musa", torch.musa.device_count(), torch.musa.memory_allocated
     elif is_npu_available():
@@ -194,6 +198,13 @@ def require_mlu(test_case):
     Decorator marking a test that requires MLU. These tests are skipped when there are no MLU available.
     """
     return unittest.skipUnless(is_mlu_available(), "test require a MLU")(test_case)
+
+
+def require_sdaa(test_case):
+    """
+    Decorator marking a test that requires SDAA. These tests are skipped when there are no SDAA available.
+    """
+    return unittest.skipUnless(is_sdaa_available(), "test require a SDAA")(test_case)
 
 
 def require_musa(test_case):
@@ -423,6 +434,13 @@ def require_transformer_engine(test_case):
     engine isn't installed
     """
     return unittest.skipUnless(is_transformer_engine_available(), "test requires transformers engine")(test_case)
+
+
+def require_torchao(test_case):
+    """
+    Decorator marking a test that requires torchao installed. These tests are skipped when torchao isn't installed
+    """
+    return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
 
 
 _atleast_one_tracker_available = (
