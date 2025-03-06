@@ -239,6 +239,7 @@ class MLflowTrackingTest(unittest.TestCase):
         self.assertEqual(metrics.get("loss"), 0.1)
         self.assertNotIn("non_numeric", metrics)
 
+    @require_matplotlib
     def test_log_figure(self):
         import mlflow
 
