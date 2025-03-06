@@ -42,6 +42,7 @@ from ..utils import (
     is_deepspeed_available,
     is_dvclive_available,
     is_import_timer_available,
+    is_matplotlib_available,
     is_mlflow_available,
     is_mlu_available,
     is_mps_available,
@@ -439,6 +440,13 @@ def require_torchao(test_case):
     Decorator marking a test that requires torchao installed. These tests are skipped when torchao isn't installed
     """
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
+
+
+def require_matplotlib(test_case):
+    """
+    Decorator marking a test that requires matplotlib installed. These tests are skipped when matplotlib isn't installed
+    """
+    return unittest.skipUnless(is_matplotlib_available(), "test requires matplotlib")(test_case)
 
 
 _atleast_one_tracker_available = (

@@ -288,6 +288,10 @@ def is_pandas_available():
     return _is_package_available("pandas")
 
 
+def is_matplotlib_available():
+    return _is_package_available("matplotlib")
+
+
 def is_mlflow_available():
     if _is_package_available("mlflow"):
         return True

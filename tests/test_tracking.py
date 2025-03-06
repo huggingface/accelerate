@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
 import torch
@@ -39,6 +38,7 @@ from accelerate.test_utils.testing import (
     require_clearml,
     require_comet_ml,
     require_dvclive,
+    require_matplotlib,
     require_mlflow,
     require_pandas,
     require_tensorboard,
@@ -210,7 +210,11 @@ class MLflowTrackingTest(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         mlflow.set_tracking_uri("file://" + self.tmpdir.name)
 
+    @require_matplotlib
     def create_mock_figure(self):
+        """Create a mock figure for testing."""
+        import matplotlib.pyplot as plt
+
         fig = plt.figure(figsize=(6, 4))
         return fig
 
@@ -232,6 +236,7 @@ class MLflowTrackingTest(unittest.TestCase):
         self.assertEqual(metrics.get("loss"), 0.1)
         self.assertNotIn("non_numeric", metrics)
 
+    @require_matplotlib
     def test_log_figure(self):
         """Test that log_figure calls mlflow.log_figure with the correct arguments."""
         dummy_figure = self.create_mock_figure()
