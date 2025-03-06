@@ -511,13 +511,8 @@ def training_check(use_seedable_sampler=False):
 
     accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
 
-    if (
-        torch.cuda.is_available()
-        or is_npu_available()
-        or is_mlu_available()
-        or is_musa_available()
-        or is_sdaa_available
-    ):
+    # FP16 support
+    if is_fp16_available():
         # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
         print("FP16 training check.")
         AcceleratorState._reset_state()
@@ -557,7 +552,7 @@ def training_check(use_seedable_sampler=False):
         input_tensor = torch.Tensor([1, 2]).to(dtype=torch.float16, device=accelerator.device)
         output = model_with_fp32_wrapper(input_tensor)
 
-    # BF16 support for CPU + TPU + HPU + XPU, and some GPU
+    # BF16 support
     if is_bf16_available():
         # Mostly a test that BF16 doesn't crash as the operation inside the model is not converted to BF16
         print("BF16 training check.")
