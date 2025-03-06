@@ -56,7 +56,9 @@ accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
 
 ## How to switch to FSDP2?
 
-If you're using the `FullyShardedDataParallelPlugin` interface, you can just replace the `
-#TODO:
+If you're using the `FullyShardedDataParallelPlugin` interface, you can just specify the `fsdp_version` to `2` and change some arguments as shown in the table above.
 
+However, if you're using the `yaml` configuration file, there's a better option: `accelerate to-fsdp2 --config_file <path_to_config_file> [--overwrite] [--output_file] [--only-rename]` #TODO: only-rename is messy, is it needed?
+
+This command will replace and change all of the configuration options in `config_file` to their `FSDP2` counterparts, overwrite the file if `--overwrite` is set or create a new one to path specified in `--output_file`.
 
