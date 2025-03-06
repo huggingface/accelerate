@@ -1705,7 +1705,7 @@ class Accelerator:
         tp_size = self.deepspeed_plugin.deepspeed_config["tensor_parallel"].get("autotp_size", 0)
         if tp_size > 1:
             if not compare_versions("deepspeed", ">=", "0.16.4"):
-                raise ValueError("Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed.")
+                raise ImportError("Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`.")
             if not is_torch_version(">=", "2.2.0"):
                 raise ValueError("`torch.distributed.device_mesh` requires PyTorch >= 2.2.0.")
             from torch.distributed.device_mesh import init_device_mesh
