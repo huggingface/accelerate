@@ -1705,9 +1705,13 @@ class Accelerator:
         tp_size = self.deepspeed_plugin.deepspeed_config["tensor_parallel"].get("autotp_size", 0)
         if tp_size > 1:
             if not compare_versions("deepspeed", ">=", "0.16.4"):
-                raise ImportError("Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`.")
+                raise ImportError(
+                    "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
+                )
             if not is_torch_version(">=", "2.2.0"):
-                raise ImportError("Tried to use TP, but `torch.distributed.device_mesh` requires PyTorch >= 2.2.0. Please upgrade your PyTorch version")
+                raise ImportError(
+                    "Tried to use TP, but `torch.distributed.device_mesh` requires PyTorch >= 2.2.0. Please upgrade your PyTorch version"
+                )
             from torch.distributed.device_mesh import init_device_mesh
 
             mesh_dim_name = "tp"
@@ -2080,6 +2084,18 @@ class Accelerator:
                 result[i] = optimizer
         return tuple(result)
 
+    def _prepare_device_mesh(self):
+        """
+        Prepare the device mesh for distributed training.
+        The dataloader will determine how to load data based on the device mesh.
+        """
+        if self.state.torch_tp_plugin:
+            return self.state.torch_tp_plugin.torch_device_mesh
+        elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
+            return self.state.ds_device_mesh
+        else:
+            return None
+
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
             raise ImportError(
@@ -2161,11 +2177,7 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
 
-        device_mesh = None
-        if self.state.torch_tp_plugin:
-            device_mesh = self.state.torch_tp_plugin.torch_device_mesh
-        elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
-            device_mesh = self.state.ds_device_mesh
+        device_mesh = self._prepare_device_mesh()
 
         prepared_data_loader = prepare_data_loader(
             data_loader,
