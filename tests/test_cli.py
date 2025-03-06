@@ -115,7 +115,7 @@ class AccelerateLauncherTester(unittest.TestCase):
             parser = launch_command_parser()
             args = parser.parse_args()
         args.config_file = mpi_config_path
-        args, _, _ = _validate_launch_command(args)
+        args, _ = _validate_launch_command(args)
 
         # Mock out the check for mpirun version to simulate Intel MPI
         with patch("accelerate.utils.launch.which", return_value=True):
