@@ -95,16 +95,14 @@ def has_transformer_engine_layers(model):
 
     if is_hpu_available():
         import intel_transformer_engine as te
-
-        for m in model.modules():
-            if isinstance(m, (te.Linear)):
-                return True
+        module_cls_to_check = (te.Linear)
     else:
         import transformer_engine.pytorch as te
+        module_cls_to_check = (te.LayerNorm, te.Linear, te.TransformerLayer)
 
-        for m in model.modules():
-            if isinstance(m, (te.LayerNorm, te.Linear, te.TransformerLayer)):
-                return True
+    for m in model.modules():
+        if isinstance(m, module_cls_to_check):
+            return True
 
     return False
 
