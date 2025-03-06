@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-import mlflow
 import numpy as np
 import torch
 from packaging import version
@@ -207,6 +206,8 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
 @require_mlflow
 class MLflowTrackingTest(unittest.TestCase):
     def setUp(self):
+        import mlflow
+
         self.tmpdir = tempfile.TemporaryDirectory()
         mlflow.set_tracking_uri("file://" + self.tmpdir.name)
 
@@ -219,6 +220,8 @@ class MLflowTrackingTest(unittest.TestCase):
         return fig
 
     def test_log(self):
+        import mlflow
+
         """Test that log calls mlflow.log_metrics with only numeric values and the correct step."""
         values = {"accuracy": 0.95, "loss": 0.1, "non_numeric": "ignored"}
         tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
@@ -236,8 +239,9 @@ class MLflowTrackingTest(unittest.TestCase):
         self.assertEqual(metrics.get("loss"), 0.1)
         self.assertNotIn("non_numeric", metrics)
 
-    @require_matplotlib
     def test_log_figure(self):
+        import mlflow
+
         """Test that log_figure calls mlflow.log_figure with the correct arguments."""
         dummy_figure = self.create_mock_figure()
         tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
@@ -254,6 +258,8 @@ class MLflowTrackingTest(unittest.TestCase):
         )
 
     def test_log_artifact(self):
+        import mlflow
+
         """Test that log_artifact calls mlflow.log_artifact with the correct file path."""
         dummy_file_path = os.path.join(self.tmpdir.name, "dummy.txt")
         with open(dummy_file_path, "w") as f:
@@ -275,6 +281,8 @@ class MLflowTrackingTest(unittest.TestCase):
         )
 
     def test_log_artifacts(self):
+        import mlflow
+
         """Test that log_artifacts calls mlflow.log_artifacts with the correct directory."""
         dummy_dir = os.path.join(self.tmpdir.name, "dummy_dir")
         os.mkdir(dummy_dir)
