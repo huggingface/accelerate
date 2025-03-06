@@ -478,8 +478,12 @@ def training_check(use_seedable_sampler=False):
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
-    torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
+    torch.testing.assert_close(
+        old_model.a, model.a, atol=ATOL, rtol=RTOL, msg="Did not obtain the same model on CPU or distributed training."
+    )
+    torch.testing.assert_close(
+        old_model.b, model.b, atol=ATOL, rtol=RTOL, msg="Did not obtain the same model on CPU or distributed training."
+    )
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
 
@@ -503,10 +507,30 @@ def training_check(use_seedable_sampler=False):
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
-    torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
+    torch.testing.assert_close(
+        old_model.a, model.a, atol=ATOL, rtol=RTOL, msg="Did not obtain the same model on CPU or distributed training."
+    )
+    torch.testing.assert_close(
+        old_model.b, model.b, atol=ATOL, rtol=RTOL, msg="Did not obtain the same model on CPU or distributed training."
+    )
 
-    accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
+    accelerator.print("Training yielded the same results on one CPU or distributed setup with batch split.")
+
+    # FP32 wrapper check
+    if is_fp16_available():
+        # Mostly a test that model.forward will have autocast when running unwrap_model(model, keep_fp32_wrapper=True)
+        print("Keep fp32 wrapper check.")
+        AcceleratorState._reset_state()
+        accelerator = Accelerator(mixed_precision="fp16")
+
+        model = torch.nn.Linear(2, 4)
+        model = accelerator.prepare(model)
+        model_with_fp32_wrapper = accelerator.unwrap_model(model, keep_fp32_wrapper=True)
+
+        # Run forward with fp16 as input.
+        # When the model is with mixed precision wrapper, no error will be raised.
+        input_tensor = torch.Tensor([1, 2]).to(dtype=torch.float16, device=accelerator.device)
+        output = model_with_fp32_wrapper(input_tensor)
 
     # FP16 support
     if is_fp16_available():
@@ -531,23 +555,20 @@ def training_check(use_seedable_sampler=False):
                 optimizer.step()
 
         model = accelerator.unwrap_model(model).cpu()
-        torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
-        torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
-
-    if torch.cuda.is_available():
-        # Mostly a test that model.forward will have autocast when running unwrap_model(model, keep_fp32_wrapper=True)
-        print("Keep fp32 wrapper check.")
-        AcceleratorState._reset_state()
-        accelerator = Accelerator(mixed_precision="fp16")
-
-        model = torch.nn.Linear(2, 4)
-        model = accelerator.prepare(model)
-        model_with_fp32_wrapper = accelerator.unwrap_model(model, keep_fp32_wrapper=True)
-
-        # Run forward with fp16 as input.
-        # When the model is with mixed precision wrapper, no error will be raised.
-        input_tensor = torch.Tensor([1, 2]).to(dtype=torch.float16, device=accelerator.device)
-        output = model_with_fp32_wrapper(input_tensor)
+        torch.testing.assert_close(
+            old_model.a,
+            model.a,
+            atol=ATOL,
+            rtol=RTOL,
+            msg="Did not obtain the same model on CPU or distributed training.",
+        )
+        torch.testing.assert_close(
+            old_model.b,
+            model.b,
+            atol=ATOL,
+            rtol=RTOL,
+            msg="Did not obtain the same model on CPU or distributed training.",
+        )
 
     # BF16 support
     if is_bf16_available():
@@ -572,8 +593,20 @@ def training_check(use_seedable_sampler=False):
                 optimizer.step()
 
         model = accelerator.unwrap_model(model).cpu()
-        torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
-        torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
+        torch.testing.assert_close(
+            old_model.a,
+            model.a,
+            atol=ATOL,
+            rtol=RTOL,
+            msg="Did not obtain the same model on CPU or distributed training.",
+        )
+        torch.testing.assert_close(
+            old_model.b,
+            model.b,
+            atol=ATOL,
+            rtol=RTOL,
+            msg="Did not obtain the same model on CPU or distributed training.",
+        )
 
     # IPEX support is only for CPU
     if is_ipex_available():
@@ -597,8 +630,20 @@ def training_check(use_seedable_sampler=False):
                 optimizer.step()
 
         model = accelerator.unwrap_model(model).cpu()
-        torch.testing.assert_close(old_model.a, model.a, atol=ATOL, rtol=RTOL)
-        torch.testing.assert_close(old_model.b, model.b, atol=ATOL, rtol=RTOL)
+        torch.testing.assert_close(
+            old_model.a,
+            model.a,
+            atol=ATOL,
+            rtol=RTOL,
+            msg="Did not obtain the same model on CPU or distributed training.",
+        )
+        torch.testing.assert_close(
+            old_model.b,
+            model.b,
+            atol=ATOL,
+            rtol=RTOL,
+            msg="Did not obtain the same model on CPU or distributed training.",
+        )
 
 
 def test_split_between_processes_dataset(datasets_Dataset):
