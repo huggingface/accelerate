@@ -174,7 +174,7 @@ _use_seedable_sampler = object()
 
 class Accelerator:
     """
-    Creates an instance of an accelerator for distributed training (on multi-GPU, TPU, HPU) or mixed precision
+    Creates an instance of an accelerator for distributed training or mixed precision
     training.
 
     Args:
