@@ -99,8 +99,8 @@ class AccelerateLauncherTester(unittest.TestCase):
         args = accelerate_test_cmd.test_command_parser().parse_args([])
         accelerate_test_cmd.test_command(args)
 
-    @require_non_hpu
     @run_first
+    @require_non_hpu
     @require_multi_device
     def test_notebook_launcher(self):
         """

@@ -174,8 +174,7 @@ _use_seedable_sampler = object()
 
 class Accelerator:
     """
-    Creates an instance of an accelerator for distributed training or mixed precision
-    training.
+    Creates an instance of an accelerator for distributed training or mixed precision training.
 
     Args:
         device_placement (`bool`, *optional*, defaults to `True`):

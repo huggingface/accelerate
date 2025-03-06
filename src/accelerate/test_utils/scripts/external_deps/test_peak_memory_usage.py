@@ -72,8 +72,8 @@ class TorchTracemalloc:
             torch.xpu.reset_max_memory_allocated()  # reset the peak gauge to zero
             self.begin = torch.xpu.memory_allocated()
         elif is_hpu_available():
-            # torch.hpu.empty_cache()
-            torch.hpu.reset_peak_memory_stats()
+            # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
+            torch.hpu.reset_peak_memory_stats()  # reset the peak gauge to zero
             self.begin = torch.hpu.memory_allocated()
         return self
 
@@ -85,15 +85,15 @@ class TorchTracemalloc:
             self.peak = torch.cuda.max_memory_allocated()
         elif is_mlu_available():
             torch.mlu.empty_cache()
-            torch.mlu.memory_allocated()  # reset the peak gauge to zero
+            self.end = torch.mlu.memory_allocated()
             self.begin = torch.mlu.max_memory_allocated()
         elif is_sdaa_available():
             torch.sdaa.empty_cache()
-            torch.sdaa.memory_allocated()  # reset the peak gauge to zero
+            self.end = torch.sdaa.memory_allocated()
             self.begin = torch.sdaa.max_memory_allocated()
         elif is_musa_available():
             torch.musa.empty_cache()
-            torch.musa.memory_allocated()  # reset the peak gauge to zero
+            self.end = torch.musa.memory_allocated()
             self.begin = torch.musa.max_memory_allocated()
         elif is_npu_available():
             torch.npu.empty_cache()
@@ -104,7 +104,7 @@ class TorchTracemalloc:
             self.end = torch.xpu.memory_allocated()
             self.peak = torch.xpu.max_memory_allocated()
         elif is_hpu_available():
-            # torch.hpu.empty_cache
+            # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
             self.end = torch.hpu.memory_allocated()
             self.peak = torch.hpu.max_memory_allocated()
         self.used = b2mb(self.end - self.begin)
