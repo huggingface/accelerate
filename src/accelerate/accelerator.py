@@ -1707,7 +1707,7 @@ class Accelerator:
             if not compare_versions("deepspeed", ">=", "0.16.4"):
                 raise ImportError("Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`.")
             if not is_torch_version(">=", "2.2.0"):
-                raise ValueError("`torch.distributed.device_mesh` requires PyTorch >= 2.2.0.")
+                raise ImportError("Tried to use TP, but `torch.distributed.device_mesh` requires PyTorch >= 2.2.0. Please upgrade your PyTorch version")
             from torch.distributed.device_mesh import init_device_mesh
 
             mesh_dim_name = "tp"
