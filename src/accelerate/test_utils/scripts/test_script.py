@@ -509,7 +509,7 @@ def training_check(use_seedable_sampler=False):
         or is_npu_available()
         or is_mlu_available()
         or is_musa_available()
-        or is_sdaa_available
+        or is_sdaa_available()
     ):
         # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
         print("FP16 training check.")
