@@ -46,6 +46,7 @@ from .dataclasses import (
     DynamoBackend,
     FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    FullyShardedDataParallelPlugin2,
     GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -279,3 +280,4 @@ from .transformer_engine import (
     convert_model,
     has_transformer_engine_layers,
 )
+from .pytorch_utils import prepare_nd_device_mesh
