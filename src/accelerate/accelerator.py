@@ -1704,6 +1704,10 @@ class Accelerator:
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         tp_size = self.deepspeed_plugin.deepspeed_config["tensor_parallel"].get("autotp_size", 0)
         if tp_size > 1:
+            if not compare_versions("deepspeed", ">=", "0.16.4"):
+                raise ValueError("Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed.")
+            if not is_torch_version(">=", "2.2.0"):
+                raise ValueError("`torch.distributed.device_mesh` requires PyTorch >= 2.2.0.")
             from torch.distributed.device_mesh import init_device_mesh
 
             mesh_dim_name = "tp"
