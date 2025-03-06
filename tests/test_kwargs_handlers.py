@@ -14,7 +14,6 @@
 
 import inspect
 import os
-import unittest
 from dataclasses import dataclass
 
 import torch
@@ -30,7 +29,7 @@ from accelerate.test_utils import (
     require_non_cpu,
     run_first,
 )
-from accelerate.test_utils.testing import slow
+from accelerate.test_utils.testing import AccelerateTestCase, slow
 from accelerate.utils import (
     AutocastKwargs,
     KwargsHandler,
@@ -52,7 +51,7 @@ class MockClass(KwargsHandler):
     c: float = 3.0
 
 
-class KwargsHandlerTester(unittest.TestCase):
+class KwargsHandlerTester(AccelerateTestCase):
     def test_kwargs_handler(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         assert MockClass().to_kwargs() == {}
@@ -60,7 +59,6 @@ class KwargsHandlerTester(unittest.TestCase):
         assert MockClass(a=2, b=True).to_kwargs() == {"a": 2, "b": True}
         assert MockClass(a=2, c=2.25).to_kwargs() == {"a": 2, "c": 2.25}
 
-    # this test leaking its mixed precision to all next ones (shoudl the state be reset at the end of the test?)
     @require_fp16
     @require_non_cpu
     def test_grad_scaler_kwargs(self):
