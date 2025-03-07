@@ -151,7 +151,7 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
         `torch.nn.Module`: The same module, with the hook attached (the module is modified in place, so the result can
         be discarded).
     """
-
+    print(f"{hook.__class__.__name__=}")
     if append and (getattr(module, "_hf_hook", None) is not None):
         old_hook = module._hf_hook
         remove_hook_from_module(module)
@@ -754,17 +754,9 @@ class LayerwiseCastingHook(ModelHook):
         self.compute_dtype = compute_dtype
         self.non_blocking = non_blocking
 
-    def initialize_hook(self, module: torch.nn.Module):
+    def init_hook(self, module: torch.nn.Module):
         module.to(dtype=self.storage_dtype, non_blocking=self.non_blocking)
         return module
-
-    def deinitalize_hook(self, module: torch.nn.Module):
-        raise NotImplementedError(
-            "LayerwiseCastingHook does not support deinitalization. A model once enabled with layerwise casting will "
-            "have casted its weights to a lower precision dtype for storage. Casting this back to the original dtype "
-            "will lead to precision loss, which might have an impact on the model's generation quality. The model should "
-            "be re-initialized and loaded in the original dtype."
-        )
 
     def pre_forward(self, module: torch.nn.Module, *args, **kwargs):
         module.to(dtype=self.compute_dtype, non_blocking=self.non_blocking)

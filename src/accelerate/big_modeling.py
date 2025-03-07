@@ -650,27 +650,11 @@ def apply_layerwise_casting(
     non_blocking: bool = False,
 ) -> None:
     r"""
-    Applies layerwise casting to a given module. The module expected here is a Diffusers ModelMixin but it can be any
-    nn.Module using diffusers layers or pytorch primitives.
+    Applies layerwise casting to a given module. The module expected here is a PyTorch nn.Module.
 
     Example:
 
-    ```python
-    >>> import torch
-    >>> from diffusers import CogVideoXTransformer3DModel
-
-    >>> transformer = CogVideoXTransformer3DModel.from_pretrained(
-    ...     model_id, subfolder="transformer", torch_dtype=torch.bfloat16
-    ... )
-
-    >>> apply_layerwise_casting(
-    ...     transformer,
-    ...     storage_dtype=torch.float8_e4m3fn,
-    ...     compute_dtype=torch.bfloat16,
-    ...     skip_modules_pattern=["patch_embed", "norm", "proj_out"],
-    ...     non_blocking=True,
-    ... )
-    ```
+    TODO
 
     Args:
         module (`torch.nn.Module`):
