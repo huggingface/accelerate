@@ -34,6 +34,7 @@ import accelerate
 
 from ..state import AcceleratorState, PartialState
 from ..utils import (
+    check_cuda_fp8_capability,
     gather,
     is_bnb_available,
     is_clearml_available,
@@ -44,6 +45,7 @@ from ..utils import (
     is_dvclive_available,
     is_fp8_available,
     is_fp16_available,
+    is_habana_gaudi1,
     is_hpu_available,
     is_import_timer_available,
     is_mlu_available,
@@ -229,7 +231,17 @@ def require_fp8(test_case):
     Decorator marking a test that requires FP8. These tests are skipped when FP8 is not supported.
     """
 
-    return unittest.skipUnless(is_fp8_available(), "test requires FP8 support")(test_case)
+    # is_fp8_available only checks for libraries
+    # ideally it should check for device capability as well
+    fp8_is_available = is_fp8_available()
+
+    if torch.cuda.is_available() and not check_cuda_fp8_capability():
+        fp8_is_available = False
+
+    if is_hpu_available() and is_habana_gaudi1():
+        fp8_is_available = False
+
+    return unittest.skipUnless(fp8_is_available, "test requires FP8 support")(test_case)
 
 
 def require_mlu(test_case):
