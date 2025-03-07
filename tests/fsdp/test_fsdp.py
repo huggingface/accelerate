@@ -27,13 +27,14 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     get_launch_command,
     path_in_accelerate_package,
+    require_fp16,
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
     run_first,
     slow,
 )
-from accelerate.utils import is_hpu_available, patch_environment, set_seed
+from accelerate.utils import is_bf16_available, is_fp16_available, is_hpu_available, patch_environment, set_seed
 from accelerate.utils.constants import (
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -51,7 +52,12 @@ BERT_BASE_CASED = "bert-base-cased"
 LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 FP16 = "fp16"
 BF16 = "bf16"
-dtypes = [FP16, BF16]
+
+dtypes = []
+if is_fp16_available():
+    dtypes.append(FP16)
+if is_bf16_available():
+    dtypes.append(BF16)
 
 
 @require_non_cpu
@@ -312,6 +318,7 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.n_train = 160
         self.n_val = 160
 
+    @require_fp16
     def test_performance(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, use_fsdp=True)
@@ -351,6 +358,7 @@ class FSDPIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_config)
 
+    @require_fp16
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = get_launch_command(
@@ -396,6 +404,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                 with patch_environment(omp_num_threads=1):
                     execute_subprocess_async(cmd_config)
 
+    @require_fp16
     def test_peak_memory_usage(self):
         self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
         cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0)
