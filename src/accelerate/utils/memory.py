@@ -67,9 +67,8 @@ def clear_device_cache(garbage_collection=False):
     elif is_cuda_available():
         torch.cuda.empty_cache()
     elif is_hpu_available():
-        logger.warning_once(
-            "The HPU backend does not support empty_cache. Please consider using a different backend for memory management."
-        )
+        # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
+        pass
 
 
 def release_memory(*objects):

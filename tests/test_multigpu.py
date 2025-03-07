@@ -72,7 +72,7 @@ class MultiDeviceTester(unittest.TestCase):
             execute_subprocess_async(cmd)
 
     @run_first
-    @require_non_hpu  # TODO: investigate why this test fails on HPU
+    @require_non_hpu  # TODO: investigate why this test hangs on HPU
     @require_multi_device
     def test_multi_device_merge_fsdp_weights(self):
         print(f"Found {device_count} devices.")
@@ -110,10 +110,9 @@ class MultiDeviceTester(unittest.TestCase):
 
     @run_first
     @require_pippy
-    @require_non_hpu
     @require_non_xpu
-    @require_multi_gpu
     @require_torchvision
+    @require_multi_device
     @require_huggingface_suite
     def test_pippy(self):
         """

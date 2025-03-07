@@ -293,7 +293,7 @@ class FeatureExamplesTests(TempDirTestCase):
         run_command(self.launch_args + testargs)
 
     @require_pippy
-    @require_non_hpu
+    @require_non_hpu  # TODO: Investigate why this test fails on HPU (hccl group error)
     @require_non_xpu
     @require_multi_gpu
     def test_pippy_examples_bert(self):
@@ -301,7 +301,7 @@ class FeatureExamplesTests(TempDirTestCase):
         run_command(self.launch_args + testargs)
 
     @require_pippy
-    @require_non_hpu
+    @require_non_hpu  # TODO: Investigate why this test fails on HPU (hccl group error)
     @require_non_xpu
     @require_multi_gpu
     def test_pippy_examples_gpt2(self):

@@ -661,7 +661,7 @@ class BigModelingTester(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 model.to(0)
 
-    @require_non_hpu
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_dispatch_model_move_model_warning(self):
         model = ModelForTest()
@@ -677,7 +677,7 @@ class BigModelingTester(unittest.TestCase):
                 model(x)
 
     @slow
-    @require_non_hpu
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_dispatch_model_gpt2_on_two_devices(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -909,10 +909,10 @@ class BigModelingTester(unittest.TestCase):
         hook2.offload()
         assert model2.weight.device == torch.device("cpu")
 
-    @require_non_hpu
-    @require_non_torch_xla
     @slow
     @require_bnb
+    @require_non_hpu  # bnb is not supported on hpu
+    @require_non_torch_xla
     @require_multi_device
     def test_dispatch_model_bnb(self):
         """Tests that `dispatch_model` quantizes int8 layers"""

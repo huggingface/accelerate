@@ -500,7 +500,7 @@ class AcceleratorTester(AccelerateTestCase):
             model = accelerator.prepare(model)
 
     @require_non_torch_xla
-    @require_non_hpu
+    @require_non_hpu  # bnb is not supported on HPU
     @slow
     @require_bnb
     @require_multi_device
@@ -539,7 +539,7 @@ class AcceleratorTester(AccelerateTestCase):
         PartialState._reset_state()
 
     @require_non_torch_xla
-    @require_non_hpu
+    @require_non_hpu  # bnb is not supported on HPU
     @slow
     @require_bnb
     @require_multi_device

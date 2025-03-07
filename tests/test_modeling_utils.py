@@ -182,7 +182,7 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest().to(torch_device)
         self.check_set_module_tensor_for_device(model, torch_device, "meta")
 
-    @require_non_hpu
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_set_module_tensor_between_gpus(self):
         model = ModelForTest().to(torch_device)
@@ -449,7 +449,7 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.batchnorm.running_mean.device == torch.device("meta")
         assert model.linear2.weight.device == torch.device("cpu")
 
-    @require_non_hpu
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_in_model_two_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
