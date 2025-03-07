@@ -15,50 +15,53 @@ rendered properly in your Markdown viewer.
 
 # FSDP1 vs FSDP2
 
-This guide will cover the key differences between `FSDP1` and `FSDP2`. It is also going to help you change your existing code to use `FSDP2` with minimal changes.
-
+This guide explains the key differences between `FSDP1` and `FSDP2` and helps you migrate your existing code to use `FSDP2` with minimal changes.
 
 ## What is FSDP2?
 
-`FSDP2` is a new API for fully-sharded data parallel training in PyTorch. It is a successor to [`FSDP1`](../usage_guides/fsdp.md) and it is supposed to simplify
-the internal implementation of the API, while also providing extensions to enable flexible freezing of model parameters, gathering of `fp8` parameters, faster and 
-simpler checkpointing and more.
+`FSDP2` is a new and improved version of PyTorch's fully-sharded data parallel training API. Compared to `FSDP1`, it offers:
+- Simpler internal implementation
+- Flexible parameter freezing
+- Support for `fp8` parameters
+- Faster and simpler checkpointing
+- Better memory efficiency
 
 ## Key Differences
 
-The following table summarizes the key differences between `FSDP1` and `FSDP2` configuration options configurable through the CLI:
+Here are the main changes in configuration options when using `FSDP2` through the Accelerate CLI:
 
-Configuration `FSDP1` | Configuration `FSDP2` | Changed Behaviour
+Previous (`FSDP1`) | New (`FSDP2`) | What Changed
 -- | -- | --
-**NEW** | `--fsdp_reshard_after_forward` | replaces `--fsdp_sharding_strategy`, changed to `true` (previous `FULL_SHARD`) or `false` (previous `SHARD_GRAD_OP`)
-`--fsdp_sharding_strategy` | **DEPRECATED** | `FSDP2` uses the `reshard_after_forward` option only, this gets ignored if `FSDP2` is used
-`--fsdp_backward_prefetch` | **REMOVED** | `FSDP2` uses previous `BACKWARD_PRE` option by default, as only this allows communication/computation overlap
-`--fsdp_state_dict_type` | **REMOVED** | `FSDP2` always uses `SHARDED_STATE_DICT`, i.e. each rank only checkpoints the shard of the model on it, resulting in no extra communication
-`--fsdp_forward_prefetch` | **NOT YET IMPLEMENTED** | How to implement this is under active discussion, for now it is not supported
+`--fsdp_sharding_strategy` | `--fsdp_reshard_after_forward` | replaces `--fsdp_sharding_strategy`, changed to `true` (previously `FULL_SHARD`) or `false` (previously `SHARD_GRAD_OP`)
+`--fsdp_backward_prefetch` | \*\***REMOVED**\*\* | `FSDP2` uses previous `BACKWARD_PRE` option by default, as only this allows communication and computation overlap
+`--fsdp_state_dict_type` | \*\***REMOVED**\*\* | `FSDP2` always uses `SHARDED_STATE_DICT`, i.e. each rank only checkpoints the shard of the model on it, resulting in no extra communication
+`--fsdp_forward_prefetch` | \*\***NOT YET IMPLEMENTED**\*\* | How to implement this is under active discussion, for now it is not supported in `FSDP2`
 `--fsdp_cpu_ram_efficient_loading` | **TODO** | **TODO**
 `--fsdp_sync_module_states` | **TODO** | **TODO**
-`--fsdp_use_orig_params` | **REMOVED** | `FSDP2` uses a `DTensor` class on the background, which means it *always* uses the original parameters by default
-**NEW** | `--fsdp_version` | `FSDP2` is the default, `FSDP1` can be selected by setting this to `1`
+`--fsdp_use_orig_params` | \*\***REMOVED**\*\* | `FSDP2` uses a `DTensor` class on the background, which means it *always* uses the original parameters by default
+\*\***NEW**\*\* | `--fsdp_version` | `2` is the default option, which means `FSDP2` is enabled by default, `FSDP1` can be selected by setting this to `1`
 
-These are the configuration options that have changed in `FSDP2`, to read more about the options that didn't change, you can read the documentation for [`FSDP`](../usage_guides/fsdp.md).
+For all other options that remain unchanged, see the [`FSDP` documentation](../usage_guides/fsdp.md).
 
-`FSDP2` also supports the original `FullyShardedDataParallelPlugin` interface, so you can still use it to override the options not exposed in the CLI, only by setting the `fsdp_version` to `2`.
+## How to Switch to FSDP2
 
-```py
-from accelerate import FullyShardedDataParallelPlugin
+### If using Python code:
+Simply set `fsdp_version=2` when creating your plugin:
+
+```python
+from accelerate import FullyShardedDataParallelPlugin, Accelerator
 
 fsdp_plugin = FullyShardedDataParallelPlugin(
     fsdp_version=2
-    ...
+    # other options...
 )
 accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
 ```
 
-## How to switch to FSDP2?
+### If using YAML config:
+Use our conversion tool:
+```bash
+accelerate to-fsdp2 --config_file config.yaml --output_file new_config.yaml
+```
 
-If you're using the `FullyShardedDataParallelPlugin` interface, you can just specify the `fsdp_version` to `2` and change some arguments as shown in the table above.
-
-However, if you're using the `yaml` configuration file, there's a better option: `accelerate to-fsdp2 --config_file <path_to_config_file> [--overwrite] [--output_file] [--only-rename]` #TODO: only-rename is messy, is it needed?
-
-This command will replace and change all of the configuration options in `config_file` to their `FSDP2` counterparts, overwrite the file if `--overwrite` is set or create a new one to path specified in `--output_file`.
-
+This will automatically convert all FSDP1 settings to their FSDP2 equivalents. Use `--overwrite` to update the existing file instead of creating a new one.
