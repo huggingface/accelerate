@@ -33,6 +33,7 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     path_in_accelerate_package,
     require_deepspeed,
+    require_fp16,
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
@@ -40,7 +41,7 @@ from accelerate.test_utils.testing import (
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset, RegressionModel
-from accelerate.utils import is_bf16_available, patch_environment, set_seed
+from accelerate.utils import is_bf16_available, is_fp16_available, patch_environment, set_seed
 from accelerate.utils.dataclasses import DeepSpeedPlugin
 from accelerate.utils.deepspeed import (
     DeepSpeedEngineWrapper,
@@ -79,10 +80,11 @@ optims = [CUSTOM_OPTIMIZER, DS_OPTIMIZER]
 schedulers = [CUSTOM_SCHEDULER, DS_SCHEDULER]
 model_types = [NO_CONFIG, CONFIG_WITH_NO_HIDDEN_SIZE, CONFIG_WITH_HIDDEN_SIZE, CONFIG_WITH_HIDDEN_SIZES]
 
+dtypes = []
 if is_bf16_available():
-    dtypes = [FP16, BF16]
-else:
-    dtypes = [FP16]
+    dtypes.append(BF16)
+if is_fp16_available():
+    dtypes.append(FP16)
 
 
 def parameterized_custom_name_func(func, param_num, param):
@@ -241,7 +243,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             deepspeed_plugin.deepspeed_config_process(**kwargs)
         assert "`optimizer.params.lr` not found in kwargs." in str(cm.exception)
 
-    @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
+    @parameterized.expand(dtypes, name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
         AcceleratorState._reset_state(True)
         deepspeed_plugin = DeepSpeedPlugin(
@@ -275,6 +277,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             assert is_deepspeed_zero3_enabled()
 
     @parameterized.expand(optim_scheduler_params, name_func=parameterized_custom_name_func)
+    @require_fp16
     def test_prepare_deepspeed(self, optim_type, scheduler_type):
         # 1. Testing with one of the ZeRO Stages is enough to test the `_prepare_deepspeed` function.
         # Here we test using ZeRO Stage 2 with FP16 enabled.
@@ -552,6 +555,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 in str(cm.exception)
             )
 
+    @require_fp16
     def test_save_checkpoints(self):
         deepspeed_plugin = DeepSpeedPlugin(
             hf_ds_config=self.ds_config_file[ZERO3],
@@ -642,6 +646,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             assert not config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
 
     @parameterized.expand(model_types, name_func=parameterized_custom_name_func)
+    @require_fp16
     def test_autofill_comm_buffers_dsconfig(self, model_type):
         deepspeed_plugin = DeepSpeedPlugin(
             hf_ds_config=self.ds_config_file[ZERO3],
@@ -697,7 +702,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 assert zero_opt["stage3_prefetch_bucket_size"] == int((0.9 * hidden_size) * hidden_size)
                 assert zero_opt["stage3_param_persistence_threshold"] == (10 * hidden_size)
 
-    @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
+    @parameterized.expand(dtypes, name_func=parameterized_custom_name_func)
     def test_autofill_dsconfig_from_ds_plugin(self, dtype):
         ds_config = self.ds_config_dict["zero3"]
         if dtype == BF16:
@@ -841,6 +846,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
+    @require_fp16
     def test_prepare_deepspeed_prepare_moe(self):
         if compare_versions("transformers", "<", "4.40") and compare_versions("deepspeed", "<", "0.14"):
             return
@@ -866,6 +872,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     assert hasattr(module, "_z3_leaf") and module._z3_leaf
 
     @run_first
+    @require_fp16
     def test_basic_run(self):
         test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")
         with tempfile.TemporaryDirectory() as dirpath:
@@ -890,10 +897,10 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 execute_subprocess_async(cmd)
 
 
+@slow
 @run_first
 @require_deepspeed
 @require_multi_device
-@slow
 class DeepSpeedIntegrationTest(TempDirTestCase):
     test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
 
@@ -923,7 +930,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.n_train = 160
         self.n_val = 160
 
-    @run_first
+    @require_fp16
     def test_performance(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
@@ -968,7 +975,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage)
 
-    @run_first
+    @require_fp16
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = [
@@ -1023,7 +1030,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage)
 
-    @run_first
+    @require_fp16
     def test_peak_memory_usage(self):
         if compare_versions("deepspeed", ">", "0.12.6"):
             self.skipTest(
@@ -1092,7 +1099,6 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage)
 
-    @run_first
     def test_lr_scheduler(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
@@ -1117,7 +1123,6 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
-    @run_first
     @require_huggingface_suite
     def test_zero3_integration(self):
         self.test_file_path = self.test_scripts_folder / "test_zero3_integration.py"
