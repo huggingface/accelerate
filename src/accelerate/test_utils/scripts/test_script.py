@@ -517,7 +517,7 @@ def training_check(use_seedable_sampler=False):
     accelerator.print("Training yielded the same results on one CPU or distributed setup with batch split.")
 
     # FP32 wrapper check
-    if is_fp16_available():
+    if torch.cuda.is_available():
         # Mostly a test that model.forward will have autocast when running unwrap_model(model, keep_fp32_wrapper=True)
         print("Keep fp32 wrapper check.")
         AcceleratorState._reset_state()
