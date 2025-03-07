@@ -151,7 +151,6 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
         `torch.nn.Module`: The same module, with the hook attached (the module is modified in place, so the result can
         be discarded).
     """
-    print(f"{hook.__class__.__name__=}")
     if append and (getattr(module, "_hf_hook", None) is not None):
         old_hook = module._hf_hook
         remove_hook_from_module(module)
