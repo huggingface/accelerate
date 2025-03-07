@@ -8,6 +8,10 @@ on:
   schedule:
     - cron: "0 2 * * *"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   run_gaudi1_tests:
     name: Test on Gaudi1
