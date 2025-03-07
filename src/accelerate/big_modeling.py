@@ -16,7 +16,7 @@ import logging
 import os
 from contextlib import contextmanager
 from functools import wraps
-from typing import Dict, List, Optional, Union, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.nn as nn
@@ -675,7 +675,7 @@ def apply_layerwise_casting(
             If `True`, the weight casting operations are non-blocking.
     """
     add_hook_to_module(
-        module, LayerwiseCastingHook(
-            storage_dtype=storage_dtype, compute_dtype=compute_dtype, non_blocking=non_blocking
-        ), append=True
+        module,
+        LayerwiseCastingHook(storage_dtype=storage_dtype, compute_dtype=compute_dtype, non_blocking=non_blocking),
+        append=True,
     )
