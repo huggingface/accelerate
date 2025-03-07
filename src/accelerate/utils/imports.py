@@ -180,9 +180,6 @@ def is_fp16_available():
 
 def is_fp8_available():
     "Checks if fp8 is supported"
-    if is_habana_gaudi1():
-        return False
-
     return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
 
 
