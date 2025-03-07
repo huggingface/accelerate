@@ -29,8 +29,8 @@ from .utils import (
     DistributedType,
     DynamoBackend,
     GradientAccumulationPlugin,
+    check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
-    check_fp8_capability,
     deepspeed_required,
     get_ccl_version,
     get_cpu_distributed_information,
@@ -906,11 +906,12 @@ class AcceleratorState:
                 else mixed_precision.lower()
             )
             if mixed_precision == "fp8":
+                # this is confusing, why is is_fp8_available only checks for library availability ?
                 if not is_fp8_available():
                     raise ValueError(
                         "Using `fp8` precision requires `transformer_engine` or `MS-AMP` to be installed."
                     )
-                elif torch.cuda.is_available() and not check_fp8_capability():
+                elif torch.cuda.is_available() and not check_cuda_fp8_capability():
                     logger.warning(
                         f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
                         "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "

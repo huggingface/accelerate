@@ -173,9 +173,9 @@ def check_cuda_p2p_ib_support():
 
 
 @lru_cache
-def check_fp8_capability():
+def check_cuda_fp8_capability():
     """
-    Checks if all the current GPUs available support FP8.
+    Checks if the current GPU available supports FP8.
 
     Notably might initialize `torch.cuda` to check.
     """
