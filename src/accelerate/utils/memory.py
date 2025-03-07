@@ -115,6 +115,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
         "XPU out of memory.",  # XPU OOM
         "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",  # CUDNN SNAFU
         "DefaultCPUAllocator: can't allocate memory",  # CPU OOM
+        "FATAL ERROR :: MODULE:PT_DEVMEM Allocation failed",  # HPU OOM
     ]
     if isinstance(exception, RuntimeError) and len(exception.args) == 1:
         return any(err in exception.args[0] for err in _statements)
