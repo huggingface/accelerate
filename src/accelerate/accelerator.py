@@ -3437,12 +3437,19 @@ class Accelerator:
         """
 
         if self.distributed_type == DistributedType.DEEPSPEED:
-            if (
-                self.deepspeed_config["zero_optimization"]["stage"] == 3
-                or self.deepspeed_config["tensor_parallel"].get("autotp_size", 0) > 1
-            ):
+            zero3_sharding = self.deepspeed_config["zero_optimization"]["stage"] == 3
+            tp_sharding = self.deepspeed_config["tensor_parallel"].get("autotp_size", 0) > 1
+            if zero3_sharding or tp_sharding:
                 if model.zero_gather_16bit_weights_on_model_save():
-                    state_dict = model._consolidated_16bit_state_dict()
+                    if tp_sharding and not compare_versions("deepspeed", ">=", "0.16.4"):
+                        raise ImportError(
+                            "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
+                        )
+                    state_dict = (
+                        model._consolidated_16bit_state_dict()
+                        if tp_sharding
+                        else model._zero3_consolidated_16bit_state_dict()
+                    )
                 else:
                     raise ValueError(
                         "Cannot get 16bit model weights because `stage3_gather_16bit_weights_on_model_save` in DeepSpeed config is False. "
