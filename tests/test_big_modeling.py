@@ -45,14 +45,18 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
-from accelerate.utils import offload_state_dict
+from accelerate.utils import is_hpu_available, offload_state_dict
 
 
 logger = logging.getLogger(__name__)
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 
-ATOL = 1e-5
-RTOL = 1e-5
+if is_hpu_available():
+    ATOL = 1e-4
+    RTOL = 1e-4
+else:
+    ATOL = 1e-5
+    RTOL = 1e-5
 
 
 class ModelForTest(nn.Module):
