@@ -25,7 +25,6 @@ jobs:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
         PT_ENABLE_INT64_SUPPORT: 1
         PT_HPU_LAZY_MODE: 0
-        MASTER_PORT: 12345
         RUN_SLOW: 1
 
     steps:
@@ -38,7 +37,7 @@ jobs:
       - name: Checkout to Accelerate
         uses: actions/checkout@v4
 
-      - name: Install Accelerate with DeepSpeed
+      - name: Install Accelerate with Transformers & DeepSpeed
         run: |
           pip install -e .[testing] \
             git+https://github.com/HabanaAI/DeepSpeed.git@1.20.0 \
