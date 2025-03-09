@@ -26,8 +26,10 @@ import warnings
 import torch
 from packaging import version
 
+from ..logging import get_logger
 from .imports import (
     is_cuda_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_mps_available,
@@ -37,6 +39,9 @@ from .imports import (
     is_xpu_available,
 )
 from .versions import compare_versions
+
+
+logger = get_logger(__name__)
 
 
 def clear_device_cache(garbage_collection=False):
@@ -61,6 +66,9 @@ def clear_device_cache(garbage_collection=False):
         torch.mps.empty_cache()
     elif is_cuda_available():
         torch.cuda.empty_cache()
+    elif is_hpu_available():
+        # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
+        pass
 
 
 def release_memory(*objects):
@@ -106,6 +114,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
         "XPU out of memory.",  # XPU OOM
         "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",  # CUDNN SNAFU
         "DefaultCPUAllocator: can't allocate memory",  # CPU OOM
+        "FATAL ERROR :: MODULE:PT_DEVMEM Allocation failed",  # HPU OOM
     ]
     if isinstance(exception, RuntimeError) and len(exception.args) == 1:
         return any(err in exception.args[0] for err in _statements)

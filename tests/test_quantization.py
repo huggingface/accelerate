@@ -28,6 +28,7 @@ from accelerate.test_utils import (
     require_non_torch_xla,
     slow,
 )
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils.bnb import load_and_quantize_model
 from accelerate.utils.dataclasses import BnbQuantizationConfig
 from accelerate.utils.memory import clear_device_cache
@@ -44,7 +45,7 @@ class BitsAndBytesConfigIntegration(unittest.TestCase):
 @require_cuda_or_xpu
 @require_bnb
 @require_huggingface_suite
-class MixedInt8EmptyModelTest(unittest.TestCase):
+class MixedInt8EmptyModelTest(AccelerateTestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
     # We need to test on relatively large models (aka >1b parameters otherwise the quantiztion may not work as expected)
