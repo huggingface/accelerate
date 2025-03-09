@@ -218,6 +218,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert prepared_train_dl in accelerator._dataloaders
         assert prepared_valid_dl in accelerator._dataloaders
 
+    @require_non_hpu  # hpu does not support empty_cache
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
         # Free up refs with empty_cache() and gc.collect()
@@ -242,12 +243,8 @@ class AcceleratorTester(AccelerateTestCase):
         assert len(accelerator._schedulers) == 0
         assert len(accelerator._dataloaders) == 0
 
-        if torch_device == "hpu":
-            # On hpu sometimes you get 1 byte difference, idk why :(
-            self.assertAlmostEqual(free_cpu_ram_after, free_cpu_ram_before, delta=1)
-        else:
-            # The less-than comes *specifically* from CUDA CPU things/won't be present on CPU builds
-            self.assertLessEqual(free_cpu_ram_after, free_cpu_ram_before)
+        # The less-than comes *specifically* from CUDA CPU things/won't be present on CPU builds
+        assert free_cpu_ram_after <= free_cpu_ram_before
 
     @require_non_torch_xla
     def test_env_var_device(self):

@@ -18,7 +18,6 @@ import os
 import random
 import shutil
 import tempfile
-import unittest
 import uuid
 from contextlib import contextmanager
 
@@ -36,6 +35,7 @@ from accelerate.test_utils import (
     require_non_torch_xla,
     run_first,
 )
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
 
 
@@ -95,7 +95,7 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 @parameterized_class(("use_safetensors",), [[True], [False]], class_name_func=parameterized_custom_name_func)
-class CheckpointTest(unittest.TestCase):
+class CheckpointTest(AccelerateTestCase):
     def check_adam_state(self, state1, state2, distributed_type):
         # For DistributedType.XLA, the `accelerator.save_state` function calls `xm._maybe_convert_to_cpu` before saving.
         # As a result, all tuple values are converted to lists. Therefore, we need to convert them back here.
