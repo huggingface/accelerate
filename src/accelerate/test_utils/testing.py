@@ -32,7 +32,7 @@ import torch
 
 import accelerate
 
-from ..state import AcceleratorState, PartialState
+from ..state import AcceleratorState
 from ..utils import (
     check_cuda_fp8_capability,
     gather,
@@ -577,8 +577,7 @@ class AccelerateTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # Reset the state of the AcceleratorState singleton.
-        AcceleratorState._reset_state()
-        PartialState._reset_state()
+        AcceleratorState._reset_state(True)
 
 
 class MockingTestCase(unittest.TestCase):

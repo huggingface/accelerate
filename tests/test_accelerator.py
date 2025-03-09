@@ -538,8 +538,6 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             _ = accelerator.prepare(model)
 
-        PartialState._reset_state()
-
     @require_non_torch_xla
     @require_non_hpu  # bnb is not supported on HPU
     @slow
