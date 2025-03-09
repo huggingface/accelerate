@@ -19,7 +19,7 @@ jobs:
       group: aws-dl1-24xlarge
 
     container:
-      image: docker://vault.habana.ai/gaudi-docker/1.20.0/ubuntu24.04/habanalabs/pytorch-installer-2.6.0:latest
+      image: docker://vault.habana.ai/gaudi-docker/1.20.0/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana --shm-size=64G --cap-add=sys_nice --env HABANA_VISIBLE_DEVICES=all
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
