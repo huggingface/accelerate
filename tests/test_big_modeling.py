@@ -45,7 +45,7 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
-from accelerate.utils import is_hpu_available, offload_state_dict
+from accelerate.utils import offload_state_dict
 
 
 logger = logging.getLogger(__name__)
