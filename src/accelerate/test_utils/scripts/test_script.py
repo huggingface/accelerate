@@ -479,10 +479,18 @@ def training_check(use_seedable_sampler=False):
 
     model = accelerator.unwrap_model(model).cpu()
     torch.testing.assert_close(
-        old_model.a, model.a, atol=ATOL, rtol=RTOL, msg="Did not obtain the same model on CPU or distributed training."
+        old_model.a,
+        model.a,
+        atol=ATOL,
+        rtol=RTOL,
+        msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
     )
     torch.testing.assert_close(
-        old_model.b, model.b, atol=ATOL, rtol=RTOL, msg="Did not obtain the same model on CPU or distributed training."
+        old_model.b,
+        model.b,
+        atol=ATOL,
+        rtol=RTOL,
+        msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
     )
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
@@ -508,10 +516,18 @@ def training_check(use_seedable_sampler=False):
 
     model = accelerator.unwrap_model(model).cpu()
     torch.testing.assert_close(
-        old_model.a, model.a, atol=ATOL, rtol=RTOL, msg="Did not obtain the same model on CPU or distributed training."
+        old_model.a,
+        model.a,
+        atol=ATOL,
+        rtol=RTOL,
+        msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
     )
     torch.testing.assert_close(
-        old_model.b, model.b, atol=ATOL, rtol=RTOL, msg="Did not obtain the same model on CPU or distributed training."
+        old_model.b,
+        model.b,
+        atol=ATOL,
+        rtol=RTOL,
+        msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
     )
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with batch split.")
@@ -560,14 +576,14 @@ def training_check(use_seedable_sampler=False):
             model.a,
             atol=ATOL,
             rtol=RTOL,
-            msg="Did not obtain the same model on CPU or distributed training.",
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
         )
         torch.testing.assert_close(
             old_model.b,
             model.b,
             atol=ATOL,
             rtol=RTOL,
-            msg="Did not obtain the same model on CPU or distributed training.",
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
         )
 
     # BF16 support
@@ -598,14 +614,14 @@ def training_check(use_seedable_sampler=False):
             model.a,
             atol=ATOL,
             rtol=RTOL,
-            msg="Did not obtain the same model on CPU or distributed training.",
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
         )
         torch.testing.assert_close(
             old_model.b,
             model.b,
             atol=ATOL,
             rtol=RTOL,
-            msg="Did not obtain the same model on CPU or distributed training.",
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
         )
 
     # IPEX support is only for CPU
@@ -635,14 +651,14 @@ def training_check(use_seedable_sampler=False):
             model.a,
             atol=ATOL,
             rtol=RTOL,
-            msg="Did not obtain the same model on CPU or distributed training.",
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
         )
         torch.testing.assert_close(
             old_model.b,
             model.b,
             atol=ATOL,
             rtol=RTOL,
-            msg="Did not obtain the same model on CPU or distributed training.",
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
         )
 
 
