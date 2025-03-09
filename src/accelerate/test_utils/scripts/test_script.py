@@ -52,8 +52,8 @@ else:
     from accelerate.test_utils import RegressionModel
 
 if is_hpu_available():
-    ATOL = 1e-3
-    RTOL = 1e-3
+    ATOL = 1e-4  # 0.0001 absolute tolerance
+    RTOL = 1e-2  # 1% relative tolerance
 else:
     ATOL = 1e-6
     RTOL = 1e-6
