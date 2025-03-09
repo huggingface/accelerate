@@ -60,6 +60,7 @@ class KwargsHandlerTester(AccelerateTestCase):
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         scaler_handler = GradScalerKwargs(init_scale=1024, growth_factor=2)
+        AcceleratorState._reset_state()
         accelerator = Accelerator(mixed_precision="fp16", kwargs_handlers=[scaler_handler])
         assert accelerator.mixed_precision == "fp16"
         scaler = accelerator.scaler
@@ -73,8 +74,6 @@ class KwargsHandlerTester(AccelerateTestCase):
         assert scaler._growth_interval == 2000
         assert scaler._enabled is True
 
-        AcceleratorState._reset_state()
-
     @run_first
     @require_multi_device
     def test_ddp_kwargs(self):
@@ -85,6 +84,7 @@ class KwargsHandlerTester(AccelerateTestCase):
     @require_non_cpu
     def test_autocast_kwargs(self):
         kwargs = AutocastKwargs(enabled=False)
+        AcceleratorState._reset_state()
         accelerator = Accelerator(mixed_precision="fp16")
 
         a_float32 = torch.rand((8, 8), device=accelerator.device)
@@ -104,8 +104,6 @@ class KwargsHandlerTester(AccelerateTestCase):
             g_float16 = torch.mm(d_float32, f_float32)
             # We should be back in fp16
             assert g_float16.dtype == torch.float16
-
-        AcceleratorState._reset_state()
 
     @slow
     def test_profile_kwargs(self):
