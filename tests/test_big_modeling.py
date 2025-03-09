@@ -45,18 +45,14 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
-from accelerate.utils import is_hpu_available, offload_state_dict
+from accelerate.utils import offload_state_dict
 
 
 logger = logging.getLogger(__name__)
-torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 
-if torch_device.startswith("hpu"):
-    ATOL = 1e-3
-    RTOL = 1e-3
-else:
-    ATOL = 1e-5
-    RTOL = 1e-5
+
+ATOL = 1e-5
+RTOL = 1e-5
 
 
 class ModelForTest(nn.Module):
@@ -192,7 +188,7 @@ class BigModelingTester(unittest.TestCase):
 
     @require_non_cpu
     def test_init_on_device(self):
-        device = torch.device(torch_device)
+        device = torch.device(torch_device, index=0)
         with init_on_device(device):
             model = nn.Linear(10, 10)
         assert model.weight.device == device
@@ -616,14 +612,12 @@ class BigModelingTester(unittest.TestCase):
 
             assert (free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_dispatch_model_multi_devices(self):
         model = BiggerModelForTest()
 
-        if is_hpu_available():
-            device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 0}
-        else:
-            device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
+        device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
 
         x = torch.randn(2, 3)
         expected = model(x)
@@ -734,14 +728,12 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_dispatch_model_with_unused_submodules_multi_device(self):
         model = ModelWithUnusedSubModulesForTest()
 
-        if is_hpu_available():
-            device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 0}
-        else:
-            device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
+        device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
 
         x = torch.randn(2, 3)
         expected = model(x)
@@ -782,19 +774,17 @@ class BigModelingTester(unittest.TestCase):
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.weight.device == torch.device("meta")
-        assert new_model.linear2.weight.device == torch.device(torch_device)
+        assert new_model.linear2.weight.device == torch.device(torch_device, index=0)
 
         output = new_model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_and_dispatch_multi_device(self):
         model = BiggerModelForTest()
 
-        if is_hpu_available():
-            device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 0}
-        else:
-            device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
+        device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
 
         x = torch.randn(2, 3)
         expected = model(x)
@@ -810,11 +800,7 @@ class BigModelingTester(unittest.TestCase):
         assert new_model.linear1.weight.device == torch.device("meta")
         assert new_model.linear2.weight.device == torch.device("meta")
         assert new_model.linear3.weight.device == torch.device(torch_device)
-
-        if is_hpu_available():
-            assert new_model.linear4.weight.device == torch.device(torch_device)
-        else:
-            assert new_model.linear4.weight.device == torch.device(torch_device.replace(":0", ":1"))
+        assert new_model.linear4.weight.device == torch.device(torch_device, index=1)
 
         output = new_model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
@@ -839,20 +825,18 @@ class BigModelingTester(unittest.TestCase):
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
         assert new_model.linear1.linear.weight.device == torch.device("meta")
         assert new_model.linear2.linear.weight.device == torch.device("meta")
-        assert new_model.linear3.linear.weight.device == torch.device(torch_device)
-        assert new_model.linear4.linear.weight.device == torch.device(torch_device)
+        assert new_model.linear3.linear.weight.device == torch.device(torch_device, index=0)
+        assert new_model.linear4.linear.weight.device == torch.device(torch_device, index=0)
 
         output = new_model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_and_dispatch_multi_device_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
 
-        if is_hpu_available():
-            device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 0}
-        else:
-            device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
+        device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
 
         x = torch.randn(2, 3)
         expected = model(x)
@@ -870,11 +854,7 @@ class BigModelingTester(unittest.TestCase):
         assert new_model.linear1.linear.weight.device == torch.device("meta")
         assert new_model.linear2.linear.weight.device == torch.device("meta")
         assert new_model.linear3.linear.weight.device == torch.device(torch_device)
-
-        if is_hpu_available():
-            assert new_model.linear4.linear.weight.device == torch.device(torch_device)
-        else:
-            assert new_model.linear4.linear.weight.device == torch.device(torch_device.replace(":0", ":1"))
+        assert new_model.linear4.linear.weight.device == torch.device(torch_device, index=1)
 
         output = new_model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
@@ -887,8 +867,8 @@ class BigModelingTester(unittest.TestCase):
 
         inputs = torch.randn(3, 4)
         outputs = model1(inputs)
-        assert outputs.device == torch.device(torch_device)
-        assert model1.weight.device == torch.device(torch_device)
+        assert outputs.device == torch.device(torch_device, index=0)
+        assert model1.weight.device == torch.device(torch_device, index=0)
 
         hook1.offload()
         assert model1.weight.device == torch.device("cpu")
@@ -898,13 +878,13 @@ class BigModelingTester(unittest.TestCase):
         assert model2.weight.device == torch.device("cpu")
 
         outputs = model1(inputs)
-        assert outputs.device == torch.device(torch_device)
-        assert model1.weight.device == torch.device(torch_device)
+        assert outputs.device == torch.device(torch_device, index=0)
+        assert model1.weight.device == torch.device(torch_device, index=0)
 
         outputs = model2(outputs)
-        assert outputs.device == torch.device(torch_device)
+        assert outputs.device == torch.device(torch_device, index=0)
         assert model1.weight.device == torch.device("cpu")
-        assert model2.weight.device == torch.device(torch_device)
+        assert model2.weight.device == torch.device(torch_device, index=0)
 
         hook2.offload()
         assert model2.weight.device == torch.device("cpu")
