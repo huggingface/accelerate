@@ -548,13 +548,13 @@ def training_check(use_seedable_sampler=False):
         input_tensor = torch.Tensor([1, 2]).to(dtype=torch.float16, device=accelerator.device)
         output = model_with_fp32_wrapper(input_tensor)
 
-    # FP16 support
-    if is_fp16_available():
-        # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
-        print("FP16 training check.")
+    # BF16 support
+    if is_bf16_available():
+        # Mostly a test that BF16 doesn't crash as the operation inside the model is not converted to BF16
+        print("BF16 training check.")
         AcceleratorState._reset_state()
         dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
-        accelerator = Accelerator(mixed_precision="fp16", dataloader_config=dataloader_config)
+        accelerator = Accelerator(mixed_precision="bf16", dataloader_config=dataloader_config)
         train_dl = generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -586,13 +586,13 @@ def training_check(use_seedable_sampler=False):
             msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
         )
 
-    # BF16 support
-    if is_bf16_available():
-        # Mostly a test that BF16 doesn't crash as the operation inside the model is not converted to BF16
-        print("BF16 training check.")
+    # FP16 support
+    if is_fp16_available():
+        # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
+        print("FP16 training check.")
         AcceleratorState._reset_state()
         dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
-        accelerator = Accelerator(mixed_precision="bf16", dataloader_config=dataloader_config)
+        accelerator = Accelerator(mixed_precision="fp16", dataloader_config=dataloader_config)
         train_dl = generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)

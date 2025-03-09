@@ -109,6 +109,7 @@ class MultiDeviceTester(unittest.TestCase):
 
     @run_first
     @require_pippy
+    @require_non_hpu
     @require_non_xpu
     @require_torchvision
     @require_multi_device
