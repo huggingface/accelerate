@@ -229,7 +229,7 @@ class AcceleratorTester(AccelerateTestCase):
         )
 
         # Short sleep here makes this test more reliable
-        time.sleep(1e-2)
+        time.sleep(1e-3)
 
         model, optimizer, scheduler, train_dl, valid_dl = accelerator.free_memory(
             model, optimizer, scheduler, train_dl, valid_dl

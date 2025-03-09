@@ -352,9 +352,9 @@ def require_single_device(test_case):
     Decorator marking a test that requires a single device. These tests are skipped when there is no hardware
     accelerator available or number of devices is more than one.
     """
-    return unittest.skipUnless(torch_device != "cpu" and device_count == 1, "test requires a single device accelerator")(
-        test_case
-    )
+    return unittest.skipUnless(
+        torch_device != "cpu" and device_count == 1, "test requires a single device accelerator"
+    )(test_case)
 
 
 def require_single_gpu(test_case):
