@@ -718,7 +718,6 @@ class CpuOffload(ModelHook):
     def pre_forward(self, module, *args, **kwargs):
         if self.prev_module_hook is not None:
             self.prev_module_hook.offload()
-            clear_device_cache()
         module.to(self.execution_device)
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 
