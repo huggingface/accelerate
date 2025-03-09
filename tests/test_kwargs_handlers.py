@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
+from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
@@ -72,6 +73,8 @@ class KwargsHandlerTester(AccelerateTestCase):
         assert scaler._growth_interval == 2000
         assert scaler._enabled is True
 
+        AcceleratorState._reset_state()
+
     @run_first
     @require_multi_device
     def test_ddp_kwargs(self):
@@ -101,6 +104,8 @@ class KwargsHandlerTester(AccelerateTestCase):
             g_float16 = torch.mm(d_float32, f_float32)
             # We should be back in fp16
             assert g_float16.dtype == torch.float16
+
+        AcceleratorState._reset_state()
 
     @slow
     def test_profile_kwargs(self):
