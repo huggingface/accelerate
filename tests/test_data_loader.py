@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import random
-import unittest
 import weakref
 
 import pytest
@@ -34,7 +33,7 @@ from accelerate.data_loader import (
     skip_first_batches,
 )
 from accelerate.state import GradientState
-from accelerate.test_utils.testing import require_torchdata_stateful_dataloader
+from accelerate.test_utils.testing import AccelerateTestCase, require_torchdata_stateful_dataloader
 from accelerate.utils import is_torchdata_stateful_dataloader_available
 
 
@@ -96,7 +95,7 @@ class SimpleBatchSampler(BatchSampler):
         self.epoch = epoch
 
 
-class DataLoaderTester(unittest.TestCase):
+class DataLoaderTester(AccelerateTestCase):
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False, even_batches=True):
         batch_sampler_shards = [
             BatchSamplerShard(batch_sampler, 2, i, split_batches=split_batches, even_batches=even_batches)
@@ -529,7 +528,7 @@ class DataLoaderTester(unittest.TestCase):
         assert gradient_state_ref() is None
 
 
-class StatefulDataLoaderTester(unittest.TestCase):
+class StatefulDataLoaderTester(AccelerateTestCase):
     @require_torchdata_stateful_dataloader
     def test_skip_data_loader(self):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2, use_stateful_dataloader=True)

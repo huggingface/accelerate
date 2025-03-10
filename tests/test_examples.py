@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock, skip
+from unittest import mock
 
 import torch
 
@@ -27,14 +27,16 @@ from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     get_launch_command,
+    is_hpu_available,
+    require_fp16,
     require_huggingface_suite,
     require_multi_device,
-    require_multi_gpu,
     require_non_xpu,
     require_pippy,
     require_schedulefree,
     require_trackers,
     run_command,
+    run_first,
     slow,
 )
 from accelerate.utils import write_basic_config
@@ -147,6 +149,7 @@ class ExampleDifferenceTests(unittest.TestCase):
 
 @mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "1"})
 @require_huggingface_suite
+@run_first
 class FeatureExamplesTests(TempDirTestCase):
     clear_on_setup = False
 
@@ -197,10 +200,13 @@ class FeatureExamplesTests(TempDirTestCase):
         --resume_from_checkpoint {self.tmpdir / "step_2"}
         """.split()
         output = run_command(self.launch_args + testargs, return_stdout=True)
-        if torch.cuda.is_available():
+        if is_hpu_available():
+            num_processes = torch.hpu.device_count()
+        elif torch.cuda.is_available():
             num_processes = torch.cuda.device_count()
         else:
             num_processes = 1
+
         if num_processes > 1:
             assert "epoch 0:" not in output
             assert "epoch 1:" in output
@@ -266,34 +272,34 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/profiler.py"]
         run_command(self.launch_args + testargs)
 
+    @require_fp16
     @require_multi_device
     def test_ddp_comm_hook(self):
         testargs = ["examples/by_feature/ddp_comm_hook.py", "--ddp_comm_hook", "fp16"]
         run_command(self.launch_args + testargs)
 
-    @skip(
-        reason="stable-diffusion-v1-5 is no longer available. Potentially `Comfy-Org/stable-diffusion-v1-5-archive` once diffusers support is added."
-    )
+    @require_fp16
     @require_multi_device
     def test_distributed_inference_examples_stable_diffusion(self):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
         run_command(self.launch_args + testargs)
 
+    @require_fp16
     @require_multi_device
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
         run_command(self.launch_args + testargs)
 
-    @require_non_xpu
     @require_pippy
-    @require_multi_gpu
+    @require_non_xpu
+    @require_multi_device
     def test_pippy_examples_bert(self):
         testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
-    @require_non_xpu
     @require_pippy
-    @require_multi_gpu
+    @require_non_xpu
+    @require_multi_device
     def test_pippy_examples_gpt2(self):
         testargs = ["examples/inference/pippy/gpt2.py"]
         run_command(self.launch_args + testargs)

@@ -17,8 +17,14 @@ import torch
 from transformers import AutoModelForMaskedLM
 
 from accelerate import PartialState, prepare_pippy
+from accelerate.test_utils import torch_device
 from accelerate.utils import set_seed
 
+
+if torch_device == "hpu":
+    synchronize_func = torch.hpu.synchronize
+else:
+    synchronize_func = torch.cuda.synchronize
 
 # Set the random seed to have reproducable outputs
 set_seed(42)
@@ -60,25 +66,25 @@ input = torch.randint(
 )
 
 # Move the inputs to the first device
-input = input.to("cuda:0")
+input = input.to(torch_device)
 
 # Take an average of 5 times
 # Measure first batch
-torch.cuda.synchronize()
+synchronize_func()
 start_time = time.time()
 with torch.no_grad():
     output = model(input)
-torch.cuda.synchronize()
+synchronize_func()
 end_time = time.time()
 first_batch = end_time - start_time
 
-# Now that CUDA is init, measure after
-torch.cuda.synchronize()
+# Now that hpu is init, measure after
+synchronize_func()
 start_time = time.time()
 for i in range(5):
     with torch.no_grad():
         output = model(input)
-torch.cuda.synchronize()
+synchronize_func()
 end_time = time.time()
 
 # The outputs are only on the final process by default

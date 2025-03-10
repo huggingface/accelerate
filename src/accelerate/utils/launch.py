@@ -27,6 +27,7 @@ from ..utils import (
     DynamoBackend,
     PrecisionType,
     is_fp8_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_musa_available,
@@ -85,10 +86,9 @@ def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
             value = getattr(args, arg)
             if value is not None:
                 if arg == "fp8_override_linear_precision":
-                    values = value.strip("()").split(",")
-                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = values[0].strip()
-                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = values[1].strip()
-                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = values[2].strip()
+                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = value[0]
+                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = value[1]
+                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = value[2]
                 else:
                     current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
     return current_env
@@ -142,6 +142,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
             current_env["MUSA_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = args.gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
@@ -246,6 +248,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -414,6 +418,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
             current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:

@@ -29,8 +29,8 @@ from .utils import (
     DistributedType,
     DynamoBackend,
     GradientAccumulationPlugin,
+    check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
-    check_fp8_capability,
     deepspeed_required,
     get_ccl_version,
     get_cpu_distributed_information,
@@ -39,6 +39,8 @@ from .utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
+    is_habana_gaudi1,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_mps_available,
@@ -68,6 +70,7 @@ if is_musa_available(check_device=False):
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
+
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +224,7 @@ class PartialState:
                             local_rank = os.environ.get("LOCAL_RANK", -1)
                             torch.sdaa.set_device(f"sdaa:{local_rank}")
                         torch.distributed.init_process_group(backend=self.backend, **kwargs)
+
             # XPU and CPU require special env configs to be set
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                 dist_information = get_cpu_distributed_information()
@@ -301,6 +305,7 @@ class PartialState:
                         'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                         "will do this automatically."
                     )
+
         # Important: This should be the *only* code outside of `self.initialized!`
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
@@ -381,6 +386,7 @@ class PartialState:
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
+            DistributedType.MULTI_HPU,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
@@ -700,6 +706,7 @@ class PartialState:
         - SDAA if `is_sdaa_available()`
         - MUSA if `is_musa_available()`
         - NPU if `is_npu_available()`
+        - HPU if `is_hpu_available()`
         - CPU otherwise
         """
         if is_mps_available():
@@ -715,6 +722,8 @@ class PartialState:
         # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
         elif is_npu_available():
             return torch.device("npu")
+        elif is_hpu_available():
+            return torch.device("hpu")
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
@@ -735,6 +744,7 @@ class PartialState:
         elif is_torch_xla_available():
             backend = "xla"
             distributed_type = DistributedType.XLA
+
         elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
             if is_mlu_available():
                 backend = "cncl"
@@ -750,6 +760,10 @@ class PartialState:
             elif is_npu_available():
                 backend = "hccl"
                 distributed_type = DistributedType.MULTI_NPU
+            elif is_hpu_available(init_hccl=True):
+                if backend is None:
+                    backend = "hccl"
+                distributed_type = DistributedType.MULTI_HPU
             elif torch.cuda.is_available():
                 if backend is None:
                     backend = "nccl"
@@ -794,12 +808,14 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "sdaa"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
         if device == "xla":
             self.device = xm.xla_device()
+        elif device == "hpu":
+            self.device = torch.device("hpu", torch.hpu.current_device())
         else:
             if device == "gpu":
                 device = "cuda"
@@ -890,17 +906,24 @@ class AcceleratorState:
                 else mixed_precision.lower()
             )
             if mixed_precision == "fp8":
+                # this is confusing, why is is_fp8_available only checks for library availability ?
                 if not is_fp8_available():
                     raise ValueError(
                         "Using `fp8` precision requires `transformer_engine` or `MS-AMP` to be installed."
                     )
-                elif not check_fp8_capability():
+                elif torch.cuda.is_available() and not check_cuda_fp8_capability():
                     logger.warning(
                         f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
                         "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
                         "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                     )
                     mixed_precision = "fp16"
+                elif is_habana_gaudi1():
+                    logger.warning(
+                        "The current HPU device is Gaudi1 which does not support FP8 mixed precision training (requires "
+                        "Gaudi2 or higher). Will use BF16 instead."
+                    )
+                    mixed_precision = "bf16"
 
             self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:
@@ -930,6 +953,7 @@ class AcceleratorState:
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
+                DistributedType.MULTI_HPU,
             ]:
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or fsdp_plugin is not None:
                     self.distributed_type = DistributedType.FSDP
