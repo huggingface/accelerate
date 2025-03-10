@@ -23,13 +23,7 @@ from torch.utils.data import DataLoader
 from accelerate.accelerator import Accelerator, DataLoaderConfiguration, GradientAccumulationPlugin
 from accelerate.state import GradientState
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import DistributedType, is_hpu_available, set_seed
-
-
-if is_hpu_available():
-    RTOL = 1e-2
-else:
-    RTOL = 1e-3
+from accelerate.utils import DistributedType, set_seed
 
 
 def check_model_parameters(model_a, model_b, did_step, iteration, **kwargs):
@@ -39,7 +33,7 @@ def check_model_parameters(model_a, model_b, did_step, iteration, **kwargs):
         if not did_step:
             # Grads should not be in sync
             assert (
-                torch.allclose(param.grad, grad_param.grad, **kwargs) is False
+                torch.equal(param.grad, grad_param.grad) is False
             ), f"Gradients in sync when they should not be at iteration {iteration}:\nmodel_a grad ({param.grad}) == model_b grad ({grad_param.grad})"
         else:
             # Grads should be in sync
@@ -297,7 +291,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(
                 ddp_model,
                 did_step or sync_each_batch,  # syncs at each grad_accum interval of if sync_each_batch==True
                 iteration,
-                rtol=RTOL,  # needs a relative tolerance due to roundoff errors
+                rtol=1e-3,  # needs a relative tolerance due to roundoff errors
             )
 
         if did_step:
