@@ -1885,7 +1885,9 @@ class FullyShardedDataParallelPlugin:
                 )
             elif self.fsdp_version == 2:  # at this point we're sure we are at a version that supports it
                 self.mixed_precision_policy = MixedPrecisionPolicy(
-                    param_dtype=dtype, reduce_dtype=dtype, output_dtype=dtype  # TODO(s1ro1): `cast_forward_inputs`?
+                    param_dtype=dtype,
+                    reduce_dtype=dtype,
+                    output_dtype=dtype,  # TODO(s1ro1): `cast_forward_inputs`?
                 )
         elif isinstance(self.mixed_precision_policy, dict):
             # Check for incompatible types
