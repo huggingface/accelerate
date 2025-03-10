@@ -28,8 +28,7 @@ from accelerate.hooks import (
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_multi_device, torch_device
-from accelerate.utils import is_hpu_available
+from accelerate.test_utils import require_multi_device, require_non_hpu, torch_device
 
 
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
@@ -154,6 +153,7 @@ class HooksModelTester(unittest.TestCase):
         output1 = test_model(x)
         assert not output1.requires_grad
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_align_devices_as_model_parallelism(self):
         model = ModelForTest()
@@ -165,29 +165,17 @@ class HooksModelTester(unittest.TestCase):
         # This will move each submodule on different devices
         add_hook_to_module(model.linear1, AlignDevicesHook(execution_device=0))
         add_hook_to_module(model.batchnorm, AlignDevicesHook(execution_device=0))
-
-        if is_hpu_available():
-            add_hook_to_module(model.linear2, AlignDevicesHook(execution_device=0))
-        else:
-            add_hook_to_module(model.linear2, AlignDevicesHook(execution_device=1))
+        add_hook_to_module(model.linear2, AlignDevicesHook(execution_device=1))
 
         assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device(torch_device)
         assert model.batchnorm.running_mean.device == torch.device(torch_device)
-
-        if is_hpu_available():
-            assert model.linear2.weight.device == torch.device(torch_device)
-        else:
-            assert model.linear2.weight.device == torch.device(torch_device.replace(":0", ":1"))
+        assert model.linear2.weight.device == torch.device(torch_device.replace(":0", ":1"))
 
         # We can still make a forward pass. The input does not need to be on any particular device
         x = torch.randn(2, 3)
         output = model(x)
-
-        if is_hpu_available():
-            assert output.device == torch.device(torch_device)
-        else:
-            assert output.device == torch.device(torch_device.replace(":0", ":1"))
+        assert output.device == torch.device(torch_device.replace(":0", ":1"))
 
         # We can add a general hook to put back output on same device as input.
         add_hook_to_module(model, AlignDevicesHook(io_same_device=True))
