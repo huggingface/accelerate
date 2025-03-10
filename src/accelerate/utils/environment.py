@@ -56,7 +56,7 @@ def convert_dict_to_env_variables(current_env: dict):
     return valid_env_items
 
 
-def str_to_bool(value) -> int:
+def str_to_bool(value, to_bool: bool = False) -> int | bool:
     """
     Converts a string representation of truth to `True` (1) or `False` (0).
 

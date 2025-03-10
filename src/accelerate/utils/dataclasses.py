@@ -1655,7 +1655,7 @@ class FullyShardedDataParallelPlugin:
             )
         if isinstance(self.reshard_after_forward, str):
             if self.fsdp_version == 2:
-                self.reshard_after_forward = str_to_bool(self.reshard_after_forward.lower())
+                self.reshard_after_forward = str_to_bool(self.reshard_after_forward.lower(), to_bool=True)
             else:
                 # We need to remap based on custom enum values for user readability
                 if self.reshard_after_forward.upper() in FSDP_SHARDING_STRATEGY:
@@ -1762,14 +1762,6 @@ class FullyShardedDataParallelPlugin:
 
         if isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)
-        if self.fsdp_version == 2 and self.mixed_precision_policy is None:
-            from torch.distributed.fsdp import (
-                MixedPrecisionPolicy,
-            )
-
-            self.mixed_precision_policy = (
-                MixedPrecisionPolicy()
-            )  # FSDP2 requires an `empty` policy as it does not support `None`
         if self.mixed_precision_policy is not None:
             self.validate_mixed_precision_policy()
 
@@ -1893,7 +1885,7 @@ class FullyShardedDataParallelPlugin:
                 )
             elif self.fsdp_version == 2:  # at this point we're sure we are at a version that supports it
                 self.mixed_precision_policy = MixedPrecisionPolicy(
-                    param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
+                    param_dtype=dtype, reduce_dtype=dtype, output_dtype=dtype  # TODO(s1ro1): `cast_forward_inputs`?
                 )
         elif isinstance(self.mixed_precision_policy, dict):
             # Check for incompatible types
