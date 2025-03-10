@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock, skip
+from unittest import mock
 
 import torch
 
@@ -36,6 +36,7 @@ from accelerate.test_utils.testing import (
     require_schedulefree,
     require_trackers,
     run_command,
+    run_first,
     slow,
 )
 from accelerate.utils import write_basic_config
@@ -148,6 +149,7 @@ class ExampleDifferenceTests(unittest.TestCase):
 
 @mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "1"})
 @require_huggingface_suite
+@run_first
 class FeatureExamplesTests(TempDirTestCase):
     clear_on_setup = False
 
@@ -276,9 +278,7 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/ddp_comm_hook.py", "--ddp_comm_hook", "fp16"]
         run_command(self.launch_args + testargs)
 
-    @skip(
-        reason="stable-diffusion-v1-5 is no longer available. Potentially `Comfy-Org/stable-diffusion-v1-5-archive` once diffusers support is added."
-    )
+    @require_fp16
     @require_multi_device
     def test_distributed_inference_examples_stable_diffusion(self):
         testargs = ["examples/inference/distributed/stable_diffusion.py"]
