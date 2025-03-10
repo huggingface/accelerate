@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
-
 from accelerate import debug_launcher
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
@@ -26,10 +24,11 @@ from accelerate.test_utils import (
     run_first,
     test_sync,
 )
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import patch_environment
 
 
-class SyncScheduler(unittest.TestCase):
+class SyncScheduler(AccelerateTestCase):
     test_file_path = path_in_accelerate_package("test_utils", "scripts", "test_sync.py")
 
     @require_cpu

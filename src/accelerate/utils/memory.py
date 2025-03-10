@@ -26,7 +26,6 @@ import warnings
 import torch
 from packaging import version
 
-from ..logging import get_logger
 from .imports import (
     is_cuda_available,
     is_hpu_available,
@@ -39,9 +38,6 @@ from .imports import (
     is_xpu_available,
 )
 from .versions import compare_versions
-
-
-logger = get_logger(__name__)
 
 
 def clear_device_cache(garbage_collection=False):
@@ -68,10 +64,7 @@ def clear_device_cache(garbage_collection=False):
         torch.cuda.empty_cache()
     elif is_hpu_available():
         # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
-        logger.warning_once(
-            "The HPU backend/device does not support `torch.cuda.empty_cache()` "
-            "since it reserves all device memory for the current process."
-        )
+        pass
 
 
 def release_memory(*objects):
