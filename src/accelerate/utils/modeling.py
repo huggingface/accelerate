@@ -27,7 +27,9 @@ from collections import OrderedDict, defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-import torch.nn as nn
+from torch import distributed as dist
+from torch import nn
+from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
 
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
@@ -1776,6 +1778,8 @@ def load_checkpoint_in_model(
     keep_in_fp32_modules: List[str] = None,
     offload_8bit_bnb: bool = False,
     strict: bool = False,
+    full_state_dict: bool = True,
+    broadcast_from_rank0: bool = True,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -1816,6 +1820,12 @@ def load_checkpoint_in_model(
         strict (`bool`, *optional*, defaults to `False`):
             Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
             state_dict.
+        full_state_dict (`bool`, *optional*, defaults to `True`): if this is set to `True`, all the tensors in the
+            returned state_dict will be gathered. No ShardedTensor and DTensor will be in the returned state_dict.
+        broadcast_from_rank0 (`bool`, *optional*, defaults to `True`): when the option is `True`, rank0 should receive
+            a full state_dict and will broadcast the tensors in the state_dict one by one to other ranks. Other ranks
+            will receive the tensors and shard according to the local shards in the model. `full_state_dict` must be
+            set to `True` when using this option.
 
     """
     if offload_8bit_bnb:
@@ -1897,11 +1907,25 @@ def load_checkpoint_in_model(
     model_keys = set(model.state_dict().keys())
     buffer_names = [name for name, _ in model.named_buffers()]
     for checkpoint_file in checkpoint_files:
-        loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
         if device_map is None:
-            model.load_state_dict(loaded_checkpoint, strict=strict)
+            loaded_checkpoint = (
+                load_state_dict(checkpoint_file, device_map=device_map)
+                if (not broadcast_from_rank0 or dist.is_initialized() and dist.get_rank() == 0)
+                else {}
+            )
+            set_model_state_dict(
+                model,
+                loaded_checkpoint,
+                options=StateDictOptions(
+                    full_state_dict=full_state_dict,
+                    strict=strict,
+                    broadcast_from_rank0=broadcast_from_rank0,
+                ),
+            )
             unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
         else:
+            loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+
             for param_name, param in loaded_checkpoint.items():
                 # skip SCB parameter (for 8-bit serialization)
                 if "SCB" in param_name:
