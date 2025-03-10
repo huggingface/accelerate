@@ -466,9 +466,10 @@ def require_pandas(test_case):
 
 def require_pippy(test_case):
     """
-    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed
+    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed It is
+    also checked if the test is running on a Gaudi1 device which doesn't support pippy.
     """
-    return unittest.skipUnless(is_pippy_available(), "test requires pippy")(test_case)
+    return unittest.skipUnless(is_pippy_available() and not is_habana_gaudi1(), "test requires pippy")(test_case)
 
 
 def require_import_timer(test_case):

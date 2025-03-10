@@ -71,7 +71,7 @@ class MultiDeviceTester(unittest.TestCase):
             execute_subprocess_async(cmd)
 
     @run_first
-    @require_non_hpu  # TODO: hangs on hpu
+    @require_non_hpu  # Synapse detected a device critical error that requires a restart
     @require_multi_device
     def test_multi_device_merge_fsdp_weights(self):
         print(f"Found {device_count} devices.")
@@ -109,7 +109,6 @@ class MultiDeviceTester(unittest.TestCase):
 
     @run_first
     @require_pippy
-    @require_non_hpu
     @require_non_xpu
     @require_torchvision
     @require_multi_device

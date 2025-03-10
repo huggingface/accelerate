@@ -31,8 +31,6 @@ from accelerate.test_utils.testing import (
     require_fp16,
     require_huggingface_suite,
     require_multi_device,
-    require_multi_gpu,
-    require_non_hpu,
     require_non_xpu,
     require_pippy,
     require_schedulefree,
@@ -293,17 +291,15 @@ class FeatureExamplesTests(TempDirTestCase):
         run_command(self.launch_args + testargs)
 
     @require_pippy
-    @require_non_hpu  # TODO: Investigate why this test fails on HPU (hccl group error)
     @require_non_xpu
-    @require_multi_gpu
+    @require_multi_device
     def test_pippy_examples_bert(self):
         testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
     @require_pippy
-    @require_non_hpu  # TODO: Investigate why this test fails on HPU (hccl group error)
     @require_non_xpu
-    @require_multi_gpu
+    @require_multi_device
     def test_pippy_examples_gpt2(self):
         testargs = ["examples/inference/pippy/gpt2.py"]
         run_command(self.launch_args + testargs)
