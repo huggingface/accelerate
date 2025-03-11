@@ -518,6 +518,13 @@ def launch_command_parser(subparsers=None):
     # fsdp arguments
     fsdp_args = parser.add_argument_group("FSDP Arguments", "Arguments related to Fully Shared Data Parallelism.")
     fsdp_args.add_argument(
+        "--fsdp_version",
+        type=str,
+        default="2",
+        choices=["1", "2"],
+        help="FSDP version to use. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
         "--fsdp_offload_params",
         default="false",
         type=str,
@@ -529,10 +536,16 @@ def launch_command_parser(subparsers=None):
         default=1e8,
         help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
     )
-    fsdp_args.add_argument(
-        "--fsdp_reshard_after_forward",  # TODO(s1ro1): Maybe too harsh to rename to FSDP2 naming and not support FSDP1 naming
+    fsdp_args.add_argument(  # We enable this for backwards compatibility, throw a warning if this is set in `FullyShardedDataParallelPlugin`
+        "--fsdp_sharding_strategy",
         type=str,
         default="FULL_SHARD",
+        help="FSDP's sharding strategy. (useful only when `use_fsdp` flag is passed and `fsdp_version=1`).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_reshard_after_forward",
+        type=str,
+        default="true",
         help="FSDP's Reshard After Forward Strategy. (useful only when `use_fsdp` flag is passed). Supports either boolean (FSDP2) or `FULL_SHARD | SHARD_GRAD_OP | NO_RESHARD` (FSDP1).",
     )
     fsdp_args.add_argument(

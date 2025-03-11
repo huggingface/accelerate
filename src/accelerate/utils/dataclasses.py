@@ -1442,7 +1442,11 @@ class FullyShardedDataParallelPlugin:
         fsdp_version (`int`, defaults to `1`):
             The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to
             FSDP2 format.
-        sharding_strategy (`Union[str, torch.distributed.fsdp.ShardingStrategy, bool]`, defaults to `'FULL_SHARD'`):
+        sharding_strategy (`Union[str, torch.distributed.fsdp.ShardingStrategy]`, defaults to `'FULL_SHARD'`):
+            Sharding strategy to use. Should be either a `str` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
+            Is deprecated in favor of `reshard_after_forward`.
+        reshard_after_forward (`Union[str, torch.distributed.fsdp.ShardingStrategy, bool]`, defaults to `'FULL_SHARD'`):
             Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
         backward_prefetch (`Union[str, torch.distributed.fsdp.BackwardPrefetch]`, defaults to `'NO_PREFETCH'`):
@@ -1504,6 +1508,13 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={
             "help": "The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to FSDP2 format."
+        },
+    )
+
+    sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
+        default=None,
+        metadata={
+            "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'. Is deprecated in favor of `reshard_after_forward` "
         },
     )
 
@@ -1643,12 +1654,33 @@ class FullyShardedDataParallelPlugin:
             ShardingStrategy,
         )
 
+        _fsdp2_warnings = {}
+
         env_prefix = "FSDP_"
         # Strategy: By default we should always assume that values are passed in, else we check the environment variables
         if self.fsdp_version is None:
             self.fsdp_version = int(os.environ.get(env_prefix + "VERSION", "1"))
 
+        if self.sharding_strategy is None:
+            self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
+        if isinstance(self.sharding_strategy, str):
+            if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
+                self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
+            if isinstance(self.sharding_strategy, int) or self.sharding_strategy.isdigit():
+                self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
+            else:
+                self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
+            _fsdp2_warnings.add(
+                "sharding_strategy is deprecated in favor of reshard_after_forward. "
+                "This will be removed in a future version of Accelerate."
+            )
+
         if self.reshard_after_forward is None:
+            reshard_after_forward = os.environ.get(env_prefix + "RESHARD_AFTER_FORWARD", True if self.fsdp_version == 2 else "FULL_SHARD")
+            if self.fsdp_version == 2:
+                self.reshard_after_forward = str_to_bool(reshard_after_forward.lower(), to_bool=True)
+            else:
+                self.reshard_after_forward = reshard_after_forward
             self.reshard_after_forward = os.environ.get(
                 env_prefix + "RESHARD_AFTER_FORWARD",
                 True if self.fsdp_version == 2 else "FULL_SHARD",
@@ -1687,7 +1719,9 @@ class FullyShardedDataParallelPlugin:
             else:
                 self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
         if self.fsdp_version == 2 and self.backward_prefetch is not None:
-            warnings.warn("Backward prefetch is not supported in FSDP2. Setting backward prefetch to None.")
+            _fsdp2_warnings.add(
+                "backward_prefetch is not supported in FSDP2. Setting backward prefetch to None."
+            )
             self.backward_prefetch = None
 
         self.set_state_dict_type()
@@ -1721,13 +1755,17 @@ class FullyShardedDataParallelPlugin:
         if self.use_orig_params is None and self.fsdp_version == 1:
             self.use_orig_params = str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False")) == 1
         if self.fsdp_version == 2 and self.use_orig_params is not None:
-            warnings.warn("use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters.")
+            _fsdp2_warnings.add(
+                "use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters."
+            )
             self.use_orig_params = None
 
         if self.sync_module_states is None and self.fsdp_version == 1:
             self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
         if self.fsdp_version == 2 and self.sync_module_states is not None:
-            warnings.warn("sync_module_states is obsolete in FSDP2, as it is not needed anymore.")
+            _fsdp2_warnings.add(
+                "sync_module_states is obsolete in FSDP2, as it is not needed anymore."
+            )
             self.sync_module_states = None
 
         if self.forward_prefetch is None and self.fsdp_version == 1:
@@ -1755,7 +1793,7 @@ class FullyShardedDataParallelPlugin:
         # Invariant: sync_module_states is None in FSDP2 only
         if self.cpu_ram_efficient_loading and self.sync_module_states is None:
             # TODO: how does this interact with FSDP2
-            warnings.warn(
+            _fsdp2_warnings.add(
                 "cpu_ram_efficient_loading is enabled, but sync_module_states is not set. "
                 "This is not properly tested yet in FSDP2"
             )
@@ -1783,6 +1821,13 @@ class FullyShardedDataParallelPlugin:
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
+
+        #  Single warning for all deprecation warnings due to FSDP2 conversion
+        if _fsdp2_warnings:
+            logger.warning(
+                "Multiple deprecation warnings due to FSDP2 conversion:"
+                "\n".join(_fsdp2_warnings)
+            )
 
     def set_state_dict_type(self, state_dict_type=None):
         """
