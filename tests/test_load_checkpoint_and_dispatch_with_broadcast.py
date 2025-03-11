@@ -15,6 +15,7 @@
 import argparse
 import functools
 import itertools
+import tempfile
 import unittest
 from typing import Any, Callable
 
@@ -26,7 +27,8 @@ from torch.distributed._composable.fsdp import fully_shard
 from torch.distributed._tensor import DTensor
 from torch.distributed.device_mesh import init_device_mesh
 from torch.distributed.fsdp.wrap import _recursive_wrap, transformer_auto_wrap_policy
-from transformers import AutoConfig, AutoModel
+from torch.nn.parallel import DistributedDataParallel
+from transformers import AutoConfig, AutoModel, PreTrainedModel
 from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
@@ -82,7 +84,7 @@ def load_checkpoint_and_dispatch_fsdp2():
 
     fsdp2_model.to_empty(device=device)
 
-    load_checkpoint_and_dispatch(fsdp2_model, model_path, strict=True)
+    load_checkpoint_and_dispatch(fsdp2_model, model_path, strict=True, broadcast_from_rank0=True)
 
     for (name, tensor), (fsdp2_name, fsdp2_tensor) in zip(
         itertools.chain(model.named_parameters(), model.named_buffers()),
@@ -128,6 +130,71 @@ def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
         torch.testing.assert_close(broadcasted_tensor, non_broadcasted_tensor, msg=broadcasted_name)
 
 
+@manage_process_group
+def load_checkpoint_and_dispatch_tp():
+    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+
+    pretrained_model_name_or_path = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
+    assert isinstance(model, PreTrainedModel)
+
+    with device, init_empty_weights():
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+        tp_model = AutoModel.from_config(config)
+        tp_model.tie_weights()
+        assert isinstance(tp_model, nn.Module)
+
+    mesh = init_device_mesh(device.type, (dist.get_world_size(),))
+    assert tp_model.supports_tp_plan
+    assert callable(tp_model.tensor_parallel)
+    tp_model.tensor_parallel(mesh)
+
+    tp_model._apply(lambda t: torch.empty_like(t, device=device) if t.device != device else t)
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        model.save_pretrained(tempdir)
+        load_checkpoint_and_dispatch(tp_model, tempdir, strict=True, broadcast_from_rank0=True)
+
+    for (name, tensor), (tp_name, tp_tensor) in zip(
+        itertools.chain(model.named_parameters(), model.named_buffers()),
+        itertools.chain(tp_model.named_parameters(), tp_model.named_buffers()),
+    ):
+        assert name == tp_name
+        if isinstance(tp_tensor, DTensor):
+            torch.testing.assert_close(tensor, tp_tensor.full_tensor(), msg=tp_name)
+        else:
+            torch.testing.assert_close(tensor, tp_tensor, msg=tp_name)
+
+
+@manage_process_group
+def load_checkpoint_and_dispatch_ddp():
+    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+
+    pretrained_model_name_or_path = "bigscience/bloom-560m"
+    model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
+
+    model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
+    assert isinstance(model, nn.Module)
+
+    with init_empty_weights():
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+        ddp_model = AutoModel.from_config(config)
+        ddp_model.tie_weights()
+        assert isinstance(ddp_model, nn.Module)
+
+    ddp_model.to_empty(device=device)
+    ddp_model = DistributedDataParallel(ddp_model)
+
+    load_checkpoint_and_dispatch(ddp_model.module, model_path, strict=True, broadcast_from_rank0=True)
+
+    for (name, tensor), (ddp_name, ddp_tensor) in zip(
+        itertools.chain(model.named_parameters(), model.named_buffers()),
+        itertools.chain(ddp_model.module.named_parameters(), ddp_model.module.named_buffers()),
+    ):
+        assert name == ddp_name
+        torch.testing.assert_close(tensor, ddp_tensor, msg=ddp_name)
+
+
 class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_fsdp2(self):
@@ -155,6 +222,32 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         )
         # successful return here == success - any errors would have caused an error in the sub-call
 
+    @require_multi_gpu
+    def test_load_checkpoint_and_dispatch_tp(self):
+        execute_subprocess_async(
+            cmd=[
+                "torchrun",
+                f"--nproc_per_node={torch.cuda.device_count()}",
+                f"--master_port={get_torch_dist_unique_port()}",
+                __file__,
+                "--tp",
+            ],
+        )
+        # successful return here == success - any errors would have caused an error in the sub-call
+
+    @require_multi_gpu
+    def test_load_checkpoint_and_dispatch_ddp(self):
+        execute_subprocess_async(
+            cmd=[
+                "torchrun",
+                f"--nproc_per_node={torch.cuda.device_count()}",
+                f"--master_port={get_torch_dist_unique_port()}",
+                __file__,
+                "--ddp",
+            ],
+        )
+        # successful return here == success - any errors would have caused an error in the sub-call
+
 
 if __name__ == "__main__":
     # The script below is meant to be run under torch.distributed, on a machine with multiple GPUs:
@@ -163,16 +256,24 @@ if __name__ == "__main__":
 
     class CLIArgs(argparse.Namespace):
         fsdp2: bool
+        tp: bool
+        ddp: bool
         no_broadcast_from_rank0: bool
 
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--fsdp2", action="store_true")
+    group.add_argument("--tp", action="store_true")
+    group.add_argument("--ddp", action="store_true")
     group.add_argument("--no_broadcast_from_rank0", action="store_true")
     args = parser.parse_args(namespace=CLIArgs())
 
     if args.fsdp2:
         load_checkpoint_and_dispatch_fsdp2()
+    elif args.tp:
+        load_checkpoint_and_dispatch_tp()
+    elif args.ddp:
+        load_checkpoint_and_dispatch_ddp
     elif args.no_broadcast_from_rank0:
         load_checkpoint_and_dispatch_no_broadcast_from_rank0()
     else:

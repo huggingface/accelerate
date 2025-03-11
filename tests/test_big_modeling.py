@@ -13,6 +13,7 @@
 # limitations under the License.
 import copy
 import gc
+import itertools
 import logging
 import os
 import unittest
@@ -768,6 +769,23 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         assert torch.allclose(expected, output.cpu(), atol=1e-5)
+
+    def test_load_checkpoint_and_dispatch_device_map_none(self):
+        model = ModelForTest()
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = ModelForTest()
+            new_model = load_checkpoint_and_dispatch(new_model, checkpoint, device_map=None)
+
+        for (name, tensor), (new_name, new_tensor) in zip(
+            itertools.chain(model.named_parameters(), model.named_buffers()),
+            itertools.chain(new_model.named_parameters(), new_model.named_buffers()),
+        ):
+            assert name == new_name
+            torch.testing.assert_close(tensor, new_tensor, msg=new_name)
 
     @require_multi_device
     def test_load_checkpoint_and_dispatch_multi_device(self):
