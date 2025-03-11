@@ -19,6 +19,7 @@ import pytest
 
 from accelerate import Accelerator
 from accelerate.logging import get_logger
+from accelerate.state import AcceleratorState
 
 
 def current_lineno() -> int:
@@ -41,7 +42,9 @@ class CustomLogger(logging.LoggerAdapter):
 
 @pytest.fixture(scope="module")
 def accelerator():
-    return Accelerator()
+    accelerator = Accelerator()
+    yield accelerator
+    AcceleratorState._reset_state(True)
 
 
 @pytest.mark.usefixtures("accelerator")
