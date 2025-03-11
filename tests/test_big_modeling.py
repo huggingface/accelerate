@@ -41,15 +41,23 @@ from accelerate.test_utils import (
     require_multi_device,
     require_multi_gpu,
     require_non_cpu,
+    require_non_hpu,
     require_non_torch_xla,
     slow,
     torch_device,
 )
-from accelerate.utils import offload_state_dict
+from accelerate.utils import is_hpu_available, offload_state_dict
 
 
 logger = logging.getLogger(__name__)
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
+
+if is_hpu_available():
+    ATOL = 1e-4
+    RTOL = 1e-4
+else:
+    ATOL = 1e-5
+    RTOL = 1e-5
 
 
 class ModelForTest(nn.Module):
@@ -200,14 +208,14 @@ class BigModelingTester(unittest.TestCase):
 
         cpu_offload(model, execution_device=device)
         output = model(x)
-        assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
         # Clean up for next test.
         remove_hook_from_submodules(model)
 
         cpu_offload(model, execution_device=device, offload_buffers=True)
         output = model(x)
-        assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     def test_cpu_offload_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
@@ -218,7 +226,7 @@ class BigModelingTester(unittest.TestCase):
 
         cpu_offload(model, execution_device=device, preload_module_classes=["ModuleWithUnusedSubModules"])
         output = model(x)
-        assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
         # Clean up for next test.
         remove_hook_from_submodules(model)
@@ -230,7 +238,7 @@ class BigModelingTester(unittest.TestCase):
             preload_module_classes=["ModuleWithUnusedSubModules"],
         )
         output = model(x)
-        assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @slow
     @require_non_cpu
@@ -253,7 +261,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             disk_offload(model, tmp_dir, execution_device=device)
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
             # Clean up for next test.
             remove_hook_from_submodules(model)
@@ -261,7 +269,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             disk_offload(model, tmp_dir, execution_device=device, offload_buffers=True)
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     def test_disk_offload_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
@@ -275,7 +283,7 @@ class BigModelingTester(unittest.TestCase):
                 model, tmp_dir, execution_device=device, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
             # Clean up for next test.
             remove_hook_from_submodules(model)
@@ -289,7 +297,7 @@ class BigModelingTester(unittest.TestCase):
                 preload_module_classes=["ModuleWithUnusedSubModules"],
             )
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @slow
     @require_non_cpu
@@ -326,8 +334,8 @@ class BigModelingTester(unittest.TestCase):
                 cm.records[0].message,
             )
             output_bis = model(x.to(torch_device))
-            assert torch.allclose(expected, output.cpu(), atol=1e-5)
-            assert torch.allclose(expected, output_bis.cpu(), atol=1e-5)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+            torch.testing.assert_close(expected, output_bis.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_dispatch_model(self):
@@ -340,7 +348,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), atol=1e-5)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_dispatch_model_with_non_persistent_buffers(self):
@@ -352,7 +360,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir, offload_buffers=True)
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), atol=1e-5)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_dispatch_model_tied_weights(self):
@@ -413,7 +421,7 @@ class BigModelingTester(unittest.TestCase):
 
         with torch.no_grad():
             output = model(x)
-        assert torch.allclose(expected, output.cpu(), atol=1e-5)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_cuda
     def test_dispatch_model_tied_weights_memory_with_nested_offload_cpu(self):
@@ -492,7 +500,7 @@ class BigModelingTester(unittest.TestCase):
             except Exception as e:
                 raise e
 
-        assert torch.allclose(expected, output.cpu(), atol=1e-5)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
         torch.cuda.empty_cache()
 
@@ -588,7 +596,7 @@ class BigModelingTester(unittest.TestCase):
                 except Exception as e:
                     raise e
 
-            assert torch.allclose(expected, output.cpu(), atol=1e-5)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
             torch.cuda.empty_cache()
 
@@ -609,9 +617,11 @@ class BigModelingTester(unittest.TestCase):
 
             assert (free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_dispatch_model_multi_devices(self):
         model = BiggerModelForTest()
+
         device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
 
         x = torch.randn(2, 3)
@@ -620,7 +630,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), atol=1e-5)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_dispatch_model_copy(self):
@@ -639,7 +649,7 @@ class BigModelingTester(unittest.TestCase):
         assert original_model.id == original_output_id
         assert copied_model.id == copied_output_id
         assert copied_model.linear1.forward is not original_model.linear1.forward
-        assert torch.allclose(expected, output.cpu(), atol=1e-5)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_dispatch_model_move_offloaded_model(self):
@@ -650,6 +660,7 @@ class BigModelingTester(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 model.to(0)
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_dispatch_model_move_model_warning(self):
         model = ModelForTest()
@@ -665,6 +676,7 @@ class BigModelingTester(unittest.TestCase):
                 model(x)
 
     @slow
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_dispatch_model_gpt2_on_two_devices(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -719,11 +731,13 @@ class BigModelingTester(unittest.TestCase):
                 model, device_map, offload_dir=tmp_dir, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), atol=1e-5)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_dispatch_model_with_unused_submodules_multi_device(self):
         model = ModelWithUnusedSubModulesForTest()
+
         device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
 
         x = torch.randn(2, 3)
@@ -734,7 +748,7 @@ class BigModelingTester(unittest.TestCase):
                 model, device_map, offload_dir=tmp_dir, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
-            assert torch.allclose(expected, output.cpu(), atol=1e-5)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_dispatch_model_force_hooks(self):
@@ -746,7 +760,7 @@ class BigModelingTester(unittest.TestCase):
 
         dispatch_model(model, device_map, force_hooks=True)
         output = model(x)
-        assert torch.allclose(expected, output.cpu(), atol=1e-5)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_load_checkpoint_and_dispatch(self):
@@ -768,7 +782,7 @@ class BigModelingTester(unittest.TestCase):
         assert new_model.linear2.weight.device == torch.device(torch_device)
 
         output = new_model(x)
-        assert torch.allclose(expected, output.cpu(), atol=1e-5)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     def test_load_checkpoint_and_dispatch_device_map_none(self):
         model = ModelForTest()
@@ -787,9 +801,11 @@ class BigModelingTester(unittest.TestCase):
             assert name == new_name
             torch.testing.assert_close(tensor, new_tensor, msg=new_name)
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_and_dispatch_multi_device(self):
         model = BiggerModelForTest()
+
         device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
 
         x = torch.randn(2, 3)
@@ -809,7 +825,7 @@ class BigModelingTester(unittest.TestCase):
         assert new_model.linear4.weight.device == torch.device(torch_device.replace(":0", ":1"))
 
         output = new_model(x)
-        assert torch.allclose(expected, output.cpu(), atol=1e-5)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_load_checkpoint_and_dispatch_with_unused_submodules(self):
@@ -835,11 +851,13 @@ class BigModelingTester(unittest.TestCase):
         assert new_model.linear4.linear.weight.device == torch.device(torch_device)
 
         output = new_model(x)
-        assert torch.allclose(expected, output.cpu(), atol=1e-5)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_and_dispatch_multi_device_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
+
         device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
 
         x = torch.randn(2, 3)
@@ -861,7 +879,7 @@ class BigModelingTester(unittest.TestCase):
         assert new_model.linear4.linear.weight.device == torch.device(torch_device.replace(":0", ":1"))
 
         output = new_model(x)
-        assert torch.allclose(expected, output.cpu(), atol=1e-5)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_cpu_offload_with_hook(self):
@@ -893,9 +911,10 @@ class BigModelingTester(unittest.TestCase):
         hook2.offload()
         assert model2.weight.device == torch.device("cpu")
 
-    @require_non_torch_xla
     @slow
     @require_bnb
+    @require_non_hpu  # bnb is not supported on hpu
+    @require_non_torch_xla
     @require_multi_device
     def test_dispatch_model_bnb(self):
         """Tests that `dispatch_model` quantizes int8 layers"""
