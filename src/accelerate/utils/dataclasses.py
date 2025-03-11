@@ -1676,7 +1676,9 @@ class FullyShardedDataParallelPlugin:
             )
 
         if self.reshard_after_forward is None:
-            reshard_after_forward = os.environ.get(env_prefix + "RESHARD_AFTER_FORWARD", True if self.fsdp_version == 2 else "FULL_SHARD")
+            reshard_after_forward = os.environ.get(
+                env_prefix + "RESHARD_AFTER_FORWARD", True if self.fsdp_version == 2 else "FULL_SHARD"
+            )
             if self.fsdp_version == 2:
                 self.reshard_after_forward = str_to_bool(reshard_after_forward.lower(), to_bool=True)
             else:
@@ -1719,9 +1721,7 @@ class FullyShardedDataParallelPlugin:
             else:
                 self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
         if self.fsdp_version == 2 and self.backward_prefetch is not None:
-            _fsdp2_warnings.add(
-                "backward_prefetch is not supported in FSDP2. Setting backward prefetch to None."
-            )
+            _fsdp2_warnings.add("backward_prefetch is not supported in FSDP2. Setting backward prefetch to None.")
             self.backward_prefetch = None
 
         self.set_state_dict_type()
@@ -1755,17 +1755,13 @@ class FullyShardedDataParallelPlugin:
         if self.use_orig_params is None and self.fsdp_version == 1:
             self.use_orig_params = str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False")) == 1
         if self.fsdp_version == 2 and self.use_orig_params is not None:
-            _fsdp2_warnings.add(
-                "use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters."
-            )
+            _fsdp2_warnings.add("use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters.")
             self.use_orig_params = None
 
         if self.sync_module_states is None and self.fsdp_version == 1:
             self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
         if self.fsdp_version == 2 and self.sync_module_states is not None:
-            _fsdp2_warnings.add(
-                "sync_module_states is obsolete in FSDP2, as it is not needed anymore."
-            )
+            _fsdp2_warnings.add("sync_module_states is obsolete in FSDP2, as it is not needed anymore.")
             self.sync_module_states = None
 
         if self.forward_prefetch is None and self.fsdp_version == 1:
@@ -1824,10 +1820,7 @@ class FullyShardedDataParallelPlugin:
 
         #  Single warning for all deprecation warnings due to FSDP2 conversion
         if _fsdp2_warnings:
-            logger.warning(
-                "Multiple deprecation warnings due to FSDP2 conversion:"
-                "\n".join(_fsdp2_warnings)
-            )
+            logger.warning("Multiple deprecation warnings due to FSDP2 conversion:" "\n".join(_fsdp2_warnings))
 
     def set_state_dict_type(self, state_dict_type=None):
         """
