@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import List, Union
 from unittest import mock
 
-import pytest
 import torch
 
 import accelerate
@@ -54,6 +53,7 @@ from ..utils import (
     is_npu_available,
     is_pandas_available,
     is_pippy_available,
+    is_pytest_available,
     is_schedulefree_available,
     is_sdaa_available,
     is_tensorboard_available,
@@ -531,8 +531,13 @@ def run_first(test_case):
     This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
     allocation conflicts.
+
+    If pytest is not installed, test will be returned as is.
     """
-    return pytest.mark.order(1)(test_case)
+    if is_pytest_available():
+        import pytest
+        return pytest.mark.order(1)(test_case)
+    return test_case
 
 
 class TempDirTestCase(unittest.TestCase):
