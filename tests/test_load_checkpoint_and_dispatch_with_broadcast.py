@@ -28,174 +28,179 @@ from torch.distributed._tensor import DTensor
 from torch.distributed.device_mesh import init_device_mesh
 from torch.distributed.fsdp.wrap import _recursive_wrap, transformer_auto_wrap_policy
 from torch.nn.parallel import DistributedDataParallel
-from transformers import AutoConfig, AutoModel, PreTrainedModel
-from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.test_utils import execute_subprocess_async, get_torch_dist_unique_port, require_multi_gpu
+from accelerate.test_utils.testing import require_torch_min_version, require_transformers
+from accelerate.utils.imports import is_transformers_available
 
 
-def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Manage the creation and destruction of the distributed process group for the wrapped function."""
+if is_transformers_available():
+    from transformers import AutoConfig, AutoModel, PreTrainedModel
+    from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        dist.init_process_group(world_size=torch.cuda.device_count())
-        try:
-            return func(*args, **kwargs)
-        finally:
-            dist.destroy_process_group()
+    def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
+        """Manage the creation and destruction of the distributed process group for the wrapped function."""
 
-    return wrapped
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            dist.init_process_group(world_size=torch.cuda.device_count())
+            try:
+                return func(*args, **kwargs)
+            finally:
+                dist.destroy_process_group()
 
+        return wrapped
 
-@manage_process_group
-def load_checkpoint_and_dispatch_fsdp2():
-    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+    @require_torch_min_version(version="2.4.0")
+    @manage_process_group
+    def load_checkpoint_and_dispatch_fsdp2():
+        torch.cuda.set_device(device := torch.device(dist.get_rank()))
 
-    pretrained_model_name_or_path = "bigscience/bloom-560m"
-    model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
+        pretrained_model_name_or_path = "bigscience/bloom-560m"
+        model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
 
-    model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
-    assert isinstance(model, nn.Module)
+        model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
+        assert isinstance(model, nn.Module)
 
-    with init_empty_weights():
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        fsdp2_model = AutoModel.from_config(config)
-        fsdp2_model.tie_weights()
-        assert isinstance(fsdp2_model, nn.Module)
+        with init_empty_weights():
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+            fsdp2_model = AutoModel.from_config(config)
+            fsdp2_model.tie_weights()
+            assert isinstance(fsdp2_model, nn.Module)
 
-    mesh = init_device_mesh(device.type, (dist.get_world_size(),))
-    fsdp2_model, _ = _recursive_wrap(
-        fsdp2_model,
-        auto_wrap_policy=functools.partial(
-            transformer_auto_wrap_policy,
-            transformer_layer_cls={
-                GPT2Block,
-                type(fsdp2_model),
-            },
-        ),
-        wrapper_cls=functools.partial(
-            fully_shard,
-            mesh=mesh,
-        ),
-        ignored_modules=set(),
-        ignored_params=set(),
-    )
+        mesh = init_device_mesh(device.type, (dist.get_world_size(),))
+        fsdp2_model, _ = _recursive_wrap(
+            fsdp2_model,
+            auto_wrap_policy=functools.partial(
+                transformer_auto_wrap_policy,
+                transformer_layer_cls={
+                    GPT2Block,
+                    type(fsdp2_model),
+                },
+            ),
+            wrapper_cls=functools.partial(
+                fully_shard,
+                mesh=mesh,
+            ),
+            ignored_modules=set(),
+            ignored_params=set(),
+        )
 
-    fsdp2_model.to_empty(device=device)
+        fsdp2_model.to_empty(device=device)
 
-    load_checkpoint_and_dispatch(fsdp2_model, model_path, strict=True, broadcast_from_rank0=True)
+        load_checkpoint_and_dispatch(fsdp2_model, model_path, strict=True, broadcast_from_rank0=True)
 
-    for (name, tensor), (fsdp2_name, fsdp2_tensor) in zip(
-        itertools.chain(model.named_parameters(), model.named_buffers()),
-        itertools.chain(fsdp2_model.named_parameters(), fsdp2_model.named_buffers()),
-    ):
-        assert name == fsdp2_name
-        assert isinstance(fsdp2_tensor, DTensor), fsdp2_name
-        torch.testing.assert_close(tensor, fsdp2_tensor.full_tensor(), msg=fsdp2_name)
+        for (name, tensor), (fsdp2_name, fsdp2_tensor) in zip(
+            itertools.chain(model.named_parameters(), model.named_buffers()),
+            itertools.chain(fsdp2_model.named_parameters(), fsdp2_model.named_buffers()),
+        ):
+            assert name == fsdp2_name
+            assert isinstance(fsdp2_tensor, DTensor), fsdp2_name
+            torch.testing.assert_close(tensor, fsdp2_tensor.full_tensor(), msg=fsdp2_name)
 
+    @require_torch_min_version(version="2.4.0")
+    @manage_process_group
+    def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
+        torch.cuda.set_device(device := torch.device(dist.get_rank()))
 
-@manage_process_group
-def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
-    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+        pretrained_model_name_or_path = "bigscience/bloom-560m"
+        model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
 
-    pretrained_model_name_or_path = "bigscience/bloom-560m"
-    model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
+        with init_empty_weights():
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+            broadcasted_model = AutoModel.from_config(config)
+            broadcasted_model.tie_weights()
+            assert isinstance(broadcasted_model, nn.Module)
 
-    with init_empty_weights():
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        broadcasted_model = AutoModel.from_config(config)
-        broadcasted_model.tie_weights()
-        assert isinstance(broadcasted_model, nn.Module)
+        broadcasted_model.to_empty(device=device)
 
-    broadcasted_model.to_empty(device=device)
+        load_checkpoint_and_dispatch(broadcasted_model, model_path, strict=True, broadcast_from_rank0=True)
 
-    load_checkpoint_and_dispatch(broadcasted_model, model_path, strict=True, broadcast_from_rank0=True)
+        with init_empty_weights():
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+            non_broadcasted_model = AutoModel.from_config(config)
+            non_broadcasted_model.tie_weights()
+            assert isinstance(non_broadcasted_model, nn.Module)
 
-    with init_empty_weights():
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        non_broadcasted_model = AutoModel.from_config(config)
-        non_broadcasted_model.tie_weights()
-        assert isinstance(non_broadcasted_model, nn.Module)
+        non_broadcasted_model.to_empty(device=device)
 
-    non_broadcasted_model.to_empty(device=device)
+        load_checkpoint_and_dispatch(non_broadcasted_model, model_path, strict=True, broadcast_from_rank0=False)
 
-    load_checkpoint_and_dispatch(non_broadcasted_model, model_path, strict=True, broadcast_from_rank0=False)
+        for (broadcasted_name, broadcasted_tensor), (non_broadcasted_name, non_broadcasted_tensor) in zip(
+            itertools.chain(broadcasted_model.named_parameters(), broadcasted_model.named_buffers()),
+            itertools.chain(non_broadcasted_model.named_parameters(), non_broadcasted_model.named_buffers()),
+        ):
+            assert broadcasted_name == non_broadcasted_name
+            torch.testing.assert_close(broadcasted_tensor, non_broadcasted_tensor, msg=broadcasted_name)
 
-    for (broadcasted_name, broadcasted_tensor), (non_broadcasted_name, non_broadcasted_tensor) in zip(
-        itertools.chain(broadcasted_model.named_parameters(), broadcasted_model.named_buffers()),
-        itertools.chain(non_broadcasted_model.named_parameters(), non_broadcasted_model.named_buffers()),
-    ):
-        assert broadcasted_name == non_broadcasted_name
-        torch.testing.assert_close(broadcasted_tensor, non_broadcasted_tensor, msg=broadcasted_name)
+    @require_torch_min_version(version="2.4.0")
+    @manage_process_group
+    def load_checkpoint_and_dispatch_tp():
+        torch.cuda.set_device(device := torch.device(dist.get_rank()))
 
+        pretrained_model_name_or_path = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
+        assert isinstance(model, PreTrainedModel)
 
-@manage_process_group
-def load_checkpoint_and_dispatch_tp():
-    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+        with device, init_empty_weights():
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+            tp_model = AutoModel.from_config(config)
+            tp_model.tie_weights()
+            assert isinstance(tp_model, nn.Module)
 
-    pretrained_model_name_or_path = "hf-internal-testing/tiny-random-LlamaForCausalLM"
-    model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
-    assert isinstance(model, PreTrainedModel)
+        mesh = init_device_mesh(device.type, (dist.get_world_size(),))
+        assert tp_model.supports_tp_plan
+        assert callable(tp_model.tensor_parallel)
+        tp_model.tensor_parallel(mesh)
 
-    with device, init_empty_weights():
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        tp_model = AutoModel.from_config(config)
-        tp_model.tie_weights()
-        assert isinstance(tp_model, nn.Module)
+        tp_model._apply(lambda t: torch.empty_like(t, device=device) if t.device != device else t)
 
-    mesh = init_device_mesh(device.type, (dist.get_world_size(),))
-    assert tp_model.supports_tp_plan
-    assert callable(tp_model.tensor_parallel)
-    tp_model.tensor_parallel(mesh)
+        with tempfile.TemporaryDirectory() as tempdir:
+            model.save_pretrained(tempdir)
+            load_checkpoint_and_dispatch(tp_model, tempdir, strict=True, broadcast_from_rank0=True)
 
-    tp_model._apply(lambda t: torch.empty_like(t, device=device) if t.device != device else t)
+        for (name, tensor), (tp_name, tp_tensor) in zip(
+            itertools.chain(model.named_parameters(), model.named_buffers()),
+            itertools.chain(tp_model.named_parameters(), tp_model.named_buffers()),
+        ):
+            assert name == tp_name
+            if isinstance(tp_tensor, DTensor):
+                torch.testing.assert_close(tensor, tp_tensor.full_tensor(), msg=tp_name)
+            else:
+                torch.testing.assert_close(tensor, tp_tensor, msg=tp_name)
 
-    with tempfile.TemporaryDirectory() as tempdir:
-        model.save_pretrained(tempdir)
-        load_checkpoint_and_dispatch(tp_model, tempdir, strict=True, broadcast_from_rank0=True)
+    @require_torch_min_version(version="2.4.0")
+    @manage_process_group
+    def load_checkpoint_and_dispatch_ddp():
+        torch.cuda.set_device(device := torch.device(dist.get_rank()))
 
-    for (name, tensor), (tp_name, tp_tensor) in zip(
-        itertools.chain(model.named_parameters(), model.named_buffers()),
-        itertools.chain(tp_model.named_parameters(), tp_model.named_buffers()),
-    ):
-        assert name == tp_name
-        if isinstance(tp_tensor, DTensor):
-            torch.testing.assert_close(tensor, tp_tensor.full_tensor(), msg=tp_name)
-        else:
-            torch.testing.assert_close(tensor, tp_tensor, msg=tp_name)
+        pretrained_model_name_or_path = "bigscience/bloom-560m"
+        model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
 
+        model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
+        assert isinstance(model, nn.Module)
 
-@manage_process_group
-def load_checkpoint_and_dispatch_ddp():
-    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+        with init_empty_weights():
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+            ddp_model = AutoModel.from_config(config)
+            ddp_model.tie_weights()
+            assert isinstance(ddp_model, nn.Module)
 
-    pretrained_model_name_or_path = "bigscience/bloom-560m"
-    model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
+        ddp_model.to_empty(device=device)
+        ddp_model = DistributedDataParallel(ddp_model)
 
-    model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
-    assert isinstance(model, nn.Module)
+        load_checkpoint_and_dispatch(ddp_model.module, model_path, strict=True, broadcast_from_rank0=True)
 
-    with init_empty_weights():
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        ddp_model = AutoModel.from_config(config)
-        ddp_model.tie_weights()
-        assert isinstance(ddp_model, nn.Module)
-
-    ddp_model.to_empty(device=device)
-    ddp_model = DistributedDataParallel(ddp_model)
-
-    load_checkpoint_and_dispatch(ddp_model.module, model_path, strict=True, broadcast_from_rank0=True)
-
-    for (name, tensor), (ddp_name, ddp_tensor) in zip(
-        itertools.chain(model.named_parameters(), model.named_buffers()),
-        itertools.chain(ddp_model.module.named_parameters(), ddp_model.module.named_buffers()),
-    ):
-        assert name == ddp_name
-        torch.testing.assert_close(tensor, ddp_tensor, msg=ddp_name)
+        for (name, tensor), (ddp_name, ddp_tensor) in zip(
+            itertools.chain(model.named_parameters(), model.named_buffers()),
+            itertools.chain(ddp_model.module.named_parameters(), ddp_model.module.named_buffers()),
+        ):
+            assert name == ddp_name
+            torch.testing.assert_close(tensor, ddp_tensor, msg=ddp_name)
 
 
 class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
+    @require_transformers
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_fsdp2(self):
         execute_subprocess_async(
@@ -209,6 +214,7 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         )
         # successful return here == success - any errors would have caused an error in the sub-call
 
+    @require_transformers
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_no_broadcast_from_rank0(self):
         execute_subprocess_async(
@@ -222,6 +228,7 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         )
         # successful return here == success - any errors would have caused an error in the sub-call
 
+    @require_transformers
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_tp(self):
         execute_subprocess_async(
@@ -235,6 +242,7 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         )
         # successful return here == success - any errors would have caused an error in the sub-call
 
+    @require_transformers
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_ddp(self):
         execute_subprocess_async(
