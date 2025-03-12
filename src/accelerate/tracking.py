@@ -738,9 +738,9 @@ class MLflowTracker(GeneralTracker):
             local_dir (`str`):
                 Path to the directory to be logged as an artifact.
             artifact_path (`str`, *optional*):
-                Directory within the run's artifact directory where the artifact will be logged.
-                If omitted, the artifact will be logged to the root of the run's artifact directory.
-                The run step. If included, the artifact will be affiliated with this step.
+                Directory within the run's artifact directory where the artifact will be logged. If omitted, the
+                artifact will be logged to the root of the run's artifact directory. The run step. If included, the
+                artifact will be affiliated with this step.
         """
         import mlflow
 
@@ -755,9 +755,9 @@ class MLflowTracker(GeneralTracker):
             local_path (`str`):
                 Path to the file to be logged as an artifact.
             artifact_path (`str`, *optional*):
-                Directory within the run's artifact directory where the artifact will be logged.
-                If omitted, the artifact will be logged to the root of the run's artifact directory.
-                The run step. If included, the artifact will be affiliated with this step.
+                Directory within the run's artifact directory where the artifact will be logged. If omitted, the
+                artifact will be logged to the root of the run's artifact directory. The run step. If included, the
+                artifact will be affiliated with this step.
         """
         import mlflow
 

@@ -444,7 +444,8 @@ def require_torchao(test_case):
 
 def require_matplotlib(test_case):
     """
-    Decorator marking a test that requires matplotlib installed. These tests are skipped when matplotlib isn't installed
+    Decorator marking a test that requires matplotlib installed. These tests are skipped when matplotlib isn't
+    installed
     """
     return unittest.skipUnless(is_matplotlib_available(), "test requires matplotlib")(test_case)
 
