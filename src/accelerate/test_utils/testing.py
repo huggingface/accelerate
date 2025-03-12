@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import List, Union
 from unittest import mock
 
-import pytest
 import torch
 
 import accelerate
@@ -48,14 +47,13 @@ from ..utils import (
     is_habana_gaudi1,
     is_hpu_available,
     is_import_timer_available,
-    is_matplotlib_available,
-    is_mlflow_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
     is_pandas_available,
     is_pippy_available,
+    is_pytest_available,
     is_schedulefree_available,
     is_sdaa_available,
     is_tensorboard_available,
@@ -466,13 +464,6 @@ def require_pandas(test_case):
     return unittest.skipUnless(is_pandas_available(), "test requires pandas")(test_case)
 
 
-def require_mlflow(test_case):
-    """
-    Decorator marking a test that requires mlflow installed. These tests are skipped when mlflow isn't installed
-    """
-    return unittest.skipUnless(is_mlflow_available(), "test requires mlflow")(test_case)
-
-
 def require_pippy(test_case):
     """
     Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed It is
@@ -502,14 +493,6 @@ def require_torchao(test_case):
     Decorator marking a test that requires torchao installed. These tests are skipped when torchao isn't installed
     """
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
-
-
-def require_matplotlib(test_case):
-    """
-    Decorator marking a test that requires matplotlib installed. These tests are skipped when matplotlib isn't
-    installed
-    """
-    return unittest.skipUnless(is_matplotlib_available(), "test requires matplotlib")(test_case)
 
 
 _atleast_one_tracker_available = (
@@ -548,8 +531,14 @@ def run_first(test_case):
     This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
     allocation conflicts.
+
+    If pytest is not installed, test will be returned as is.
     """
-    return pytest.mark.order(1)(test_case)
+    if is_pytest_available():
+        import pytest
+
+        return pytest.mark.order(1)(test_case)
+    return test_case
 
 
 class TempDirTestCase(unittest.TestCase):
