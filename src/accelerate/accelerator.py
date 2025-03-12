@@ -2086,8 +2086,8 @@ class Accelerator:
 
     def _prepare_device_mesh(self):
         """
-        Prepare the device mesh for distributed training.
-        The dataloader will determine how to load data based on the device mesh.
+        Prepare the device mesh for distributed training. The dataloader will determine how to load data based on the
+        device mesh.
         """
         if self.state.torch_tp_plugin:
             return self.state.torch_tp_plugin.torch_device_mesh
