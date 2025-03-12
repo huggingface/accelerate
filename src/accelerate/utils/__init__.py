@@ -104,6 +104,7 @@ from .imports import (
     is_import_timer_available,
     is_ipex_available,
     is_lomo_available,
+    is_matplotlib_available,
     is_megatron_lm_available,
     is_mlflow_available,
     is_mlu_available,
