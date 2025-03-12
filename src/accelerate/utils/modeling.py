@@ -1929,6 +1929,7 @@ def load_checkpoint_in_model(
             if is_torch_version(">=", "2.2.0"):
                 from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
 
+                broadcast_from_rank0 &= is_torch_version(">=", "2.4.0")
                 loaded_checkpoint = (
                     load_state_dict(checkpoint_file, device_map=device_map)
                     if not broadcast_from_rank0 or dist.get_rank() == 0
@@ -1940,7 +1941,7 @@ def load_checkpoint_in_model(
                     options=StateDictOptions(
                         full_state_dict=full_state_dict,
                         strict=strict,
-                        broadcast_from_rank0=broadcast_from_rank0,
+                        **({"broadcast_from_rank0": broadcast_from_rank0} if is_torch_version(">=", "2.4.0") else {}),
                     ),
                 )
             else:
