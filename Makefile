@@ -83,7 +83,7 @@ prepare_release:
 # Make sure this is ran in a fresh venv of some form
 install_test_release:
 	pip uninstall accelerate -y
-	pip install -i https://testpypi.python.org/pypi --extra-index-url https://pypi.org/simple accelerate
+	pip install -i https://testpypi.python.org/pypi --extra-index-url https://pypi.org/simple accelerate$(if $(version),==$(version),)
 
 # Run as `make target=testpypi upload_release`
 upload_release:
