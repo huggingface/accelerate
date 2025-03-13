@@ -1755,7 +1755,7 @@ class Accelerator:
         deepspeed_plugin = self.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
-        tp_size = self.deepspeed_plugin.deepspeed_config["tensor_parallel"].get("autotp_size", 0)
+        tp_size = deepspeed_plugin.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0)
         if tp_size > 1:
             if not compare_versions("deepspeed", ">=", "0.16.4"):
                 raise ImportError(
@@ -3510,7 +3510,7 @@ class Accelerator:
 
         if self.distributed_type == DistributedType.DEEPSPEED:
             zero3_sharding = self.deepspeed_config["zero_optimization"]["stage"] == 3
-            tp_sharding = self.deepspeed_config["tensor_parallel"].get("autotp_size", 0) > 1
+            tp_sharding = self.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0) > 1
             if zero3_sharding or tp_sharding:
                 if model.zero_gather_16bit_weights_on_model_save():
                     if tp_sharding and not compare_versions("deepspeed", ">=", "0.16.4"):
