@@ -51,7 +51,6 @@ if is_transformers_available():
 
         return wrapped
 
-    @require_torch_min_version(version="2.4.0")
     @manage_process_group
     def load_checkpoint_and_dispatch_fsdp2():
         torch.cuda.set_device(device := torch.device(dist.get_rank()))
@@ -98,7 +97,6 @@ if is_transformers_available():
             assert isinstance(fsdp2_tensor, DTensor), fsdp2_name
             torch.testing.assert_close(tensor, fsdp2_tensor.full_tensor(), msg=fsdp2_name)
 
-    @require_torch_min_version(version="2.4.0")
     @manage_process_group
     def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
         torch.cuda.set_device(device := torch.device(dist.get_rank()))
@@ -133,7 +131,6 @@ if is_transformers_available():
             assert broadcasted_name == non_broadcasted_name
             torch.testing.assert_close(broadcasted_tensor, non_broadcasted_tensor, msg=broadcasted_name)
 
-    @require_torch_min_version(version="2.4.0")
     @manage_process_group
     def load_checkpoint_and_dispatch_tp():
         torch.cuda.set_device(device := torch.device(dist.get_rank()))
@@ -169,7 +166,6 @@ if is_transformers_available():
             else:
                 torch.testing.assert_close(tensor, tp_tensor, msg=tp_name)
 
-    @require_torch_min_version(version="2.4.0")
     @manage_process_group
     def load_checkpoint_and_dispatch_ddp():
         torch.cuda.set_device(device := torch.device(dist.get_rank()))
@@ -199,9 +195,10 @@ if is_transformers_available():
             torch.testing.assert_close(tensor, ddp_tensor, msg=ddp_name)
 
 
+@require_torch_min_version(version="2.4.0")
+@require_transformers
+@require_multi_gpu
 class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
-    @require_transformers
-    @require_multi_gpu
     def test_load_checkpoint_and_dispatch_fsdp2(self):
         execute_subprocess_async(
             cmd=[
@@ -214,8 +211,6 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         )
         # successful return here == success - any errors would have caused an error in the sub-call
 
-    @require_transformers
-    @require_multi_gpu
     def test_load_checkpoint_and_dispatch_no_broadcast_from_rank0(self):
         execute_subprocess_async(
             cmd=[
@@ -228,8 +223,6 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         )
         # successful return here == success - any errors would have caused an error in the sub-call
 
-    @require_transformers
-    @require_multi_gpu
     def test_load_checkpoint_and_dispatch_tp(self):
         execute_subprocess_async(
             cmd=[
@@ -242,8 +235,6 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         )
         # successful return here == success - any errors would have caused an error in the sub-call
 
-    @require_transformers
-    @require_multi_gpu
     def test_load_checkpoint_and_dispatch_ddp(self):
         execute_subprocess_async(
             cmd=[
