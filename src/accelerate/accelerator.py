@@ -1755,6 +1755,21 @@ class Accelerator:
         deepspeed_plugin = self.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        tp_size = self.deepspeed_plugin.deepspeed_config["tensor_parallel"].get("autotp_size", 0)
+        if tp_size > 1:
+            if not compare_versions("deepspeed", ">=", "0.16.4"):
+                raise ImportError(
+                    "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
+                )
+            if not is_torch_version(">=", "2.2.0"):
+                raise ImportError(
+                    "Tried to use TP, but `torch.distributed.device_mesh` requires PyTorch >= 2.2.0. Please upgrade your PyTorch version"
+                )
+            from torch.distributed.device_mesh import init_device_mesh
+
+            mesh_dim_name = "tp"
+            self.state.ds_device_mesh = init_device_mesh(self.device.type, (tp_size,), mesh_dim_names=(mesh_dim_name,))
+
         result = [
             self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
             for obj in args
@@ -2134,6 +2149,18 @@ class Accelerator:
                 result[i] = optimizer
         return tuple(result)
 
+    def _prepare_device_mesh(self):
+        """
+        Prepare the device mesh for distributed training. The dataloader will determine how to load data based on the
+        device mesh.
+        """
+        if self.state.torch_tp_plugin:
+            return self.state.torch_tp_plugin.torch_device_mesh
+        elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
+            return self.state.ds_device_mesh
+        else:
+            return None
+
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
             raise ImportError(
@@ -2219,6 +2246,9 @@ class Accelerator:
             return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
+
+        device_mesh = self._prepare_device_mesh()
+
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2234,7 +2264,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
-            torch_device_mesh=self.state.torch_tp_plugin.torch_device_mesh if self.state.torch_tp_plugin else None,
+            torch_device_mesh=device_mesh,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
@@ -3479,9 +3509,19 @@ class Accelerator:
         """
 
         if self.distributed_type == DistributedType.DEEPSPEED:
-            if self.deepspeed_config["zero_optimization"]["stage"] == 3:
+            zero3_sharding = self.deepspeed_config["zero_optimization"]["stage"] == 3
+            tp_sharding = self.deepspeed_config["tensor_parallel"].get("autotp_size", 0) > 1
+            if zero3_sharding or tp_sharding:
                 if model.zero_gather_16bit_weights_on_model_save():
-                    state_dict = model._zero3_consolidated_16bit_state_dict()
+                    if tp_sharding and not compare_versions("deepspeed", ">=", "0.16.4"):
+                        raise ImportError(
+                            "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
+                        )
+                    state_dict = (
+                        model._consolidated_16bit_state_dict()
+                        if tp_sharding
+                        else model._zero3_consolidated_16bit_state_dict()
+                    )
                 else:
                     raise ValueError(
                         "Cannot get 16bit model weights because `stage3_gather_16bit_weights_on_model_save` in DeepSpeed config is False. "
