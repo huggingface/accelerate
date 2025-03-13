@@ -1924,9 +1924,10 @@ def load_checkpoint_in_model(
     unexpected_keys = set()
     model_keys = set(model.state_dict().keys())
     buffer_names = [name for name, _ in model.named_buffers()]
+    model_devices = {t.device for t in model.state_dict().values() if isinstance(t, torch.Tensor)}
     for checkpoint_file in checkpoint_files:
         if device_map is None:
-            if is_torch_version(">=", "2.2.0"):
+            if is_torch_version(">=", "2.2.0") and len(model_devices) <= 1:
                 from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
 
                 broadcast_from_rank0 &= is_torch_version(">=", "2.4.0")
