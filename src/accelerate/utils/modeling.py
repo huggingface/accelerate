@@ -1931,10 +1931,8 @@ def load_checkpoint_in_model(
             # exception for multi-device loading was made for the meta device in torch v2.7.0
             # https://github.com/pytorch/pytorch/blob/v2.6.0/torch/distributed/checkpoint/state_dict.py#L557-L563
             # https://github.com/pytorch/pytorch/blob/v2.7.0-rc2/torch/distributed/checkpoint/state_dict.py#L575-L587
-            if (
-                is_torch_version(">=", "2.2.0")
-                and (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1)
-                or len(model_devices) <= 1
+            if is_torch_version(">=", "2.2.0") and (
+                (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1
             ):
                 from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
 
