@@ -90,7 +90,7 @@ class SeedableRandomSampler(RandomSampler):
     def __iter__(self):
         if self.generator is None:
             self.generator = torch.Generator(
-                device=torch.get_default_device() if hasattr(torch, "get_default_device") else None
+                device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
             )
             self.generator.manual_seed(self.initial_seed)
 
@@ -1172,7 +1172,7 @@ def prepare_data_loader(
             generator=getattr(
                 sampler,
                 "generator",
-                torch.Generator(device=torch.get_default_device() if hasattr(torch, "get_default_device") else None),
+                torch.Generator(device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"),
             ),
             data_seed=data_seed,
         )
@@ -1180,7 +1180,7 @@ def prepare_data_loader(
     if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
         # isinstance(dataloader.sampler, RandomSampler) indicates the original dataloader has `shuffle` enabled.
         generator = torch.Generator(
-            device=torch.get_default_device() if hasattr(torch, "get_default_device") else None
+            device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
         ).manual_seed(42)
         dataloader.generator = generator
         dataloader.sampler.generator = generator
@@ -1201,7 +1201,7 @@ def prepare_data_loader(
             if not use_seedable_sampler and hasattr(sampler, "generator"):
                 if sampler.generator is None:
                     sampler.generator = torch.Generator(
-                        device=torch.get_default_device() if hasattr(torch, "get_default_device") else None
+                        device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
                     )
                 synchronized_generator = sampler.generator
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
