@@ -176,7 +176,7 @@ _use_seedable_sampler = object()
 
 class Accelerator:
     """
-    Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
+    Creates an instance of an accelerator for distributed training or mixed precision training.
 
     Args:
         device_placement (`bool`, *optional*, defaults to `True`):
@@ -540,9 +540,16 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "npu", "xla", "mlu", "musa", "sdaa") or is_torch_xla_available(
-                check_is_tpu=True
-            ):
+            if self.device.type not in (
+                "xpu",
+                "cuda",
+                "npu",
+                "xla",
+                "mlu",
+                "musa",
+                "hpu",
+                "sdaa",
+            ) or is_torch_xla_available(check_is_tpu=True):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
@@ -551,7 +558,7 @@ class Accelerator:
             DistributedType.DEEPSPEED,
             DistributedType.MEGATRON_LM,
         ):
-            if self.device.type in ["cpu", "xpu"]:
+            if self.device.type in ["cpu", "xpu", "hpu"]:
                 self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
@@ -1208,6 +1215,7 @@ class Accelerator:
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
         ):
             dl_even_batches_values = []
 
@@ -1443,6 +1451,7 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
+
         self._models.append(model)
 
         # TODO: Look at enabling native TP training directly with a proper config
@@ -1521,12 +1530,16 @@ class Accelerator:
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
+                DistributedType.MULTI_HPU,
             ):
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                     # TODO: Look at enabling native TP training directly with a proper config
                     if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true":
-                        device_ids, output_device = [self.local_process_index], self.local_process_index
+                        if self.device.type == "hpu":
+                            device_ids, output_device = [self.device.index], self.device.index
+                        else:
+                            device_ids, output_device = [self.local_process_index], self.local_process_index
                     else:
                         device_ids, output_device = None, None
 
@@ -1850,6 +1863,21 @@ class Accelerator:
         deepspeed_plugin = self.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        tp_size = deepspeed_plugin.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0)
+        if tp_size > 1:
+            if not compare_versions("deepspeed", ">=", "0.16.4"):
+                raise ImportError(
+                    "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
+                )
+            if not is_torch_version(">=", "2.2.0"):
+                raise ImportError(
+                    "Tried to use TP, but `torch.distributed.device_mesh` requires PyTorch >= 2.2.0. Please upgrade your PyTorch version"
+                )
+            from torch.distributed.device_mesh import init_device_mesh
+
+            mesh_dim_name = "tp"
+            self.state.ds_device_mesh = init_device_mesh(self.device.type, (tp_size,), mesh_dim_names=(mesh_dim_name,))
+
         result = [
             self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
             for obj in args
@@ -2028,13 +2056,25 @@ class Accelerator:
                     if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
                         "device", "none"
                     ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", True):
+                        if self.device.type == "hpu" and os.environ.get("PT_HPU_LAZY_MODE", "1") == "1":
+                            raise ValueError(
+                                "You can't use an Offload Optimizer with HPU in Lazy Mode. "
+                                "Please set the environment variable `PT_HPU_LAZY_MODE` to `0`."
+                            )
+
                         optimizer = map_pytorch_optim_to_deepspeed(optimizer)
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
 
+            if self.device.type == "hpu":
+                # This env variable is initialized here to make sure it is set to "true"
+                # It should be done by the launcher but it does not work for multi-node runs
+                os.environ["DEEPSPEED_USE_HPU"] = "true"
+
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
+
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
                 engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
@@ -2217,6 +2257,18 @@ class Accelerator:
                 result[i] = optimizer
         return tuple(result)
 
+    def _prepare_device_mesh(self):
+        """
+        Prepare the device mesh for distributed training. The dataloader will determine how to load data based on the
+        device mesh.
+        """
+        if self.state.torch_tp_plugin:
+            return self.state.torch_tp_plugin.torch_device_mesh
+        elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
+            return self.state.ds_device_mesh
+        else:
+            return None
+
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
             raise ImportError(
@@ -2302,6 +2354,9 @@ class Accelerator:
             return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
+
+        device_mesh = self._prepare_device_mesh()
+
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2317,7 +2372,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
-            torch_device_mesh=self.state.torch_tp_plugin.torch_device_mesh if self.state.torch_tp_plugin else None,
+            torch_device_mesh=device_mesh,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
@@ -3431,6 +3486,7 @@ class Accelerator:
                 DistributedType.MULTI_SDAA,
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
+                DistributedType.MULTI_HPU,
             ):
                 map_location = "on_device"
             else:
@@ -3566,9 +3622,19 @@ class Accelerator:
         """
 
         if self.distributed_type == DistributedType.DEEPSPEED:
-            if self.deepspeed_config["zero_optimization"]["stage"] == 3:
+            zero3_sharding = self.deepspeed_config["zero_optimization"]["stage"] == 3
+            tp_sharding = self.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0) > 1
+            if zero3_sharding or tp_sharding:
                 if model.zero_gather_16bit_weights_on_model_save():
-                    state_dict = model._zero3_consolidated_16bit_state_dict()
+                    if tp_sharding and not compare_versions("deepspeed", ">=", "0.16.4"):
+                        raise ImportError(
+                            "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
+                        )
+                    state_dict = (
+                        model._consolidated_16bit_state_dict()
+                        if tp_sharding
+                        else model._zero3_consolidated_16bit_state_dict()
+                    )
                 else:
                     raise ValueError(
                         "Cannot get 16bit model weights because `stage3_gather_16bit_weights_on_model_save` in DeepSpeed config is False. "

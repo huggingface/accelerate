@@ -37,12 +37,14 @@ from accelerate.test_utils.testing import (
     require_clearml,
     require_comet_ml,
     require_dvclive,
+    require_matplotlib,
+    require_mlflow,
     require_pandas,
     require_tensorboard,
     require_wandb,
     skip,
 )
-from accelerate.tracking import CometMLTracker, GeneralTracker
+from accelerate.tracking import CometMLTracker, GeneralTracker, MLflowTracker
 from accelerate.utils import (
     ProjectConfiguration,
     is_comet_ml_available,
@@ -199,6 +201,110 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         assert logged_items["iteration"] == "1"
         assert logged_items["my_text"] == "some_value"
         assert logged_items["_step"] == "0"
+
+
+@require_mlflow
+class MLflowTrackingTest(unittest.TestCase):
+    def setUp(self):
+        import mlflow
+
+        self.tmpdir = tempfile.TemporaryDirectory()
+        mlflow.set_tracking_uri("file://" + self.tmpdir.name)
+
+    @require_matplotlib
+    def create_mock_figure(self):
+        """Create a mock figure for testing."""
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure(figsize=(6, 4))
+        return fig
+
+    def test_log(self):
+        import mlflow
+
+        """Test that log calls mlflow.log_metrics with only numeric values and the correct step."""
+        values = {"accuracy": 0.95, "loss": 0.1, "non_numeric": "ignored"}
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.log(values, step=10)
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        # Retrieve the run and check the logged metrics.
+        run = mlflow.get_run(run_id)
+        metrics = run.data.metrics
+        self.assertEqual(metrics.get("accuracy"), 0.95)
+        self.assertEqual(metrics.get("loss"), 0.1)
+        self.assertNotIn("non_numeric", metrics)
+
+    @require_matplotlib
+    def test_log_figure(self):
+        import mlflow
+
+        """Test that log_figure calls mlflow.log_figure with the correct arguments."""
+        dummy_figure = self.create_mock_figure()
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.log_figure(dummy_figure, artifact_file="dummy_figure.png")
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        self.assertIn(
+            "dummy_figure.png",
+            [artifact.path for artifact in mlflow.artifacts.list_artifacts(run_id=run_id)],
+        )
+
+    def test_log_artifact(self):
+        import mlflow
+
+        """Test that log_artifact calls mlflow.log_artifact with the correct file path."""
+        dummy_file_path = os.path.join(self.tmpdir.name, "dummy.txt")
+        with open(dummy_file_path, "w") as f:
+            f.write("dummy content")
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.log_artifact(dummy_file_path, artifact_path="artifact_dir")
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        self.assertIn(
+            "artifact_dir/dummy.txt",
+            [
+                artifact.path
+                for artifact in mlflow.artifacts.list_artifacts(run_id=run_id, artifact_path="artifact_dir")
+            ],
+        )
+
+    def test_log_artifacts(self):
+        import mlflow
+
+        """Test that log_artifacts calls mlflow.log_artifacts with the correct directory."""
+        dummy_dir = os.path.join(self.tmpdir.name, "dummy_dir")
+        os.mkdir(dummy_dir)
+        dummy_file_path = os.path.join(dummy_dir, "dummy.txt")
+        with open(dummy_file_path, "w") as f:
+            f.write("dummy content")
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.log_artifacts(dummy_dir, artifact_path="artifact_dir")
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        self.assertIn(
+            "artifact_dir/dummy.txt",
+            [
+                artifact.path
+                for artifact in mlflow.artifacts.list_artifacts(run_id=run_id, artifact_path="artifact_dir")
+            ],
+        )
 
 
 # Comet has a special `OfflineExperiment` we need to use for testing

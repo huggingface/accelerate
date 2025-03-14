@@ -28,7 +28,7 @@ test_big_modeling:
 
 test_core:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed --ignore=./tests/test_big_modeling.py \
-	--ignore=./tests/fsdp --ignore=./tests/test_cli.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_core.log",)
+	--ignore=./tests/fsdp --ignore=./tests/tp --ignore=./tests/test_cli.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_core.log",)
 
 test_cli:
 	python -m pytest -s -v ./tests/test_cli.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_cli.log",)
@@ -39,6 +39,9 @@ test_deepspeed:
 test_fsdp:
 	python -m pytest -s -v ./tests/fsdp $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_fsdp.log",)
 
+test_tp:
+	python -m pytest -s -v ./tests/tp $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_tp.log",)
+
 # Since the new version of pytest will *change* how things are collected, we need `deepspeed` to 
 # run after test_core and test_cli
 test:
@@ -47,13 +50,14 @@ test:
 	$(MAKE) test_big_modeling
 	$(MAKE) test_deepspeed
 	$(MAKE) test_fsdp
+	$(MAKE) test_tp
 
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_examples.log",)
 
 # Broken down example tests for the CI runners
 test_integrations:
-	python -m pytest -s -v ./tests/deepspeed ./tests/fsdp $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_integrations.log",)
+	python -m pytest -s -v ./tests/deepspeed ./tests/fsdp ./tests/tp $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_integrations.log",)
 
 test_example_differences:
 	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_example_diff.log",)
@@ -79,7 +83,7 @@ prepare_release:
 # Make sure this is ran in a fresh venv of some form
 install_test_release:
 	pip uninstall accelerate -y
-	pip install -i https://testpypi.python.org/pypi --extra-index-url https://pypi.org/simple accelerate
+	pip install -i https://testpypi.python.org/pypi --extra-index-url https://pypi.org/simple accelerate$(if $(version),==$(version),)
 
 # Run as `make target=testpypi upload_release`
 upload_release:
