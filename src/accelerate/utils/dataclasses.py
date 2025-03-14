@@ -1666,7 +1666,7 @@ class FullyShardedDataParallelPlugin:
             ShardingStrategy,
         )
 
-        _fsdp2_warnings = {}
+        _fsdp2_warnings = set()
 
         env_prefix = "FSDP_"
         # Strategy: By default we should always assume that values are passed in, else we check the environment variables

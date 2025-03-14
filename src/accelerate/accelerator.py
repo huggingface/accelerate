@@ -1380,10 +1380,28 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
+        fsdp2_should_fix_optimizer = (
+            self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2
+        )
+        should_fix_optimizer = tpu_should_fix_optimizer or fsdp2_should_fix_optimizer
 
-        if tpu_should_fix_optimizer:
+        if should_fix_optimizer:
             # 1. grabbing old model parameters
-            old_named_params = self._get_named_parameters(*args)
+            old_named_params = self._get_named_parameters(*args, drop_refs=fsdp2_should_fix_optimizer)  # Drop refs for FSDP2
+
+        # TODO(siro1): Abstract away
+        # `FSDP2` by default expects `Optimizer` to be created after the model is prepared,
+        # however that goes against `Accelerate's` design of `bring your own`
+        # this is a workaround to make memory footprint match if `Optimizer` is created before preparing the model
+        if fsdp2_should_fix_optimizer:
+            for obj in args:
+                if isinstance(obj, torch.optim.Optimizer):
+                    for param_group in obj.param_groups:
+                        for i, p in enumerate(param_group["params"]):
+                            # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
+                            # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
+                            param_group["params"][i] = torch.empty_like(p)
+                            param_group["params"][i].data_ptr = p.data_ptr()
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.use_ipex:
@@ -1405,7 +1423,7 @@ class Accelerator:
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
-        if tpu_should_fix_optimizer:
+        if should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
