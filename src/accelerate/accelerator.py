@@ -3513,12 +3513,12 @@ class Accelerator:
         """
         return self.free_memory(*objects)
 
-    def _get_named_parameters(self, *args):
+    def _get_named_parameters(self, *args, drop_refs=False):
         named_parameters = {}
         for obj in args:
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
-                named_parameters.update({n: p for n, p in obj.named_parameters()})
+                named_parameters.update({n: p.data_ptr() if drop_refs else p for n, p in obj.named_parameters()})
         return named_parameters
 
     def _get_devices(self, *args):
