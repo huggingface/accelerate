@@ -1673,6 +1673,13 @@ class FullyShardedDataParallelPlugin:
         if self.fsdp_version is None:
             self.fsdp_version = int(os.environ.get(env_prefix + "VERSION", "1"))
 
+        if self.sharding_strategy is not None:
+            # We cannot properly detect all of the cases, as by default `args.fsdp_sharding_strategy` is set to `fully_shard`
+            # Therefore we issue a warning only if the user has explicitly set it inside their plugin
+            _fsdp2_warnings.add(
+                "sharding_strategy is deprecated in favor of reshard_after_forward. "
+                "This will be removed in a future version of Accelerate."
+            )
         if self.sharding_strategy is None:
             self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
         if isinstance(self.sharding_strategy, str):
@@ -1682,10 +1689,6 @@ class FullyShardedDataParallelPlugin:
                 self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
             else:
                 self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
-            _fsdp2_warnings.add(
-                "sharding_strategy is deprecated in favor of reshard_after_forward. "
-                "This will be removed in a future version of Accelerate."
-            )
 
         if self.reshard_after_forward is None:
             reshard_after_forward = os.environ.get(
@@ -1791,20 +1794,12 @@ class FullyShardedDataParallelPlugin:
                 str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")) == 1
             )
 
-        if self.cpu_ram_efficient_loading and self.sync_module_states is False:
+        if self.cpu_ram_efficient_loading and not self.sync_module_states:
             warnings.warn(
                 "sync_module_states cannot be False since efficient cpu ram loading enabled. "
                 "Setting sync_module_states to True."
             )
             self.sync_module_states = True
-
-        # Invariant: sync_module_states is None in FSDP2 only
-        if self.cpu_ram_efficient_loading and self.sync_module_states is None:
-            # TODO: how does this interact with FSDP2
-            _fsdp2_warnings.add(
-                "cpu_ram_efficient_loading is enabled, but sync_module_states is not set. "
-                "This is not properly tested yet in FSDP2"
-            )
 
         if isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)

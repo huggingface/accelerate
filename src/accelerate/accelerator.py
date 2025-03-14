@@ -1387,7 +1387,9 @@ class Accelerator:
 
         if should_fix_optimizer:
             # 1. grabbing old model parameters
-            old_named_params = self._get_named_parameters(*args, drop_refs=fsdp2_should_fix_optimizer)  # Drop refs for FSDP2
+            old_named_params = self._get_named_parameters(
+                *args, drop_refs=fsdp2_should_fix_optimizer
+            )  # Drop refs for FSDP2
 
         # TODO(siro1): Abstract away
         # `FSDP2` by default expects `Optimizer` to be created after the model is prepared,
@@ -1585,6 +1587,7 @@ class Accelerator:
 
                 if not is_type_fsdp:
                     fsdp2_plugin = self.state.fsdp_plugin
+                    full_sd = model.state_dict()
 
                     from torch.distributed.fsdp.wrap import (
                         size_based_auto_wrap_policy,
@@ -1673,6 +1676,29 @@ class Accelerator:
                                 fully_shard(module, **kwargs)
 
                     fully_shard(model, **kwargs)  # Wrap the top-most module nonetheless
+                    if fsdp2_plugin.sync_module_states:
+                        import torch.distributed as dist
+                        from torch.distributed.tensor import distribute_tensor
+
+                        sharded_sd = model.state_dict()
+                        if self.is_main_process:
+                            for (param_name, full_param), sharded_param in zip(full_sd.items(), sharded_sd.values()):
+                                full_param = full_param.detach().cuda()
+                                mesh = sharded_param.device_mesh
+                                dist.broadcast(full_param, src=0, group=mesh.get_group())
+                                sharded_tensor = distribute_tensor(full_param, mesh, sharded_param.placements)
+                                sharded_sd[param_name] = sharded_tensor
+                        else:
+                            for param_name, sharded_param in sharded_sd.items():
+                                full_tensor = torch.empty(
+                                    sharded_param.size(), device="cuda", dtype=sharded_param.dtype
+                                )
+                                mesh = sharded_param.device_mesh
+                                dist.broadcast(full_tensor, src=0, group=mesh.get_group())
+                                sharded_tensor = distribute_tensor(full_tensor, mesh, sharded_param.placements)
+                                sharded_sd[param_name] = sharded_tensor
+
+                        model.load_state_dict(sharded_sd)
 
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
