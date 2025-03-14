@@ -39,12 +39,13 @@ from accelerate.utils import (
     convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
+    is_hpu_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
-    is_torch_version,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
     patch_environment,
@@ -74,6 +75,7 @@ options_to_group = {
     "tpu": "TPU",
     "use_deepspeed": "DeepSpeed Arguments",
     "use_fsdp": "FSDP Arguments",
+    "use_tp": "PyTorch TP Arguments",
     "use_megatron_lm": "Megatron-LM Arguments",
     "fp8_backend": "FP8 Arguments",
 }
@@ -261,6 +263,12 @@ def launch_command_parser(subparsers=None):
         default=False,
         action="store_true",
         help="Whether to use fsdp.",
+    )
+    paradigm_args.add_argument(
+        "--use_tp",
+        default=False,
+        action="store_true",
+        help="Whether to use PyTorch TP.",
     )
     paradigm_args.add_argument(
         "--use_megatron_lm",
@@ -589,6 +597,15 @@ def launch_command_parser(subparsers=None):
         help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
     )
 
+    # tp args
+    tp_args = parser.add_argument_group("TP Arguments", "Arguments related to Tensor Parallelism using PyToch.")
+    tp_args.add_argument(
+        "--tp_size",
+        default=1,
+        type=int,
+        help="PyTorch Tensor Parallelism (TP) degree. Set a value greater than 1 to activate. (useful only when `use_tp` flag is passed)",
+    )
+
     # megatron_lm args
     megatron_lm_args = parser.add_argument_group("Megatron-LM Arguments", "Arguments related to Megatron-LM.")
     megatron_lm_args.add_argument(
@@ -855,6 +872,7 @@ def deepspeed_launcher(args):
 
 def tpu_launcher(args):
     import torch_xla.distributed.xla_multiprocessing as xmp
+    from torch_xla import device_count
 
     if args.no_python:
         raise ValueError("--no_python cannot be used with TPU launcher")
@@ -875,13 +893,17 @@ def tpu_launcher(args):
             f"Your training script should have a function named {args.main_training_function}, or you should pass a "
             "different value to `--main_training_function`."
         )
+    if args.num_processes and args.num_processes != device_count():
+        raise ValueError(
+            f"Number of processes ({args.num_processes}) must match the number of TPU devices ({device_count()})"
+        )
 
     # Patch sys.argv
     sys.argv = [mod.__file__] + args.training_script_args
 
     main_function = getattr(mod, args.main_training_function)
     with patch_environment(**current_env):
-        xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
+        xmp.spawn(PrepareForLaunch(main_function), args=())
 
 
 def tpu_pod_launcher(args):
@@ -965,9 +987,9 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def _validate_launch_command(args):
     # Sanity checks
-    if sum([args.multi_gpu, args.cpu, args.tpu, args.use_deepspeed, args.use_fsdp]) > 1:
+    if sum([args.multi_gpu, args.cpu, args.tpu, args.use_deepspeed, args.use_fsdp, args.use_tp]) > 1:
         raise ValueError(
-            "You can only use one of `--cpu`, `--multi_gpu`, `--tpu`, `--use_deepspeed`, `--use_fsdp` at a time."
+            "You can only use one of `--cpu`, `--multi_gpu`, `--tpu`, `--use_deepspeed`, `--use_fsdp`, `--use_tp` at a time."
         )
     if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
@@ -984,6 +1006,7 @@ def _validate_launch_command(args):
             and not args.tpu_use_cluster
             and not args.use_deepspeed
             and not args.use_fsdp
+            and not args.use_tp
             and not args.use_megatron_lm
         ):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
@@ -994,13 +1017,16 @@ def _validate_launch_command(args):
                     DistributedType.MULTI_GPU,
                     DistributedType.MULTI_NPU,
                     DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_SDAA,
                     DistributedType.MULTI_MUSA,
                     DistributedType.MULTI_XPU,
+                    DistributedType.MULTI_HPU,
                 )
                 else False
             )
             args.tpu = defaults.distributed_type == DistributedType.XLA
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
+            args.use_tp = defaults.distributed_type == DistributedType.TP
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
         if args.gpu_ids is None:
@@ -1021,28 +1047,20 @@ def _validate_launch_command(args):
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
                 if isinstance(attr, dict):
-                    for k in defaults.deepspeed_config:
-                        setattr(args, k, defaults.deepspeed_config[k])
-                    for k in defaults.fsdp_config:
-                        arg_to_set = k
-                        if "fsdp" not in arg_to_set:
-                            arg_to_set = "fsdp_" + arg_to_set
-                        setattr(args, arg_to_set, defaults.fsdp_config[k])
-                    for k in defaults.megatron_lm_config:
-                        setattr(args, k, defaults.megatron_lm_config[k])
-                    for k in defaults.dynamo_config:
-                        setattr(args, k, defaults.dynamo_config[k])
-                    for k in defaults.ipex_config:
-                        setattr(args, k, defaults.ipex_config[k])
-                    for k in defaults.mpirun_config:
-                        setattr(args, k, defaults.mpirun_config[k])
-                    continue
-
-                # Those args are handled separately
-                if (
+                    # Copy defaults.somedict.somearg to args.somearg and
+                    # defaults.fsdp_config.x to args.fsdp_x
+                    for key, value in attr.items():
+                        if name == "fsdp_config" and not key.startswith("fsdp"):
+                            key = "fsdp_" + key
+                        elif name == "fp8_config" and not key.startswith("fp8"):
+                            key = "fp8_" + key
+                        if hasattr(args, "nondefault") and key not in args.nondefault:
+                            setattr(args, key, value)
+                elif (
                     name not in ["compute_environment", "mixed_precision", "distributed_type"]
                     and getattr(args, name, None) is None
                 ):
+                    # Those args are handled separately
                     setattr(args, name, attr)
         if not args.debug:
             args.debug = defaults.debug
@@ -1055,7 +1073,7 @@ def _validate_launch_command(args):
                 mp_from_config_flag = True
         else:
             if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
-                native_amp = is_torch_version(">=", "1.10")
+                native_amp = True
             else:
                 native_amp = is_bf16_available(True)
             if (
@@ -1076,10 +1094,14 @@ def _validate_launch_command(args):
                 args.num_processes = torch.xpu.device_count()
             elif is_mlu_available():
                 args.num_processes = torch.mlu.device_count()
+            elif is_sdaa_available():
+                args.num_processes = torch.sdaa.device_count()
             elif is_musa_available():
                 args.num_processes = torch.musa.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
+            elif is_hpu_available():
+                args.num_processes = torch.hpu.device_count()
             else:
                 args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
@@ -1089,11 +1111,13 @@ def _validate_launch_command(args):
             not args.multi_gpu
             and args.num_processes > 1
             and (
-                (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
-                or (is_mlu_available() and torch.mlu.device_count() > 1)
-                or (is_musa_available() and torch.musa.device_count() > 1)
+                (is_xpu_available() and torch.xpu.device_count() > 1)
                 or (is_npu_available() and torch.npu.device_count() > 1)
-                or (torch.cuda.device_count() > 1)
+                or (is_hpu_available() and torch.hpu.device_count() > 1)
+                or (is_mlu_available() and torch.mlu.device_count() > 1)
+                or (is_sdaa_available() and torch.sdaa.device_count() > 1)
+                or (is_musa_available() and torch.musa.device_count() > 1)
+                or (torch.cuda.is_available() and torch.cuda.device_count() > 1)
             )
         ):
             warned.append(
@@ -1152,6 +1176,8 @@ def launch_command(args):
         args.deepspeed_fields_from_accelerate_config = ",".join(args.deepspeed_fields_from_accelerate_config)
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
+        multi_gpu_launcher(args)
+    elif args.use_tp and not args.cpu:
         multi_gpu_launcher(args)
     elif args.use_megatron_lm and not args.cpu:
         multi_gpu_launcher(args)

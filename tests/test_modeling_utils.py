@@ -28,10 +28,10 @@ from safetensors.torch import save_file
 from accelerate import init_empty_weights
 from accelerate.big_modeling import cpu_offload
 from accelerate.test_utils import (
-    require_cuda,
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    require_non_hpu,
     torch_device,
 )
 from accelerate.utils.modeling import (
@@ -43,6 +43,7 @@ from accelerate.utils.modeling import (
     convert_file_size_to_int,
     find_tied_parameters,
     get_balanced_memory,
+    get_module_size_with_ties,
     get_state_dict_offloaded_model,
     infer_auto_device_map,
     load_checkpoint_in_model,
@@ -181,6 +182,7 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest().to(torch_device)
         self.check_set_module_tensor_for_device(model, torch_device, "meta")
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_set_module_tensor_between_gpus(self):
         model = ModelForTest().to(torch_device)
@@ -447,6 +449,7 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.batchnorm.running_mean.device == torch.device("meta")
         assert model.linear2.weight.device == torch.device("cpu")
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_in_model_two_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
@@ -852,7 +855,7 @@ class ModelingUtilsTester(unittest.TestCase):
         expected_device_map = {"batchnorm": 0, "linear1": "disk", "linear2": "disk"}
         assert device_map == expected_device_map
 
-    @require_cuda
+    @require_non_cpu
     def test_get_balanced_memory(self):
         model = ModelForTest()
         # model has size 236: linear1 64, batchnorm 72, linear2 100
@@ -881,6 +884,50 @@ class ModelingUtilsTester(unittest.TestCase):
         # If we set a device to 0, it's not counted.
         max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
         assert {0: 0, "cpu": 100} == max_memory
+
+    # Tests that get_module_size_with_ties returns the correct tied modules in
+    # models with tied parameters whose parent modules share the same name prefix
+    # See issue #3308: https://github.com/huggingface/accelerate/issues/3308
+    def test_get_module_size_with_ties(self):
+        # Create a model with a ModuleList containing more than 10 elements
+        # so the names of some layers share the same prefix, e.g. "1" and "10"
+        num_layers = 15
+        model = nn.ModuleList([nn.Linear(10, 10) for _ in range(num_layers)])
+        # Tie .weight for all the layers
+        for i in range(1, num_layers):
+            model[i].weight = model[i - 1].weight
+        # Each tied parameter group is sorted in alphabetical ordering,
+        # mimicking the output of find_tied_parameters
+        tied_parameters = [sorted([f"{i}.weight" for i in range(num_layers)])]
+        # Compute module sizes
+        weight_size, bias_size = (
+            model[0].weight.element_size() * model[0].weight.numel(),
+            model[0].bias.element_size() * model[0].bias.numel(),
+        )
+        module_sizes = dict(
+            **{"": num_layers * (weight_size + bias_size)},
+            **{f"{i}": (weight_size + bias_size) for i in range(num_layers)},
+            **{f"{i}.weight": weight_size for i in range(num_layers)},
+            **{f"{i}.bias": bias_size for i in range(num_layers)},
+        )
+        # Simulate the input for get_module_size_with_ties when invoked from infer_auto_device_map
+        # when the first module in model is being processed
+        modules_to_treat = list(model.named_children())[1:]
+        tied_params = tied_parameters[0][1:]
+        module_size = weight_size + bias_size
+
+        module_size_with_ties, tied_module_names, tied_modules = get_module_size_with_ties(
+            tied_params, module_size, module_sizes, modules_to_treat
+        )
+        # The expected lists are ordered using as key the module names, to follow
+        # the same order as the tied_parameters returned by find_tied_parameters
+        expected_tied_module_names, expected_tied_modules = map(
+            list, zip(*sorted(modules_to_treat, key=lambda x: x[0]))
+        )
+
+        assert module_size_with_ties == module_size + (num_layers - 1) * bias_size
+        assert tied_module_names == expected_tied_module_names
+        assert tied_modules == expected_tied_modules
 
     @require_non_cpu
     def test_load_state_dict(self):

@@ -41,7 +41,7 @@ from .utils import (
     is_mlu_available,
     is_musa_available,
     is_npu_available,
-    is_torch_version,
+    is_sdaa_available,
     is_xpu_available,
     load_checkpoint_in_model,
     offload_state_dict,
@@ -114,8 +114,7 @@ def init_on_device(device: torch.device, include_buffers: bool = None):
     if include_buffers is None:
         include_buffers = parse_flag_from_env("ACCELERATE_INIT_INCLUDE_BUFFERS", False)
 
-    # TODO(shingjan): remove the torch version check once older versions are deprecated
-    if is_torch_version(">=", "2.0") and include_buffers:
+    if include_buffers:
         with device:
             yield
         return
@@ -468,6 +467,8 @@ def dispatch_model(
             model.npu = add_warning(model.npu, model)
         elif is_mlu_available():
             model.mlu = add_warning(model.mlu, model)
+        elif is_sdaa_available():
+            model.sdaa = add_warning(model.sdaa, model)
         elif is_musa_available():
             model.musa = add_warning(model.musa, model)
         elif is_xpu_available():
@@ -490,6 +491,8 @@ def dispatch_model(
             device = f"npu:{device}"
         elif is_mlu_available() and isinstance(device, int):
             device = f"mlu:{device}"
+        elif is_sdaa_available() and isinstance(device, int):
+            device = f"sdaa:{device}"
         elif is_musa_available() and isinstance(device, int):
             device = f"musa:{device}"
         elif is_xpu_available() and isinstance(device, int):

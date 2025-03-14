@@ -26,6 +26,7 @@ from ...utils import (
     is_msamp_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_transformer_engine_available,
     is_transformers_available,
     is_xpu_available,
@@ -61,6 +62,7 @@ def get_cluster_input():
             "multi-GPU",
             "multi-NPU",
             "multi-MLU",
+            "multi-SDAA",
             "multi-MUSA",
             "TPU",
         ],
@@ -80,6 +82,7 @@ def get_cluster_input():
     if distributed_type in [
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
@@ -164,6 +167,7 @@ def get_cluster_input():
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.XLA,
             DistributedType.MULTI_MUSA,
         ]
@@ -226,6 +230,7 @@ def get_cluster_input():
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.NO,
         ]
@@ -376,10 +381,12 @@ def get_cluster_input():
                         )
 
     fsdp_config = {}
+    tp_config = {}
     if distributed_type in [
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_XPU,
     ]:
@@ -475,7 +482,21 @@ def get_cluster_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
-
+        if not use_fsdp:
+            use_tp = _ask_field(
+                "Do you want to use TensorParallel? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            if use_tp:
+                distributed_type = DistributedType.TP
+            if distributed_type == DistributedType.TP:
+                tp_config["tp_size"] = _ask_field(
+                    "What should be your Tensor Parallel degree? [1]: ",
+                    int,
+                    default=1,
+                )
     megatron_lm_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:
         use_megatron_lm = _ask_field(
@@ -552,6 +573,7 @@ def get_cluster_input():
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
         DistributedType.XLA,
@@ -589,6 +611,7 @@ def get_cluster_input():
         in [
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
@@ -601,6 +624,8 @@ def get_cluster_input():
             machine_type = "NPU(s)"
         elif is_mlu_available():
             machine_type = "MLU(s)"
+        elif is_sdaa_available():
+            machine_type = "SDAA(s)"
         elif is_musa_available():
             machine_type = "MUSA(s)"
         elif is_xpu_available():
@@ -810,6 +835,7 @@ def get_cluster_input():
         fp8_config=fp8_config,
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
+        tp_config=tp_config,
         megatron_lm_config=megatron_lm_config,
         ipex_config=ipex_config,
         mpirun_config=mpirun_config,

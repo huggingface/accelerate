@@ -32,7 +32,6 @@ from .imports import (
     is_torch_xla_available,
     is_xpu_available,
 )
-from .versions import is_torch_version
 
 
 if is_torch_xla_available():
@@ -320,10 +319,7 @@ def _tpu_gather(tensor):
 
 def _gpu_gather(tensor):
     state = PartialState()
-    if is_torch_version(">=", "1.13"):
-        gather_op = torch.distributed.all_gather_into_tensor
-    else:
-        gather_op = torch.distributed._all_gather_base
+    gather_op = torch.distributed.all_gather_into_tensor
 
     def _gpu_gather_one(tensor):
         if tensor.ndim == 0:

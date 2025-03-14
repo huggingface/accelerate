@@ -27,10 +27,12 @@ from ..utils import (
     DynamoBackend,
     PrecisionType,
     is_fp8_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
 )
@@ -83,7 +85,12 @@ def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
         if arg.startswith("fp8_"):
             value = getattr(args, arg)
             if value is not None:
-                current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
+                if arg == "fp8_override_linear_precision":
+                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = value[0]
+                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = value[1]
+                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = value[2]
+                else:
+                    current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
     return current_env
 
 
@@ -129,10 +136,14 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
             current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = args.gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = args.gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
@@ -231,10 +242,14 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -283,6 +298,10 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
+
+    if args.use_tp:
+        current_env["ACCELERATE_USE_TP"] = "true"
+        current_env["TP_SIZE"] = str(args.tp_size)
 
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"
@@ -393,10 +412,14 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
