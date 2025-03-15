@@ -167,7 +167,7 @@ Currently, `Accelerate` supports following config through the CLI:
 `deepspeed_hostfile`: DeepSpeed hostfile for configuring multi-node compute resources.
 `deepspeed_exclusion_filter`: DeepSpeed exclusion filter string when using mutli-node setup.
 `deepspeed_inclusion_filter`: DeepSpeed inclusion filter string when using mutli-node setup.
-`deepspeed_multinode_launcher`: DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.
+`deepspeed_multinode_launcher`: DeepSpeed multi-node launcher to use, e.g. `pdsh`, `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5). If unspecified, will default to `pdsh`.
 `deepspeed_config_file`: path to the DeepSpeed config file in `json` format. See the next section for more details on this.
 ```
 To be able to tweak more options, you will need to use a DeepSpeed config file.
@@ -709,6 +709,13 @@ model, eval_dataloader = accelerator.prepare(model, eval_dataloader)
 1. Current integration doesn’t support Pipeline Parallelism of DeepSpeed.
 2. Current integration doesn’t support `mpu`, limiting the tensor parallelism which is supported in Megatron-LM.
 3. Current integration doesn’t support multiple models.
+
+## Multi-node DeepSpeed
+DeepSpeed supports multi-node inference and training over a variety of different launchers. You can specify a different launcher by setting the `deepspeed_multinode_launcher` config in the CLI or in the DeepSpeed config file.
+
+Currently, accelerate supports passing configuration for the following DeepSpeed multi-node launchers: `pdsh` (default), `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5).
+
+Please read the [DeepSpeed documentation](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node) for more information on the different launchers. By default, DeepSpeed will attempt to use passwordless SSH from the main machine node to the other nodes to perform the launcher command. In this configuration, the accelerate launch command only needs to be run on the main node. If using the `nossh` launcher, you will need to run the accelerate launch command on every node using copied configuration. 
 
 ## DeepSpeed Resources
 
