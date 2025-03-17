@@ -1923,58 +1923,49 @@ class FullyShardedDataParallelPlugin:
         if self.fsdp_version == 1:
             from torch.distributed.fsdp import MixedPrecision
         elif self.fsdp_version == 2:
-            from torch.distributed.fsdp import MixedPrecisionPolicy
+            from torch.distributed.fsdp import MixedPrecisionPolicy as MixedPrecision
 
         if override or self.mixed_precision_policy is None:
+            dtype_args = {"param_dtype": dtype, "reduce_dtype": dtype}
             if self.fsdp_version == 1:
-                self.mixed_precision_policy = MixedPrecision(
-                    param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
-                )
-            elif self.fsdp_version == 2:  # at this point we're sure we are at a version that supports it
-                self.mixed_precision_policy = MixedPrecisionPolicy(
-                    param_dtype=dtype,
-                    reduce_dtype=dtype,
-                    output_dtype=dtype,  # TODO(s1ro1): `cast_forward_inputs`?
-                )
+                dtype_args["buffer_dtype"] = buffer_type
+            else:
+                dtype_args["output_dtype"] = dtype
+            # TODO(s1ro1): `cast_forward_inputs` for FSDP2?
+            self.mixed_precision_policy = MixedPrecision(**dtype_args)
         elif isinstance(self.mixed_precision_policy, dict):
             # Check for incompatible types
-            missing_keys = [
-                k for k in ["param_dtype", "reduce_dtype", "buffer_dtype"] if k not in self.mixed_precision_policy
-            ]
+            valid_keys = ["param_dtype", "reduce_dtype"] + (
+                ["buffer_dtype"] if self.fsdp_version == 1 else ["output_dtype"]
+            )
+            missing_keys = [k for k in valid_keys if k not in self.mixed_precision_policy]
             invalid_values = [
                 k for k, v in self.mixed_precision_policy.items() if v not in mixed_precision_mapping.values()
             ]
             if missing_keys or invalid_values:
                 raise ValueError(
                     f"Invalid mixed precision policy: {self.mixed_precision_policy}. "
-                    f"Must be a `dict` with keys `param_dtype`, `reduce_dtype`, and `buffer_dtype`. "
+                    f"Must be a `dict` with keys {valid_keys}."
                     f"Values must be one of {list(mixed_precision_mapping.values())}"
                 )
-            if self.fsdp_version == 1:
-                self.mixed_precision_policy = MixedPrecision(**self.mixed_precision_policy)
-            elif self.fsdp_version == 2:
-                self.mixed_precision_policy = MixedPrecisionPolicy(**self.mixed_precision_policy)
+            self.mixed_precision_policy = MixedPrecision(**self.mixed_precision_policy)
 
     def validate_mixed_precision_policy(self):
         """
         Validates the mixed precision policy, abstracted away to not bring in the imports if not needed.
         """
         if self.fsdp_version == 2:
-            from torch.distributed.fsdp import (
-                MixedPrecisionPolicy,  # at this point we're sure we are at a version that supports it
-            )
-
-            if not isinstance(self.mixed_precision_policy, MixedPrecisionPolicy):
-                raise ValueError(
-                    "mixed_precision_policy must be an instance of `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2"
-                )
-        if self.fsdp_version == 1:
+            from torch.distributed.fsdp import MixedPrecisionPolicy as MixedPrecision
+        else:
             from torch.distributed.fsdp import MixedPrecision
 
-            if not isinstance(self.mixed_precision_policy, MixedPrecision):
-                raise ValueError(
-                    "mixed_precision_policy must be an instance of `torch.distributed.fsdp.MixedPrecision` if `fsdp_version` is set to 1"
-                )
+        if not isinstance(self.mixed_precision_policy, MixedPrecision):
+            required_type = (
+                "`torch.distributed.fsdp.MixedPrecisionPolicy`"
+                if self.fsdp_version == 2
+                else "`torch.distributed.fsdp.MixedPrecision`"
+            )
+            raise ValueError(f"mixed_precision_policy must be an instance of {required_type}.")
 
     def set_cpu_offload(self):
         if self.fsdp_version == 2:

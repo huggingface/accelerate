@@ -392,7 +392,7 @@ class Accelerator:
 
         if fsdp_plugin is not None and fsdp_plugin.fsdp_version == 2:
             if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
-                raise ValueError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
+                raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
 
         if torch_tp_plugin is None:
             torch_tp_plugin = (
@@ -1600,9 +1600,10 @@ class Accelerator:
                     elif fsdp2_plugin.auto_wrap_policy is size_based_auto_wrap_policy:
                         auto_wrap_policy_type = "size"
 
+                    # we set the auto_wrap policy to a functools.partial, so we can use it in apply_activation_checkpointing
                     fsdp2_plugin.set_auto_wrap_policy(
                         model
-                    )  # we set the auto_wrap policy to a functools.partial, so we can use it in apply_activation_checkpointing
+                    )
 
                     kwargs = {
                         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
