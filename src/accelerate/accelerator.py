@@ -1579,7 +1579,7 @@ class Accelerator:
                     )
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
             elif self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
-                from torch.distributed.fsdp import FSDPModule, fully_shard
+                from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
 
                 is_type_fsdp = isinstance(model, FSDPModule) or (
                     is_compiled_module(model) and isinstance(model._orig_mod, FSDPModule)
@@ -1607,7 +1607,8 @@ class Accelerator:
                     kwargs = {
                         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
                         "offload_policy": fsdp2_plugin.cpu_offload,
-                        "mp_policy": fsdp2_plugin.mixed_precision_policy,
+                        "mp_policy": fsdp2_plugin.mixed_precision_policy
+                        or MixedPrecisionPolicy(),  # fsdp2 doesn't support None, rather a default policy is used
                     }
 
                     if fsdp2_plugin.activation_checkpointing:
