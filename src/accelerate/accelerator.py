@@ -1428,6 +1428,10 @@ class Accelerator:
         if should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
+            if fsdp2_should_fix_optimizer and self.state.fsdp_plugin.activation_checkpointing:
+                new_named_params = {
+                    k.replace("._checkpoint_wrapped_module", ""): v for k, v in new_named_params.items()
+                }
             # 3. building a map from the first to the second
             mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
             # 4. using that map to update the parameters of the optimizer
@@ -1601,9 +1605,7 @@ class Accelerator:
                         auto_wrap_policy_type = "size"
 
                     # we set the auto_wrap policy to a functools.partial, so we can use it in apply_activation_checkpointing
-                    fsdp2_plugin.set_auto_wrap_policy(
-                        model
-                    )
+                    fsdp2_plugin.set_auto_wrap_policy(model)
 
                     kwargs = {
                         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
@@ -1623,16 +1625,11 @@ class Accelerator:
                             model,
                             checkpoint_wrapper_fn=functools.partial(
                                 checkpoint_wrapper,
-                                checkpoint_impl=CheckpointImpl.NO_REENTRANT,  # TODO(siro1): This breaks
+                                checkpoint_impl=CheckpointImpl.NO_REENTRANT,
                             ),
                             auto_wrap_policy=fsdp2_plugin.auto_wrap_policy,
                         )
                     if (auto_wrap_policy := auto_wrap_policy_type) is not None:
-                        from torch.distributed.fsdp.wrap import (
-                            size_based_auto_wrap_policy,
-                            transformer_auto_wrap_policy,
-                        )
-
                         # Simulate the behavior of the old auto_wrap_policy
                         # TODO(siro1): abstract this into a function together with `set_auto_wrap_policy`
                         if auto_wrap_policy == "transformer":
@@ -1678,7 +1675,7 @@ class Accelerator:
                                 fully_shard(module, **kwargs)
 
                     fully_shard(model, **kwargs)  # Wrap the top-most module nonetheless
-                    if fsdp2_plugin.sync_module_states:
+                    if fsdp2_plugin.cpu_ram_efficient_loading:
                         import torch.distributed as dist
                         from torch.distributed.tensor import distribute_tensor
 
@@ -1701,6 +1698,14 @@ class Accelerator:
                                 sharded_sd[param_name] = sharded_tensor
 
                         model.load_state_dict(sharded_sd)
+
+                if self.mixed_precision != "no" and model.dtype != torch.float32:
+                    model = model.to(torch.float32)
+                    if self.is_main_process:
+                        # TODO(siro1): Add a warning for each parameter that was upcasted
+                        warnings.warn(
+                            "FSDP upcast of low precision parameters may affect the precision of model checkpoints."
+                        )
 
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
