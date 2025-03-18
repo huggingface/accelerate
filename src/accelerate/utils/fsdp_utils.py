@@ -14,6 +14,7 @@
 import os
 import shutil
 from collections import defaultdict
+from contextlib import nullcontext
 from pathlib import Path
 
 import torch
@@ -71,24 +72,34 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
     os.makedirs(output_dir, exist_ok=True)
-    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
+    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT and fsdp_plugin.fsdp_version == 1:
         # FSDP raises error when single GPU is used with `offload_to_cpu=True` for FULL_STATE_DICT
         # so, only enable it when num_processes>1
         is_multi_process = accelerator.num_processes > 1
         fsdp_plugin.state_dict_config.offload_to_cpu = is_multi_process
         fsdp_plugin.state_dict_config.rank0_only = is_multi_process
 
-    with FSDP.state_dict_type(
-        model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
-    ):
+    ctx = (
+        FSDP.state_dict_type(
+            model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
+        )
+        if fsdp_plugin.fsdp_version == 1
+        else nullcontext()
+    )
+
+    with ctx:
         state_dict = _get_model_state_dict(model, adapter_only=adapter_only)
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
+            if fsdp_plugin.fsdp_version == 2:
+                with torch.no_grad():
+                    state_dict = {k: v.full_tensor() for k, v in state_dict.items()}
             if accelerator.process_index == 0:
                 logger.info(f"Saving model to {output_model_file}")
                 torch.save(state_dict, output_model_file)
                 logger.info(f"Model saved to {output_model_file}")
+        # Invariant: `LOCAL_STATE_DICT` is never possible with `FSDP2`
         elif fsdp_plugin.state_dict_type == StateDictType.LOCAL_STATE_DICT:
             weights_name = (
                 f"{FSDP_MODEL_NAME}_rank{accelerator.process_index}.bin"
@@ -121,15 +132,22 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
     accelerator.wait_for_everyone()
-    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
+    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT and fsdp_plugin.fsdp_version == 1:
         # FSDP raises error when single GPU is used with `offload_to_cpu=True` for FULL_STATE_DICT
         # so, only enable it when num_processes>1
         is_multi_process = accelerator.num_processes > 1
         fsdp_plugin.state_dict_config.offload_to_cpu = is_multi_process
         fsdp_plugin.state_dict_config.rank0_only = is_multi_process
-    with FSDP.state_dict_type(
-        model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
-    ):
+
+    ctx = (
+        FSDP.state_dict_type(
+            model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
+        )
+        if fsdp_plugin.fsdp_version == 1
+        else nullcontext()
+    )
+
+    with ctx:
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             if type(model) is not FSDP and accelerator.process_index != 0:
                 if not fsdp_plugin.sync_module_states:
@@ -180,10 +198,21 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
     os.makedirs(output_dir, exist_ok=True)
-    with FSDP.state_dict_type(
-        model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
-    ):
-        optim_state = FSDP.optim_state_dict(model, optimizer)
+
+    ctx = (
+        FSDP.state_dict_type(
+            model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
+        )
+        if fsdp_plugin.fsdp_version == 1
+        else nullcontext()
+    )
+
+    with ctx:
+        if fsdp_plugin.fsdp_version == 1:
+            optim_state = FSDP.optim_state_dict(model, optimizer)
+        else:
+            optim_state = optimizer.state_dict()
+
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             if accelerator.process_index == 0:
                 optim_state_name = (
@@ -213,9 +242,14 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
     accelerator.wait_for_everyone()
-    with FSDP.state_dict_type(
-        model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
-    ):
+    ctx = (
+        FSDP.state_dict_type(
+            model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
+        )
+        if fsdp_plugin.fsdp_version == 1
+        else nullcontext()
+    )
+    with ctx:
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             optim_state = None
             if accelerator.process_index == 0 or not fsdp_plugin.optim_state_dict_config.rank0_only:
