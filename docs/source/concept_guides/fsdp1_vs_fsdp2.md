@@ -21,10 +21,12 @@ This guide explains the key differences between `FSDP1` and `FSDP2` and helps yo
 
 `FSDP2` is a new and improved version of PyTorch's fully-sharded data parallel training API. Compared to `FSDP1`, it offers:
 - Simpler internal implementation
-- Flexible parameter freezing
-- Support for `fp8` parameters
-- Faster and simpler checkpointing
-- Better memory efficiency
+- Simpler to partially freeze parameters
+- Faster and simpler checkpointing without extra communication (`SHARDED_STATE_DICT`)
+- With `DTensor`, `FSDP2` supports mixing `fp8` and other parameter types in the same model out of the box
+- Future possibilities of optimizing communication patterns via `torch.compile`
+- Memory efficiency and deterministic memory usage, `FSDP2` doesn't use `recordStream` anymore and uses stream-to-stream synchronization (for more technical details see [this forum post](https://dev-discuss.pytorch.org/t/fsdp-cudacachingallocator-an-outsider-newb-perspective/1486) and [this issue](https://github.com/pytorch/pytorch/issues/114299))
+- NOT YET IMPLEMENTED IN ACCELERATE: user-specified sharding dimension, allowing users to specify which dimension the parameters should be sharded on
 
 ## Key Differences
 
@@ -36,8 +38,9 @@ Previous (`FSDP1`) | New (`FSDP2`) | What Changed
 `--fsdp_backward_prefetch` | \*\***REMOVED**\*\* | `FSDP2` uses previous `BACKWARD_PRE` option by default, as only this allows communication and computation overlap
 `--fsdp_state_dict_type` | \*\***REMOVED**\*\* | `FSDP2` always uses `SHARDED_STATE_DICT`, i.e. each rank only checkpoints the shard of the model on it, resulting in no extra communication
 `--fsdp_forward_prefetch` | \*\***NOT YET IMPLEMENTED**\*\* | How to implement this is under active discussion, for now it is not supported in `FSDP2`
-`--fsdp_cpu_ram_efficient_loading` | **TODO** | **TODO**
-`--fsdp_sync_module_states` | **TODO** | **TODO**
+`--fsdp_sync_module_states` | \*\***REMOVED**\*\* | with `FSDP2`, this parameter becomes redundant
+`--fsdp_cpu_ram_efficient_loading` | `--fsdp_cpu_ram_efficient_loading` | if `true`, `FSDP2` will similarly load the model only on rank 0, and then parameters get synced to other ranks, this is the same behavior as `FSDP1`, however, setting `--fsdp_sync_module_states` isn't required anymore
+`--fsdp_state_dict_type` | `--fsdp_state_dict_type` | `LOCAL_STATE_DICT` becomes obsolete and with `FSDP2` `SHARDED_STATE_DICT` is the default option, which results in no extra communication and each rank saving its own shard, other possible option is `FULL_STATE_DICT` which results in extra communication and spike in memory usage but saves the full model from rank 0
 `--fsdp_use_orig_params` | \*\***REMOVED**\*\* | `FSDP2` uses a `DTensor` class on the background, which means it *always* uses the original parameters by default
 \*\***NEW**\*\* | `--fsdp_version` | `2` is the default option, which means `FSDP2` is enabled by default, `FSDP1` can be selected by setting this to `1`
 
