@@ -150,7 +150,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
     with ctx:
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             if type(model) is not FSDP and accelerator.process_index != 0:
-                if not fsdp_plugin.sync_module_states:
+                if not fsdp_plugin.sync_module_states and fsdp_plugin.fsdp_version == 1:
                     raise ValueError(
                         "Set the `sync_module_states` flag to `True` so that model states are synced across processes when "
                         "initializing FSDP object"
@@ -186,7 +186,10 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             )
             state_dict = state_dict["model"]
             logger.info(f"Model loaded from {ckpt_dir}")
-        load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only)
+        if fsdp_plugin.fsdp_version == 1:
+            load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only)
+        else:
+            load_result = fsdp2_load_full_state_dict(accelerator, model, state_dict)
     return load_result
 
 
@@ -274,8 +277,12 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
             )
             optim_state = optim_state["optimizer"]
             logger.info(f"Optimizer loaded from {ckpt_dir}")
-        flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
-        optimizer.load_state_dict(flattened_osd)
+        if fsdp_plugin.fsdp_version == 1:
+            flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
+            optimizer.load_state_dict(flattened_osd)
+        else:
+            flattened_osd = {"state": optim_state}
+            optimizer.state_dict = flattened_osd
 
 
 def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: str, safe_serialization: bool = True):
@@ -405,3 +412,26 @@ def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.c
         return module
 
     return param_init_fn_tied_param
+
+
+def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict):
+    import torch.distributed as dist
+    from torch.distributed.tensor import distribute_tensor
+
+    sharded_sd = model.state_dict()
+    if accelerator.is_main_process:
+        for (param_name, full_param), sharded_param in zip(full_sd.items(), sharded_sd.values()):
+            full_param = full_param.detach().cuda()
+            mesh = sharded_param.device_mesh
+            dist.broadcast(full_param, src=0, group=mesh.get_group())
+            sharded_tensor = distribute_tensor(full_param, mesh, sharded_param.placements)
+            sharded_sd[param_name] = sharded_tensor
+    else:
+        for param_name, sharded_param in sharded_sd.items():
+            full_tensor = torch.empty(sharded_param.size(), device="cuda", dtype=sharded_param.dtype)
+            mesh = sharded_param.device_mesh
+            dist.broadcast(full_tensor, src=0, group=mesh.get_group())
+            sharded_tensor = distribute_tensor(full_tensor, mesh, sharded_param.placements)
+            sharded_sd[param_name] = sharded_tensor
+
+    model.load_state_dict(sharded_sd)
