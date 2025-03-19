@@ -406,7 +406,7 @@ def require_multi_gpu_or_xpu(test_case):
     """
     cuda_condition = is_cuda_available()
     xpu_condition = is_xpu_available()
-    return unittest.skipUnless((cuda_condition or xpu_condition) and device_count > 1, "test requires multiple GPUs")(test_case)
+    return unittest.skipUnless((cuda_condition or xpu_condition) and device_count > 1, "test requires multiple GPUs or XPUs")(test_case)
 
 
 def require_deepspeed(test_case):
