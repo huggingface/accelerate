@@ -38,7 +38,6 @@ from accelerate.test_utils import (
     require_cuda,
     require_cuda_or_xpu,
     require_multi_device,
-    require_multi_gpu,
     require_multi_gpu_or_xpu,
     require_non_cpu,
     require_non_hpu,

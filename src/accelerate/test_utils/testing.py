@@ -398,6 +398,7 @@ def require_multi_xpu(test_case):
     """
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
+
 def require_multi_gpu_or_xpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
@@ -406,6 +407,7 @@ def require_multi_gpu_or_xpu(test_case):
     cuda_condition = is_cuda_available()
     xpu_condition = is_xpu_available()
     return unittest.skipUnless((cuda_condition or xpu_condition) and device_count > 1, "test requires multiple GPUs")(test_case)
+
 
 def require_deepspeed(test_case):
     """
