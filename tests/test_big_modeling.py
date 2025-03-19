@@ -411,7 +411,7 @@ class BigModelingTester(unittest.TestCase):
         # Just to initialize CUDA context.
         a = torch.rand(5).to(device_0)  # noqa: F841
 
-        free_memory_bytes = torch.cuda.mem_get_info(device_0)[0]
+        free_memory_bytes = torch_accelerator_module.mem_get_info(device_0)[0]
         required_memory_bytes = 5000 * 5000 * (32 // 8)
 
         # Leaving 50 MB of free memory for possible buffers, etc.
