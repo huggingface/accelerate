@@ -33,6 +33,7 @@ from ...utils import (
 )
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
+    FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
@@ -465,9 +466,9 @@ def get_cluster_input():
             fsdp_state_dict_type_query = "What should be your FSDP's state dict type?"
             fsdp_config["fsdp_state_dict_type"] = _ask_options(
                 fsdp_state_dict_type_query,
-                FSDP_STATE_DICT_TYPE,
-                lambda x: FSDP_STATE_DICT_TYPE[int(x)],
-                default=2,
+                FSDP_STATE_DICT_TYPE if fsdp_version == 1 else FSDP2_STATE_DICT_TYPE,
+                lambda x: FSDP_STATE_DICT_TYPE[int(x)] if fsdp_version == 1 else FSDP2_STATE_DICT_TYPE[int(x)],
+                default=0 if fsdp_version == 1 else 1,
             )
             # Not implemented in FSDP2, ask for user input for FSDP1
             if fsdp_version == 1:
