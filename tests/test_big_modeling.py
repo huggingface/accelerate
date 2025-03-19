@@ -39,6 +39,7 @@ from accelerate.test_utils import (
     require_cuda_or_xpu,
     require_multi_device,
     require_multi_gpu,
+    require_multi_gpu_or_xpu,
     require_non_cpu,
     require_non_hpu,
     require_non_torch_xla,
@@ -371,11 +372,17 @@ class BigModelingTester(unittest.TestCase):
         dispatch_model(model, device_map)
         assert model.linear2.weight is model.linear1.weight
 
-    @require_multi_gpu
+    @require_multi_gpu_or_xpu
     def test_dispatch_model_tied_weights_memory(self):
         # Test that we do not duplicate tied weights at any point during dispatch_model call.
 
-        torch.cuda.empty_cache()  # Needed in case we run several tests in a row.
+        torch_accelerator_module = None
+        if torch_device_type == "cuda":
+            torch_accelerator_module = torch.cuda
+        elif torch_device_type == "xpu":
+            torch_accelerator_module = torch.xpu
+
+        torch_accelerator_module.empty_cache()  # Needed in case we run several tests in a row.
 
         model = nn.Sequential(
             OrderedDict(
@@ -397,23 +404,25 @@ class BigModelingTester(unittest.TestCase):
             expected = model(x)
 
         # We should need only 5000 * 5000 * 32 // 8 * 1e-6 = 100 MB on the device 0 for the four linear weights.
-        device_map = {"linear0": 0, "linear1": 1, "linear2": 0, "linear3": 0, "linear4": 0}
+        device_0 = f"{torch_device_type}:0" if torch_device != "cpu" else "cpu"
+        device_1 = f"{torch_device_type}:1" if torch_device != "cpu" else "cpu"
+        device_map = {"linear0": device_0, "linear1": device_1, "linear2": device_0, "linear3": device_0, "linear4": device_0}
 
         # Just to initialize CUDA context.
-        a = torch.rand(5).to("cuda:0")  # noqa: F841
+        a = torch.rand(5).to(device_0)  # noqa: F841
 
-        free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
+        free_memory_bytes = torch.cuda.mem_get_info(device_0)[0]
         required_memory_bytes = 5000 * 5000 * (32 // 8)
 
         # Leaving 50 MB of free memory for possible buffers, etc.
         n_vals = (free_memory_bytes - required_memory_bytes - int(50e6)) // (32 // 8)
-        foo = torch.rand(n_vals, device="cuda:0")  # noqa: F841
+        foo = torch.rand(n_vals, device=device_0)  # noqa: F841
 
         # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
         try:
             dispatch_model(model, device_map)
-        except torch.cuda.OutOfMemoryError as e:
-            raise torch.cuda.OutOfMemoryError(
+        except torch_accelerator_module.OutOfMemoryError as e:
+            raise torch_accelerator_module.OutOfMemoryError(
                 f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory. {e}"
             )
         except Exception as e:

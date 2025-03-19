@@ -33,6 +33,7 @@ from .testing import (
     require_mps,
     require_multi_device,
     require_multi_gpu,
+    require_multi_gpu_or_xpu,
     require_multi_xpu,
     require_musa,
     require_non_cpu,
