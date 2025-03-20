@@ -506,7 +506,7 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_multinode_launcher",
         default=None,
         type=str,
-        help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
+        help="DeepSpeed multi-node launcher to use, e.g. `pdsh`, `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5). If unspecified, will default to `pdsh`.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_moe_layer_cls_names",
