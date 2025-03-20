@@ -158,3 +158,19 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
         model.forward = new_forward
 
     return model
+
+
+def get_fp8_checkpoint_fn():
+    """
+    Returns the activation checkpointing context manager from `transformer_engine` if available.
+    """
+
+    if not is_fp8_available():
+        raise ImportError("Using `apply_fp8_activation_checkpointing` requires transformer_engine to be installed.")
+
+    if is_hpu_available():
+        from intel_transformer_engine.distributed import checkpoint
+    else:
+        from transformer_engine.distributed import checkpoint
+
+    return checkpoint

@@ -281,5 +281,6 @@ from .transformer_engine import (
     apply_fp8_autowrap,
     contextual_fp8_autocast,
     convert_model,
+    get_fp8_checkpoint_fn,
     has_transformer_engine_layers,
 )

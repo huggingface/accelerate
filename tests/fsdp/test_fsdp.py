@@ -34,7 +34,14 @@ from accelerate.test_utils.testing import (
     run_first,
     slow,
 )
-from accelerate.utils import is_bf16_available, is_fp16_available, is_hpu_available, patch_environment, set_seed
+from accelerate.utils import (
+    is_bf16_available,
+    is_fp8_available,
+    is_fp16_available,
+    is_hpu_available,
+    patch_environment,
+    set_seed,
+)
 from accelerate.utils.constants import (
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -47,9 +54,8 @@ from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enab
 
 set_seed(42)
 
-
-BERT_BASE_CASED = "bert-base-cased"
 LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+BERT_BASE_CASED = "bert-base-cased"
 FP16 = "fp16"
 BF16 = "bf16"
 
@@ -293,8 +299,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
 
 @run_first
-# Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
-@require_non_torch_xla
+@require_non_torch_xla  # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
 @require_multi_device
 @slow
 class FSDPIntegrationTest(TempDirTestCase):
@@ -324,28 +329,43 @@ class FSDPIntegrationTest(TempDirTestCase):
         cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, use_fsdp=True)
         for config in self.performance_configs:
             cmd_config = cmd.copy()
+
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                 if strategy.lower() in config:
                     cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
                     break
 
-            if "fp32" in config:
-                cmd_config.append("--mixed_precision=no")
+            if "fp8" in config:
+                if not is_fp8_available():
+                    continue
+                mixed_precision = "fp8"
+            elif "bf16" in config:
+                if not is_bf16_available():
+                    continue
+                mixed_precision = "bf16"
+            elif "fp16" in config:
+                if not is_fp16_available():
+                    continue
+                mixed_precision = "fp16"
             else:
-                cmd_config.append("--mixed_precision=fp16")
+                mixed_precision = "no"
+
+            cmd_config.append(f"--mixed_precision={mixed_precision}")
 
             if "cpu_offload" in config:
                 cmd_config.append("--fsdp_offload_params=True")
 
+            if "activation_checkpointing" in config:
+                cmd_config.append("--fsdp_activation_checkpointing=true")
+
             for policy in FSDP_AUTO_WRAP_POLICY:
                 if policy.lower() in config:
                     cmd_config.append(f"--fsdp_auto_wrap_policy={policy}")
+                    if policy == "TRANSFORMER_BASED_WRAP":
+                        cmd_config.append("--fsdp_transformer_layer_cls_to_wrap=BertLayer")
+                    elif policy == "SIZE_BASED_WRAP":
+                        cmd_config.append("--fsdp_min_num_params=2000")
                     break
-
-            if policy == "TRANSFORMER_BASED_WRAP":
-                cmd_config.append("--fsdp_transformer_layer_cls_to_wrap=BertLayer")
-            elif policy == "SIZE_BASED_WRAP":
-                cmd_config.append("--fsdp_min_num_params=2000")
 
             cmd_config.extend(
                 [
@@ -370,11 +390,13 @@ class FSDPIntegrationTest(TempDirTestCase):
             fsdp_transformer_layer_cls_to_wrap="BertLayer",
         )
 
-        for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
-            cmd_config = cmd.copy()
-            cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
+        for strategy in FSDP_SHARDING_STRATEGY:
             if strategy != "FULL_SHARD":
                 continue
+
+            cmd_config = cmd.copy()
+            cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
+
             state_dict_config_index = len(cmd_config)
             for state_dict_type in FSDP_STATE_DICT_TYPE:
                 # Todo: Currently failing for `LOCAL_STATE_DICT` with error
@@ -410,13 +432,18 @@ class FSDPIntegrationTest(TempDirTestCase):
         cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0)
         for spec, peak_mem_upper_bound in self.peak_memory_usage_upper_bound.items():
             cmd_config = cmd.copy()
+
             if "fp16" in spec:
-                cmd_config.extend(["--mixed_precision=fp16"])
+                mixed_precision = "fp16"
+            elif "bf16" in spec:
+                mixed_precision = "bf16"
             else:
-                cmd_config.extend(["--mixed_precision=no"])
+                mixed_precision = "no"
+
+            cmd_config.append(f"--mixed_precision={mixed_precision}")
 
             if "multi_gpu" in spec:
-                continue
+                pass
             else:
                 cmd_config.extend(["--use_fsdp"])
                 for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):

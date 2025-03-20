@@ -84,6 +84,7 @@ from .utils import (
     extract_model_from_parallel,
     gather,
     gather_object,
+    get_fp8_checkpoint_fn,
     get_grad_scaler,
     get_mixed_precision_context_manager,
     get_pretty_name,
@@ -1598,10 +1599,15 @@ class Accelerator:
                             checkpoint_wrapper,
                         )
 
+                        checkpoint_fn = None
+                        if self.mixed_precision == "fp8" and self.fp8_backend == "TE":
+                            checkpoint_fn = get_fp8_checkpoint_fn()
+
                         apply_activation_checkpointing(
                             model,
                             checkpoint_wrapper_fn=functools.partial(
                                 checkpoint_wrapper,
+                                checkpoint_fn=checkpoint_fn,
                                 checkpoint_impl=CheckpointImpl.NO_REENTRANT,
                             ),
                             auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
