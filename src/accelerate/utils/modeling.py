@@ -321,8 +321,6 @@ def set_module_tensor_to_device(
                 device = f"sdaa:{device}"
             elif is_musa_available():
                 device = f"musa:{device}"
-            elif is_xpu_available():
-                device = f"xpu:{device}"
             elif is_hpu_available():
                 device = "hpu"
         if "xpu" in str(device) and not is_xpu_available():
@@ -792,6 +790,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
                     max_memory[i] = get_xpu_available_memory(i)
+                    print(f"i: {i}, memory: {max_memory[i]}")
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -1158,6 +1157,8 @@ def get_module_size_with_ties(
     tied_module_names = []
     tied_modules = []
 
+    print(f"tied_params: {tied_params}")
+    print(f"modules_to_treat: {modules_to_treat}")
     for tied_param in tied_params:
         tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
         tied_module_names.append(modules_to_treat[tied_module_index][0])
@@ -1650,9 +1651,7 @@ def load_state_dict(checkpoint_file, device_map=None):
                 device = list(device_map.values())[0]
                 target_device = device
                 if isinstance(device, int):
-                    if is_xpu_available():
-                        target_device = f"xpu:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         target_device = f"npu:{device}"
                     elif is_hpu_available():
                         target_device = "hpu"
@@ -1688,9 +1687,7 @@ def load_state_dict(checkpoint_file, device_map=None):
             for device in devices:
                 target_device = device
                 if isinstance(device, int):
-                    if is_xpu_available():
-                        target_device = f"xpu:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         target_device = f"npu:{device}"
                     elif is_hpu_available():
                         target_device = "hpu"

@@ -495,8 +495,6 @@ def dispatch_model(
             device = f"sdaa:{device}"
         elif is_musa_available() and isinstance(device, int):
             device = f"musa:{device}"
-        elif is_xpu_available() and isinstance(device, int):
-            device = f"xpu:{device}"
         if device != "disk":
             model.to(device)
         else:

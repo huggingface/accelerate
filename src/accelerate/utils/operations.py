@@ -149,8 +149,6 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
         if device == "npu":
             device = "npu:0"
-        if device == "xpu":
-            device = "xpu:0"
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
@@ -161,9 +159,6 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             if is_npu_available():
                 if isinstance(device, int):
                     device = f"npu:{device}"
-            elif is_xpu_available():
-                if isinstance(device, int):
-                    device = f"xpu:{device}"
             else:
                 raise error
         try:

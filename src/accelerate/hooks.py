@@ -356,6 +356,7 @@ class AlignDevicesHook(ModelHook):
                     and value.data_ptr() in self.tied_params_map
                     and self.execution_device not in self.tied_params_map[value.data_ptr()]
                 ):
+                    print(f"value.data_ptr(): {value.data_ptr()}, execution_device: {self.execution_device}")
                     self.tied_pointers_to_remove.add((value.data_ptr(), self.execution_device))
 
                 set_module_tensor_to_device(
@@ -386,6 +387,7 @@ class AlignDevicesHook(ModelHook):
 
             # We may have loaded tied weights into self.tied_params_map (avoiding to load them several times in e.g. submodules): remove them from
             # this dictionary to allow the garbage collector to do its job.
+            print(f"self.tied_params_map: {self.tied_params_map}")
             for value_pointer, device in self.tied_pointers_to_remove:
                 if isinstance(device, int):
                     if is_npu_available():
@@ -394,8 +396,6 @@ class AlignDevicesHook(ModelHook):
                         device = f"mlu:{device}"
                     elif is_musa_available():
                         device = f"musa:{device}"
-                    elif is_xpu_available():
-                        device = f"xpu:{device}"
                 del self.tied_params_map[value_pointer][device]
             self.tied_pointers_to_remove = set()
         if self.io_same_device and self.input_device is not None:
