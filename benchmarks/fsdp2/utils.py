@@ -12,29 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
+import argparse  # noqa: I001
 
+from accelerate.state import AcceleratorState
+from accelerate.utils import set_seed
+import torch
+from accelerate import FullyShardedDataParallelPlugin
 from datasets import load_dataset
+from torch.distributed.fsdp import fully_shard
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import DataCollatorForLanguageModeling
+from transformers import AutoConfig, DataCollatorForLanguageModeling, AutoModelForCausalLM, AutoTokenizer
+from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
 
 from accelerate import Accelerator
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--optimizer_post_shard",
-        action="store_true",
-        default=False,
-        help="If True, the optimizer will be sharded after applying `fully_shard`",
-    )
-    parser.add_argument(
-        "--optimizer_apply_fix",
-        action="store_true",
-        default=False,
-        help="Only used if `--optimizer_post_shard` is False. If True, the optimizer will be fixed to lower the memory footprint. This fix is used in `Accelerate` to enable bringing your own optimizer.",
-    )
     parser.add_argument(
         "--run_name",
         type=str,
@@ -77,7 +72,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def prepare_dataloader(tokenizer, args) -> DataLoader:
+def prepare_dataloader(tokenizer, args, accelerator: Accelerator) -> DataLoader:
     dataset = load_dataset("tiny_shakespeare", split="train", trust_remote_code=True)
 
     def tokenize_function(example):
@@ -85,12 +80,11 @@ def prepare_dataloader(tokenizer, args) -> DataLoader:
             example["text"],
         )
 
-    with Accelerator().main_process_first():
-        dataset = dataset.map(
-            tokenize_function,
-            batched=True,
-            remove_columns=["text"],
-        )
+    dataset = dataset.map(
+        tokenize_function,
+        batched=True,
+        remove_columns=["text"],
+    )
 
     block_size = min(tokenizer.model_max_length, args.block_size)
 
@@ -121,5 +115,93 @@ def prepare_dataloader(tokenizer, args) -> DataLoader:
         batch_size=args.batch_size,
         collate_fn=collate_fn,
     )
-    dataloader = Accelerator().prepare(dataloader)
+    dataloader = accelerator.prepare(dataloader)
     return dataloader
+
+
+def replace_optimizer_params(optimizer):
+    for param_group in optimizer.param_groups:
+        for i, p in enumerate(param_group["params"]):
+            param_group["params"][i] = torch.empty_like(p)
+            param_group["params"][i].data_ptr = p.data_ptr()
+
+
+def swap_back_optimizer_params(
+    accelerator: Accelerator, model: torch.nn.Module, optimizer: torch.optim.Optimizer, old_named_parameters: dict
+):
+    new_named_parameters = accelerator._get_named_parameters(model)
+
+    mapping = {p: new_named_parameters[n] for n, p in old_named_parameters.items()}
+
+    for param_group in optimizer.param_groups:
+        param_group["params"] = [mapping[p.data_ptr] for p in param_group["params"]]
+
+
+def get_model_and_tokenizer(model_name: str):
+    config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_config(config)
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    tokenizer.pad_token = tokenizer.eos_token
+    return model, tokenizer
+
+
+def prepare_torch(
+    args, config: dict, post_shard_optimizer: bool = False, apply_optimizer_fix: bool = False
+) -> tuple[torch.nn.Module, torch.optim.Optimizer, torch.utils.data.DataLoader, Accelerator]:
+    from torch.distributed.fsdp import MixedPrecisionPolicy
+
+    mp_policy = MixedPrecisionPolicy(
+        param_dtype=torch.bfloat16,
+        reduce_dtype=torch.bfloat16,
+        output_dtype=torch.bfloat16,
+    )
+
+    accelerator = Accelerator(mixed_precision="bf16")
+    set_seed(42)
+    model, tokenizer = get_model_and_tokenizer(config["model_name"])
+    train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
+    optimizer = None
+
+    if not post_shard_optimizer:
+        optimizer = AdamW(model.parameters(), lr=config["learning_rate"])
+
+        if apply_optimizer_fix:
+            old_named_parameters = accelerator._get_named_parameters(model, drop_refs=True)
+            replace_optimizer_params(optimizer)
+
+    for module in model.modules():
+        if isinstance(module, Qwen2DecoderLayer):
+            fully_shard(module, mp_policy=mp_policy)
+    fully_shard(model, mp_policy=mp_policy)
+
+    if post_shard_optimizer:
+        optimizer = AdamW(model.parameters(), lr=config["learning_rate"])
+
+    if not post_shard_optimizer and apply_optimizer_fix:
+        swap_back_optimizer_params(accelerator, model, optimizer, old_named_parameters)
+
+    return model, optimizer, train_dataloader, accelerator
+
+
+def prepare_accelerate(
+    args, config: dict
+) -> tuple[torch.nn.Module, torch.optim.Optimizer, torch.utils.data.DataLoader, Accelerator]:
+    AcceleratorState()._reset_state(True)
+    fsdp_plugin = FullyShardedDataParallelPlugin(
+        fsdp_version=2,
+        auto_wrap_policy="transformer_based_wrap",
+        transformer_cls_names_to_wrap=["Qwen2DecoderLayer"],
+    )
+    accelerator = Accelerator(
+        fsdp_plugin=fsdp_plugin,
+        mixed_precision="bf16",
+    )
+    set_seed(42)
+    model, tokenizer = get_model_and_tokenizer(config["model_name"])
+    train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
+    optimizer = AdamW(model.parameters(), lr=config["learning_rate"])
+
+    model, optimizer = accelerator.prepare(model, optimizer)
+
+    return model, optimizer, train_dataloader, accelerator
