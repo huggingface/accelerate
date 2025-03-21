@@ -1680,15 +1680,16 @@ class FullyShardedDataParallelPlugin:
                 "sharding_strategy is deprecated in favor of reshard_after_forward. "
                 "This will be removed in a future version of Accelerate."
             )
-        if self.sharding_strategy is None:
-            self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
-        if isinstance(self.sharding_strategy, str):
-            if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
-                self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
-            if isinstance(self.sharding_strategy, int) or self.sharding_strategy.isdigit():
-                self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
-            else:
-                self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
+        if self.fsdp_version == 1:
+            if self.sharding_strategy is None:
+                self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
+            if isinstance(self.sharding_strategy, str):
+                if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
+                    self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
+                if isinstance(self.sharding_strategy, int) or self.sharding_strategy.isdigit():
+                    self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
+                else:
+                    self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
 
         if self.reshard_after_forward is None:
             reshard_after_forward = os.environ.get(
