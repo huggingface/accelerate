@@ -38,6 +38,7 @@ from ..utils import (
 )
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from ..utils.other import is_port_in_use, merge_dicts
+from ..utils.versions import compare_versions
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
@@ -348,8 +349,14 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         args.deepspeed_multinode_launcher = DEEPSPEED_MULTINODE_LAUNCHERS[0]
 
     if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        cmd = ["deepspeed", "--no_local_rank"]
-        cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
+        cmd = ["deepspeed"]
+        cmd.extend(["--hostfile", str(args.deepspeed_hostfile)])
+        if args.deepspeed_multinode_launcher == "nossh":
+            if compare_versions("deepspeed", "<", "0.14.5"):
+                raise ValueError("nossh launcher requires DeepSpeed >= 0.14.5")
+            cmd.extend(["--node_rank", str(args.machine_rank), "--no_ssh"])
+        else:
+            cmd.extend(["--no_local_rank", "--launcher", str(args.deepspeed_multinode_launcher)])
         if args.deepspeed_exclusion_filter is not None:
             cmd.extend(
                 [
