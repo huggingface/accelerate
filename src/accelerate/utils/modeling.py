@@ -321,8 +321,6 @@ def set_module_tensor_to_device(
                 device = f"sdaa:{device}"
             elif is_musa_available():
                 device = f"musa:{device}"
-            elif is_xpu_available():
-                device = f"xpu:{device}"
             elif is_hpu_available():
                 device = "hpu"
         if "xpu" in str(device) and not is_xpu_available():
@@ -1650,9 +1648,7 @@ def load_state_dict(checkpoint_file, device_map=None):
                 device = list(device_map.values())[0]
                 target_device = device
                 if isinstance(device, int):
-                    if is_xpu_available():
-                        target_device = f"xpu:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         target_device = f"npu:{device}"
                     elif is_hpu_available():
                         target_device = "hpu"
@@ -1688,9 +1684,7 @@ def load_state_dict(checkpoint_file, device_map=None):
             for device in devices:
                 target_device = device
                 if isinstance(device, int):
-                    if is_xpu_available():
-                        target_device = f"xpu:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         target_device = f"npu:{device}"
                     elif is_hpu_available():
                         target_device = "hpu"

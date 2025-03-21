@@ -30,7 +30,6 @@ from .utils.imports import (
     is_mlu_available,
     is_musa_available,
     is_npu_available,
-    is_xpu_available,
 )
 from .utils.memory import clear_device_cache
 from .utils.modeling import get_non_persistent_buffers
@@ -394,8 +393,6 @@ class AlignDevicesHook(ModelHook):
                         device = f"mlu:{device}"
                     elif is_musa_available():
                         device = f"musa:{device}"
-                    elif is_xpu_available():
-                        device = f"xpu:{device}"
                 del self.tied_params_map[value_pointer][device]
             self.tied_pointers_to_remove = set()
         if self.io_same_device and self.input_device is not None:
