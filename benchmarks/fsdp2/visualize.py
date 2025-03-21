@@ -25,23 +25,26 @@ def parse_args():
     return parser.parse_args()
 
 
+def filter_data(data, memory_threshold):
+    timestamps = data["timestamps"]
+    memory = data["allocated_memory"]
+
+    mid_point = len(timestamps) // 2
+    filtered_times = []
+    filtered_memory = []
+    for i, (t, m) in enumerate(zip(timestamps, memory)):
+        if i < mid_point and m < memory_threshold:
+            continue
+        filtered_times.append(t)
+        filtered_memory.append(m)
+    return filtered_times, filtered_memory
+
 def compare_memory_usage(data, labels, memory_threshold):
     fig1, ax1 = plt.subplots(figsize=(15, 5))
     for data_item, label in zip(data, labels):
-        timestamps = data_item["timestamps"]
-        allocated = data_item["allocated_memory"]
+        timestamps, allocated = filter_data(data_item, memory_threshold)
+        ax1.plot(timestamps, allocated, label=label)
 
-        # Filter data: remove points below 500MB in first 50% of data
-        mid_point = len(timestamps) // 2
-        filtered_times = []
-        filtered_allocated = []
-        for i, (t, m) in enumerate(zip(timestamps, allocated)):
-            if i < mid_point and m < memory_threshold:
-                continue
-            filtered_times.append(t)
-            filtered_allocated.append(m)
-
-        ax1.plot(filtered_times, filtered_allocated, label=label)
     ax1.set_xlabel("Time")
     ax1.set_ylabel("Allocated Memory")
     ax1.set_title("Allocated Memory")
@@ -50,20 +53,8 @@ def compare_memory_usage(data, labels, memory_threshold):
 
     fig2, ax2 = plt.subplots(figsize=(15, 5))
     for data_item, label in zip(data, labels):
-        timestamps = data_item["timestamps"]
-        reserved = data_item["reserved_memory"]
-
-        # Filter data: remove points below 500MB in first 50% of data
-        mid_point = len(timestamps) // 2
-        filtered_times = []
-        filtered_reserved = []
-        for i, (t, m) in enumerate(zip(timestamps, reserved)):
-            if i < mid_point and m < args.memory_threshold:
-                continue
-            filtered_times.append(t)
-            filtered_reserved.append(m)
-
-        ax2.plot(filtered_times, filtered_reserved, label=label)
+        timestamps, reserved = filter_data(data_item, memory_threshold)
+        ax2.plot(timestamps, reserved, label=label)
     ax2.set_xlabel("Time")
     ax2.set_ylabel("Reserved Memory")
     ax2.set_title("Reserved Memory")
