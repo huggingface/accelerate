@@ -1736,7 +1736,9 @@ class Accelerator:
                     )
 
                     kwargs = {
-                        "sharding_strategy": fsdp_plugin.reshard_after_forward,
+                        # We fallback to the sharding strategy if reshard_after_forward is not set, as is is getting deprecated
+                        # Warning has already been issued in `utils.dataclasses.py`
+                        "sharding_strategy": fsdp_plugin.reshard_after_forward or fsdp_plugin.sharding_strategy,
                         "cpu_offload": fsdp_plugin.cpu_offload,
                         "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
                         "mixed_precision": fsdp_plugin.mixed_precision_policy,

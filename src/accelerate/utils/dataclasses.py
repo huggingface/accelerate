@@ -1709,9 +1709,14 @@ class FullyShardedDataParallelPlugin:
                     self.reshard_after_forward = ShardingStrategy(int(self.reshard_after_forward))
                 else:
                     self.reshard_after_forward = ShardingStrategy[self.reshard_after_forward.upper()]
+
         if self.fsdp_version == 2 and not isinstance(self.reshard_after_forward, bool):
             raise ValueError(
                 f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP2, please set to a `bool`"
+            )
+        if self.fsdp_version == 1 and isinstance(self.reshard_after_forward, bool):
+            raise ValueError(
+                "reshard_after_forward set to a `bool`. This is not supported with FSDP1, please set to a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
             )
 
         if self.cpu_offload is None:
@@ -1772,7 +1777,10 @@ class FullyShardedDataParallelPlugin:
         if self.sync_module_states is None and self.fsdp_version == 1:
             self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
         if self.fsdp_version == 2 and self.sync_module_states is not None:
-            _fsdp2_warnings.add("sync_module_states is obsolete in FSDP2, as it is not needed anymore.")
+            _fsdp2_warnings.add(
+                "sync_module_states is obsolete in FSDP2, as it is not needed anymore."
+                "Setting sync_module_states to None."
+            )
             self.sync_module_states = None
 
         if self.forward_prefetch is None and self.fsdp_version == 1:
