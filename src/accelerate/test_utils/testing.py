@@ -404,7 +404,9 @@ def require_multi_gpu_or_xpu(test_case):
     Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
     GPUs or XPUs.
     """
-    return unittest.skipUnless((is_cuda_available() or is_xpu_available()) and device_count > 1, "test requires multiple GPUs or XPUs")(test_case)
+    return unittest.skipUnless(
+        (is_cuda_available() or is_xpu_available()) and device_count > 1, "test requires multiple GPUs or XPUs"
+    )(test_case)
 
 
 def require_deepspeed(test_case):

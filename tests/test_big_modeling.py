@@ -401,7 +401,13 @@ class BigModelingTester(unittest.TestCase):
         # We should need only 5000 * 5000 * 32 // 8 * 1e-6 = 100 MB on the device 0 for the four linear weights.
         device_0 = f"{torch_device_type}:0" if torch_device != "cpu" else "cpu"
         device_1 = f"{torch_device_type}:1" if torch_device != "cpu" else "cpu"
-        device_map = {"linear0": device_0, "linear1": device_1, "linear2": device_0, "linear3": device_0, "linear4": device_0}
+        device_map = {
+            "linear0": device_0,
+            "linear1": device_1,
+            "linear2": device_0,
+            "linear3": device_0,
+            "linear4": device_0,
+        }
 
         # Just to initialize CUDA context.
         a = torch.rand(5).to(device_0)  # noqa: F841
@@ -431,11 +437,7 @@ class BigModelingTester(unittest.TestCase):
     def test_dispatch_model_tied_weights_memory_with_nested_offload_cpu(self):
         # Test that we do not duplicate tied weights at any point during dispatch_model call.
 
-        torch_accelerator_module = None
-        if torch_device_type == "cuda":
-            torch_accelerator_module = torch.cuda
-        elif torch_device_type == "xpu":
-            torch_accelerator_module = torch.xpu
+        torch_accelerator_module = getattr(torch, torch_device_type)
         torch_accelerator_module.empty_cache()  # Needed in case we run several tests in a row.
 
         class SubModule(torch.nn.Module):
