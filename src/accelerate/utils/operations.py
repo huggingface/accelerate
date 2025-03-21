@@ -778,9 +778,14 @@ def convert_to_fp32(tensor):
         return tensor.float()
 
     def _is_fp16_bf16_tensor(tensor):
-        return (is_torch_tensor(tensor) or hasattr(tensor, "dtype")) and tensor.dtype in (
-            torch.float16,
-            torch.bfloat16,
+        return (
+            hasattr(tensor, "dtype")
+            and tensor.dtype
+            in (
+                torch.float16,
+                torch.bfloat16,
+            )
+            and callable(getattr(tensor, "float", None))
         )
 
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
