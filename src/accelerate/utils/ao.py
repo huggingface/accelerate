@@ -135,5 +135,5 @@ def convert_model_to_fp8_ao(
 
     first_linear, last_linear = find_first_last_linear_layers(model)
     if module_filter_func is None:
-        module_filter_func = partial(filter_linear_layers, first_layer_name=first_linear, last_layer_name=last_linear)
+        module_filter_func = partial(filter_linear_layers, layers_to_filter=[first_linear, last_linear])
     convert_to_float8_training(model, module_filter_fn=module_filter_func, config=config)
