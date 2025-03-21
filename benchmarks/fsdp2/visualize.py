@@ -55,6 +55,7 @@ def compare_memory_usage(data, labels, memory_threshold):
     for data_item, label in zip(data, labels):
         timestamps, reserved = filter_data(data_item, memory_threshold)
         ax2.plot(timestamps, reserved, label=label)
+
     ax2.set_xlabel("Time")
     ax2.set_ylabel("Reserved Memory")
     ax2.set_title("Reserved Memory")

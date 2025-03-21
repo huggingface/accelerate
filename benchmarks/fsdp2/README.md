@@ -37,6 +37,7 @@ This script will run 4 different benchmarks:
 - `accelerate`: `Accelerate`'s own integration of `FSDP2` where optimizer is created before applying `FSDP2`, but we apply our fix to the optimizer
 
 Memory results are saved in a folder specified by `--output_dir` argument.
+Optionally, you can specify `--save_memory_snapshot` to save the torch memory snapshot, which can then be viewed using [`torch memory viz`](https://pytorch.org/memory_viz)
 
 ## Visualizing results
 

@@ -1380,6 +1380,22 @@ class Accelerator:
                     "part for you."
                 )
 
+        if self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+            model_count = 0
+            optimizer_count = 0
+            for obj in args:
+                if isinstance(obj, torch.nn.Module):
+                    model_count += 1
+                elif isinstance(obj, torch.optim.Optimizer):
+                    optimizer_count += 1
+
+            # This needs to be written as such, so that passing other objects other than models/optimizers doesn't raise an error
+            if (model_count < 1 and optimizer_count > 0) or (model_count > 0 and optimizer_count < 1):
+                raise ValueError(  #
+                    "With FSDP2, you need to pass model and optimizer to a single `Accelerator.prepare()` call."
+                    "This is due to the fact that we apply a fix to the optimizer, which replaces its parameters after applying FSDP2."
+                )
+
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
         fsdp2_should_fix_optimizer = (
