@@ -375,11 +375,7 @@ class BigModelingTester(unittest.TestCase):
     def test_dispatch_model_tied_weights_memory(self):
         # Test that we do not duplicate tied weights at any point during dispatch_model call.
 
-        torch_accelerator_module = None
-        if torch_device_type == "cuda":
-            torch_accelerator_module = torch.cuda
-        elif torch_device_type == "xpu":
-            torch_accelerator_module = torch.xpu
+        torch_accelerator_module = getattr(torch, torch_device_type)
 
         torch_accelerator_module.empty_cache()  # Needed in case we run several tests in a row.
 
