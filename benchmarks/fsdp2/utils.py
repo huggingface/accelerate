@@ -27,15 +27,11 @@ from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
 
 from accelerate import Accelerator
 
+from measure_utils import MemoryTracker
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--run_name",
-        type=str,
-        required=True,
-        help="Name of the run, will be used to name the output files inside the directory specified by `--output_dir`",
-    )
     parser.add_argument(
         "--output_dir",
         type=str,
@@ -47,12 +43,6 @@ def parse_args():
         action="store_true",
         default=False,
         help="If True, `torch.cuda.memory._dump_snapshot` will be used to additionaly save the memory trace.",
-    )
-    parser.add_argument(
-        "--wandb",
-        action="store_true",
-        default=False,
-        help="If True, the benchmarking results will be logged to Weights & Biases under the run specified by `--run_name`.",
     )
     ######################
     # Training arguments #
@@ -159,6 +149,11 @@ def prepare_torch(
 
     accelerator = Accelerator(mixed_precision="bf16")
     set_seed(42)
+    is_fixed = "fixed" if apply_optimizer_fix else "not_fixed"
+    is_post_shard = "post_shard" if post_shard_optimizer else "pre_shard"
+    run_name = f"torch_{is_post_shard}" if post_shard_optimizer else f"torch_{is_post_shard}_{is_fixed}"
+    memory_tracker = MemoryTracker(accelerator, args.output_dir, run_name, args.save_memory_snapshot)
+    memory_tracker.start()
     model, tokenizer = get_model_and_tokenizer(config["model_name"])
     train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
     optimizer = None
@@ -181,7 +176,7 @@ def prepare_torch(
     if not post_shard_optimizer and apply_optimizer_fix:
         swap_back_optimizer_params(accelerator, model, optimizer, old_named_parameters)
 
-    return model, optimizer, train_dataloader, accelerator
+    return model, optimizer, train_dataloader, accelerator, memory_tracker
 
 
 def prepare_accelerate(
@@ -198,10 +193,12 @@ def prepare_accelerate(
         mixed_precision="bf16",
     )
     set_seed(42)
+    memory_tracker = MemoryTracker(accelerator, args.output_dir, "accelerate", args.save_memory_snapshot)
+    memory_tracker.start()
     model, tokenizer = get_model_and_tokenizer(config["model_name"])
     train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
     optimizer = AdamW(model.parameters(), lr=config["learning_rate"])
 
     model, optimizer = accelerator.prepare(model, optimizer)
 
-    return model, optimizer, train_dataloader, accelerator
+    return model, optimizer, train_dataloader, accelerator, memory_tracker

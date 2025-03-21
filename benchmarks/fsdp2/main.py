@@ -55,8 +55,11 @@ def train(
 
 
 def evaluate(args, config: dict, init_fn: Callable) -> torch.Tensor:
-    model, optimizer, dataloader, accelerator = init_fn(args, config)
+    model, optimizer, dataloader, accelerator, memory_tracker = init_fn(args, config)
+
     loss = train(model, optimizer, dataloader, accelerator)
+
+    memory_tracker.stop()
     return loss
 
 
