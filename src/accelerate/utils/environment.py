@@ -64,9 +64,9 @@ def str_to_bool(value, to_bool: bool = False) -> Union[int, bool]:
     """
     value = value.lower()
     if value in ("y", "yes", "t", "true", "on", "1"):
-        return 1
+        return 1 if not to_bool else True
     elif value in ("n", "no", "f", "false", "off", "0"):
-        return 0
+        return 0 if not to_bool else False
     else:
         raise ValueError(f"invalid truth value {value}")
 

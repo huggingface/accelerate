@@ -435,3 +435,15 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             sharded_sd[param_name] = sharded_tensor
 
     model.load_state_dict(sharded_sd)
+
+
+def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping: dict):
+    try:
+        for param_group in optimizer.param_groups:
+            param_group["params"] = [mapping[p.data_ptr] for p in param_group["params"]]
+    except KeyError:
+        # This shouldn't ever happen, but we want to fail here else training wouldn't be numerically correct
+        # This basically means that we're missing a mapping from the original parameter to the sharded parameter
+        raise KeyError(
+            "A parameter in the optimizer couldn't be switched to its sharded version. This breaks the training. Please raise an issue on GitHub."
+        )

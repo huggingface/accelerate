@@ -84,6 +84,7 @@ from .utils import (
     ensure_weights_retied,
     extract_model_from_parallel,
     fsdp2_load_full_state_dict,
+    fsdp2_switch_optimizer_parameters,
     gather,
     gather_object,
     get_grad_scaler,
@@ -1438,7 +1439,10 @@ class Accelerator:
             # 4. using that map to update the parameters of the optimizer
             for obj in result:
                 if isinstance(obj, torch.optim.Optimizer):
-                    obj._switch_parameters(mapping)
+                    if not fsdp2_should_fix_optimizer:
+                        obj._switch_parameters(mapping)
+                    else:
+                        fsdp2_switch_optimizer_parameters(obj, mapping)
 
         for item in result:
             if any(

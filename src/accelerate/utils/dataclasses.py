@@ -1692,16 +1692,12 @@ class FullyShardedDataParallelPlugin:
 
         if self.reshard_after_forward is None:
             reshard_after_forward = os.environ.get(
-                env_prefix + "RESHARD_AFTER_FORWARD", True if self.fsdp_version == 2 else "FULL_SHARD"
+                env_prefix + "RESHARD_AFTER_FORWARD", "true" if self.fsdp_version == 2 else "FULL_SHARD"
             )
             if self.fsdp_version == 2:
                 self.reshard_after_forward = str_to_bool(reshard_after_forward.lower(), to_bool=True)
             else:
                 self.reshard_after_forward = reshard_after_forward
-            self.reshard_after_forward = os.environ.get(
-                env_prefix + "RESHARD_AFTER_FORWARD",
-                True if self.fsdp_version == 2 else "FULL_SHARD",
-            )
         if isinstance(self.reshard_after_forward, str):
             if self.fsdp_version == 2:
                 self.reshard_after_forward = str_to_bool(self.reshard_after_forward.lower(), to_bool=True)
@@ -1713,9 +1709,9 @@ class FullyShardedDataParallelPlugin:
                     self.reshard_after_forward = ShardingStrategy(int(self.reshard_after_forward))
                 else:
                     self.reshard_after_forward = ShardingStrategy[self.reshard_after_forward.upper()]
-        if self.fsdp_version != 2 and isinstance(self.reshard_after_forward, bool):
+        if self.fsdp_version == 2 and not isinstance(self.reshard_after_forward, bool):
             raise ValueError(
-                f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP1, please set to a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
+                f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP2, please set to a `bool`"
             )
 
         if self.cpu_offload is None:
