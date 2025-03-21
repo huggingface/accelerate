@@ -39,6 +39,7 @@ def filter_data(data, memory_threshold):
         filtered_memory.append(m)
     return filtered_times, filtered_memory
 
+
 def compare_memory_usage(data, labels, memory_threshold):
     fig1, ax1 = plt.subplots(figsize=(15, 5))
     for data_item, label in zip(data, labels):
