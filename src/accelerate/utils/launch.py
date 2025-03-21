@@ -291,7 +291,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
 
         current_env["FSDP_RESHARD_AFTER_FORWARD"] = str(
             args.fsdp_reshard_after_forward
-        ).lower()  # TODO(s1ro1): this breaks with old configs, maybe too harsh?
+        ).lower()
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
         if args.fsdp_auto_wrap_policy is not None:

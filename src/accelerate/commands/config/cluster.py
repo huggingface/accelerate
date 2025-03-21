@@ -468,7 +468,7 @@ def get_cluster_input():
                 fsdp_state_dict_type_query,
                 FSDP_STATE_DICT_TYPE if fsdp_version == 1 else FSDP2_STATE_DICT_TYPE,
                 lambda x: FSDP_STATE_DICT_TYPE[int(x)] if fsdp_version == 1 else FSDP2_STATE_DICT_TYPE[int(x)],
-                default=0 if fsdp_version == 1 else 1,
+                default=0,
             )
             # Not implemented in FSDP2, ask for user input for FSDP1
             if fsdp_version == 1:

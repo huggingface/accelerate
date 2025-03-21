@@ -1845,7 +1845,9 @@ class FullyShardedDataParallelPlugin:
             self.state_dict_type = state_dict_type
 
         if self.state_dict_type is None:
-            self.state_dict_type = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
+            self.state_dict_type = os.environ.get(
+                "FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT" if self.fsdp_version == 1 else "SHARDED_STATE_DICT"
+            )
         if isinstance(self.state_dict_type, str):
             if self.state_dict_type.isdigit():
                 self.state_dict_type = StateDictType(int(self.state_dict_type))
@@ -1862,6 +1864,13 @@ class FullyShardedDataParallelPlugin:
                 self.state_dict_config = ShardedStateDictConfig(offload_to_cpu=True)
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
+
+        # TODO(s1ro1): add support for FULL_STATE_DICT in FSDP2
+        if self.fsdp_version == 2 and self.state_dict_type != StateDictType.SHARDED_STATE_DICT:
+            raise ValueError(
+                "FSDP2 only supports SHARDED_STATE_DICT for now. "
+                "Please set `fsdp_state_dict_type` to `SHARDED_STATE_DICT`."
+            )
 
     def set_auto_wrap_policy(self, model):
         """
