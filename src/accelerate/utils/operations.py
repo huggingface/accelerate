@@ -30,7 +30,6 @@ from .imports import (
     is_npu_available,
     is_torch_distributed_available,
     is_torch_xla_available,
-    is_xpu_available,
 )
 
 
