@@ -95,9 +95,6 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
-            if fsdp_plugin.fsdp_version == 2:
-                with torch.no_grad():
-                    state_dict = {k: v.full_tensor() for k, v in state_dict.items()}
             if accelerator.process_index == 0:
                 logger.info(f"Saving model to {output_model_file}")
                 torch.save(state_dict, output_model_file)
@@ -189,10 +186,13 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             )
             state_dict = state_dict["model"]
             logger.info(f"Model loaded from {ckpt_dir}")
+
         if fsdp_plugin.fsdp_version == 1:
             load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only)
         else:
-            load_result = fsdp2_load_full_state_dict(accelerator, model, state_dict)
+            from torch.distributed.checkpoint.state_dict import set_model_state_dict
+
+            load_result = set_model_state_dict(model, state_dict)
     return load_result
 
 
@@ -273,19 +273,28 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
                 else input_dir
             )
             logger.info(f"Loading Optimizer from {ckpt_dir}")
-            optim_state = load_sharded_optimizer_state_dict(
-                model_state_dict=_get_model_state_dict(model, adapter_only=adapter_only),
-                optimizer_key="optimizer",
-                storage_reader=dist_cp.FileSystemReader(ckpt_dir),
-            )
+            if fsdp_plugin.fsdp_version == 1:
+                optim_state = load_sharded_optimizer_state_dict(
+                    model_state_dict=_get_model_state_dict(model, adapter_only=adapter_only),
+                    optimizer_key="optimizer",
+                    storage_reader=dist_cp.FileSystemReader(ckpt_dir),
+                )
+            else:
+                optim_state = {"optimizer": optimizer.state_dict()}
+                dist_cp.load(
+                    optim_state,
+                    checkpoint_id=ckpt_dir,
+                    storage_reader=dist_cp.FileSystemReader(ckpt_dir),
+                )
             optim_state = optim_state["optimizer"]
             logger.info(f"Optimizer loaded from {ckpt_dir}")
         if fsdp_plugin.fsdp_version == 1:
             flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
             optimizer.load_state_dict(flattened_osd)
         else:
-            flattened_osd = {"state": optim_state}
-            optimizer.state_dict = flattened_osd
+            from torch.distributed.checkpoint.state_dict import set_optimizer_state_dict
+
+            set_optimizer_state_dict(model, optimizer, optim_state)
 
 
 def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: str, safe_serialization: bool = True):

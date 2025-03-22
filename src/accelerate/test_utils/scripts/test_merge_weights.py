@@ -51,7 +51,7 @@ def setup():
     if AcceleratorState._shared_state != {}:
         AcceleratorState()._reset_state()
     plugin = FullyShardedDataParallelPlugin(
-        reshard_after_forward=ShardingStrategy.FULL_SHARD, state_dict_type=StateDictType.SHARDED_STATE_DICT
+        sharding_strategy=ShardingStrategy.FULL_SHARD, state_dict_type=StateDictType.SHARDED_STATE_DICT
     )
     model = TinyModel()
     with patch_environment(fsdp_auto_wrap_policy="SIZE_BASED_WRAP"):
