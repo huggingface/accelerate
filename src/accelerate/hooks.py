@@ -396,7 +396,8 @@ class AlignDevicesHook(ModelHook):
                         device = f"musa:{device}"
                     elif is_xpu_available():
                         device = f"xpu:{device}"
-                del self.tied_params_map[value_pointer][device]
+                if self.tied_params_map[value_pointer]:
+                    del self.tied_params_map[value_pointer][device]
             self.tied_pointers_to_remove = set()
         if self.io_same_device and self.input_device is not None:
             output = send_to_device(output, self.input_device, skip_keys=self.skip_keys)
