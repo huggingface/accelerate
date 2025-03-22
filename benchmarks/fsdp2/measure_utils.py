@@ -118,3 +118,11 @@ class MemoryTracker:
                     },
                     f,
                 )
+
+    @property
+    def peak_allocated_memory(self):
+        return max(self.allocated_memory)
+
+    @property
+    def peak_reserved_memory(self):
+        return max(self.reserved_memory)

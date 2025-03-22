@@ -54,31 +54,70 @@ def train(
     return torch.tensor(losses)
 
 
-def evaluate(args, config: dict, init_fn: Callable) -> torch.Tensor:
+def evaluate(args, config: dict, init_fn: Callable, run_name: str) -> torch.Tensor:
     model, optimizer, dataloader, accelerator, memory_tracker = init_fn(args, config)
 
     loss = train(model, optimizer, dataloader, accelerator)
 
     memory_tracker.stop()
+    if accelerator.is_main_process:
+        print(f"Results for {run_name} (rank 0):")
+        print(f"\tLoss: {loss[-1].item()}")
+        print(f"Peak Allocated Memory: {float(memory_tracker.peak_allocated_memory):.2f} MB")
+        print(f"Peak Reserved Memory: {float(memory_tracker.peak_reserved_memory):.2f} MB")
+        print("----------------------------------")
     return loss
 
 
 def main():
     args = parse_args()
     evaluations = [
-        functools.partial(evaluate, init_fn=functools.partial(prepare_torch, post_shard_optimizer=True)),
         functools.partial(
-            evaluate, init_fn=functools.partial(prepare_torch, post_shard_optimizer=False, apply_optimizer_fix=True)
+            evaluate,
+            init_fn=functools.partial(prepare_torch, post_shard_optimizer=True),
+            run_name="Optimizer Post fully_shard",
         ),
         functools.partial(
-            evaluate, init_fn=functools.partial(prepare_torch, post_shard_optimizer=False, apply_optimizer_fix=False)
+            evaluate,
+            init_fn=functools.partial(prepare_torch, post_shard_optimizer=False, apply_optimizer_fix=True),
+            run_name="Optimizer Pre fully_shard (w/ fix)",
         ),
-        functools.partial(evaluate, init_fn=prepare_accelerate),
+        functools.partial(
+            evaluate,
+            init_fn=functools.partial(prepare_torch, post_shard_optimizer=False, apply_optimizer_fix=False),
+            run_name="Optimizer Pre fully_shard (w/o fix)",
+        ),
+        functools.partial(evaluate, init_fn=prepare_accelerate, run_name="Accelerate"),
+    ]
+    labels = [
+        "Optimizer Post fully_shard",
+        "Optimizer Pre fully_shard (w/ fix)",
+        "Optimizer Post fully_shard (w/o fix)",
+        "Accelerate",
     ]
 
-    for evaluation in evaluations:
-        results = evaluation(args, CONFIG)
-        print(results)
+    results = {}
+
+    for evaluation, label in zip(evaluations, labels):
+        results[label] = evaluation(args, CONFIG)
+
+    torch.testing.assert_close(
+        results["Optimizer Post fully_shard"],
+        results["Optimizer Pre fully_shard (w/ fix)"],
+        msg="Optimizer Post fully_shard and Optimizer Pre fully_shard (w/ fix) should be the same",
+    )
+
+    torch.testing.assert_close(
+        results["Optimizer Post fully_shard"],
+        results["Accelerate"],
+        msg="Optimizer Post fully_shard and Accelerate should be the same",
+    )
+
+    torch.testing.assert_close(
+        results["Optimizer Pre fully_shard (w/ fix)"],
+        results["Accelerate"],
+        msg="Optimizer Pre fully_shard (w/ fix) and Accelerate should be the same",
+    )
 
 
 if __name__ == "__main__":
