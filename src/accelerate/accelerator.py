@@ -33,7 +33,6 @@ import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
-from accelerate.utils.dataclasses import get_module_class_from_name
 from accelerate.utils.imports import is_torchao_available
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
@@ -83,7 +82,7 @@ from .utils import (
     convert_outputs_to_fp32,
     ensure_weights_retied,
     extract_model_from_parallel,
-    fsdp2_load_full_state_dict,
+    fsdp2_prepare_model,
     fsdp2_switch_optimizer_parameters,
     gather,
     gather_object,
@@ -1407,9 +1406,8 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(
                 *args, drop_refs=fsdp2_should_fix_optimizer
-            )  # Drop refs for FSDP2
+            )  # Drop refs for FSDP2, to enable reallocation of parameters furhter in `fully_shard`
 
-        # TODO(siro1): Abstract away
         # `FSDP2` by default expects `Optimizer` to be created after the model is prepared,
         # however that goes against `Accelerate's` design of `bring your own`
         # this is a workaround to make memory footprint match if `Optimizer` is created before preparing the model
@@ -1604,108 +1602,7 @@ class Accelerator:
                     )
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
             elif self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
-                from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
-
-                is_type_fsdp = isinstance(model, FSDPModule) or (
-                    is_compiled_module(model) and isinstance(model._orig_mod, FSDPModule)
-                )
-
-                if not is_type_fsdp:
-                    fsdp2_plugin = self.state.fsdp_plugin
-                    full_sd = model.state_dict()
-
-                    from torch.distributed.fsdp.wrap import (
-                        size_based_auto_wrap_policy,
-                        transformer_auto_wrap_policy,
-                    )
-
-                    auto_wrap_policy_type = None  # extract the original type to create custom fn later
-                    if fsdp2_plugin.auto_wrap_policy is transformer_auto_wrap_policy:
-                        auto_wrap_policy_type = "transformer"
-                    elif fsdp2_plugin.auto_wrap_policy is size_based_auto_wrap_policy:
-                        auto_wrap_policy_type = "size"
-
-                    # we set the auto_wrap policy to a functools.partial, so we can use it in apply_activation_checkpointing
-                    fsdp2_plugin.set_auto_wrap_policy(model)
-
-                    kwargs = {
-                        "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
-                        "offload_policy": fsdp2_plugin.cpu_offload,
-                        "mp_policy": fsdp2_plugin.mixed_precision_policy
-                        or MixedPrecisionPolicy(),  # fsdp2 doesn't support None, rather a default policy is used
-                    }
-
-                    if fsdp2_plugin.activation_checkpointing:
-                        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-                            CheckpointImpl,
-                            apply_activation_checkpointing,
-                            checkpoint_wrapper,
-                        )
-
-                        apply_activation_checkpointing(
-                            model,
-                            checkpoint_wrapper_fn=functools.partial(
-                                checkpoint_wrapper,
-                                checkpoint_impl=CheckpointImpl.NO_REENTRANT,
-                            ),
-                            auto_wrap_policy=fsdp2_plugin.auto_wrap_policy,
-                        )
-                    if (auto_wrap_policy := auto_wrap_policy_type) is not None:
-                        # Simulate the behavior of the old auto_wrap_policy
-                        # TODO(siro1): abstract this into a function together with `set_auto_wrap_policy`
-                        if auto_wrap_policy == "transformer":
-                            no_split_modules = model._no_split_modules
-                            if no_split_modules is None:
-                                no_split_modules = []
-                            transformer_cls_names_to_wrap = list(no_split_modules)
-                            if fsdp2_plugin.transformer_cls_names_to_wrap is not None:
-                                transformer_cls_names_to_wrap = fsdp2_plugin.transformer_cls_names_to_wrap
-                            transformer_cls_to_wrap = set()
-
-                            for layer_class in transformer_cls_names_to_wrap:
-                                transformer_cls = get_module_class_from_name(model, layer_class)
-                                if transformer_cls is None:
-                                    raise ValueError(
-                                        f"Could not find the transformer layer class {layer_class} in the model."
-                                    )
-                                transformer_cls_to_wrap.add(transformer_cls)
-
-                            def policy(module: torch.nn.Module) -> bool:
-                                if fsdp2_plugin.transformer_cls_names_to_wrap is None:
-                                    return False
-                                return isinstance(module, tuple(transformer_cls_to_wrap))
-
-                        elif auto_wrap_policy == "size":
-
-                            def policy(module: torch.nn.Module) -> bool:
-                                return module.numel() > fsdp2_plugin.min_num_params
-
-                        stack = [model]
-                        ordered_modules = []
-                        while stack:
-                            current_module = stack.pop()
-                            for _, attr in current_module.named_children():
-                                if isinstance(attr, torch.nn.Module):
-                                    stack.append(attr)
-                            ordered_modules.append(current_module)
-
-                        for module in ordered_modules[::-1][
-                            :-1
-                        ]:  # Skip the top-most module, as that one is wrapped even without policy
-                            if policy(module):
-                                fully_shard(module, **kwargs)
-
-                    fully_shard(model, **kwargs)  # Wrap the top-most module nonetheless
-                    if fsdp2_plugin.cpu_ram_efficient_loading:
-                        fsdp2_load_full_state_dict(self, model, full_sd)
-
-                if self.mixed_precision != "no" and model.dtype != torch.float32:
-                    model = model.to(torch.float32)
-                    if self.is_main_process:
-                        # TODO(siro1): Add a warning for each parameter that was upcasted
-                        warnings.warn(
-                            "FSDP upcast of low precision parameters may affect the precision of model checkpoints."
-                        )
+                model = fsdp2_prepare_model(self, model)
 
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
