@@ -25,9 +25,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def filter_data(data, memory_threshold):
+def filter_data(data, memory_threshold, key):
     timestamps = data["timestamps"]
-    memory = data["allocated_memory"]
+    memory = data[key]
 
     mid_point = len(timestamps) // 2
     filtered_times = []
@@ -43,7 +43,7 @@ def filter_data(data, memory_threshold):
 def compare_memory_usage(data, labels, memory_threshold):
     fig1, ax1 = plt.subplots(figsize=(15, 5))
     for data_item, label in zip(data, labels):
-        timestamps, allocated = filter_data(data_item, memory_threshold)
+        timestamps, allocated = filter_data(data_item, memory_threshold, "allocated_memory")
         ax1.plot(timestamps, allocated, label=label)
 
     ax1.set_xlabel("Time")
@@ -54,7 +54,7 @@ def compare_memory_usage(data, labels, memory_threshold):
 
     fig2, ax2 = plt.subplots(figsize=(15, 5))
     for data_item, label in zip(data, labels):
-        timestamps, reserved = filter_data(data_item, memory_threshold)
+        timestamps, reserved = filter_data(data_item, memory_threshold, "reserved_memory")
         ax2.plot(timestamps, reserved, label=label)
 
     ax2.set_xlabel("Time")
