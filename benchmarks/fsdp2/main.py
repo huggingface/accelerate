@@ -18,11 +18,7 @@ from typing import Callable
 import torch
 
 from accelerate import Accelerator
-from utils import (
-    parse_args,
-    prepare_accelerate,
-    prepare_torch,
-)
+from utils import parse_args, prepare_accelerate, prepare_torch
 
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
@@ -66,6 +62,7 @@ def evaluate(args, config: dict, init_fn: Callable, run_name: str) -> torch.Tens
         print(f"Peak Allocated Memory: {float(memory_tracker.peak_allocated_memory):.2f} MB")
         print(f"Peak Reserved Memory: {float(memory_tracker.peak_reserved_memory):.2f} MB")
         print("----------------------------------")
+
     return loss
 
 
@@ -114,9 +111,9 @@ def main():
     )
 
     torch.testing.assert_close(
-        results["Optimizer Pre fully_shard (w/ fix)"],
         results["Accelerate"],
-        msg="Optimizer Pre fully_shard (w/ fix) and Accelerate should be the same",
+        results["Optimizer Pre fully_shard (w/ fix)"],
+        msg="Accelerate and Optimizer Pre fully_shard (w/ fix) should be the same",
     )
 
 

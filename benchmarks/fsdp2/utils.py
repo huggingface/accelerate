@@ -12,22 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse  # noqa: I001
+import argparse
+from types import MethodType  # noqa: I001
 
-from accelerate.state import AcceleratorState
-from accelerate.utils import set_seed
 import torch
-from accelerate import FullyShardedDataParallelPlugin
 from datasets import load_dataset
+from measure_utils import MemoryTracker
 from torch.distributed.fsdp import fully_shard
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoConfig, DataCollatorForLanguageModeling, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, DataCollatorForLanguageModeling
 from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
 
-from accelerate import Accelerator
+from accelerate import Accelerator, FullyShardedDataParallelPlugin
+from accelerate.state import AcceleratorState
+from accelerate.utils import convert_outputs_to_fp32, set_seed
 
-from measure_utils import MemoryTracker
+
+SEED = 5123
 
 
 def parse_args():
@@ -50,13 +52,13 @@ def parse_args():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=8,
+        default=2,
         help="Batch size for the training loop.",
     )
     parser.add_argument(
         "--block_size",
         type=int,
-        default=512,
+        default=128,
         help="The maximum sequence length to use with the model.",
     )
     return parser.parse_args()
@@ -93,6 +95,7 @@ def prepare_dataloader(tokenizer, args, accelerator: Accelerator) -> DataLoader:
         return result
 
     dataset = dataset.map(group_texts, batched=True)
+    dataset = dataset.select(range(len(dataset) // 20))
 
     def collate_fn(examples):
         return DataCollatorForLanguageModeling(
@@ -148,7 +151,7 @@ def prepare_torch(
     )
 
     accelerator = Accelerator(mixed_precision="bf16")
-    set_seed(42)
+    set_seed(SEED)
     is_fixed = "fixed" if apply_optimizer_fix else "not_fixed"
     is_post_shard = "post_shard" if post_shard_optimizer else "pre_shard"
     run_name = f"torch_{is_post_shard}" if post_shard_optimizer else f"torch_{is_post_shard}_{is_fixed}"
@@ -169,6 +172,13 @@ def prepare_torch(
         if isinstance(module, Qwen2DecoderLayer):
             fully_shard(module, mp_policy=mp_policy)
     fully_shard(model, mp_policy=mp_policy)
+
+    # We do this to imitate how accelerate forces outputs to be in fp32
+    autocast_context = torch.autocast(device_type=accelerator.state.device.type, dtype=torch.bfloat16)
+    model_forward_func = model.forward.__func__
+    new_forward = autocast_context(model_forward_func)
+    model.forward = MethodType(new_forward, model)
+    model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
 
     if post_shard_optimizer:
         optimizer = AdamW(model.parameters(), lr=config["learning_rate"])
@@ -192,7 +202,7 @@ def prepare_accelerate(
         fsdp_plugin=fsdp_plugin,
         mixed_precision="bf16",
     )
-    set_seed(42)
+    set_seed(SEED)
     memory_tracker = MemoryTracker(accelerator, args.output_dir, "accelerate", args.save_memory_snapshot)
     memory_tracker.start()
     model, tokenizer = get_model_and_tokenizer(config["model_name"])

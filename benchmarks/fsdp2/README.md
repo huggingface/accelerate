@@ -17,6 +17,10 @@ However, in `Accelerate` we had to come up with a workaround, because our approa
 
 So, we came up with a workaround, where we apply our own fix to the optimizer, basically replacing its parameters with the sharded ones. More about this can be found in this [blog post](TODO)
 
+> [!NOTE]
+> This script is intended to fit on 2x 24GB GPUs, though on so few GPUs it's not possible to see the memory difference (discrepancies in grad allocation result in lower memory usage in the non-fixed case), only the difference in convergence. Below are attached results from 8x H100 GPUs where the difference is visible.
+> TLDR: more GPUs = bigger memory difference between fixed and non-fixed cases.
+
 ## Running
 
 To run the benchmark, use the following command:

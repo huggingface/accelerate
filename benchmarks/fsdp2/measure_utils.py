@@ -119,6 +119,9 @@ class MemoryTracker:
                     f,
                 )
 
+        torch.cuda.memory._record_memory_history(False)
+        torch.cuda.empty_cache()
+
     @property
     def peak_allocated_memory(self):
         return max(self.allocated_memory)
