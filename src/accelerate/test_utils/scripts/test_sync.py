@@ -283,7 +283,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(
         # Learning rates should be the same
         assert (
             opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"]
-        ), f'Learning rates found in each optimizer did not align\nopt: {opt.param_groups[0]["lr"]}\nDDP opt: {ddp_opt.param_groups[0]["lr"]}\n'
+        ), f"Learning rates found in each optimizer did not align\nopt: {opt.param_groups[0]['lr']}\nDDP opt: {ddp_opt.param_groups[0]['lr']}\n"
         did_step = (((iteration + 1) % 2) == 0) or ((iteration + 1) == len(dataloader))
         if accelerator.num_processes > 1:
             check_model_parameters(
@@ -343,8 +343,10 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_CPU,
+        DistributedType.MULTI_HPU,
     ):
         if state.local_process_index == 0:
             print("**Test Distributed `no_sync` context manager**")
@@ -356,7 +358,9 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
+        DistributedType.MULTI_HPU,
     ):
         for split_batch in [True, False]:
             for dispatch_batches in [True, False]:
@@ -379,7 +383,9 @@ def main():
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
+        DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
+        DistributedType.MULTI_HPU,
     ):
         for split_batch in [True, False]:
             for dispatch_batches in [True, False]:

@@ -102,15 +102,14 @@ def is_schedulefree_available():
 
 
 def is_transformer_engine_available():
-    return _is_package_available("transformer_engine", "transformer-engine")
+    if is_hpu_available():
+        return _is_package_available("intel_transformer_engine", "intel-transformer-engine")
+    else:
+        return _is_package_available("transformer_engine", "transformer-engine")
 
 
 def is_lomo_available():
     return _is_package_available("lomo_optim")
-
-
-def is_fp8_available():
-    return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
 
 
 def is_cuda_available():
@@ -169,6 +168,19 @@ def is_bf16_available(ignore_tpu=False):
     if is_mps_available():
         return False
     return True
+
+
+def is_fp16_available():
+    "Checks if fp16 is supported"
+    if is_habana_gaudi1():
+        return False
+
+    return True
+
+
+def is_fp8_available():
+    "Checks if fp8 is supported"
+    return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
 
 
 def is_4bit_bnb_available():
@@ -288,6 +300,10 @@ def is_pandas_available():
     return _is_package_available("pandas")
 
 
+def is_matplotlib_available():
+    return _is_package_available("matplotlib")
+
+
 def is_mlflow_available():
     if _is_package_available("mlflow"):
         return True
@@ -384,6 +400,51 @@ def is_npu_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "npu") and torch.npu.is_available()
+
+
+@lru_cache
+def is_sdaa_available(check_device=False):
+    "Checks if `torch_sdaa` is installed and potentially if a SDAA is in the environment"
+    if importlib.util.find_spec("torch_sdaa") is None:
+        return False
+
+    import torch_sdaa  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            _ = torch.sdaa.device_count()
+            return torch.sdaa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "sdaa") and torch.sdaa.is_available()
+
+
+@lru_cache
+def is_hpu_available(init_hccl=False):
+    "Checks if `torch.hpu` is installed and potentially if a HPU is in the environment"
+    if (
+        importlib.util.find_spec("habana_frameworks") is None
+        or importlib.util.find_spec("habana_frameworks.torch") is None
+    ):
+        return False
+
+    import habana_frameworks.torch  # noqa: F401
+
+    if init_hccl:
+        import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
+
+    return hasattr(torch, "hpu") and torch.hpu.is_available()
+
+
+def is_habana_gaudi1():
+    if is_hpu_available():
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+            return True
+
+    return False
 
 
 @lru_cache

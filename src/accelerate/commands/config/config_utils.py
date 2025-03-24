@@ -72,7 +72,9 @@ def _convert_compute_environment(value):
 def _convert_distributed_mode(value):
     value = int(value)
     return DistributedType(
-        ["NO", "MULTI_CPU", "MULTI_XPU", "MULTI_GPU", "MULTI_NPU", "MULTI_MLU", "MULTI_MUSA", "XLA"][value]
+        ["NO", "MULTI_CPU", "MULTI_XPU", "MULTI_GPU", "MULTI_NPU", "MULTI_MLU", "MULTI_SDAA", "MULTI_MUSA", "XLA"][
+            value
+        ]
     )
 
 

@@ -28,9 +28,11 @@ from accelerate.test_utils.testing import (
     capture_call_output,
     path_in_accelerate_package,
     require_multi_device,
+    require_non_hpu,
     require_timm,
     require_transformers,
     run_command,
+    run_first,
 )
 from accelerate.utils import patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
@@ -64,6 +66,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         if cls.changed_path.is_file():
             cls.changed_path.rename(cls.config_path)
 
+    @run_first
     def test_no_config(self):
         args = ["--monitor_interval", "0.1", str(self.test_file_path)]
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
@@ -71,6 +74,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         args = self.parser.parse_args(["--monitor_interval", "0.1", str(self.test_file_path)])
         launch_command(args)
 
+    @run_first
     def test_config_compatibility(self):
         invalid_configs = ["fp8", "invalid", "mpi", "sagemaker"]
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
@@ -80,6 +84,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                 args = self.parser.parse_args(["--config_file", str(config), str(self.test_file_path)])
                 launch_command(args)
 
+    @run_first
     def test_invalid_keys(self):
         config_path = self.test_config_path / "invalid_keys.yaml"
         with self.assertRaises(
@@ -89,10 +94,13 @@ class AccelerateLauncherTester(unittest.TestCase):
             args = self.parser.parse_args(["--config_file", str(config_path), str(self.test_file_path)])
             launch_command(args)
 
+    @run_first
     def test_accelerate_test(self):
         args = accelerate_test_cmd.test_command_parser().parse_args([])
         accelerate_test_cmd.test_command(args)
 
+    @run_first
+    @require_non_hpu
     @require_multi_device
     def test_notebook_launcher(self):
         """
@@ -133,6 +141,28 @@ class AccelerateLauncherTester(unittest.TestCase):
         self.assertEqual(len(python_script_cmd), 3)
         self.assertEqual(python_script_cmd[1], str(self.test_file_path))
         self.assertEqual(python_script_cmd[2], test_file_arg)
+
+    def test_validate_launch_command(self):
+        """Test that the validation function combines args and defaults."""
+        parser = launch_command_parser()
+        args = parser.parse_args(
+            [
+                "--num-processes",
+                "2",
+                "--deepspeed_config_file",
+                "path/to/be/accepted",
+                "--config-file",
+                str(self.test_config_path / "validate_launch_cmd.yaml"),
+                "test.py",
+            ]
+        )
+        self.assertFalse(args.debug)
+        self.assertTrue(args.fsdp_sync_module_states)
+        _validate_launch_command(args)
+        self.assertTrue(args.debug)
+        self.assertEqual(2, args.num_processes)
+        self.assertFalse(args.fsdp_sync_module_states)
+        self.assertEqual("path/to/be/accepted", args.deepspeed_config_file)
 
 
 class LaunchArgTester(unittest.TestCase):
@@ -184,7 +214,7 @@ class LaunchArgTester(unittest.TestCase):
         args = self.parser.parse_args(["test.py"])
         for arg in args.__dict__:
             if "_" in arg:
-                bad_arg = f'--{arg.replace("_", "-")}'
+                bad_arg = f"--{arg.replace('_', '-')}"
                 # Need an exception for `num-processes` since it's in the docstring
                 if bad_arg == "--num-processes":
                     assert help_return.count(bad_arg) == 1, f"Found {bad_arg} in `accelerate launch -h`"

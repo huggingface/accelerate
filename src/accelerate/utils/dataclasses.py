@@ -41,6 +41,7 @@ from .constants import (
 from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
     is_cuda_available,
+    is_hpu_available,
     is_mlu_available,
     is_msamp_available,
     is_musa_available,
@@ -428,7 +429,7 @@ class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
 
 
 # Literal
-ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda"]
+ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda", "hpu"]
 
 
 @dataclass
@@ -456,7 +457,8 @@ class ProfileKwargs(KwargsHandler):
 
     Args:
         activities (`List[str]`, *optional*, default to `None`):
-            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, or `"cuda"`.
+            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, "hpu" or
+            `"cuda"`.
         schedule_option (`Dict[str, int]`, *optional*, default to `None`):
             The schedule option to use for the profiler. Available keys are `wait`, `warmup`, `active`, `repeat` and
             `skip_first`. The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the
@@ -506,11 +508,16 @@ class ProfileKwargs(KwargsHandler):
             "cuda": torch.profiler.ProfilerActivity.CUDA,
         }
 
+        if is_hpu_available():
+            profiler_activity_map["hpu"] = torch.profiler.ProfilerActivity.HPU
+
         if is_torch_version(">=", XPU_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
+            if torch.xpu.is_available():
+                profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
 
         if is_torch_version(">=", MITA_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
+            if torch.mtia.is_available():
+                profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
 
         if activity not in profiler_activity_map:
             raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
@@ -552,9 +559,11 @@ class DistributedType(str, enum.Enum):
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
         - **MULTI_MLU** -- Distributed on multiple MLUs.
+        - **MULTI_SDAA** -- Distributed on multiple SDAAs.
         - **MULTI_MUSA** -- Distributed on multiple MUSAs.
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
+        - **MULTI_HPU** -- Distributed on multiple HPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **XLA** -- Using TorchXLA.
     """
@@ -565,6 +574,7 @@ class DistributedType(str, enum.Enum):
     MULTI_GPU = "MULTI_GPU"
     MULTI_NPU = "MULTI_NPU"
     MULTI_MLU = "MULTI_MLU"
+    MULTI_SDAA = "MULTI_SDAA"
     MULTI_MUSA = "MULTI_MUSA"
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
@@ -572,6 +582,7 @@ class DistributedType(str, enum.Enum):
     TP = "TP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
+    MULTI_HPU = "MULTI_HPU"
 
 
 class SageMakerDistributedType(str, enum.Enum):
@@ -654,6 +665,7 @@ class DynamoBackend(str, BaseEnum):
         - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
           more](https://github.com/intel/intel-extension-for-pytorch).
         - **TVM** -- Uses Apach TVM for inference optimizations. [Read more](https://tvm.apache.org/)
+        - **HPU_BACKEND** -- Uses HPU backend for inference optimizations.
 
     """
 
@@ -673,6 +685,7 @@ class DynamoBackend(str, BaseEnum):
     TORCHXLA_TRACE_ONCE = "TORCHXLA_TRACE_ONCE"
     IPEX = "IPEX"
     TVM = "TVM"
+    HPU_BACKEND = "HPU_BACKEND"
 
 
 class LoggerType(BaseEnum):
@@ -717,10 +730,12 @@ class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
     MLU = "mlu"
+    SDAA = "sdaa"
     MUSA = "musa"
     NPU = "npu"
     XLA = "xla"
     XPU = "xpu"
+    HPU = "hpu"
     GENERATOR = "generator"
 
 
@@ -1722,9 +1737,11 @@ class FullyShardedDataParallelPlugin:
                 device = torch.cuda.current_device()
             elif is_xpu_available():
                 device = torch.xpu.current_device()
+            elif is_hpu_available():
+                device = torch.hpu.current_device()
             else:
                 raise RuntimeError(
-                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', or 'NPU'."
+                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', 'MLU', 'NPU', 'MUSA', or 'HPU'."
                 )
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`
@@ -1867,8 +1884,14 @@ class TorchTensorParallelPlugin:
             )
         from torch.distributed.device_mesh import init_device_mesh
 
+        # support for other devices has to be investigated
+        if is_hpu_available(init_hccl=True):
+            device = "hpu"
+        else:
+            device = "cuda"
+
         mesh_dim_name = "tp"
-        device = "cuda"  # support for other devices has to be investigated
+
         self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
 
 
