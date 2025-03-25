@@ -1691,7 +1691,8 @@ class FullyShardedDataParallelPlugin:
                 else:
                     self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
 
-        if self.reshard_after_forward is None:
+        # Fallback to `reshard_after_forward` in FSDP1 if `sharding_strategy` is not set
+        if self.reshard_after_forward is None and self.sharding_strategy is None:
             reshard_after_forward = os.environ.get(
                 env_prefix + "RESHARD_AFTER_FORWARD", "true" if self.fsdp_version == 2 else "FULL_SHARD"
             )

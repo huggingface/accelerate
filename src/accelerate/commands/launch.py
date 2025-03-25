@@ -521,7 +521,7 @@ def launch_command_parser(subparsers=None):
     fsdp_args.add_argument(
         "--fsdp_version",
         type=str,
-        default="2",
+        default="1",
         choices=["1", "2"],
         help="FSDP version to use. (useful only when `use_fsdp` flag is passed).",
     )

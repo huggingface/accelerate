@@ -85,9 +85,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
             env["FSDP_SHARDING_STRATEGY"] = f"{i + 1}"
             with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert fsdp_plugin.reshard_after_forward == ShardingStrategy(i + 1)
-            fsdp_plugin = FullyShardedDataParallelPlugin(reshard_after_forward=ShardingStrategy(i + 1))
-            assert fsdp_plugin.reshard_after_forward == ShardingStrategy(i + 1)
+                assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
+            fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=ShardingStrategy(i + 1))
+            assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
 
         # check that giving names works fine
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
@@ -95,9 +95,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
             env["FSDP_SHARDING_STRATEGY"] = strategy
             with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert fsdp_plugin.reshard_after_forward == ShardingStrategy(i + 1)
-            fsdp_plugin = FullyShardedDataParallelPlugin(reshard_after_forward=strategy)
-            assert fsdp_plugin.reshard_after_forward == ShardingStrategy(i + 1)
+                assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
+            fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=strategy)
+            assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
 
     def test_backward_prefetch(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch
@@ -326,7 +326,7 @@ class FSDPIntegrationTest(TempDirTestCase):
             cmd_config = cmd.copy()
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                 if strategy.lower() in config:
-                    cmd_config.append(f"--fsdp_reshard_after_forward={strategy}")
+                    cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
                     break
 
             if "fp32" in config:
@@ -421,7 +421,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                 cmd_config.extend(["--use_fsdp"])
                 for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                     if strategy.lower() in spec:
-                        cmd_config.append(f"--fsdp_reshard_after_forward={strategy}")
+                        cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
                         break
 
                 if "cpu_offload" in spec:
