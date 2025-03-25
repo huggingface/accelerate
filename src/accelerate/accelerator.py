@@ -86,6 +86,7 @@ from .utils import (
     fsdp2_switch_optimizer_parameters,
     gather,
     gather_object,
+    get_fsdp2_grad_scaler,
     get_grad_scaler,
     get_mixed_precision_context_manager,
     get_pretty_name,
@@ -553,7 +554,12 @@ class Accelerator:
             ) or is_torch_xla_available(check_is_tpu=True):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-            self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
+
+            # FSDP2 doesn't use ShardedGradScaler, don't want to modify `get_grad_scaler`, rather create a simple utility
+            if self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+                self.scaler = get_fsdp2_grad_scaler(**kwargs)
+            else:
+                self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,

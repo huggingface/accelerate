@@ -292,9 +292,9 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
             flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
             optimizer.load_state_dict(flattened_osd)
         else:
-            from torch.distributed.checkpoint.state_dict import set_optimizer_state_dict
-
-            set_optimizer_state_dict(model, optimizer, optim_state)
+            # we can't do `set_state_dict` here because it does a step of the optimizer which breaks with grad-scaler
+            # TODO(siro1): investigate
+            optimizer.load_state_dict(optim_state)
 
 
 def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: str, safe_serialization: bool = True):
@@ -564,3 +564,9 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, auto_wrap_policy_type: str, mod
         return None
 
     return policy
+
+
+def get_fsdp2_grad_scaler(**kwargs):
+    from torch.amp.grad_scaler import GradScaler
+
+    return GradScaler(**kwargs)
