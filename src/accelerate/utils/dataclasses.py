@@ -1718,7 +1718,7 @@ class FullyShardedDataParallelPlugin:
             )
         if self.fsdp_version == 1 and isinstance(self.reshard_after_forward, bool):
             raise ValueError(
-                "reshard_after_forward set to a `bool`. This is not supported with FSDP1, please set to a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
+                f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP1, please set to a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
             )
 
         if self.cpu_offload is None:

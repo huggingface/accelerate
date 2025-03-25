@@ -79,6 +79,16 @@ class FSDPPluginIntegration(AccelerateTestCase):
     def test_sharding_strategy(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
 
+        SHARDING_STRATEGIES = {
+            1: FSDP_SHARDING_STRATEGY,
+            2: [True, False],
+        }
+
+        SHARDING_STRATEGY_NAMES = {
+            1: "FSDP_SHARDING_STRATEGY",
+            2: "FSDP_RESHARD_AFTER_FORWARD",
+        }
+
         # check that giving enums works fine
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             env = self.fsdp_env.copy()
@@ -89,15 +99,32 @@ class FSDPPluginIntegration(AccelerateTestCase):
             fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=ShardingStrategy(i + 1))
             assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
 
-        # check that giving names works fine
-        for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
-            env = self.fsdp_env.copy()
-            env["FSDP_SHARDING_STRATEGY"] = strategy
-            with patch_environment(**env):
-                fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
-            fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=strategy)
-            assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
+        # check that giving names works fine, also needed for FSDP2
+        for fsdp_version in [1, 2]:
+            for i, strategy in enumerate(SHARDING_STRATEGIES[fsdp_version]):
+                env = self.fsdp_env.copy()
+                env["FSDP_VERSION"] = f"{fsdp_version}"
+                env[SHARDING_STRATEGY_NAMES[fsdp_version]] = strategy
+                with patch_environment(**env):
+                    fsdp_plugin = FullyShardedDataParallelPlugin()
+                if fsdp_version == 1:
+                    assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
+                    assert fsdp_plugin.reshard_after_forward is None
+                else:
+                    assert fsdp_plugin.reshard_after_forward == strategy
+                    assert fsdp_plugin.sharding_strategy is None
+
+                env = self.fsdp_env.copy()
+                env["FSDP_VERSION"] = f"{fsdp_version}"
+                with patch_environment(**env):
+                    if fsdp_version == 1:
+                        fsdp_plugin = FullyShardedDataParallelPlugin(sharding_strategy=ShardingStrategy(i + 1))
+                        assert fsdp_plugin.sharding_strategy == ShardingStrategy(i + 1)
+                        assert fsdp_plugin.reshard_after_forward is None
+                    else:
+                        fsdp_plugin = FullyShardedDataParallelPlugin(reshard_after_forward=strategy)
+                        assert fsdp_plugin.reshard_after_forward == strategy
+                        assert fsdp_plugin.sharding_strategy is None
 
     def test_backward_prefetch(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch
