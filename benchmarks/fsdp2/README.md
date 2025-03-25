@@ -33,7 +33,9 @@ Here are the results from running the benchmark on 8x H100 GPUs:
 </p>
 
 As you can see, the memory usage of `Accelerate` and `torch_post_shard` (the intended way) are very similar, while `torch_pre_shard_not_fixed` uses significantly more memory. Our fix in `torch_pre_shard_fixed` brings the memory usage back in line with the intended approach.
-> [!NOTE] Timing discrepancies are due to the benchmarks being ran in 1 script.
+
+> [!NOTE]
+> Timing discrepancies are due to the benchmarks being ran in 1 script.
 
 
 ## Running
