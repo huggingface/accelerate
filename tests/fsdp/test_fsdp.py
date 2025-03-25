@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+from contextlib import nullcontext
 import functools
 import os
 
@@ -129,24 +130,46 @@ class FSDPPluginIntegration(AccelerateTestCase):
     def test_backward_prefetch(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch
 
-        for i, prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
-            expected_value = None if prefetch_policy == "NO_PREFETCH" else BackwardPrefetch(i + 1)
-            env = self.fsdp_env.copy()
-            env["FSDP_BACKWARD_PREFETCH"] = prefetch_policy
-            with patch_environment(**env):
-                fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert (
-                    fsdp_plugin.backward_prefetch == expected_value
-                ), f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
+        _warning_message_fsdp2 = "backward_prefetch is not supported in FSDP2. Setting backward prefetch to None."
 
-            # Check if torch enum works
-            if prefetch_policy != "NO_PREFETCH":
-                fsdp_plugin = FullyShardedDataParallelPlugin(backward_prefetch=BackwardPrefetch(i + 1))
-                assert fsdp_plugin.backward_prefetch == expected_value
+        for fsdp_version in [1, 2]:
+            for i, prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
+                # FSDP2 warns about backward prefetch and sets to None
+                ctx = (
+                    self.assertLogs("accelerate.utils.dataclasses", level="WARNING")
+                    if fsdp_version == 2 and prefetch_policy != "NO_PREFETCH"
+                    else nullcontext()
+                )
+                expected_value = (
+                    None if (prefetch_policy == "NO_PREFETCH" or fsdp_version == 2) else BackwardPrefetch(i + 1)
+                )
+                env = self.fsdp_env.copy()
+                env["FSDP_VERSION"] = f"{fsdp_version}"
+                env["FSDP_BACKWARD_PREFETCH"] = prefetch_policy
+                with patch_environment(**env), ctx as cm:
+                    fsdp_plugin = FullyShardedDataParallelPlugin()
+                    assert (
+                        fsdp_plugin.backward_prefetch == expected_value
+                    ), f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
+                    if cm:
+                        self.assertTrue(any(_warning_message_fsdp2 in out for out in cm.output))
 
-            # Check if name works
-            fsdp_plugin = FullyShardedDataParallelPlugin(backward_prefetch=prefetch_policy)
-            assert fsdp_plugin.backward_prefetch == expected_value
+                # Check if torch enum works
+                env = self.fsdp_env.copy()
+                env["FSDP_VERSION"] = f"{fsdp_version}"
+                with patch_environment(**env), ctx as cm:
+                    if prefetch_policy != "NO_PREFETCH":
+                        fsdp_plugin = FullyShardedDataParallelPlugin(backward_prefetch=BackwardPrefetch(i + 1))
+                        assert fsdp_plugin.backward_prefetch == expected_value
+                        if cm:
+                            self.assertTrue(any(_warning_message_fsdp2 in out for out in cm.output))
+
+                # Check if name works
+                with patch_environment(**env), ctx as cm:
+                    fsdp_plugin = FullyShardedDataParallelPlugin(backward_prefetch=prefetch_policy)
+                    assert fsdp_plugin.backward_prefetch == expected_value
+                    if cm:
+                        self.assertTrue(any(_warning_message_fsdp2 in out for out in cm.output))
 
     def test_state_dict_type(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
