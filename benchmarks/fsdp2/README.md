@@ -21,6 +21,21 @@ So, we came up with a workaround, where we apply our own fix to the optimizer, b
 > This script is intended to fit on 2x 24GB GPUs, though on so few GPUs it's not possible to see the memory difference (discrepancies in grad allocation result in lower memory usage in the non-fixed case), only the difference in convergence. Below are attached results from 8x H100 GPUs where the difference is visible.
 > TLDR: more GPUs = bigger memory difference between fixed and non-fixed cases.
 
+## Results
+
+Here are the results from running the benchmark on 8x H100 GPUs:
+
+<p align="center">
+  <img src="imgs/allocated_memory.png" width="80%" alt="Allocated Memory Usage">
+</p>
+<p align="center">
+  <img src="imgs/reserved_memory.png" width="80%" alt="Reserved Memory Usage">
+</p>
+
+As you can see, the memory usage of `Accelerate` and `torch_post_shard` (the intended way) are very similar, while `torch_pre_shard_not_fixed` uses significantly more memory. Our fix in `torch_pre_shard_fixed` brings the memory usage back in line with the intended approach.
+> [!NOTE] Timing discrepancies are due to the benchmarks being ran in 1 script.
+
+
 ## Running
 
 To run the benchmark, use the following command:

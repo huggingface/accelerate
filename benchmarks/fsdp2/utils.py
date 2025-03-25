@@ -29,7 +29,7 @@ from accelerate.state import AcceleratorState
 from accelerate.utils import convert_outputs_to_fp32, set_seed
 
 
-SEED = 5123
+SEED = 421
 
 
 def parse_args():
@@ -60,6 +60,12 @@ def parse_args():
         type=int,
         default=128,
         help="The maximum sequence length to use with the model.",
+    )
+    parser.add_argument(
+        "--dataset_fraction",
+        type=float,
+        default=1.0,
+        help="Fraction of the dataset to use.",
     )
     return parser.parse_args()
 
@@ -95,7 +101,7 @@ def prepare_dataloader(tokenizer, args, accelerator: Accelerator) -> DataLoader:
         return result
 
     dataset = dataset.map(group_texts, batched=True)
-    dataset = dataset.select(range(len(dataset) // 20))
+    dataset = dataset.select(range(int(len(dataset) * args.dataset_fraction)))
 
     def collate_fn(examples):
         return DataCollatorForLanguageModeling(
@@ -130,13 +136,16 @@ def swap_back_optimizer_params(
         param_group["params"] = [mapping[p.data_ptr] for p in param_group["params"]]
 
 
-def get_model_and_tokenizer(model_name: str):
+def get_model(model_name: str):
     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_config(config)
+    return model
 
+
+def get_tokenizer(model_name: str):
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
-    return model, tokenizer
+    return tokenizer
 
 
 def prepare_torch(
@@ -155,10 +164,14 @@ def prepare_torch(
     is_fixed = "fixed" if apply_optimizer_fix else "not_fixed"
     is_post_shard = "post_shard" if post_shard_optimizer else "pre_shard"
     run_name = f"torch_{is_post_shard}" if post_shard_optimizer else f"torch_{is_post_shard}_{is_fixed}"
+
+    tokenizer = get_tokenizer(config["model_name"])
+    train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
+
     memory_tracker = MemoryTracker(accelerator, args.output_dir, run_name, args.save_memory_snapshot)
     memory_tracker.start()
-    model, tokenizer = get_model_and_tokenizer(config["model_name"])
-    train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
+
+    model = get_model(config["model_name"])
     optimizer = None
 
     if not post_shard_optimizer:
@@ -203,10 +216,14 @@ def prepare_accelerate(
         mixed_precision="bf16",
     )
     set_seed(SEED)
+
+    tokenizer = get_tokenizer(config["model_name"])
+    train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
+
     memory_tracker = MemoryTracker(accelerator, args.output_dir, "accelerate", args.save_memory_snapshot)
     memory_tracker.start()
-    model, tokenizer = get_model_and_tokenizer(config["model_name"])
-    train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
+
+    model = get_model(config["model_name"])
     optimizer = AdamW(model.parameters(), lr=config["learning_rate"])
 
     model, optimizer = accelerator.prepare(model, optimizer)

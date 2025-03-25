@@ -22,7 +22,7 @@ from utils import parse_args, prepare_accelerate, prepare_torch
 
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 3e-5
 
 CONFIG = {
     "model_name": MODEL_NAME,
@@ -71,11 +71,6 @@ def main():
     evaluations = [
         functools.partial(
             evaluate,
-            init_fn=functools.partial(prepare_torch, post_shard_optimizer=True),
-            run_name="Optimizer Post fully_shard",
-        ),
-        functools.partial(
-            evaluate,
             init_fn=functools.partial(prepare_torch, post_shard_optimizer=False, apply_optimizer_fix=True),
             run_name="Optimizer Pre fully_shard (w/ fix)",
         ),
@@ -84,12 +79,17 @@ def main():
             init_fn=functools.partial(prepare_torch, post_shard_optimizer=False, apply_optimizer_fix=False),
             run_name="Optimizer Pre fully_shard (w/o fix)",
         ),
+        functools.partial(
+            evaluate,
+            init_fn=functools.partial(prepare_torch, post_shard_optimizer=True),
+            run_name="Optimizer Post fully_shard",
+        ),
         functools.partial(evaluate, init_fn=prepare_accelerate, run_name="Accelerate"),
     ]
     labels = [
-        "Optimizer Post fully_shard",
         "Optimizer Pre fully_shard (w/ fix)",
         "Optimizer Post fully_shard (w/o fix)",
+        "Optimizer Post fully_shard",
         "Accelerate",
     ]
 
@@ -115,6 +115,8 @@ def main():
         results["Optimizer Pre fully_shard (w/ fix)"],
         msg="Accelerate and Optimizer Pre fully_shard (w/ fix) should be the same",
     )
+
+    torch.distributed.destroy_process_group()
 
 
 if __name__ == "__main__":
