@@ -37,9 +37,8 @@ def train(
     accelerator: Accelerator,
 ) -> torch.Tensor:
     losses = []
-    for step, batch in enumerate(train_dataloader):
+    for batch in train_dataloader:
         optimizer.zero_grad()
-        batch = {k: v.to(accelerator.device) for k, v in batch.items()}
         outputs = model(**batch, use_cache=False)
 
         loss = outputs.loss
@@ -56,13 +55,12 @@ def evaluate(args, config: dict, init_fn: Callable, run_name: str) -> torch.Tens
     loss = train(model, optimizer, dataloader, accelerator)
 
     memory_tracker.stop()
-    if accelerator.is_main_process:
-        print(f"Results for {run_name} (rank 0):")
-        print(f"\tLoss: {loss[-1].item()}")
-        print(f"Peak Allocated Memory: {float(memory_tracker.peak_allocated_memory):.2f} MB")
-        print(f"Peak Reserved Memory: {float(memory_tracker.peak_reserved_memory):.2f} MB")
-        print("----------------------------------")
-
+    msg = f"""Results for {run_name} (rank 0):
+Loss: {loss[-1].item()}
+Peak Allocated Memory: {float(memory_tracker.peak_allocated_memory):.2f} MB
+Peak Reserved Memory: {float(memory_tracker.peak_reserved_memory):.2f} MB
+{'-' * 34}"""
+    accelerator.print(msg)
     return loss
 
 

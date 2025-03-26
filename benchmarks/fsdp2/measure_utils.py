@@ -21,7 +21,7 @@ import time
 import psutil
 import torch
 
-from accelerate import Accelerator
+from accelerate import PartialState
 
 
 class MemoryTracker:
@@ -36,11 +36,16 @@ class MemoryTracker:
         """Class for tracking gpu and cpu memory usage of the process.
 
         Args:
-            device (torch.device): Cuda device to monitor.
-            output_directory (str): Directory to save the memory usage data to, will be created if it doesn't exist.
-            run_name (str): Name of the run, will be used to name the output files.
-            save_memory_snapshot (bool): Whether to also save `torch.cuda.memory._dump_snapshot` to the output directory.
-            log_interval (float, optional): Interval in seconds between memory measurements. Defaults to 0.01.
+            device (`torch.device`):
+                Cuda device to monitor.
+            output_directory (`str`):
+                Directory to save the memory usage data to, will be created if it doesn't exist.
+            run_name (`str`):
+                Name of the run, will be used to name the output files.
+            save_memory_snapshot (`bool`):
+                Whether to also save `torch.cuda.memory._dump_snapshot` to the output directory.
+            log_interval (`float`, *optional*):
+                Interval in seconds between memory measurements. Defaults to 0.01.
         """
         self.log_interval = log_interval
         self.save_memory_snapshot = save_memory_snapshot
@@ -56,7 +61,7 @@ class MemoryTracker:
         self.running = False
 
         self._thread = None
-        self._accelerator = Accelerator()
+        self._state = PartialState()
         self._process = psutil.Process()
         self._devicee = device
 
@@ -74,14 +79,6 @@ class MemoryTracker:
             self.timestamps.append(time.time() - self.start_time)
 
             time.sleep(self.log_interval)
-
-    def _pad_tensor_to_power_of_2(self, tensor):
-        length = tensor.size(0)
-        next_power_of_2 = 2 ** (length - 1).bit_length()
-        if length != next_power_of_2:
-            padding = -torch.ones(next_power_of_2 - length, dtype=tensor.dtype, device=tensor.device)
-            tensor = torch.cat([tensor, padding])
-        return tensor
 
     def start(self):
         gc.collect()
@@ -102,11 +99,11 @@ class MemoryTracker:
         if self._thread:
             self._thread.join()
 
-        if self.save_memory_snapshot and self._accelerator.is_main_process:
+        if self.save_memory_snapshot and self._state.is_main_process:
             output_file = os.path.join(self.output_directory, f"{self.run_name}_memory_snapshot.pkl")
             torch.cuda.memory._dump_snapshot(output_file)
 
-        if self._accelerator.is_main_process:
+        if self._state.is_main_process:
             path = os.path.join(self.output_directory, f"{self.run_name}_memory_usage.json")
             with open(path, "w") as f:
                 json.dump(
