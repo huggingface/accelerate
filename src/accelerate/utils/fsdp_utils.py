@@ -459,9 +459,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     model.load_state_dict(sharded_sd)
 
 
-def fsdp2_switch_optimizer_parameters(
-    optimizer: torch.optim.Optimizer, mapping: dict
-):
+def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping: dict):
     """
     Switches the parameters of the optimizer to new ones (sharded parameters in usual case). This function modifies the
     optimizer in-place.
