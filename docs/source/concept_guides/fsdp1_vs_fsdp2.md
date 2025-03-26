@@ -17,22 +17,11 @@ rendered properly in your Markdown viewer.
 
 This guide explains the key differences between `FSDP1` and `FSDP2` and helps you migrate your existing code to use `FSDP2` with minimal changes.
 
-## What is FSDP2?
+## How is FSDP2 better than FSDP1?
 
-`FSDP2` is a new and improved version of PyTorch's fully-sharded data parallel training API. Its main advantage is using `DTensor` to represent sharded parameters. Compared to `FSDP1`, it offers:
-- Simpler internal implementation, where each `Parameter` is a separate `DTensor`
-- Enables simple partial parameter freezing because of the above, which makes methods as [`LORA`](https://arxiv.org/abs/2106.09685) work out of the box
-- With `DTensor`, `FSDP2` supports mixing `fp8` and other parameter types in the same model out of the box
-- Faster and simpler checkpointing without extra communication across ranks using `SHARDED_STATE_DICT` and [`torch.distributed.checkpoint`](https://pytorch.org/docs/stable/distributed.checkpoint.html), this way, each rank only saves its own shard and corresponding metadata
-- For loading, it uses a `state_dict` of the sharded model to directly load the sharded parameters
-- Support for asynchronous checkpointing, where parameters are first copied to CPU memory, after this, main thread continues training while another thread stores the parameters on disk
-- Memory efficiency and deterministic memory usage, `FSDP2` doesn't use `recordStream` anymore and uses stream-to-stream synchronization (for more technical details see [this forum post](https://dev-discuss.pytorch.org/t/fsdp-cudacachingallocator-an-outsider-newb-perspective/1486) and [this issue](https://github.com/pytorch/pytorch/issues/114299))
-- In the future, optimizations of the communication patterns via `torch.compile` are planned, further improving the performance and memory efficiency
+First, we want to understand how `FSDP1` and `FSDP2` work internally to understand the differences between them. This also helps us understand the limitations of `FSDP1` and how `FSDP2` solves them.
 
-## How is it better than FSDP1?
-The previous section shows what `FSDP2` offers, but doesn't discuss how it achieves them.
-
-In the following part, we'll be discussing a scenario where we have a single `Layer` that contains 3 `Linear` layers and is wrapped using `FSDP` to be sharded across 2 GPUs.
+We'll be discussing a scenario where we have a single `Layer` that contains 3 `Linear` layers and is wrapped using `FSDP` to be sharded across 2 GPUs.
 
 <div align="center">
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/layer.png" alt="Layer">
@@ -59,6 +48,18 @@ Each Parameter of the original `Layer` is sharded across the 0th dimension, and 
 
 > [!TIP] 
 > In the image above, the tensors were sharded across the 1st dimension for the sake of fitting the image on the screen, in reality, they are sharded across the 0th dimension as stated above
+
+## What does FSDP2 offer?
+
+`FSDP2` is a new and improved version of PyTorch's fully-sharded data parallel training API. Its main advantage is using `DTensor` to represent sharded parameters. Compared to `FSDP1`, it offers:
+- Simpler internal implementation, where each `Parameter` is a separate `DTensor`
+- Enables simple partial parameter freezing because of the above, which makes methods as [`LORA`](https://arxiv.org/abs/2106.09685) work out of the box
+- With `DTensor`, `FSDP2` supports mixing `fp8` and other parameter types in the same model out of the box
+- Faster and simpler checkpointing without extra communication across ranks using `SHARDED_STATE_DICT` and [`torch.distributed.checkpoint`](https://pytorch.org/docs/stable/distributed.checkpoint.html), this way, each rank only saves its own shard and corresponding metadata
+- For loading, it uses a `state_dict` of the sharded model to directly load the sharded parameters
+- Support for asynchronous checkpointing, where parameters are first copied to CPU memory, after this, main thread continues training while another thread stores the parameters on disk
+- Memory efficiency and deterministic memory usage, `FSDP2` doesn't use `recordStream` anymore and uses stream-to-stream synchronization (for more technical details see [this forum post](https://dev-discuss.pytorch.org/t/fsdp-cudacachingallocator-an-outsider-newb-perspective/1486) and [this issue](https://github.com/pytorch/pytorch/issues/114299))
+- In the future, optimizations of the communication patterns via `torch.compile` are planned, further improving the performance and memory efficiency
 
 
 ## API Differences
