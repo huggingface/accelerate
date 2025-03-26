@@ -65,7 +65,7 @@ Each Parameter of the original `Layer` is sharded across the 0th dimension, and 
 
 We have already discussed the internal differences, now let's discuss the differences, you, as a user, will need to know. 
 
-Here are the main changes in configuration options when using `FSDP2` through the `Accelerate` CLI:
+Here are the main changes in configuration options when using `FSDP2` through the `accelerate` CLI:
 
 Previous (`FSDP1`) | New (`FSDP2`) | What Changed
 -- | -- | --
@@ -75,7 +75,7 @@ Previous (`FSDP1`) | New (`FSDP2`) | What Changed
 `--fsdp_forward_prefetch` | \*\***NOT YET IMPLEMENTED**\*\* | How to implement this is under active discussion, for now it is not supported in `FSDP2`
 `--fsdp_sync_module_states` | \*\***REMOVED**\*\* | with `FSDP2`, this parameter becomes redundant
 `--fsdp_cpu_ram_efficient_loading` | `--fsdp_cpu_ram_efficient_loading` | if `true`, `FSDP2` will similarly load the model only on rank 0, and then parameters get synced to other ranks, this is the same behavior as `FSDP1`, however, setting `--fsdp_sync_module_states` isn't required anymore
-`--fsdp_state_dict_type` | `--fsdp_state_dict_type` | `LOCAL_STATE_DICT` becomes obsolete and with `FSDP2` `SHARDED_STATE_DICT` is the default option, which results in no extra communication and each rank saving its own shard, other possible option is `FULL_STATE_DICT` which results in extra communication and spike in memory usage but saves the full model from rank 0. `FULL_STATE_DICT` is not supported in `Accelerate` yet.
+`--fsdp_state_dict_type` | `--fsdp_state_dict_type` | `LOCAL_STATE_DICT` becomes obsolete and with `FSDP2` `SHARDED_STATE_DICT` is the default option, which results in no extra communication and each rank saving its own shard, other possible option is `FULL_STATE_DICT` which results in extra communication and spike in memory usage but saves the full model from rank 0. `FULL_STATE_DICT` is not supported in `accelerate` yet.
 `--fsdp_use_orig_params` | \*\***REMOVED**\*\* | `FSDP2` uses a `DTensor` class on the background, which means it *always* uses the original parameters by default
 \*\***NEW**\*\* | `--fsdp_version` | `1` is the default option, to not break existing code, set to `2` to use `FSDP2`
 
