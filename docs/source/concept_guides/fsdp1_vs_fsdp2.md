@@ -35,14 +35,14 @@ The previous section shows what `FSDP2` offers, but doesn't discuss how it achie
 In the following part, we'll be discussing a scenario where we have a single `Layer` that contains 3 `Linear` layers and is wrapped using `FSDP` to be sharded across 2 GPUs.
 
 <div align="center">
-  <img src="../imgs/fsdp1_vs_fsdp2/Layer.png" alt="Layer">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/layer.png" alt="Layer">
 </div>
 
 ### FSDP1
 First, we have to understand the original `FSDP1` and the limitations it brings. It represents each `FSDP` module as a single `FlatParameter` which is a single 1D tensor that contains all of the module parameters, which then get sharded across ranks. I.e. if you wrap the `Layer` with `FSDP1`, you'd achieve something as such:
 
 <div align="center">
-  <img src="../imgs/fsdp1_vs_fsdp2/Fsdp1.png" alt="FSDP1">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/fsdp1.png" alt="FSDP1">
 </div>
 
 You might notice a problem. The whole `Layer` gets flattened into a single `FlatParameter`, which then gets sharded across ranks. But if it's a single `FlatParameter` object, how do we store metadata? That is one of the limitations. Properly storing per-parameter metadata such as `dtype`, `requires_grad`, etc. is not possible without some ugly hacks.
@@ -51,13 +51,13 @@ You might notice a problem. The whole `Layer` gets flattened into a single `Flat
 This is why `FSDP2` was introduced. It doesn't use `FlatParameter`, instead it uses `DTensor` which is short for "Distributed Tensor". Each `DTensor` basically represents a vanilla `torch.Tensor` that has been sharded across ranks. It contains metadata about the original `torch.Tensor` and how it's sharded, what is the [placement type](https://pytorch.org/docs/stable/distributed.tensor.html#module-torch.distributed.tensor.placement_types) and so on. This is why it's called `per-parameter sharding`. The following figure shows the difference:
 
 <div align="center">
-  <img src="../imgs/fsdp1_vs_fsdp2/Fsdp2.png" alt="FSDP2">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/fsdp2.png" alt="FSDP2">
 </div>
 
 Each Parameter of the original `Layer` is sharded across the 0th dimension, and split between 2 GPUs. Now, each `Linear` layer is a separate `DTensor` and storing metadata per-parameter is possible and straightforward.
 
 
-> [!NOTE]
+> [!TIP] 
 > In the image above, the tensors were sharded across the 1st dimension for the sake of fitting the image on the screen, in reality, they are sharded across the 0th dimension as stated above
 
 

@@ -567,6 +567,11 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, auto_wrap_policy_type: str, mod
 
 
 def get_fsdp2_grad_scaler(**kwargs):
+    """
+    Returns a `GradScaler` for FSDP2, as the current implementation of `get_grad_scaler` doesn't accept other args. We
+    need this as current `get_grad_scaler` accepts only `distributed_type` as arg, which doesn't differentiate between
+    FSDP1 and FSDP2
+    """
     from torch.amp.grad_scaler import GradScaler
 
     return GradScaler(**kwargs)

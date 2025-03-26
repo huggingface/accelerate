@@ -556,7 +556,7 @@ class Accelerator:
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
 
             # FSDP2 doesn't use ShardedGradScaler, don't want to modify `get_grad_scaler`, rather create a simple utility
-            if self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+            if self.is_fsdp2:
                 self.scaler = get_fsdp2_grad_scaler(**kwargs)
             else:
                 self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
@@ -710,6 +710,10 @@ class Accelerator:
     @property
     def mixed_precision(self):
         return self.state.mixed_precision
+
+    @property
+    def is_fsdp2(self):
+        return self.state.is_fsdp2
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
@@ -1385,7 +1389,7 @@ class Accelerator:
                     "part for you."
                 )
 
-        if self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+        if self.is_fsdp2:
             model_count = 0
             optimizer_count = 0
             for obj in args:
@@ -1396,16 +1400,14 @@ class Accelerator:
 
             # This needs to be written as such, so that passing other objects other than models/optimizers doesn't raise an error
             if (model_count < 1 and optimizer_count > 0) or (model_count > 0 and optimizer_count < 1):
-                raise ValueError(  #
-                    "With FSDP2, you need to pass model and optimizer to a single `Accelerator.prepare()` call."
-                    "This is due to the fact that we apply a fix to the optimizer, which replaces its parameters after applying FSDP2."
+                raise ValueError(
+                    "When using FSDP2, a model and optimizer must be passed together to `Accelerator.prepare()`"
+                    " as the optimizer needs to have its parameters modified after the model is converted."
                 )
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
-        fsdp2_should_fix_optimizer = (
-            self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2
-        )
+        fsdp2_should_fix_optimizer = self.is_fsdp2
         should_fix_optimizer = tpu_should_fix_optimizer or fsdp2_should_fix_optimizer
 
         if should_fix_optimizer:
@@ -1607,7 +1609,7 @@ class Accelerator:
                         and _tp_plan attribute to model class."
                     )
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
-            elif self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+            elif self.is_fsdp2:
                 model = fsdp2_prepare_model(self, model)
 
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
@@ -3603,7 +3605,7 @@ class Accelerator:
                 from deepspeed.checkpoint.utils import clone_tensors_for_torch_save
 
                 state_dict = clone_tensors_for_torch_save(self.unwrap_model(model).state_dict())
-        elif self.distributed_type == DistributedType.FSDP and self.state.fsdp_plugin.fsdp_version == 2:
+        elif self.is_fsdp2:
             with torch.no_grad():
                 state_dict = {k: v.full_tensor() for k, v in model.state_dict().items()}
         elif self.distributed_type == DistributedType.FSDP:
