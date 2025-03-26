@@ -460,15 +460,15 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
 
 def fsdp2_switch_optimizer_parameters(
-    optimizer: torch.optim.Optimizer, mapping: dict[int, torch.distributed.tensor.DTensor]
+    optimizer: torch.optim.Optimizer, mapping: dict
 ):
     """
     Switches the parameters of the optimizer to new ones (sharded parameters in usual case). This function modifies the
     optimizer in-place.
 
     Args:
-        optimizer (torch.optim.Optimizer): Optimizer instance which contains the original model parameters
-        mapping (dict): Mapping from the original parameter (specified by `data_ptr`) to the sharded parameter
+        optimizer (`torch.optim.Optimizer`): Optimizer instance which contains the original model parameters
+        mapping (`dict`): Mapping from the original parameter (specified by `data_ptr`) to the sharded parameter
 
     Raises:
         KeyError:
@@ -495,7 +495,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         model (`torch.nn.Module`): The model to prepare
 
     Returns:
-        torch.nn.Module: Prepared model
+        `torch.nn.Module`: Prepared model
     """
     from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
 
