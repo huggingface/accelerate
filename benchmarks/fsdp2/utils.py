@@ -190,7 +190,7 @@ def prepare_dataloader(tokenizer, args, accelerator: Accelerator) -> DataLoader:
 
 
 def get_model(model_name: str):
-    config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
+    config = AutoConfig.from_pretrained(model_name, trust_remote_code=True, torch_dtype=torch.float32)
     model = AutoModelForCausalLM.from_config(config)
     return model
 
