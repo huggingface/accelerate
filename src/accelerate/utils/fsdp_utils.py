@@ -18,6 +18,7 @@ import warnings
 from collections import defaultdict
 from contextlib import nullcontext
 from pathlib import Path
+from typing import Callable
 
 import torch
 
@@ -427,6 +428,15 @@ def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.c
 
 
 def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict):
+    """
+    Loads the full state dict (could be only on rank 0) into the sharded model. This is done by broadcasting the
+    parameters from rank 0 to all other ranks. This function modifies the model in-place.
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance
+        model (`torch.nn.Module`): The model to load the state dict into
+        full_sd (`dict`): The full state dict to load, can only be on rank 0
+    """
     import torch.distributed as dist
     from torch.distributed.tensor import distribute_tensor
 
@@ -449,7 +459,23 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     model.load_state_dict(sharded_sd)
 
 
-def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping: dict):
+def fsdp2_switch_optimizer_parameters(
+    optimizer: torch.optim.Optimizer, mapping: dict[int, torch.distributed.tensor.DTensor]
+):
+    """
+    Switches the parameters of the optimizer to new ones (sharded parameters in usual case). This function modifies the
+    optimizer in-place.
+
+    Args:
+        optimizer (torch.optim.Optimizer): Optimizer instance which contains the original model parameters
+        mapping (dict): Mapping from the original parameter (specified by `data_ptr`) to the sharded parameter
+
+    Raises:
+        KeyError:
+            If a parameter in the optimizer couldn't be switched to its sharded version. This should never happen and
+            indicates a bug. If we kept the original params instead of raising, the training wouldn't be numerically
+            correct and weights wouldn't get updated.
+    """
     try:
         for param_group in optimizer.param_groups:
             param_group["params"] = [mapping[p.data_ptr] for p in param_group["params"]]
@@ -462,6 +488,15 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
 
 
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
+    """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance
+        model (`torch.nn.Module`): The model to prepare
+
+    Returns:
+        torch.nn.Module: Prepared model
+    """
     from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
 
     is_type_fsdp = isinstance(model, FSDPModule) or (
@@ -535,7 +570,23 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     return model
 
 
-def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, auto_wrap_policy_type: str, model: torch.nn.Module):
+def fsdp2_prepare_auto_wrap_policy(
+    fsdp2_plugin, auto_wrap_policy_type: str, model: torch.nn.Module
+) -> Callable[[torch.nn.Module], bool]:
+    """Prepares the auto wrap policy based on its type, done to mimic the behaviour of FSDP1 auto wrap policy.
+
+    Args:
+        fsdp2_plugin (`FullyShardedDataParallelPlugin`):
+            Instance of `FullyShardedDataParallelPlugin` containing the configuration options
+        auto_wrap_policy_type (`str`):
+            Either `transformer` or `size`
+        model (`torch.nn.Module`):
+            The model to wrap
+
+    Returns:
+        `Callable[[torch.nn.Module], bool]`:
+            The auto wrap policy function to be applied to the model
+    """
     if auto_wrap_policy_type == "transformer":
         no_split_modules = model._no_split_modules
         if no_split_modules is None:
