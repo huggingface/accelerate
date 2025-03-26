@@ -1203,6 +1203,8 @@ def prepare_data_loader(
                     sampler.generator = torch.Generator(
                         device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
                     )
+                    seed = int(torch.empty((), dtype=torch.int64).random_().item())
+                    sampler.generator.manual_seed(seed)
                 synchronized_generator = sampler.generator
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
