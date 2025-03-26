@@ -269,7 +269,7 @@ from .other import (
     clean_state_dict_for_safetensors,
     convert_bytes,
     extract_model_from_parallel,
-    get_children_bottom_up,
+    get_module_children_bottom_up,
     get_pretty_name,
     is_port_in_use,
     load,
