@@ -213,7 +213,7 @@ def prepare_torch(
     accelerator = Accelerator(mixed_precision="bf16")
     set_seed(SEED)
     is_fixed = "fixed" if apply_optimizer_fix else "not_fixed"
-    is_post_shard = "post_shard" if post_shard_optimizer else "pre_shard"
+    is_post_shard = "after_fsdp" if post_shard_optimizer else "before_fsdp"
     run_name = f"torch_{is_post_shard}" if post_shard_optimizer else f"torch_{is_post_shard}_{is_fixed}"
 
     tokenizer = get_tokenizer(config["model_name"])
