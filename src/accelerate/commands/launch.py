@@ -1072,10 +1072,7 @@ def _validate_launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
                 mp_from_config_flag = True
         else:
-            if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
-                native_amp = True
-            else:
-                native_amp = is_bf16_available(True)
+            native_amp = is_bf16_available(True)
             if (
                 args.mixed_precision == "bf16"
                 and not native_amp
@@ -1090,7 +1087,7 @@ def _validate_launch_command(args):
             raise ValueError("You need to manually pass in `--num_processes` using this config yaml.")
     else:
         if args.num_processes is None:
-            if args.use_xpu and is_xpu_available():
+            if is_xpu_available():
                 args.num_processes = torch.xpu.device_count()
             elif is_mlu_available():
                 args.num_processes = torch.mlu.device_count()

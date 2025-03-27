@@ -1380,10 +1380,8 @@ class Accelerator:
             old_named_params = self._get_named_parameters(*args)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if self.device.type == "cpu" and self.state.use_ipex:
-                args = self._prepare_ipex_or_xpu(*args)
-            elif self.device.type == "xpu" and is_xpu_available():
-                args = self._prepare_ipex_or_xpu(*args)
+            if (self.device.type == "cpu" or self.device.type == "xpu") and self.state.use_ipex:
+                args = self._prepare_ipex(*args)
         if self.fp8_backend == "TE":
             args = self._prepare_te(*args)
         elif self.fp8_backend == "AO":
@@ -2111,9 +2109,9 @@ class Accelerator:
 
         return tuple(result)
 
-    def _prepare_ipex_or_xpu(self, *args):
+    def _prepare_ipex(self, *args):
         """
-        Prepares model and optimizer for training with IPEX or XPU acceleration. This covers 3 cases, IPEX compiled
+        Prepares model and optimizer for training with IPEX on CPU/XPU. This covers 3 cases, IPEX compiled
         with CPU only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock
         pytorch starting from version 2.4.
         """

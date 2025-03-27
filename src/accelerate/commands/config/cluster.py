@@ -137,13 +137,15 @@ def get_cluster_input():
 
     ipex_config = {}
     mpirun_config = {}
-    if use_cpu:
+    if use_cpu or is_xpu_available():
         ipex_config["ipex"] = _ask_field(
-            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:",
+            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU/XPU? [yes/NO]:",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
         )
+
+    if use_cpu:
         if distributed_type == DistributedType.MULTI_CPU:
             use_mpirun = _ask_field(
                 "Do you want accelerate to launch mpirun? [yes/NO]: ",
@@ -159,25 +161,6 @@ def get_cluster_input():
                 )
                 mpirun_config["mpirun_hostfile"] = os.path.expanduser(mpirun_hostfile.strip())
                 mpirun_config["mpirun_ccl"] = _ask_field("Enter the number of oneCCL worker threads [1]: ", default=1)
-    if (
-        not use_cpu
-        and is_xpu_available()
-        and distributed_type
-        not in [
-            DistributedType.MULTI_GPU,
-            DistributedType.MULTI_NPU,
-            DistributedType.MULTI_MLU,
-            DistributedType.MULTI_SDAA,
-            DistributedType.XLA,
-            DistributedType.MULTI_MUSA,
-        ]
-    ):
-        ipex_config["use_xpu"] = _ask_field(
-            "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
 
     dynamo_config = {}
     use_dynamo = _ask_field(
