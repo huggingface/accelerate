@@ -641,7 +641,7 @@ def load_checkpoint_and_dispatch(
     )
 
 
-def apply_layerwise_casting(
+def attach_layerwise_casting_hooks(
     module: torch.nn.Module,
     storage_dtype: torch.dtype,
     compute_dtype: torch.dtype,
