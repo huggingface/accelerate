@@ -565,7 +565,9 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         model = model.to(torch.float32)
         if accelerator.is_main_process:
             # TODO(siro1): Add a warning for each parameter that was upcasted
-            warnings.warn("FSDP upcast of low precision parameters may affect the precision of model checkpoints.")
+            warnings.warn(
+                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints."
+            )
     return model
 
 

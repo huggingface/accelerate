@@ -70,24 +70,24 @@ def main():
         functools.partial(
             evaluate,
             init_fn=functools.partial(prepare_torch, post_shard_optimizer=False, apply_optimizer_fix=True),
-            run_name="Optimizer Pre fully_shard (w/ fix)",
+            run_name="Optimizer Before FSDP (w/ fix)",
         ),
         functools.partial(
             evaluate,
             init_fn=functools.partial(prepare_torch, post_shard_optimizer=False, apply_optimizer_fix=False),
-            run_name="Optimizer Pre fully_shard (w/o fix)",
+            run_name="Optimizer Before FSDP (w/o fix)",
         ),
         functools.partial(
             evaluate,
             init_fn=functools.partial(prepare_torch, post_shard_optimizer=True),
-            run_name="Optimizer Post fully_shard",
+            run_name="Optimizer After FSDP",
         ),
         functools.partial(evaluate, init_fn=prepare_accelerate, run_name="Accelerate"),
     ]
     labels = [
-        "Optimizer Pre fully_shard (w/ fix)",
-        "Optimizer Post fully_shard (w/o fix)",
-        "Optimizer Post fully_shard",
+        "Optimizer Before FSDP (w/ fix)",
+        "Optimizer Before FSDP (w/o fix)",
+        "Optimizer After FSDP",
         "Accelerate",
     ]
 
@@ -97,21 +97,21 @@ def main():
         results[label] = evaluation(args, CONFIG)
 
     torch.testing.assert_close(
-        results["Optimizer Post fully_shard"],
-        results["Optimizer Pre fully_shard (w/ fix)"],
-        msg="Optimizer Post fully_shard and Optimizer Pre fully_shard (w/ fix) should be the same",
+        results["Optimizer After FSDP"],
+        results["Optimizer Before FSDP (w/ fix)"],
+        msg="Optimizer After FSDP and Optimizer Before FSDP (w/ fix) should be the same",
     )
 
     torch.testing.assert_close(
-        results["Optimizer Post fully_shard"],
+        results["Optimizer After FSDP"],
         results["Accelerate"],
-        msg="Optimizer Post fully_shard and Accelerate should be the same",
+        msg="Optimizer After FSDP and Accelerate should be the same",
     )
 
     torch.testing.assert_close(
         results["Accelerate"],
-        results["Optimizer Pre fully_shard (w/ fix)"],
-        msg="Accelerate and Optimizer Pre fully_shard (w/ fix) should be the same",
+        results["Optimizer Before FSDP (w/ fix)"],
+        msg="Accelerate and Optimizer Before FSDP (w/ fix) should be the same",
     )
 
     torch.distributed.destroy_process_group()

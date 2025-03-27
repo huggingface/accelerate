@@ -1458,7 +1458,7 @@ class FullyShardedDataParallelPlugin:
             Sharding strategy to use. Should be either a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Is deprecated in favor of
             `reshard_after_forward`.
-        reshard_after_forward (`Union[str, torch.distributed.fsdp.ShardingStrategy, bool]`, defaults to `'FULL_SHARD'`):
+        reshard_after_forward (`Union[str, torch.distributed.fsdp.ShardingStrategy, bool]`, defaults to `'FULL_SHARD'` for `fsdp_version=1` and `True` for `fsdp_version=2`):
             Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
         backward_prefetch (`Union[str, torch.distributed.fsdp.BackwardPrefetch]`, defaults to `'NO_PREFETCH'`):

@@ -79,7 +79,7 @@ def replace_optimizer_params(optimizer: torch.optim.Optimizer):
 
 
 def swap_back_optimizer_params(
-    model: torch.nn.Module, optimizer: torch.optim.Optimizer, old_named_parameters: dict[str, int]
+    model: torch.nn.Module, optimizer: torch.optim.Optimizer, old_named_parameter_pointers: dict[str, int]
 ):
     """
     This function is the counterpart of `replace_optimizer_params`. It is called after `fully_shard` being applied to
@@ -89,14 +89,14 @@ def swap_back_optimizer_params(
     Args:
         model (`torch.nn.Module`): Model instance to get the new named parameters from
         optimizer (`torch.optim.Optimizer`): Optimizer instance to swap the parameters of
-        old_named_parameters (`dict[str, int]`): Dictionary mapping the original parameter names to the new ones
+        old_named_parameter_pointers (`dict[str, int]`): Dictionary mapping the original parameter names: data_ptrs to the new ones
     """
     # We get the new named parameters after `fully_shard` being applied
     # We don't drop the references as we need the sharded parameters now
     new_named_parameters = get_named_parameters(model, drop_refs=False)
 
     # We create a mapping from the original data_ptr to the new sharded param corresponding to it
-    mapping = {p: new_named_parameters[n] for n, p in old_named_parameters.items()}
+    mapping = {p: new_named_parameters[n] for n, p in old_named_parameter_pointers.items()}
 
     for param_group in optimizer.param_groups:
         # We swap the parameters of the optimizer to the new sharded ones
@@ -108,7 +108,6 @@ def parse_args():
     parser.add_argument(
         "--output_dir",
         type=str,
-        required=True,
         help="Directory to save the benchmarking results.",
     )
     parser.add_argument(
@@ -190,6 +189,7 @@ def prepare_dataloader(tokenizer, args, accelerator: Accelerator) -> DataLoader:
 
 
 def get_model(model_name: str):
+    # We reguire model to be loaded in fp32, otherwise benchmarks don't match as accelerate does upcasting of parameters to fp32
     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True, torch_dtype=torch.float32)
     model = AutoModelForCausalLM.from_config(config)
     return model
@@ -213,7 +213,7 @@ def prepare_torch(
     accelerator = Accelerator(mixed_precision="bf16")
     set_seed(SEED)
     is_fixed = "fixed" if apply_optimizer_fix else "not_fixed"
-    is_post_shard = "after_fsdp" if post_shard_optimizer else "before_fsdp"
+    is_post_shard = "optimizer_after_fsdp" if post_shard_optimizer else "optimizer_before_fsdp"
     run_name = f"torch_{is_post_shard}" if post_shard_optimizer else f"torch_{is_post_shard}_{is_fixed}"
 
     tokenizer = get_tokenizer(config["model_name"])

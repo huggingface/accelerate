@@ -6,7 +6,7 @@ This benchmark showcases `FSDP2` in 🤗 `accelerate` and compares it to `torch`
 
 This benchmark consists of two parts:
 - `main.py` is the main script that runs the benchmark
-- `visualize.py` is the script that visualizes the results
+- `visualize.py` is the script that visualizes the results (if `--output_dir` was specified for the previous command)
 
 ## Motivation
 
@@ -37,7 +37,7 @@ As you can see, the memory usage of `accelerate` and `torch_post_shard` (the **i
 
 ## Running
 
-To run the benchmark, you can either use `accelerate launch` or `torchrun` (with the appropriate params):
+To run the benchmark, you can either use `accelerate launch` or `torchrun`:
 ```bash
 accelerate launch main.py
 ```
@@ -52,9 +52,9 @@ python3 main.py --help
 ```
 
 This script will run 4 different benchmarks:
-- `torch_post_shard`: `torch` baseline where optimizer is created after applying `FSDP2`, this is the **intended** way to do it
-- `torch_pre_shard_not_fixed`: `torch` baseline where optimizer is created before applying `FSDP2`
-- `torch_pre_shard_fixed`: `torch` baseline where optimizer is created before applying `FSDP2` but we apply our fix to the optimizer
+- `torch_optimizer_after_fsdp`: `torch` baseline where optimizer is created after applying `FSDP2`, this is the **intended** way to do it
+- `torch_optimizer_before_fsdp_not_fixed`: `torch` baseline where optimizer is created before applying `FSDP2` without fixing the optimizer parameters
+- `torch_optimizer_before_fsdp_fixed`: `torch` baseline where optimizer is created before applying `FSDP2` with our fix to the optimizer
 - `accelerate`: `accelerate`'s own integration of `FSDP2` where optimizer is created before applying `FSDP2`, but we apply our fix to the optimizer
 
 Memory results are saved in a folder specified by `--output_dir` argument.

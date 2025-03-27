@@ -89,23 +89,23 @@ def compare_memory_usage(data, labels, memory_threshold, filter_partition):
 if __name__ == "__main__":
     args = parse_args()
     DIR = args.dir
-    with open(f"{DIR}/torch_post_shard_memory_usage.json") as f:
-        post_shard = json.load(f)
+    with open(f"{DIR}/torch_optimizer_before_fsdp_not_fixed_memory_usage.json") as f:
+        optimizer_before_fsdp_not_fixed = json.load(f)
 
-    with open(f"{DIR}/torch_pre_shard_not_fixed_memory_usage.json") as f:
-        pre_shard = json.load(f)
+    with open(f"{DIR}/torch_optimizer_after_fsdp_memory_usage.json") as f:
+        optimizer_after_fsdp = json.load(f)
 
-    with open(f"{DIR}/torch_pre_shard_fixed_memory_usage.json") as f:
-        pre_shard_fixed = json.load(f)
+    with open(f"{DIR}/torch_optimizer_before_fsdp_fixed_memory_usage.json") as f:
+        optimizer_before_fsdp_fixed = json.load(f)
 
     with open(f"{DIR}/accelerate_memory_usage.json") as f:
         accelerate = json.load(f)
 
-    data = [post_shard, pre_shard, pre_shard_fixed, accelerate]
+    data = [optimizer_before_fsdp_not_fixed, optimizer_before_fsdp_fixed, optimizer_after_fsdp, accelerate]
     labels = [
-        "Optimizer Post Sharding",
-        "Optimizer Pre Sharding (w/o fix)",
-        "Optimizer Pre Sharding (w/ fix)",
+        "Optimizer Before FSDP (w/o fix)",
+        "Optimizer Before FSDP (w/ fix)",
+        "Optimizer After FSDP",
         "Accelerate",
     ]
 

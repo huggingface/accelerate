@@ -1414,7 +1414,7 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(
                 *args, drop_refs=fsdp2_should_fix_optimizer
-            )  # Drop refs for FSDP2, to enable reallocation of parameters furhter in `fully_shard`
+            )  # Drop refs for FSDP2, to enable reallocation of parameters further in `fully_shard`
 
         # `FSDP2` by default expects `Optimizer` to be created after the model is prepared,
         # however that goes against `Accelerate's` design of `bring your own`

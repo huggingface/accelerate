@@ -401,7 +401,7 @@ def get_cluster_input():
             distributed_type = DistributedType.FSDP
         if distributed_type == DistributedType.FSDP:
             fsdp_config["fsdp_version"] = _ask_options(
-                "What should be your FSDP version? [1]: ",
+                "What should be your FSDP version? [2]: ",
                 [1, 2],
                 lambda x: int(x) + 1,
                 default=1,
@@ -463,6 +463,7 @@ def get_cluster_input():
                     FSDP_BACKWARD_PREFETCH,
                     lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
                 )
+
             fsdp_state_dict_type_query = "What should be your FSDP's state dict type?"
             fsdp_config["fsdp_state_dict_type"] = _ask_options(
                 fsdp_state_dict_type_query,

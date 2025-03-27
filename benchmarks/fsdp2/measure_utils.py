@@ -84,7 +84,8 @@ class MemoryTracker:
         gc.collect()
         torch.cuda.empty_cache()
 
-        os.makedirs(self.output_directory, exist_ok=True)
+        if self.output_directory:
+            os.makedirs(self.output_directory, exist_ok=True)
 
         if self.save_memory_snapshot:
             torch.cuda.memory._record_memory_history()
@@ -99,11 +100,11 @@ class MemoryTracker:
         if self._thread:
             self._thread.join()
 
-        if self.save_memory_snapshot and self._state.is_main_process:
+        if self.save_memory_snapshot and self._state.is_main_process and self.output_directory:
             output_file = os.path.join(self.output_directory, f"{self.run_name}_memory_snapshot.pkl")
             torch.cuda.memory._dump_snapshot(output_file)
 
-        if self._state.is_main_process:
+        if self._state.is_main_process and self.output_directory:
             path = os.path.join(self.output_directory, f"{self.run_name}_memory_usage.json")
             with open(path, "w") as f:
                 json.dump(
