@@ -17,7 +17,6 @@
 import pickle
 import tempfile
 import warnings
-from typing import List
 from unittest.mock import Mock
 
 import torch
@@ -102,8 +101,8 @@ def verify_dataloader_batch_sizes(
     accelerator: Accelerator,
     dataset_size: int,
     batch_size: int,
-    process_0_expected_batch_sizes: List[int],
-    process_1_expected_batch_sizes: List[int],
+    process_0_expected_batch_sizes: list[int],
+    process_1_expected_batch_sizes: list[int],
 ):
     """
     A helper function for verifying the batch sizes coming from a prepared dataloader in each process

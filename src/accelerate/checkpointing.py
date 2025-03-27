@@ -14,7 +14,6 @@
 
 import random
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import torch
@@ -56,7 +55,7 @@ logger = get_logger(__name__)
 
 def save_accelerator_state(
     output_dir: str,
-    model_states: List[dict],
+    model_states: list[dict],
     optimizers: list,
     schedulers: list,
     dataloaders: list,

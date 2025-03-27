@@ -17,7 +17,7 @@ Needed utilities for torchao FP8 training.
 """
 
 from functools import partial
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 import torch
 
@@ -45,7 +45,7 @@ def find_first_last_linear_layers(model: torch.nn.Module):
     return first_linear, last_linear
 
 
-def filter_linear_layers(module, fqn: str, layers_to_filter: List[str]) -> bool:
+def filter_linear_layers(module, fqn: str, layers_to_filter: list[str]) -> bool:
     """
     A function which will check if `module` is:
     - a `torch.nn.Linear` layer

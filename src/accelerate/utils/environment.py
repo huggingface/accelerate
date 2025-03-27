@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache, wraps
 from shutil import which
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import torch
 from packaging.version import parse
@@ -91,7 +91,7 @@ def parse_choice_from_env(key, default="no"):
     return value
 
 
-def are_libraries_initialized(*library_names: str) -> List[str]:
+def are_libraries_initialized(*library_names: str) -> list[str]:
     """
     Checks if any of `library_names` are imported in the environment. Will return any names that are.
     """
