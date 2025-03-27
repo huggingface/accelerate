@@ -2381,10 +2381,10 @@ class Accelerator:
             self.deepspeed_engine_wrapped.backward(loss, **kwargs)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             return
-        elif self.scaler is not None:
-            self.scaler.scale(loss).backward(**kwargs)
         elif learning_rate is not None and self.has_lomo_optimizer:
             self.lomo_backward(loss, learning_rate)
+        elif self.scaler is not None:
+            self.scaler.scale(loss).backward(**kwargs)
         else:
             loss.backward(**kwargs)
 
