@@ -31,7 +31,7 @@ from accelerate.hooks import (
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_multi_device, torch_device
+from accelerate.test_utils import require_multi_device, require_non_hpu, torch_device
 from accelerate.utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 
 
@@ -169,6 +169,7 @@ class HooksModelTester(unittest.TestCase):
         output1 = test_model(x)
         assert not output1.requires_grad
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_align_devices_as_model_parallelism(self):
         model = ModelForTest()

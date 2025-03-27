@@ -54,8 +54,9 @@ def test_gather_non_contigous(state):
     # Skip this test because the 'is_contiguous' function of XLA tensor always returns True.
     if state.distributed_type == DistributedType.XLA:
         return
-    # Create a non-contiguous tensor
-    tensor = torch.arange(12).view(4, 3).t().to(state.device)
+
+    # Create a non-contiguous tensor (enforce non-contiguity after device memory allocation)
+    tensor = torch.arange(12, device=state.device).view(4, 3).t()
     assert not tensor.is_contiguous()
     # Shouldn't error out
     _ = gather(tensor)

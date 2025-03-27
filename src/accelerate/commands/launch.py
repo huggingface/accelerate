@@ -39,6 +39,7 @@ from accelerate.utils import (
     convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
+    is_hpu_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
@@ -505,7 +506,7 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_multinode_launcher",
         default=None,
         type=str,
-        help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
+        help="DeepSpeed multi-node launcher to use, e.g. `pdsh`, `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5). If unspecified, will default to `pdsh`.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_moe_layer_cls_names",
@@ -1019,6 +1020,7 @@ def _validate_launch_command(args):
                     DistributedType.MULTI_SDAA,
                     DistributedType.MULTI_MUSA,
                     DistributedType.MULTI_XPU,
+                    DistributedType.MULTI_HPU,
                 )
                 else False
             )
@@ -1098,6 +1100,8 @@ def _validate_launch_command(args):
                 args.num_processes = torch.musa.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
+            elif is_hpu_available():
+                args.num_processes = torch.hpu.device_count()
             else:
                 args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
@@ -1107,12 +1111,13 @@ def _validate_launch_command(args):
             not args.multi_gpu
             and args.num_processes > 1
             and (
-                (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
+                (is_xpu_available() and torch.xpu.device_count() > 1)
+                or (is_npu_available() and torch.npu.device_count() > 1)
+                or (is_hpu_available() and torch.hpu.device_count() > 1)
                 or (is_mlu_available() and torch.mlu.device_count() > 1)
                 or (is_sdaa_available() and torch.sdaa.device_count() > 1)
                 or (is_musa_available() and torch.musa.device_count() > 1)
-                or (is_npu_available() and torch.npu.device_count() > 1)
-                or (torch.cuda.device_count() > 1)
+                or (torch.cuda.is_available() and torch.cuda.device_count() > 1)
             )
         ):
             warned.append(

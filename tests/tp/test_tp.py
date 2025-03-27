@@ -22,15 +22,17 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     require_tp,
     require_transformers,
+    run_first,
     slow,
 )
 from accelerate.utils import patch_environment
 
 
 @require_non_torch_xla
-@require_tp
 @require_multi_device
 @require_transformers
+@require_tp
+@run_first
 @slow
 class TPIntegrationTest(TempDirTestCase):
     test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")

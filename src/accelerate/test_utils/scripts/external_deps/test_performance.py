@@ -21,9 +21,10 @@ import torch
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator, DistributedType
+from accelerate.utils import SAFE_WEIGHTS_NAME, set_seed
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
@@ -216,7 +217,7 @@ def training_function(config, args):
     accelerator.save_model(model, args.output_dir)
     accelerator.wait_for_everyone()
     assert Path(
-        args.output_dir, "model.safetensors"
+        args.output_dir, SAFE_WEIGHTS_NAME
     ).exists(), "Model was not saved when calling `Accelerator.save_model`"
     accelerator.end_training()
 

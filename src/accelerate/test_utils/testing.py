@@ -31,8 +31,9 @@ import torch
 
 import accelerate
 
-from ..state import AcceleratorState, PartialState
+from ..state import AcceleratorState
 from ..utils import (
+    check_cuda_fp8_capability,
     gather,
     is_bnb_available,
     is_clearml_available,
@@ -41,13 +42,20 @@ from ..utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_dvclive_available,
+    is_fp8_available,
+    is_fp16_available,
+    is_habana_gaudi1,
+    is_hpu_available,
     is_import_timer_available,
+    is_matplotlib_available,
+    is_mlflow_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
     is_pandas_available,
     is_pippy_available,
+    is_pytest_available,
     is_schedulefree_available,
     is_sdaa_available,
     is_tensorboard_available,
@@ -85,6 +93,8 @@ def get_backend():
         return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
         return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
+    elif is_hpu_available():
+        return "hpu", torch.hpu.device_count(), torch.hpu.memory_allocated
     else:
         return "cpu", 1, lambda: 0
 
@@ -169,6 +179,16 @@ def require_cuda(test_case):
     return unittest.skipUnless(is_cuda_available() and not is_torch_xla_available(), "test requires a GPU")(test_case)
 
 
+def require_cuda_or_hpu(test_case):
+    """
+    Decorator marking a test that requires CUDA or HPU. These tests are skipped when there are no GPU available or when
+    TorchXLA is available.
+    """
+    return unittest.skipUnless(
+        (is_cuda_available() and not is_torch_xla_available()) or is_hpu_available(), "test requires a GPU or HPU"
+    )(test_case)
+
+
 def require_xpu(test_case):
     """
     Decorator marking a test that requires XPU. These tests are skipped when there are no XPU available.
@@ -191,6 +211,39 @@ def require_non_xpu(test_case):
     Decorator marking a test that should be skipped for XPU.
     """
     return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
+
+
+def require_non_hpu(test_case):
+    """
+    Decorator marking a test that should be skipped for HPU.
+    """
+    return unittest.skipUnless(torch_device != "hpu", "test requires a non-HPU")(test_case)
+
+
+def require_fp16(test_case):
+    """
+    Decorator marking a test that requires FP16. These tests are skipped when FP16 is not supported.
+    """
+
+    return unittest.skipUnless(is_fp16_available(), "test requires FP16 support")(test_case)
+
+
+def require_fp8(test_case):
+    """
+    Decorator marking a test that requires FP8. These tests are skipped when FP8 is not supported.
+    """
+
+    # is_fp8_available only checks for libraries
+    # ideally it should check for device capability as well
+    fp8_is_available = is_fp8_available()
+
+    if torch.cuda.is_available() and not check_cuda_fp8_capability():
+        fp8_is_available = False
+
+    if is_hpu_available() and is_habana_gaudi1():
+        fp8_is_available = False
+
+    return unittest.skipUnless(fp8_is_available, "test requires FP8 support")(test_case)
 
 
 def require_mlu(test_case):
@@ -301,9 +354,9 @@ def require_single_device(test_case):
     Decorator marking a test that requires a single device. These tests are skipped when there is no hardware
     accelerator available or number of devices is more than one.
     """
-    return unittest.skipUnless(torch_device != "cpu" and device_count == 1, "test requires a hardware accelerator")(
-        test_case
-    )
+    return unittest.skipUnless(
+        torch_device != "cpu" and device_count == 1, "test requires a single device accelerator"
+    )(test_case)
 
 
 def require_single_gpu(test_case):
@@ -344,6 +397,16 @@ def require_multi_xpu(test_case):
     XPUs.
     """
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
+
+
+def require_multi_gpu_or_xpu(test_case):
+    """
+    Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
+    GPUs or XPUs.
+    """
+    return unittest.skipUnless(
+        (is_cuda_available() or is_xpu_available()) and device_count > 1, "test requires multiple GPUs or XPUs"
+    )(test_case)
 
 
 def require_deepspeed(test_case):
@@ -413,11 +476,19 @@ def require_pandas(test_case):
     return unittest.skipUnless(is_pandas_available(), "test requires pandas")(test_case)
 
 
+def require_mlflow(test_case):
+    """
+    Decorator marking a test that requires mlflow installed. These tests are skipped when mlflow isn't installed
+    """
+    return unittest.skipUnless(is_mlflow_available(), "test requires mlflow")(test_case)
+
+
 def require_pippy(test_case):
     """
-    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed
+    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed It is
+    also checked if the test is running on a Gaudi1 device which doesn't support pippy.
     """
-    return unittest.skipUnless(is_pippy_available(), "test requires pippy")(test_case)
+    return unittest.skipUnless(is_pippy_available() and not is_habana_gaudi1(), "test requires pippy")(test_case)
 
 
 def require_import_timer(test_case):
@@ -441,6 +512,14 @@ def require_torchao(test_case):
     Decorator marking a test that requires torchao installed. These tests are skipped when torchao isn't installed
     """
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
+
+
+def require_matplotlib(test_case):
+    """
+    Decorator marking a test that requires matplotlib installed. These tests are skipped when matplotlib isn't
+    installed
+    """
+    return unittest.skipUnless(is_matplotlib_available(), "test requires matplotlib")(test_case)
 
 
 _atleast_one_tracker_available = (
@@ -469,6 +548,25 @@ def require_torchdata_stateful_dataloader(test_case):
     return unittest.skipUnless(
         is_torchdata_stateful_dataloader_available(), "test requires torchdata.stateful_dataloader"
     )(test_case)
+
+
+def run_first(test_case):
+    """
+    Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator are
+    garanteed to run first.
+
+    This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
+    single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
+    allocation conflicts.
+
+    If pytest is not installed, test will be returned as is.
+    """
+
+    if is_pytest_available():
+        import pytest
+
+        return pytest.mark.order(1)(test_case)
+    return test_case
 
 
 class TempDirTestCase(unittest.TestCase):
@@ -514,8 +612,7 @@ class AccelerateTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # Reset the state of the AcceleratorState singleton.
-        AcceleratorState._reset_state()
-        PartialState._reset_state()
+        AcceleratorState._reset_state(True)
 
 
 class MockingTestCase(unittest.TestCase):
