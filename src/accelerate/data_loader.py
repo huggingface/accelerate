@@ -15,7 +15,7 @@
 import importlib
 import math
 from contextlib import suppress
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 from packaging import version
@@ -992,7 +992,7 @@ def prepare_data_loader(
     process_index: Optional[int] = None,
     split_batches: bool = False,
     put_on_device: bool = False,
-    rng_types: Optional[List[Union[str, RNGType]]] = None,
+    rng_types: Optional[list[Union[str, RNGType]]] = None,
     dispatch_batches: Optional[bool] = None,
     even_batches: bool = True,
     slice_fn_for_dispatch: Optional[Callable] = None,

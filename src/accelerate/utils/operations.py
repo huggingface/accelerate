@@ -17,9 +17,10 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 
 import pickle
 import warnings
+from collections.abc import Mapping
 from contextlib import contextmanager, nullcontext
 from functools import update_wrapper, wraps
-from typing import Any, Mapping
+from typing import Any
 
 import torch
 
