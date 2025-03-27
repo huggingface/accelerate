@@ -91,9 +91,8 @@ def training_function(config, args):
 
     set_seed(seed)
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size, model_name)
-
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, return_dict=True)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, return_dict=True, tp_plan=args.tp_plan)
 
     if args.add_pad_token:
         if model.config.pad_token_id is None:
@@ -254,6 +253,12 @@ def main():
         type=bool,
         default=False,
         help="To add pad token if not exists.",
+    )
+    parser.add_argument(
+        "--tp_plan",
+        type=str,
+        default=None,
+        help="To use TP or not",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}
