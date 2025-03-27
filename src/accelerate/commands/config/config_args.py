@@ -18,7 +18,7 @@ import json
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import yaml
 
@@ -211,9 +211,9 @@ class ClusterConfig(BaseConfig):
     tpu_use_cluster: bool = False
     tpu_use_sudo: bool = False
     command_file: str = None
-    commands: List[str] = None
-    tpu_vm: List[str] = None
-    tpu_env: List[str] = None
+    commands: list[str] = None
+    tpu_vm: list[str] = None
+    tpu_env: list[str] = None
 
     # args for dynamo
     dynamo_config: dict = None

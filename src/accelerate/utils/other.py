@@ -17,9 +17,9 @@ import platform
 import re
 import socket
 from codecs import encode
+from collections import OrderedDict
 from functools import partial, reduce
 from types import MethodType
-from typing import OrderedDict
 
 import numpy as np
 import torch
