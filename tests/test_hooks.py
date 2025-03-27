@@ -13,12 +13,15 @@
 # limitations under the License.
 
 import inspect
+import re
 import unittest
 
 import torch
 import torch.nn as nn
+from parameterized import parameterized
 from torch.fx import symbolic_trace
 
+from accelerate.big_modeling import attach_layerwise_casting_hooks
 from accelerate.hooks import (
     AlignDevicesHook,
     ModelHook,
@@ -29,6 +32,7 @@ from accelerate.hooks import (
     remove_hook_from_submodules,
 )
 from accelerate.test_utils import require_multi_device, torch_device
+from accelerate.utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 
 
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
@@ -56,6 +60,18 @@ class PostForwardHook(ModelHook):
 
 
 class HooksModelTester(unittest.TestCase):
+    def check_dtype_for_layerwise_upcasting(self, module, storage_dtype, compute_dtype, patterns_to_check=None):
+        for name, submodule in module.named_modules():
+            if not isinstance(submodule, SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING):
+                continue
+            dtype_to_check = storage_dtype
+            if patterns_to_check and any(re.search(pattern, name) for pattern in patterns_to_check):
+                dtype_to_check = compute_dtype
+            if getattr(submodule, "weight", None) is not None:
+                self.assertEqual(submodule.weight.dtype, dtype_to_check)
+            if getattr(submodule, "bias", None) is not None:
+                self.assertEqual(submodule.bias.dtype, dtype_to_check)
+
     def test_add_and_remove_hooks(self):
         test_model = ModelForTest()
         test_hook = ModelHook()
@@ -399,3 +415,27 @@ class HooksModelTester(unittest.TestCase):
 
             # Now the output is expected to be different since we modified the graph.
             assert not torch.allclose(output1, output3)
+
+    @parameterized.expand(
+        [
+            (torch.float16, torch.float32),
+            (torch.float8_e4m3fn, torch.float32),
+            (torch.float8_e4m3fn, torch.float32, ["batchnorm"]),
+        ]
+    )
+    def test_layerwise_upcasting_inference(self, storage_dtype, compute_dtype, skip_modules_pattern=None):
+        test_model = ModelForTest()
+        inputs = torch.randn(2, 3)
+        inputs = inputs.to(compute_dtype) if inputs.dtype == torch.float32 else inputs
+
+        attach_layerwise_casting_hooks(
+            test_model,
+            storage_dtype=storage_dtype,
+            compute_dtype=compute_dtype,
+            skip_modules_pattern=skip_modules_pattern,
+        )
+        patterns_to_check = skip_modules_pattern if skip_modules_pattern else None
+        self.check_dtype_for_layerwise_upcasting(test_model, storage_dtype, compute_dtype, patterns_to_check)
+
+        with torch.no_grad():
+            _ = test_model(inputs)
