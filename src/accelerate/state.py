@@ -1052,6 +1052,10 @@ class AcceleratorState:
         return PartialState().use_distributed
 
     @property
+    def is_fsdp2(self) -> bool:
+        return self.distributed_type == DistributedType.FSDP and self.fsdp_plugin.fsdp_version == 2
+
+    @property
     def is_last_process(self) -> bool:
         "Returns whether the current process is the last one"
         return PartialState().is_last_process

@@ -82,8 +82,11 @@ from .utils import (
     convert_outputs_to_fp32,
     ensure_weights_retied,
     extract_model_from_parallel,
+    fsdp2_prepare_model,
+    fsdp2_switch_optimizer_parameters,
     gather,
     gather_object,
+    get_fsdp2_grad_scaler,
     get_grad_scaler,
     get_mixed_precision_context_manager,
     get_pretty_name,
@@ -117,6 +120,7 @@ from .utils import (
 from .utils.constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
+    FSDP2_PYTORCH_VERSION,
     FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
 )
@@ -388,6 +392,10 @@ class Accelerator:
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
 
+        if fsdp_plugin is not None and fsdp_plugin.fsdp_version == 2:
+            if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
+                raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
+
         if torch_tp_plugin is None:
             torch_tp_plugin = (
                 TorchTensorParallelPlugin() if os.environ.get("ACCELERATE_USE_TP", "false") == "true" else None
@@ -546,7 +554,12 @@ class Accelerator:
             ) or is_torch_xla_available(check_is_tpu=True):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-            self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
+
+            # FSDP2 doesn't use ShardedGradScaler, don't want to modify `get_grad_scaler`, rather create a simple utility
+            if self.is_fsdp2:
+                self.scaler = get_fsdp2_grad_scaler(**kwargs)
+            else:
+                self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
@@ -697,6 +710,10 @@ class Accelerator:
     @property
     def mixed_precision(self):
         return self.state.mixed_precision
+
+    @property
+    def is_fsdp2(self):
+        return self.state.is_fsdp2
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
@@ -1372,12 +1389,45 @@ class Accelerator:
                     "part for you."
                 )
 
+        if self.is_fsdp2:
+            model_count = 0
+            optimizer_count = 0
+            for obj in args:
+                if isinstance(obj, torch.nn.Module):
+                    model_count += 1
+                elif isinstance(obj, torch.optim.Optimizer):
+                    optimizer_count += 1
+
+            # This needs to be written as such, so that passing other objects other than models/optimizers doesn't raise an error
+            if (model_count < 1 and optimizer_count > 0) or (model_count > 0 and optimizer_count < 1):
+                raise ValueError(
+                    "When using FSDP2, a model and optimizer must be passed together to `Accelerator.prepare()`"
+                    " as the optimizer needs to have its parameters modified after the model is converted."
+                )
+
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
+        fsdp2_should_fix_optimizer = self.is_fsdp2
+        should_fix_optimizer = tpu_should_fix_optimizer or fsdp2_should_fix_optimizer
 
-        if tpu_should_fix_optimizer:
+        if should_fix_optimizer:
             # 1. grabbing old model parameters
-            old_named_params = self._get_named_parameters(*args)
+            old_named_params = self._get_named_parameters(
+                *args, drop_refs=fsdp2_should_fix_optimizer
+            )  # Drop refs for FSDP2, to enable reallocation of parameters further in `fully_shard`
+
+        # `FSDP2` by default expects `Optimizer` to be created after the model is prepared,
+        # however that goes against `Accelerate's` design of `bring your own`
+        # this is a workaround to make memory footprint match if `Optimizer` is created before preparing the model
+        if fsdp2_should_fix_optimizer:
+            for obj in args:
+                if isinstance(obj, torch.optim.Optimizer):
+                    for param_group in obj.param_groups:
+                        for i, p in enumerate(param_group["params"]):
+                            # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
+                            # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
+                            param_group["params"][i] = torch.empty_like(p)
+                            param_group["params"][i].data_ptr = p.data_ptr()
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.use_ipex:
@@ -1399,15 +1449,22 @@ class Accelerator:
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
-        if tpu_should_fix_optimizer:
+        if should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
+            if fsdp2_should_fix_optimizer and self.state.fsdp_plugin.activation_checkpointing:
+                new_named_params = {
+                    k.replace("._checkpoint_wrapped_module", ""): v for k, v in new_named_params.items()
+                }
             # 3. building a map from the first to the second
             mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
             # 4. using that map to update the parameters of the optimizer
             for obj in result:
                 if isinstance(obj, torch.optim.Optimizer):
-                    obj._switch_parameters(mapping)
+                    if not fsdp2_should_fix_optimizer:
+                        obj._switch_parameters(mapping)
+                    else:
+                        fsdp2_switch_optimizer_parameters(obj, mapping)
 
         for item in result:
             if any(
@@ -1552,6 +1609,13 @@ class Accelerator:
                         and _tp_plan attribute to model class."
                     )
                 model.tensor_parallel(self.state.torch_tp_plugin.torch_device_mesh["tp"])
+            elif self.is_fsdp2:
+                model = fsdp2_prepare_model(self, model)
+
+                if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
+                    del self._models[-2]
+                self._models[-1] = model
+
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -1577,7 +1641,10 @@ class Accelerator:
                     )
 
                     kwargs = {
-                        "sharding_strategy": fsdp_plugin.sharding_strategy,
+                        # We fallback to reshard_after_forward if sharding_strategy is not set.
+                        # We prerfer sharding_strategy to not break the behavior of the existing code.
+                        # Deprecation warning has already been issued in `utils.dataclasses.py`
+                        "sharding_strategy": fsdp_plugin.sharding_strategy or fsdp_plugin.reshard_after_forward,
                         "cpu_offload": fsdp_plugin.cpu_offload,
                         "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
                         "mixed_precision": fsdp_plugin.mixed_precision_policy,
@@ -2512,7 +2579,12 @@ class Accelerator:
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
-                    return model.clip_grad_norm_(max_norm, norm_type)
+                    if self.fsdp_version == 1:
+                        return model.clip_grad_norm_(max_norm, norm_type)
+                    else:
+                        return torch.nn.utils.clip_grad_norm_(
+                            parameters, max_norm, norm_type=norm_type
+                        )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
@@ -3456,12 +3528,12 @@ class Accelerator:
         """
         return self.free_memory(*objects)
 
-    def _get_named_parameters(self, *args):
+    def _get_named_parameters(self, *args, drop_refs=False):
         named_parameters = {}
         for obj in args:
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
-                named_parameters.update({n: p for n, p in obj.named_parameters()})
+                named_parameters.update({n: p.data_ptr() if drop_refs else p for n, p in obj.named_parameters()})
         return named_parameters
 
     def _get_devices(self, *args):
@@ -3533,6 +3605,9 @@ class Accelerator:
                 from deepspeed.checkpoint.utils import clone_tensors_for_torch_save
 
                 state_dict = clone_tensors_for_torch_save(self.unwrap_model(model).state_dict())
+        elif self.is_fsdp2:
+            with torch.no_grad():
+                state_dict = {k: v.full_tensor() for k, v in model.state_dict().items()}
         elif self.distributed_type == DistributedType.FSDP:
             from torch.distributed.fsdp import FullStateDictConfig, StateDictType
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
