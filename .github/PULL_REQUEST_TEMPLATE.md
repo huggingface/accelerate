@@ -38,7 +38,7 @@ members/contributors who may be interested in your PR.
 
 - Big modeling: @SunMarc
 - Fully-Sharded Data Parallism: @zach-huggingface
-- DeepSpeed: @zach-huggingface
+- DeepSpeed: @SunMarc @zach-huggingface
 - Command Line Interface: @zach-huggingface
 - Documentation: @zach-huggingface
 - Core parts of the library: @zach-huggingface @BenjaminBossan @SunMarc
