@@ -970,6 +970,8 @@ def get_balanced_memory(
         expected_device_type = "xpu"
     elif is_hpu_available():
         expected_device_type = "hpu"
+    elif is_mps_available():
+        expected_device_type = "mps"
     else:
         expected_device_type = "cuda"
     num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
