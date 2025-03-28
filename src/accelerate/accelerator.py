@@ -2111,9 +2111,9 @@ class Accelerator:
 
     def _prepare_ipex(self, *args):
         """
-        Prepares model and optimizer for training with IPEX on CPU/XPU. This covers 3 cases, IPEX compiled
-        with CPU only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock
-        pytorch starting from version 2.4.
+        Prepares model and optimizer for training with IPEX on CPU/XPU. This covers 3 cases, IPEX compiled with CPU
+        only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock pytorch
+        starting from version 2.4.
         """
         if self.state.use_ipex:
             if not is_ipex_available():
