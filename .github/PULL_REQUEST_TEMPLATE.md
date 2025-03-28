@@ -37,11 +37,11 @@ members/contributors who may be interested in your PR.
  If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of **who to tag**.
 
 - Big modeling: @SunMarc
-- Fully-Sharded Data Parallism: @muellerzr
-- DeepSpeed: @muellerzr
-- Command Line Interface: @muellerzr
-- Documentation: @muellerzr
-- Core parts of the library: @muellerzr @BenjaminBossan @SunMarc
-- Maintained examples: @muellerzr or @SunMarc
+- Fully-Sharded Data Parallism: @zach-huggingface
+- DeepSpeed: @zach-huggingface
+- Command Line Interface: @zach-huggingface
+- Documentation: @zach-huggingface
+- Core parts of the library: @zach-huggingface @BenjaminBossan @SunMarc
+- Maintained examples: @zach-huggingface or @SunMarc
 
  -->
