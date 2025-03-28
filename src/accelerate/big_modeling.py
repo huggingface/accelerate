@@ -14,9 +14,10 @@
 
 import logging
 import os
+import re
 from contextlib import contextmanager
 from functools import wraps
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.nn as nn
@@ -24,6 +25,7 @@ import torch.nn as nn
 from .hooks import (
     AlignDevicesHook,
     CpuOffload,
+    LayerwiseCastingHook,
     UserCpuOffloadHook,
     add_hook_to_module,
     attach_align_device_hook,
@@ -48,6 +50,7 @@ from .utils import (
     parse_flag_from_env,
     retie_parameters,
 )
+from .utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 from .utils.other import recursive_getattr
 
 
@@ -636,3 +639,86 @@ def load_checkpoint_and_dispatch(
         preload_module_classes=preload_module_classes,
         force_hooks=force_hooks,
     )
+
+
+def attach_layerwise_casting_hooks(
+    module: torch.nn.Module,
+    storage_dtype: torch.dtype,
+    compute_dtype: torch.dtype,
+    skip_modules_pattern: Union[str, Tuple[str, ...]] = None,
+    skip_modules_classes: Optional[Tuple[Type[torch.nn.Module], ...]] = None,
+    non_blocking: bool = False,
+) -> None:
+    r"""
+    Applies layerwise casting to a given module. The module expected here is a PyTorch nn.Module.
+
+    Example:
+
+    TODO
+
+    Args:
+        module (`torch.nn.Module`):
+            The module whose leaf modules will be cast to a high precision dtype for computation, and to a low
+            precision dtype for storage.
+        storage_dtype (`torch.dtype`):
+            The dtype to cast the module to before/after the forward pass for storage.
+        compute_dtype (`torch.dtype`):
+            The dtype to cast the module to during the forward pass for computation.
+        skip_modules_pattern (`Tuple[str, ...]`, defaults to `None`):
+            A list of patterns to match the names of the modules to skip during the layerwise casting process. If set
+            to `None` alongside `skip_modules_classes` being `None`, the layerwise casting is applied directly to the
+            module instead of its internal submodules.
+        skip_modules_classes (`Tuple[Type[torch.nn.Module], ...]`, defaults to `None`):
+            A list of module classes to skip during the layerwise casting process.
+        non_blocking (`bool`, defaults to `False`):
+            If `True`, the weight casting operations are non-blocking.
+    """
+    if skip_modules_classes is None and skip_modules_pattern is None:
+        add_hook_to_module(
+            module,
+            LayerwiseCastingHook(storage_dtype=storage_dtype, compute_dtype=compute_dtype, non_blocking=non_blocking),
+            append=True,
+        )
+        return
+    else:
+        _attach_layerwise_casting_hooks(
+            module, storage_dtype, compute_dtype, skip_modules_pattern, skip_modules_classes, non_blocking
+        )
+
+
+def _attach_layerwise_casting_hooks(
+    module: torch.nn.Module,
+    storage_dtype: torch.dtype,
+    compute_dtype: torch.dtype,
+    skip_modules_pattern: Union[str, Tuple[str, ...]] = None,
+    skip_modules_classes: Optional[Tuple[Type[torch.nn.Module], ...]] = None,
+    non_blocking: bool = False,
+    _prefix: str = "",
+):
+    should_skip = (skip_modules_classes is not None and isinstance(module, skip_modules_classes)) or (
+        skip_modules_pattern is not None and any(re.search(pattern, _prefix) for pattern in skip_modules_pattern)
+    )
+    if should_skip:
+        logger.debug(f'Skipping layerwise casting for layer "{_prefix}"')
+        return
+
+    if isinstance(module, SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING):
+        logger.debug(f'Applying layerwise casting to layer "{_prefix}"')
+        add_hook_to_module(
+            module,
+            LayerwiseCastingHook(storage_dtype=storage_dtype, compute_dtype=compute_dtype, non_blocking=non_blocking),
+            append=True,
+        )
+        return
+
+    for name, submodule in module.named_children():
+        layer_name = f"{_prefix}.{name}" if _prefix else name
+        _attach_layerwise_casting_hooks(
+            submodule,
+            storage_dtype,
+            compute_dtype,
+            skip_modules_pattern,
+            skip_modules_classes,
+            non_blocking,
+            _prefix=layer_name,
+        )
