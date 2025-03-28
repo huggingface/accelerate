@@ -49,7 +49,7 @@ class TPIntegrationTest(TempDirTestCase):
     def test_working_of_tp(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = get_launch_command(
-            num_processes=self.test_tp_size, num_machines=1, machine_rank=0, use_tp=True, tp_size=self.test_tp_size
+            num_processes=self.test_tp_size, num_machines=1, machine_rank=0, tp_size=self.test_tp_size
         )
         cmd.extend(
             [
@@ -57,6 +57,7 @@ class TPIntegrationTest(TempDirTestCase):
                 f"--output_dir={self.tmpdir}",
                 f"--model_name_or_path={self.model_name_or_path}",
                 "--add_pad_token=true",
+                "--tp_plan='auto'",
             ]
         )
         with patch_environment(omp_num_threads=1):
