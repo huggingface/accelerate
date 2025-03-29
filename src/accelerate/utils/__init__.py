@@ -133,6 +133,7 @@ from .imports import (
     is_triton_available,
     is_wandb_available,
     is_weights_only_available,
+    is_xccl_available,
     is_xpu_available,
     torchao_required,
 )
