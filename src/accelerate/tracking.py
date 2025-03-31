@@ -19,7 +19,7 @@ import json
 import os
 import time
 from functools import wraps
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import yaml
 
@@ -360,8 +360,8 @@ class WandBTracker(GeneralTracker):
     def log_table(
         self,
         table_name: str,
-        columns: List[str] = None,
-        data: List[List[Any]] = None,
+        columns: list[str] = None,
+        data: list[list[Any]] = None,
         dataframe: Any = None,
         step: Optional[int] = None,
         **kwargs,
@@ -537,7 +537,7 @@ class AimTracker(GeneralTracker):
             self.writer.track(value, name=key, step=step, **kwargs)
 
     @on_main_process
-    def log_images(self, values: dict, step: Optional[int] = None, kwargs: Optional[Dict[str, dict]] = None):
+    def log_images(self, values: dict, step: Optional[int] = None, kwargs: Optional[dict[str, dict]] = None):
         """
         Logs `images` to the current run.
 
@@ -613,7 +613,7 @@ class MLflowTracker(GeneralTracker):
         experiment_name: str = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         run_id: Optional[str] = None,
-        tags: Optional[Union[Dict[str, Any], str]] = None,
+        tags: Optional[Union[dict[str, Any], str]] = None,
         nested_run: Optional[bool] = False,
         run_name: Optional[str] = None,
         description: Optional[str] = None,
@@ -820,7 +820,7 @@ class ClearMLTracker(GeneralTracker):
         return self.task.connect_configuration(values)
 
     @on_main_process
-    def log(self, values: Dict[str, Union[int, float]], step: Optional[int] = None, **kwargs):
+    def log(self, values: dict[str, Union[int, float]], step: Optional[int] = None, **kwargs):
         """
         Logs `values` dictionary to the current run. The dictionary keys must be strings. The dictionary values must be
         ints or floats
@@ -875,8 +875,8 @@ class ClearMLTracker(GeneralTracker):
     def log_table(
         self,
         table_name: str,
-        columns: List[str] = None,
-        data: List[List[Any]] = None,
+        columns: list[str] = None,
+        data: list[list[Any]] = None,
         dataframe: Any = None,
         step: Optional[int] = None,
         **kwargs,
@@ -1022,7 +1022,7 @@ LOGGER_TYPE_TO_CLASS = {
 
 
 def filter_trackers(
-    log_with: List[Union[str, LoggerType, GeneralTracker]],
+    log_with: list[Union[str, LoggerType, GeneralTracker]],
     logging_dir: Union[str, os.PathLike] = None,
 ):
     """

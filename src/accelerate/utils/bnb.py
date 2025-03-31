@@ -16,7 +16,7 @@
 import logging
 import os
 from copy import deepcopy
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -45,9 +45,9 @@ def load_and_quantize_model(
     model: torch.nn.Module,
     bnb_quantization_config: BnbQuantizationConfig,
     weights_location: Union[str, os.PathLike] = None,
-    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+    device_map: Optional[dict[str, Union[int, str, torch.device]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     offload_state_dict: bool = False,
 ):
@@ -204,7 +204,7 @@ def get_quantized_model_device_map(
             device_map = {"": torch.xpu.current_device()}
         else:
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-        logger.info("The device_map was not initialized." "Setting device_map to `{'':torch.cuda.current_device()}`.")
+        logger.info("The device_map was not initialized.Setting device_map to `{'':torch.cuda.current_device()}`.")
 
     if isinstance(device_map, str):
         if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
