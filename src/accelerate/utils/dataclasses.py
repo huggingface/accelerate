@@ -1836,7 +1836,7 @@ class FullyShardedDataParallelPlugin:
 
         #  Single warning for all deprecation warnings due to FSDP2 conversion
         if _fsdp2_warnings:
-            logger.warning("Multiple deprecation warnings due to FSDP2 conversion:" "\n".join(_fsdp2_warnings))
+            logger.warning("Multiple deprecation warnings due to FSDP2 conversion:\n".join(_fsdp2_warnings))
 
     def set_state_dict_type(self, state_dict_type=None):
         """

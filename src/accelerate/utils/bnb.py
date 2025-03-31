@@ -204,7 +204,7 @@ def get_quantized_model_device_map(
             device_map = {"": torch.xpu.current_device()}
         else:
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-        logger.info("The device_map was not initialized." "Setting device_map to `{'':torch.cuda.current_device()}`.")
+        logger.info("The device_map was not initialized.Setting device_map to `{'':torch.cuda.current_device()}`.")
 
     if isinstance(device_map, str):
         if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:

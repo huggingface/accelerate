@@ -195,8 +195,7 @@ class MegatronLMDummyDataLoader:
             old_value = getattr(args, key, "")
             if old_value != value:
                 print(
-                    f"WARNING: MegatronLMDummyDataLoader overriding arguments for "
-                    f"{key}:{old_value} with {key}:{value}"
+                    f"WARNING: MegatronLMDummyDataLoader overriding arguments for {key}:{old_value} with {key}:{value}"
                 )
             setattr(args, key, value)
 
@@ -887,7 +886,7 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
         if getattr(args, key, None) is not None:
             if args.rank == 0:
                 print(
-                    f"WARNING: overriding default arguments for " f"{key}:{getattr(args, key)} with {key}:{value}",
+                    f"WARNING: overriding default arguments for {key}:{getattr(args, key)} with {key}:{value}",
                     flush=True,
                 )
         setattr(args, key, value)
