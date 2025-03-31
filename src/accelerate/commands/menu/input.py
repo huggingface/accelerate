@@ -17,7 +17,6 @@ This file contains utilities for handling input from the user and registering sp
 based on https://github.com/bchao1/bullet
 """
 
-
 from .keymap import KEYMAP, get_character
 
 
