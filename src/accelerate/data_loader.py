@@ -19,7 +19,7 @@ from typing import Callable, Optional, Union
 
 import torch
 from packaging import version
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler, Sampler
 
 from .logging import get_logger
 from .state import DistributedType, GradientState, PartialState, is_torch_xla_available
@@ -631,13 +631,10 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         return get_sampler(self)
 
     def set_sampler(self, sampler):
-        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
-        if sampler_is_batch_sampler:
+        if isinstance(sampler, BatchSampler):
+            self.sampler.batch_sampler = sampler
+        elif isinstance(sampler, Sampler):
             self.sampler.sampler = sampler
-        else:
-            self.batch_sampler.sampler = sampler
-            if hasattr(self.batch_sampler, "batch_sampler"):
-                self.batch_sampler.batch_sampler.sampler = sampler
 
 
 if is_torch_xla_available():
@@ -958,13 +955,12 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         return get_sampler(self)
 
     def set_sampler(self, sampler):
-        sampler_is_batch_sampler = isinstance(self.sampler, BatchSampler)
-        if sampler_is_batch_sampler:
+        if isinstance(sampler, BatchSampler):
+            self.sampler.batch_sampler = sampler
+        elif isinstance(sampler, Sampler):
             self.sampler.sampler = sampler
         else:
-            self.batch_sampler.sampler = sampler
-            if hasattr(self.batch_sampler, "batch_sampler"):
-                self.batch_sampler.batch_sampler.sampler = sampler
+            raise ValueError(f"{sampler} must be of type torch.utills.data.Sampler or torch.utils.data.BatchSampler")
 
 
 def get_sampler(dataloader):
@@ -977,10 +973,8 @@ def get_sampler(dataloader):
     Returns:
         `torch.utils.data.Sampler`: The sampler associated to the dataloader
     """
-    sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
-    if sampler_is_batch_sampler:
-        sampler = getattr(dataloader.sampler, "sampler", None)
-    else:
+    sampler = getattr(dataloader.sampler, "sampler", None)
+    if not sampler:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
     return sampler
 
@@ -1155,11 +1149,16 @@ def prepare_data_loader(
 
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
-    new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
-    sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
-    synchronized_generator = None
+    if isinstance(dataloader.sampler, BatchSampler):
+        raise ValueError(
+            "Should not pass a BatchSampler do dataloader sampler argument. As per pytorch>2.1.0 documentation, please pass this to sampler instead"
+        )
 
-    sampler = get_sampler(dataloader)
+    new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
+
+    synchronized_generator = None
+    sampler = dataloader.sampler
+
     if isinstance(sampler, RandomSampler) and use_seedable_sampler:
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
@@ -1208,9 +1207,8 @@ def prepare_data_loader(
                     seed = int(torch.empty((), dtype=torch.int64).random_().item())
                     sampler.generator.manual_seed(seed)
                 synchronized_generator = sampler.generator
-            batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
-                batch_sampler,
+                dataloader.batch_sampler,
                 num_processes=num_processes,
                 process_index=process_index,
                 split_batches=split_batches,
@@ -1252,19 +1250,6 @@ def prepare_data_loader(
             slice_fn=slice_fn_for_dispatch,
             use_stateful_dataloader=use_stateful_dataloader,
             torch_device_mesh=torch_device_mesh,
-            **kwargs,
-        )
-    elif sampler_is_batch_sampler:
-        dataloader = DataLoaderShard(
-            new_dataset,
-            device=device if put_on_device and state.distributed_type != DistributedType.XLA else None,
-            sampler=new_batch_sampler,
-            batch_size=dataloader.batch_size,
-            rng_types=rng_types,
-            _drop_last=dataloader.drop_last,
-            _non_blocking=non_blocking,
-            synchronized_generator=synchronized_generator,
-            use_stateful_dataloader=use_stateful_dataloader,
             **kwargs,
         )
     else:
@@ -1361,13 +1346,15 @@ def skip_first_batches(dataloader, num_batches=0):
         dataloader = dataloader.dataloader
 
     dataset = dataloader.dataset
-    sampler_is_batch_sampler = False
+    if isinstance(dataloader.sampler, BatchSampler):
+        raise ValueError(
+            "Should not pass a BatchSampler do dataloader sampler argument. As per the latest pytorch documentation, please pass this to sampler instead"
+        )
+
     if isinstance(dataset, IterableDataset):
         new_batch_sampler = None
     else:
-        sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
-        batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
-        new_batch_sampler = SkipBatchSampler(batch_sampler, skip_batches=num_batches)
+        new_batch_sampler = SkipBatchSampler(dataloader.batch_sampler, skip_batches=num_batches)
 
     # We ignore all of those since they are all dealt with by our new_batch_sampler
     ignore_kwargs = [
@@ -1404,9 +1391,6 @@ def skip_first_batches(dataloader, num_batches=0):
         if new_batch_sampler is None:
             # Need to manually skip batches in the dataloader
             kwargs["skip_batches"] = num_batches
-        elif sampler_is_batch_sampler:
-            kwargs["sampler"] = new_batch_sampler
-            kwargs["batch_size"] = dataloader.batch_size
         else:
             kwargs["batch_sampler"] = new_batch_sampler
         dataloader = DataLoaderShard(
