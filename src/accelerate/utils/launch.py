@@ -18,7 +18,7 @@ import subprocess
 import sys
 from ast import literal_eval
 from shutil import which
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import torch
 
@@ -77,7 +77,7 @@ def _get_mpirun_args():
         return mpi_app, "-f", "-n", "-ppn", ""
 
 
-def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
+def setup_fp8_env(args: argparse.Namespace, current_env: dict[str, str]):
     """
     Setup the FP8 environment variables.
     """
@@ -95,7 +95,7 @@ def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
     return current_env
 
 
-def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
+def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict[str, str]]:
     """
     Prepares and returns the command list and an environment with the correct simple launcher environment variables.
     """
@@ -192,7 +192,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     return cmd, current_env
 
 
-def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
+def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     """
     Prepares and returns an environment with the correct multi-GPU environment variables.
     """
@@ -331,7 +331,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     return current_env
 
 
-def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
+def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict[str, str]]:
     """
     Prepares and returns the command list and an environment with the correct DeepSpeed environment variables.
     """
@@ -476,8 +476,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
 
 
 def prepare_tpu(
-    args: argparse.Namespace, current_env: Dict[str, str], pod: bool = False
-) -> Tuple[argparse.Namespace, Dict[str, str]]:
+    args: argparse.Namespace, current_env: dict[str, str], pod: bool = False
+) -> tuple[argparse.Namespace, dict[str, str]]:
     """
     Prepares and returns an environment with the correct TPU environment variables.
     """
@@ -495,7 +495,7 @@ def prepare_tpu(
     return args, current_env
 
 
-def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
+def _convert_nargs_to_dict(nargs: list[str]) -> dict[str, str]:
     if len(nargs) < 0:
         return {}
     # helper function to infer type for argsparser
@@ -539,7 +539,7 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
 
 def prepare_sagemager_args_inputs(
     sagemaker_config: SageMakerConfig, args: argparse.Namespace
-) -> Tuple[argparse.Namespace, Dict[str, Any]]:
+) -> tuple[argparse.Namespace, dict[str, Any]]:
     # configure environment
     print("Configuring Amazon SageMaker environment")
     os.environ["AWS_DEFAULT_REGION"] = sagemaker_config.region

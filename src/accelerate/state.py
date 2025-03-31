@@ -21,7 +21,7 @@ import warnings
 import weakref
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import torch
 
@@ -1207,7 +1207,7 @@ class GradientState:
 
     _shared_state = SharedDict()
 
-    def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
+    def __init__(self, gradient_accumulation_plugin: GradientAccumulationPlugin | None = None):
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True

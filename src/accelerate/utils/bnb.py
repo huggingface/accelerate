@@ -16,7 +16,7 @@
 import logging
 import os
 from copy import deepcopy
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -45,9 +45,9 @@ def load_and_quantize_model(
     model: torch.nn.Module,
     bnb_quantization_config: BnbQuantizationConfig,
     weights_location: Union[str, os.PathLike] = None,
-    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+    device_map: Optional[dict[str, Union[int, str, torch.device]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     offload_state_dict: bool = False,
 ):

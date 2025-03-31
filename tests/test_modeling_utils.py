@@ -18,7 +18,7 @@ import tempfile
 import unittest
 import warnings
 from collections import OrderedDict
-from typing import Dict, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -499,7 +499,7 @@ class ModelingUtilsTester(unittest.TestCase):
             assert new_model.float_param.dtype == torch.float16
 
     @parameterized.expand([(None,), ({"": "cpu"},)])
-    def test_load_checkpoint_in_model_unexpected_keys(self, device_map: Optional[Dict]):
+    def test_load_checkpoint_in_model_unexpected_keys(self, device_map: Optional[dict]):
         model = ModelForTest()
 
         state_dict = model.state_dict()

@@ -23,10 +23,11 @@ import functools
 import logging
 import os
 import warnings
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union, get_args
 
 import torch
 
@@ -192,14 +193,14 @@ class DistributedDataParallelKwargs(KwargsHandler):
     def register_comm_hook(self, model):
         from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
 
-        hook_map: Dict[DDPCommunicationHookType, Callable] = {
+        hook_map: dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
             DDPCommunicationHookType.BF16: default_hooks.bf16_compress_hook,
             DDPCommunicationHookType.POWER_SGD: powerSGD_hook.powerSGD_hook,
             DDPCommunicationHookType.BATCHED_POWER_SGD: powerSGD_hook.batched_powerSGD_hook,
         }
 
-        wrapper_map: Dict[DDPCommunicationHookType, Callable] = {
+        wrapper_map: dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_wrapper,
             DDPCommunicationHookType.BF16: default_hooks.bf16_compress_wrapper,
         }
@@ -355,7 +356,7 @@ class TERecipeKwargs(KwargsHandler):
     fp8_format: FP8Format = None
     amax_history_len: int = None
     amax_compute_algo: AmaxComputeAlgorithm = None
-    override_linear_precision: Tuple[bool, bool, bool] = None
+    override_linear_precision: tuple[bool, bool, bool] = None
 
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
@@ -483,8 +484,8 @@ class ProfileKwargs(KwargsHandler):
             to None, which means profiling does not store json files.
     """
 
-    activities: Optional[List[ProfilerActivity]] = None
-    schedule_option: Optional[Dict[str, int]] = None
+    activities: Optional[list[ProfilerActivity]] = None
+    schedule_option: Optional[dict[str, int]] = None
     on_trace_ready: Optional[Callable] = None
     record_shapes: bool = False
     profile_memory: bool = False
@@ -530,7 +531,7 @@ class ProfileKwargs(KwargsHandler):
         Returns:
             torch.profiler.profile: The profiler object.
         """
-        activities: Optional[List[ProfilerActivity]] = None
+        activities: Optional[list[ProfilerActivity]] = None
         if self.activities is not None:
             activities = [self._get_profiler_activity(activity) for activity in self.activities]
         schedule: Optional[torch.profiler.schedule] = None
@@ -1647,7 +1648,7 @@ class FullyShardedDataParallelPlugin:
             "Only applicable for 🤗 Transformers. When using this, `sync_module_states` needs to be `True`. Defaults to `False`."
         },
     )
-    transformer_cls_names_to_wrap: Optional[List[str]] = field(
+    transformer_cls_names_to_wrap: Optional[list[str]] = field(
         default=None,
         metadata={
             "help": "A list of transformer layer class names to wrap. Only applicable when `auto_wrap_policy` is `transformer_based_wrap`."
@@ -2228,7 +2229,7 @@ class MegatronLMPlugin:
         default=0,
         metadata={"help": "Minumum value for learning rate. The scheduler clip values below this threshold."},
     )
-    consumed_samples: List[int] = field(
+    consumed_samples: list[int] = field(
         default=None,
         metadata={
             "help": "Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call."
@@ -2277,7 +2278,7 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom train step class."},
     )
-    custom_train_step_kwargs: Optional[Dict[str, Any]] = field(
+    custom_train_step_kwargs: Optional[dict[str, Any]] = field(
         default=None,
         metadata={"help": "Custom train step kwargs."},
     )
@@ -2306,7 +2307,7 @@ class MegatronLMPlugin:
 
     # remaining args such as enabling Alibi/ROPE positional embeddings,
     # wandb logging, Multi-Query Attention, etc.
-    other_megatron_args: Optional[Dict[str, Any]] = field(
+    other_megatron_args: Optional[dict[str, Any]] = field(
         default=None,
         metadata={"help": "Other Megatron-LM arguments. Please refer Megatron-LM"},
     )
@@ -2667,14 +2668,14 @@ class BnbQuantizationConfig:
         },
     )
 
-    skip_modules: List[str] = field(
+    skip_modules: list[str] = field(
         default=None,
         metadata={
             "help": "an explicit list of the modules that we don't quantize. The dtype of these modules will be `torch_dtype`."
         },
     )
 
-    keep_in_fp32_modules: List[str] = field(
+    keep_in_fp32_modules: list[str] = field(
         default=None,
         metadata={"help": "an explicit list of the modules that we don't quantize. We keep them in `torch.float32`."},
     )
