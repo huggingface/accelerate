@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import psutil
@@ -276,12 +277,19 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether to use Megatron-LM.",
     )
+
     paradigm_args.add_argument(
         "--use_xpu",
-        default=False,
+        default=None,
         action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
+        help="Whether to use IPEX plugin to speed up training on XPU specifically. This argument is deprecated and ignored, will be removed in Accelerate v1.20.",
     )
+    if paradigm_args.use_xpu is not None:
+        warnings.warn(
+                "use_xpu is deprecated and ignored, will be removed in Accelerate v1.20. "
+                "XPU is a PyTorch native citizen now, we don't need extra argument to enable it any more.",
+                FutureWarning,
+        )
 
     # distributed GPU training arguments
     distributed_args = parser.add_argument_group("Distributed GPUs", "Arguments related to distributed GPU training.")
