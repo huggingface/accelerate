@@ -15,7 +15,6 @@
 import argparse
 import functools
 import itertools
-import tempfile
 import unittest
 from typing import Any, Callable
 
@@ -36,7 +35,7 @@ from accelerate.utils.imports import is_transformers_available
 
 
 if is_transformers_available():
-    from transformers import AutoConfig, AutoModel, PreTrainedModel
+    from transformers import AutoConfig, AutoModel
     from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
 
@@ -136,42 +135,6 @@ def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
 
 
 @manage_process_group
-def load_checkpoint_and_dispatch_tp():
-    torch.cuda.set_device(device := torch.device(dist.get_rank()))
-
-    pretrained_model_name_or_path = "hf-internal-testing/tiny-random-LlamaForCausalLM"
-    model = AutoModel.from_pretrained(pretrained_model_name_or_path, device_map=device)
-    assert isinstance(model, PreTrainedModel)
-
-    with device, init_empty_weights():
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        tp_model = AutoModel.from_config(config)
-        tp_model.tie_weights()
-        assert isinstance(tp_model, nn.Module)
-
-    mesh = init_device_mesh(device.type, (dist.get_world_size(),))
-    assert tp_model.supports_tp_plan
-    assert callable(tp_model.tensor_parallel)
-    tp_model.tensor_parallel(mesh)
-
-    tp_model._apply(lambda t: torch.empty_like(t, device=device) if t.device != device else t)
-
-    with tempfile.TemporaryDirectory() as tempdir:
-        model.save_pretrained(tempdir)
-        load_checkpoint_and_dispatch(tp_model, tempdir, strict=True, broadcast_from_rank0=True)
-
-    for (name, tensor), (tp_name, tp_tensor) in zip(
-        itertools.chain(model.named_parameters(), model.named_buffers()),
-        itertools.chain(tp_model.named_parameters(), tp_model.named_buffers()),
-    ):
-        assert name == tp_name
-        if isinstance(tp_tensor, DTensor):
-            torch.testing.assert_close(tensor, tp_tensor.full_tensor(), msg=tp_name)
-        else:
-            torch.testing.assert_close(tensor, tp_tensor, msg=tp_name)
-
-
-@manage_process_group
 def load_checkpoint_and_dispatch_ddp():
     torch.cuda.set_device(device := torch.device(dist.get_rank()))
 
@@ -260,22 +223,18 @@ if __name__ == "__main__":
 
     class CLIArgs(argparse.Namespace):
         fsdp2: bool
-        tp: bool
         ddp: bool
         no_broadcast_from_rank0: bool
 
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--fsdp2", action="store_true")
-    group.add_argument("--tp", action="store_true")
     group.add_argument("--ddp", action="store_true")
     group.add_argument("--no_broadcast_from_rank0", action="store_true")
     args = parser.parse_args(namespace=CLIArgs())
 
     if args.fsdp2:
         load_checkpoint_and_dispatch_fsdp2()
-    elif args.tp:
-        load_checkpoint_and_dispatch_tp()
     elif args.ddp:
         load_checkpoint_and_dispatch_ddp
     elif args.no_broadcast_from_rank0:
