@@ -24,7 +24,7 @@ import shutil
 import tempfile
 import warnings
 from collections import OrderedDict, defaultdict
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -178,7 +178,7 @@ def dtype_byte_size(dtype: torch.dtype):
     return bit_size // 8
 
 
-def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
     example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
@@ -221,7 +221,7 @@ def set_module_tensor_to_device(
     value: Optional[torch.Tensor] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     fp16_statistics: Optional[torch.HalfTensor] = None,
-    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
+    tied_params_map: Optional[dict[int, dict[torch.device, torch.Tensor]]] = None,
 ):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
@@ -654,7 +654,7 @@ def _get_proper_dtype(dtype: Union[str, torch.device]) -> torch.dtype:
 def compute_module_sizes(
     model: nn.Module,
     dtype: Optional[Union[str, torch.device]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
     buffers_only: bool = False,
 ):
     """
@@ -696,7 +696,7 @@ def compute_module_sizes(
 def compute_module_total_buffer_size(
     model: nn.Module,
     dtype: Optional[Union[str, torch.device]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
 ):
     """
     Compute the total size of buffers in each submodule of a given model.
@@ -706,7 +706,7 @@ def compute_module_total_buffer_size(
 
 
 def get_max_layer_size(
-    modules: List[Tuple[str, torch.nn.Module]], module_sizes: Dict[str, int], no_split_module_classes: List[str]
+    modules: list[tuple[str, torch.nn.Module]], module_sizes: dict[str, int], no_split_module_classes: list[str]
 ):
     """
     Utility function that will scan a list of named modules and return the maximum size used by one full layer. The
@@ -744,7 +744,7 @@ def get_max_layer_size(
     return max_size, layer_names
 
 
-def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None):
+def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None):
     """
     Get the maximum memory available if nothing is passed, converts string to int otherwise.
     """
@@ -855,7 +855,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     return max_memory
 
 
-def clean_device_map(device_map: Dict[str, Union[int, str, torch.device]], module_name: str = ""):
+def clean_device_map(device_map: dict[str, Union[int, str, torch.device]], module_name: str = ""):
     """
     Cleans a device_map by grouping all submodules that go on the same device together.
     """
@@ -920,10 +920,10 @@ def get_module_leaves(module_sizes):
 
 def get_balanced_memory(
     model: nn.Module,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
     low_zero: bool = False,
 ):
     """
@@ -970,6 +970,8 @@ def get_balanced_memory(
         expected_device_type = "xpu"
     elif is_hpu_available():
         expected_device_type = "hpu"
+    elif is_mps_available():
+        expected_device_type = "mps"
     else:
         expected_device_type = "cuda"
     num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
@@ -1069,19 +1071,19 @@ def calculate_maximum_sizes(model: torch.nn.Module):
 
 def _init_infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
-) -> Tuple[
-    List[Union[int, str]],
-    Dict[Union[int, str], Union[int, str]],
-    List[Union[int, str]],
-    List[int],
-    Dict[str, int],
-    List[List[str]],
-    List[str],
-    List[Tuple[str, nn.Module]],
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
+) -> tuple[
+    list[Union[int, str]],
+    dict[Union[int, str], Union[int, str]],
+    list[Union[int, str]],
+    list[int],
+    dict[str, int],
+    list[list[str]],
+    list[str],
+    list[tuple[str, nn.Module]],
 ]:
     """
     Initialize variables required for computing the device map for model allocation.
@@ -1137,7 +1139,7 @@ def get_module_size_with_ties(
     module_size,
     module_sizes,
     modules_to_treat,
-) -> Tuple[int, List[str], List[nn.Module]]:
+) -> tuple[int, list[str], list[nn.Module]]:
     """
     Calculate the total size of a module, including its tied parameters.
 
@@ -1169,12 +1171,12 @@ def get_module_size_with_ties(
 
 
 def fallback_allocate(
-    modules: List[Tuple[str, nn.Module]],
-    module_sizes: Dict[str, int],
+    modules: list[tuple[str, nn.Module]],
+    module_sizes: dict[str, int],
     size_limit: Union[int, str],
-    no_split_module_classes: Optional[List[str]] = None,
-    tied_parameters: Optional[List[List[str]]] = None,
-) -> Tuple[Optional[str], Optional[nn.Module], List[Tuple[str, nn.Module]]]:
+    no_split_module_classes: Optional[list[str]] = None,
+    tied_parameters: Optional[list[list[str]]] = None,
+) -> tuple[Optional[str], Optional[nn.Module], list[tuple[str, nn.Module]]]:
     """
     Find a module that fits in the size limit using BFS and return it with its name and the remaining modules.
 
@@ -1278,10 +1280,10 @@ def fallback_allocate(
 
 def infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.dtype]]] = None,
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
@@ -1584,7 +1586,7 @@ def infer_auto_device_map(
     return device_map
 
 
-def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, torch.device]]):
+def check_device_map(model: nn.Module, device_map: dict[str, Union[int, str, torch.device]]):
     """
     Checks a device map covers everything in a given model.
 
@@ -1745,7 +1747,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
 def get_state_dict_from_offload(
     module: nn.Module,
     module_name: str,
-    state_dict: Dict[str, Union[str, torch.tensor]],
+    state_dict: dict[str, Union[str, torch.tensor]],
     device_to_put_offload: Union[int, str, torch.device] = "cpu",
 ):
     """
@@ -1781,12 +1783,12 @@ def get_state_dict_from_offload(
 def load_checkpoint_in_model(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
-    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
+    device_map: Optional[dict[str, Union[int, str, torch.device]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: bool = False,
     offload_buffers: bool = False,
-    keep_in_fp32_modules: List[str] = None,
+    keep_in_fp32_modules: list[str] = None,
     offload_8bit_bnb: bool = False,
     strict: bool = False,
 ):

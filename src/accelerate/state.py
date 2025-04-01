@@ -21,7 +21,7 @@ import warnings
 import weakref
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import torch
 
@@ -48,6 +48,7 @@ from .utils import (
     is_npu_available,
     is_sdaa_available,
     is_torch_xla_available,
+    is_xccl_available,
     is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
@@ -768,6 +769,10 @@ class PartialState:
                 if backend is None:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
+            elif is_xpu_available() and is_xccl_available():
+                if backend is None:
+                    backend = "xccl"
+                distributed_type = DistributedType.MULTI_XPU
 
         if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
@@ -1207,7 +1212,7 @@ class GradientState:
 
     _shared_state = SharedDict()
 
-    def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
+    def __init__(self, gradient_accumulation_plugin: GradientAccumulationPlugin | None = None):
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True
