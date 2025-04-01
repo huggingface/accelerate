@@ -186,7 +186,6 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_ipex_available():
         current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
-        current_env["ACCELERATE_USE_XPU"] = str(args.use_xpu).lower()
     if args.enable_cpu_affinity:
         current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return cmd, current_env

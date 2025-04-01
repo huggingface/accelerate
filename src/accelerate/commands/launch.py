@@ -276,11 +276,12 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether to use Megatron-LM.",
     )
+
     paradigm_args.add_argument(
         "--use_xpu",
-        default=False,
+        default=None,
         action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
+        help="Whether to use IPEX plugin to speed up training on XPU specifically. This argument is deprecated and ignored, will be removed in Accelerate v1.20.",
     )
 
     # distributed GPU training arguments
@@ -1086,10 +1087,7 @@ def _validate_launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
                 mp_from_config_flag = True
         else:
-            if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
-                native_amp = True
-            else:
-                native_amp = is_bf16_available(True)
+            native_amp = is_bf16_available(True)
             if (
                 args.mixed_precision == "bf16"
                 and not native_amp
@@ -1104,7 +1102,7 @@ def _validate_launch_command(args):
             raise ValueError("You need to manually pass in `--num_processes` using this config yaml.")
     else:
         if args.num_processes is None:
-            if args.use_xpu and is_xpu_available():
+            if is_xpu_available():
                 args.num_processes = torch.xpu.device_count()
             elif is_mlu_available():
                 args.num_processes = torch.mlu.device_count()
@@ -1169,6 +1167,13 @@ def _validate_launch_command(args):
                 warned.append(
                     f"\t`--num_cpu_threads_per_process` was set to `{args.num_cpu_threads_per_process}` to improve out-of-box performance when training on CPUs"
                 )
+
+    if args.use_xpu is not None:
+        logger.warning(
+            "use_xpu is deprecated and ignored, will be removed in Accelerate v1.20. "
+            "XPU is a PyTorch native citizen now, we don't need extra argument to enable it any more.",
+            FutureWarning,
+        )
 
     if any(warned):
         message = "The following values were not passed to `accelerate launch` and had defaults used instead:\n"
