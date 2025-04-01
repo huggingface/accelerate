@@ -113,12 +113,12 @@ def train_baseline(zero_stage: int = 1):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.destroy()
-    assert (
-        trained_model_results["accuracy"] > base_model_results["accuracy"]
-    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
-    assert (
-        trained_model_results["f1"] > base_model_results["f1"]
-    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    assert trained_model_results["accuracy"] > base_model_results["accuracy"], (
+        f"Accuracy should be higher for the trained model: {trained_model_results['accuracy']} > {base_model_results['accuracy']}"
+    )
+    assert trained_model_results["f1"] > base_model_results["f1"], (
+        f"F1 score should be higher for the trained model: {trained_model_results['f1']} > {base_model_results['f1']}"
+    )
 
     return base_model_results, trained_model_results, model_outputs, data
 
@@ -159,12 +159,12 @@ def train_integration(zero_stage: int = 1):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.destroy()
-    assert (
-        trained_model_results["accuracy"] > base_model_results["accuracy"]
-    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
-    assert (
-        trained_model_results["f1"] > base_model_results["f1"]
-    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    assert trained_model_results["accuracy"] > base_model_results["accuracy"], (
+        f"Accuracy should be higher for the trained model: {trained_model_results['accuracy']} > {base_model_results['accuracy']}"
+    )
+    assert trained_model_results["f1"] > base_model_results["f1"], (
+        f"F1 score should be higher for the trained model: {trained_model_results['f1']} > {base_model_results['f1']}"
+    )
 
     return base_model_results, trained_model_results, model_outputs, data
 
@@ -175,17 +175,17 @@ if __name__ == "__main__":
         accelerator_not_trained, accelerator_trained, accelerator_outputs, accelerator_data = train_integration(
             zero_stage
         )
-        assert (
-            baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
-        ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
-        assert (
-            baseline_not_trained["f1"] == accelerator_not_trained["f1"]
-        ), f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
-        assert (
-            baseline_trained["accuracy"] == accelerator_trained["accuracy"]
-        ), f'ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
-        assert (
-            baseline_trained["f1"] == accelerator_trained["f1"]
-        ), f'ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
+        assert baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"], (
+            f"ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_not_trained['accuracy']} == {accelerator_not_trained['accuracy']}"
+        )
+        assert baseline_not_trained["f1"] == accelerator_not_trained["f1"], (
+            f"ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_not_trained['f1']} == {accelerator_not_trained['f1']}"
+        )
+        assert baseline_trained["accuracy"] == accelerator_trained["accuracy"], (
+            f"ZERO stage {zero_stage}: Accuracy should be the same for the baseline and accelerator: {baseline_trained['accuracy']} == {accelerator_trained['accuracy']}"
+        )
+        assert baseline_trained["f1"] == accelerator_trained["f1"], (
+            f"ZERO stage {zero_stage}: F1 score should be the same for the baseline and accelerator: {baseline_trained['f1']} == {accelerator_trained['f1']}"
+        )
 
         torch.distributed.destroy_process_group()

@@ -59,7 +59,7 @@ def evaluate(args, config: dict, init_fn: Callable, run_name: str) -> torch.Tens
 Loss: {loss[-1].item()}
 Peak Allocated Memory: {float(memory_tracker.peak_allocated_memory):.2f} MB
 Peak Reserved Memory: {float(memory_tracker.peak_reserved_memory):.2f} MB
-{'-' * 34}"""
+{"-" * 34}"""
     accelerator.print(msg)
     return loss
 

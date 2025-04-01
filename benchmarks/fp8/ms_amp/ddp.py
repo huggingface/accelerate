@@ -62,12 +62,12 @@ def train_baseline(opt_level="O2"):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
-    assert (
-        trained_model_results["accuracy"] > base_model_results["accuracy"]
-    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
-    assert (
-        trained_model_results["f1"] > base_model_results["f1"]
-    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    assert trained_model_results["accuracy"] > base_model_results["accuracy"], (
+        f"Accuracy should be higher for the trained model: {trained_model_results['accuracy']} > {base_model_results['accuracy']}"
+    )
+    assert trained_model_results["f1"] > base_model_results["f1"], (
+        f"F1 score should be higher for the trained model: {trained_model_results['f1']} > {base_model_results['f1']}"
+    )
 
     return base_model_results, trained_model_results
 
@@ -95,12 +95,12 @@ def train_integration(opt_level="O2"):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
 
-    assert (
-        trained_model_results["accuracy"] > base_model_results["accuracy"]
-    ), f'Accuracy should be higher for the trained model: {trained_model_results["accuracy"]} > {base_model_results["accuracy"]}'
-    assert (
-        trained_model_results["f1"] > base_model_results["f1"]
-    ), f'F1 score should be higher for the trained model: {trained_model_results["f1"]} > {base_model_results["f1"]}'
+    assert trained_model_results["accuracy"] > base_model_results["accuracy"], (
+        f"Accuracy should be higher for the trained model: {trained_model_results['accuracy']} > {base_model_results['accuracy']}"
+    )
+    assert trained_model_results["f1"] > base_model_results["f1"], (
+        f"F1 score should be higher for the trained model: {trained_model_results['f1']} > {base_model_results['f1']}"
+    )
 
     return base_model_results, trained_model_results
 
@@ -109,15 +109,15 @@ if __name__ == "__main__":
     for opt_level in ["O1", "O2"]:
         baseline_not_trained, baseline_trained = train_baseline(opt_level)
         accelerator_not_trained, accelerator_trained = train_integration(opt_level)
-        assert (
-            baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"]
-        ), f'Accuracy not the same for untrained baseline and accelerator using opt_level={opt_level}: {baseline_not_trained["accuracy"]} == {accelerator_not_trained["accuracy"]}'
-        assert (
-            baseline_not_trained["f1"] == accelerator_not_trained["f1"]
-        ), f'F1 not the same for untrained baseline and accelerator using opt_level={opt_level}: {baseline_not_trained["f1"]} == {accelerator_not_trained["f1"]}'
-        assert (
-            baseline_trained["accuracy"] == accelerator_trained["accuracy"]
-        ), f'Accuracy not the same for trained baseline and accelerator using opt_level={opt_level}: {baseline_trained["accuracy"]} == {accelerator_trained["accuracy"]}'
-        assert (
-            baseline_trained["f1"] == accelerator_trained["f1"]
-        ), f'F1 not the same for trained baseline and accelerator using opt_level={opt_level}: {baseline_trained["f1"]} == {accelerator_trained["f1"]}'
+        assert baseline_not_trained["accuracy"] == accelerator_not_trained["accuracy"], (
+            f"Accuracy not the same for untrained baseline and accelerator using opt_level={opt_level}: {baseline_not_trained['accuracy']} == {accelerator_not_trained['accuracy']}"
+        )
+        assert baseline_not_trained["f1"] == accelerator_not_trained["f1"], (
+            f"F1 not the same for untrained baseline and accelerator using opt_level={opt_level}: {baseline_not_trained['f1']} == {accelerator_not_trained['f1']}"
+        )
+        assert baseline_trained["accuracy"] == accelerator_trained["accuracy"], (
+            f"Accuracy not the same for trained baseline and accelerator using opt_level={opt_level}: {baseline_trained['accuracy']} == {accelerator_trained['accuracy']}"
+        )
+        assert baseline_trained["f1"] == accelerator_trained["f1"], (
+            f"F1 not the same for trained baseline and accelerator using opt_level={opt_level}: {baseline_trained['f1']} == {accelerator_trained['f1']}"
+        )

@@ -245,9 +245,9 @@ def get_cluster_input():
         )
         if use_deepspeed:
             distributed_type = DistributedType.DEEPSPEED
-            assert (
-                is_deepspeed_available()
-            ), "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
+            assert is_deepspeed_available(), (
+                "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
+            )
 
         if distributed_type == DistributedType.DEEPSPEED:
             use_deepspeed_config = _ask_field(
