@@ -143,8 +143,6 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
 
 
 def is_deepspeed_available():
-    if is_mlu_available():
-        return _is_package_available("deepspeed", metadata_name="deepspeed-mlu")
     return _is_package_available("deepspeed")
 
 
@@ -158,6 +156,8 @@ def is_bf16_available(ignore_tpu=False):
         return not ignore_tpu
     if is_cuda_available():
         return torch.cuda.is_bf16_supported()
+    if is_mlu_available():
+        return torch.mlu.is_bf16_supported()
     if is_mps_available():
         return False
     return True
