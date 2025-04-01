@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from .ao import convert_model_to_fp8_ao, filter_first_and_last_linear_layers, has_ao_layers
 from .constants import (
     MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
     MODEL_NAME,
@@ -32,6 +33,7 @@ from .constants import (
     XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .dataclasses import (
+    AORecipeKwargs,
     AutocastKwargs,
     BnbQuantizationConfig,
     ComputeEnvironment,
@@ -50,20 +52,22 @@ from .dataclasses import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
+    MSAMPRecipeKwargs,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
     RNGType,
     SageMakerDistributedType,
     TensorInformation,
+    TERecipeKwargs,
     TorchDynamoPlugin,
     TorchTensorParallelPlugin,
     add_model_config_to_megatron_parser,
 )
 from .environment import (
     are_libraries_initialized,
+    check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
-    check_fp8_capability,
     clear_environment,
     convert_dict_to_env_variables,
     get_cpu_distributed_information,
@@ -94,9 +98,13 @@ from .imports import (
     is_deepspeed_available,
     is_dvclive_available,
     is_fp8_available,
+    is_fp16_available,
+    is_habana_gaudi1,
+    is_hpu_available,
     is_import_timer_available,
     is_ipex_available,
     is_lomo_available,
+    is_matplotlib_available,
     is_megatron_lm_available,
     is_mlflow_available,
     is_mlu_available,
@@ -112,9 +120,11 @@ from .imports import (
     is_rich_available,
     is_sagemaker_available,
     is_schedulefree_available,
+    is_sdaa_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_xla_available,
+    is_torchao_available,
     is_torchdata_available,
     is_torchdata_stateful_dataloader_available,
     is_torchvision_available,
@@ -124,6 +134,7 @@ from .imports import (
     is_wandb_available,
     is_weights_only_available,
     is_xpu_available,
+    torchao_required,
 )
 from .modeling import (
     align_module_device,
@@ -208,6 +219,10 @@ from .fsdp_utils import (
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
     ensure_weights_retied,
+    fsdp2_load_full_state_dict,
+    fsdp2_prepare_model,
+    fsdp2_switch_optimizer_parameters,
+    get_fsdp2_grad_scaler,
     load_fsdp_model,
     load_fsdp_optimizer,
     merge_fsdp_weights,
@@ -254,6 +269,7 @@ from .other import (
     clean_state_dict_for_safetensors,
     convert_bytes,
     extract_model_from_parallel,
+    get_module_children_bottom_up,
     get_pretty_name,
     is_port_in_use,
     load,

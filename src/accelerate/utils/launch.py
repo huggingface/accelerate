@@ -27,15 +27,18 @@ from ..utils import (
     DynamoBackend,
     PrecisionType,
     is_fp8_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
 )
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from ..utils.other import is_port_in_use, merge_dicts
+from ..utils.versions import compare_versions
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
@@ -84,10 +87,9 @@ def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
             value = getattr(args, arg)
             if value is not None:
                 if arg == "fp8_override_linear_precision":
-                    values = value.strip("()").split(",")
-                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = values[0].strip()
-                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = values[1].strip()
-                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = values[2].strip()
+                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = value[0]
+                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = value[1]
+                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = value[2]
                 else:
                     current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
     return current_env
@@ -135,10 +137,14 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
             current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = args.gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = args.gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
@@ -237,10 +243,14 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -273,7 +283,13 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         if args.fsdp_cpu_ram_efficient_loading and not args.fsdp_sync_module_states:
             raise ValueError("When using `--fsdp_cpu_ram_efficient_loading` set `--fsdp_sync_module_states` to `True`")
 
+        current_env["FSDP_VERSION"] = str(args.fsdp_version) if hasattr(args, "fsdp_version") else "1"
+
+        # For backwards compatibility, we support this in launched scripts,
+        # however, we do not ask users for this in `accelerate config` CLI
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
+
+        current_env["FSDP_RESHARD_AFTER_FORWARD"] = str(args.fsdp_reshard_after_forward).lower()
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
         if args.fsdp_auto_wrap_policy is not None:
@@ -331,8 +347,14 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         args.deepspeed_multinode_launcher = DEEPSPEED_MULTINODE_LAUNCHERS[0]
 
     if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        cmd = ["deepspeed", "--no_local_rank"]
-        cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
+        cmd = ["deepspeed"]
+        cmd.extend(["--hostfile", str(args.deepspeed_hostfile)])
+        if args.deepspeed_multinode_launcher == "nossh":
+            if compare_versions("deepspeed", "<", "0.14.5"):
+                raise ValueError("nossh launcher requires DeepSpeed >= 0.14.5")
+            cmd.extend(["--node_rank", str(args.machine_rank), "--no_ssh"])
+        else:
+            cmd.extend(["--no_local_rank", "--launcher", str(args.deepspeed_multinode_launcher)])
         if args.deepspeed_exclusion_filter is not None:
             cmd.extend(
                 [
@@ -403,10 +425,14 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:

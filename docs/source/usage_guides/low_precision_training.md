@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Low Precision Training Methods
 
-Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine` and `MS-AMP` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training. 
+Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine`, `MS-AMP`, and `torchao` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training. 
 
 ## What training on FP8 means
 
@@ -26,11 +26,11 @@ This is only enabled on specific NVIDIA hardware, namely:
 * Anything after the 3000 series consumer graphics cards (such as the 4090)
 * Hopper-based GPU architectures (such as the `H100` and `H200`)
 
-What this will result in is some gain in the memory used (as we've cut the needed memory in half for some parts of training) and an increase in throughput *should* be seen as well for larger models that can replace certain layers with FP8-enabled ones.
+What this will result in is some reduction in the memory used (as we've cut the needed memory in half for some parts of training) and an increase in throughput *should* be seen as well for larger models that can replace certain layers with FP8-enabled ones.
 
 ## Configuring the Accelerator
 
-Currently two different backends for FP8 are supported (`TransformersEngine` and `MS-AMP`), each with different capabilities and configurations. 
+Currently three different backends for FP8 are supported (`TransformersEngine`, `torchao`, and `MS-AMP`), each with different capabilities and configurations. 
 
 To use either, the same core API is used. Just pass `mixed_precision="fp8"` to either the [`Accelerator`], during `accelerate config` when prompted about mixed precision, or as part of your `config.yaml` file in the `mixed_precision` key:
 
@@ -39,14 +39,16 @@ from accelerate import Accelerator
 accelerator = Accelerator(mixed_precision="fp8")
 ```
 
-By default, if `MS-AMP` is available in your environment, Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize the [`utils.FP8RecipeKwargs`] or clarify it in your config `yaml`/during `accelerate launch`:
+By default, if `MS-AMP` is available in your environment, Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize one of the `RecipeKwargs` dataclasses such as [`utils.AORecipeKwargs`], [`utils.TERecipeKwargs`], or [`utils.MSAMPRecipeKwargs`]; you can also nclarify it in your config `yaml`/during `accelerate launch`:
 
 ```{python}
 from accelerate import Accelerator
-from accelerate.utils import FP8RecipeKwargs
-kwargs = [FP8RecipeKwargs(backend="msamp")]
+from accelerate.utils import MSAMPRecipeKwargs
+kwargs = [MSAMPRecipeKwargs()]
 # Or to specify the backend as `TransformersEngine` even if MS-AMP is installed
-# kwargs = [FP8RecipeKwargs(backend="te")]
+# kwargs = [TERecipeKwargs()]
+# Or to use torchao
+# kwargs = [AORecipeKwargs()]
 accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 ```
 
@@ -94,7 +96,7 @@ fp8_config:
 
 ## Configuring TransformersEngine
 
-TransformersEngine has much more available for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
+TransformersEngine has many options for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
 
 Accelerate tries to set sensible defaults, but exploring and tweaking the various parameters yourself can lead to better performance potentially.
 
@@ -124,6 +126,22 @@ fp8_config:
     use_autocast_during_eval: false
 ```
 
+## Configuring `torchao`
+
+`torchao` is a [PyTorch-driven](https://github.com/pytorch/ao/tree/main/torchao/float8) hackable FP8 backend, aiming to be more approchable than the prior two engines. One of the core differences with `ao` compared to the prior two is that for numerical stability, it's found to be generally better off keeping the first *and* last layers in the model at the regular precision (be it FP32 or BF16), and then the other layers quantized down to FP8. As a result, a config for `ao` looks a bit differently:
+
+> Note: this API is experimental and is subject to change
+
+```{python}
+from accelerate import Accelerator
+from accelerate.utils import AORecipeKwargs
+kwargs = [AORecipeKwargs()]
+accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
+```
+
+To learn more about the specific parameters to be used, please see the official `torchao` repo.
+
+
 ## Example Zoo
 
 We have examples showcasing training with FP8 both with accelerate and its underlying implementation available in the accelerate repo.
@@ -143,3 +161,4 @@ To learn more about training in FP8 please check out the following resources:
 * [Our concept guide](../concept_guides/low_precision_training) detailing into more about both TransformersEngine and MS-AMP
 * [The `transformers-engine` documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html)
 * [The `MS-AMP` documentation](https://azure.github.io/MS-AMP/docs/)
+* [The `torchao` documentation](https://github.com/pytorch/ao/tree/main/torchao/float8)

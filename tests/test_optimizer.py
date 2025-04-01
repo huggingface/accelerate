@@ -13,17 +13,16 @@
 # limitations under the License.
 
 import pickle
-import unittest
 
 import torch
 
 from accelerate import Accelerator
-from accelerate.state import AcceleratorState
-from accelerate.test_utils import require_cpu, require_non_cpu
+from accelerate.test_utils import require_cpu, require_fp16, require_non_cpu
+from accelerate.test_utils.testing import AccelerateTestCase
 
 
 @require_cpu
-class CPUOptimizerTester(unittest.TestCase):
+class CPUOptimizerTester(AccelerateTestCase):
     def test_accelerated_optimizer_pickling(self):
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.SGD(model.parameters(), 0.1)
@@ -33,11 +32,11 @@ class CPUOptimizerTester(unittest.TestCase):
             pickle.loads(pickle.dumps(optimizer))
         except Exception as e:
             self.fail(f"Accelerated optimizer pickling failed with {e}")
-        AcceleratorState._reset_state()
 
 
+@require_fp16
 @require_non_cpu
-class OptimizerTester(unittest.TestCase):
+class OptimizerTester(AccelerateTestCase):
     def test_accelerated_optimizer_step_was_skipped(self):
         model = torch.nn.Linear(5, 5)
         optimizer = torch.optim.SGD(model.parameters(), 0.1)
@@ -81,5 +80,3 @@ class OptimizerTester(unittest.TestCase):
 
         optimizer.step()
         assert optimizer.step_was_skipped is False
-
-        AcceleratorState._reset_state()

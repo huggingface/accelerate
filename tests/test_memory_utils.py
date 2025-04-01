@@ -16,7 +16,12 @@ import unittest
 
 from torch import nn
 
-from accelerate.test_utils import memory_allocated_func, require_non_cpu, require_non_torch_xla, torch_device
+from accelerate.test_utils import (
+    memory_allocated_func,
+    require_non_cpu,
+    require_non_torch_xla,
+    torch_device,
+)
 from accelerate.utils.memory import find_executable_batch_size, release_memory
 
 
@@ -33,6 +38,15 @@ class ModelForTest(nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
+
+
+class BigModelForTest(ModelForTest):
+    def __init__(self):
+        super().__init__()
+        self.linear3 = nn.Linear(5, 1000)
+
+    def forward(self, x):
+        return self.linear3(super().forward(x))
 
 
 class MemoryTest(unittest.TestCase):
@@ -108,7 +122,14 @@ class MemoryTest(unittest.TestCase):
     @require_non_torch_xla
     def test_release_memory(self):
         starting_memory = memory_allocated_func()
-        model = ModelForTest()
+
+        if torch_device.startswith("hpu"):
+            # hpu has a minimum memory allocation that cannot be released,
+            # we need to surpass it by using a bigger model (>5767296 bytes)
+            model = BigModelForTest()
+        else:
+            model = ModelForTest()
+
         model.to(torch_device)
         assert memory_allocated_func() > starting_memory
         model = release_memory(model)

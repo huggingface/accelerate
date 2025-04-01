@@ -25,7 +25,7 @@ head_node_ip=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
 export ACCELERATE_DIR="${ACCELERATE_DIR:-/accelerate}"
 
 export LAUNCHER="accelerate launch \
-    --config ${ACCELERATE_DIR}/examples/slurm/fsdp_config.yaml \
+    --config_file ${ACCELERATE_DIR}/examples/slurm/fsdp_config.yaml \
     --num_processes $((SLURM_NNODES * GPUS_PER_NODE)) \
     --num_machines $SLURM_NNODES \
     --rdzv_backend c10d \

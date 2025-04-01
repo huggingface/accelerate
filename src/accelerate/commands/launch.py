@@ -39,11 +39,13 @@ from accelerate.utils import (
     convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
+    is_hpu_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
     patch_environment,
@@ -504,7 +506,7 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_multinode_launcher",
         default=None,
         type=str,
-        help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
+        help="DeepSpeed multi-node launcher to use, e.g. `pdsh`, `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5). If unspecified, will default to `pdsh`.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_moe_layer_cls_names",
@@ -517,6 +519,13 @@ def launch_command_parser(subparsers=None):
     # fsdp arguments
     fsdp_args = parser.add_argument_group("FSDP Arguments", "Arguments related to Fully Shared Data Parallelism.")
     fsdp_args.add_argument(
+        "--fsdp_version",
+        type=str,
+        default="1",
+        choices=["1", "2"],
+        help="FSDP version to use. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
         "--fsdp_offload_params",
         default="false",
         type=str,
@@ -528,11 +537,18 @@ def launch_command_parser(subparsers=None):
         default=1e8,
         help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
     )
+    # We enable this for backwards compatibility, throw a warning if this is set in `FullyShardedDataParallelPlugin`
     fsdp_args.add_argument(
         "--fsdp_sharding_strategy",
         type=str,
         default="FULL_SHARD",
-        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
+        help="FSDP's sharding strategy. (useful only when `use_fsdp` flag is passed and `fsdp_version=1`).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_reshard_after_forward",
+        type=str,
+        default="true",
+        help="FSDP's Reshard After Forward Strategy. (useful only when `use_fsdp` flag is passed). Supports either boolean (FSDP2) or `FULL_SHARD | SHARD_GRAD_OP | NO_RESHARD` (FSDP1).",
     )
     fsdp_args.add_argument(
         "--fsdp_auto_wrap_policy",
@@ -1015,8 +1031,10 @@ def _validate_launch_command(args):
                     DistributedType.MULTI_GPU,
                     DistributedType.MULTI_NPU,
                     DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_SDAA,
                     DistributedType.MULTI_MUSA,
                     DistributedType.MULTI_XPU,
+                    DistributedType.MULTI_HPU,
                 )
                 else False
             )
@@ -1043,35 +1061,20 @@ def _validate_launch_command(args):
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
                 if isinstance(attr, dict):
-                    for k in defaults.deepspeed_config:
-                        setattr(args, k, defaults.deepspeed_config[k])
-                    for k in defaults.fsdp_config:
-                        arg_to_set = k
-                        if "fsdp" not in arg_to_set:
-                            arg_to_set = "fsdp_" + arg_to_set
-                        setattr(args, arg_to_set, defaults.fsdp_config[k])
-                    for k in defaults.tp_config:
-                        setattr(args, k, defaults.tp_config[k])
-                    for k in defaults.megatron_lm_config:
-                        setattr(args, k, defaults.megatron_lm_config[k])
-                    for k in defaults.dynamo_config:
-                        setattr(args, k, defaults.dynamo_config[k])
-                    for k in defaults.ipex_config:
-                        setattr(args, k, defaults.ipex_config[k])
-                    for k in defaults.mpirun_config:
-                        setattr(args, k, defaults.mpirun_config[k])
-                    for k in defaults.fp8_config:
-                        arg_to_set = k
-                        if "fp8" not in arg_to_set:
-                            arg_to_set = "fp8_" + arg_to_set
-                        setattr(args, arg_to_set, defaults.fp8_config[k])
-                    continue
-
-                # Those args are handled separately
-                if (
+                    # Copy defaults.somedict.somearg to args.somearg and
+                    # defaults.fsdp_config.x to args.fsdp_x
+                    for key, value in attr.items():
+                        if name == "fsdp_config" and not key.startswith("fsdp"):
+                            key = "fsdp_" + key
+                        elif name == "fp8_config" and not key.startswith("fp8"):
+                            key = "fp8_" + key
+                        if hasattr(args, "nondefault") and key not in args.nondefault:
+                            setattr(args, key, value)
+                elif (
                     name not in ["compute_environment", "mixed_precision", "distributed_type"]
                     and getattr(args, name, None) is None
                 ):
+                    # Those args are handled separately
                     setattr(args, name, attr)
         if not args.debug:
             args.debug = defaults.debug
@@ -1105,10 +1108,14 @@ def _validate_launch_command(args):
                 args.num_processes = torch.xpu.device_count()
             elif is_mlu_available():
                 args.num_processes = torch.mlu.device_count()
+            elif is_sdaa_available():
+                args.num_processes = torch.sdaa.device_count()
             elif is_musa_available():
                 args.num_processes = torch.musa.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
+            elif is_hpu_available():
+                args.num_processes = torch.hpu.device_count()
             else:
                 args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
@@ -1118,11 +1125,13 @@ def _validate_launch_command(args):
             not args.multi_gpu
             and args.num_processes > 1
             and (
-                (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
-                or (is_mlu_available() and torch.mlu.device_count() > 1)
-                or (is_musa_available() and torch.musa.device_count() > 1)
+                (is_xpu_available() and torch.xpu.device_count() > 1)
                 or (is_npu_available() and torch.npu.device_count() > 1)
-                or (torch.cuda.device_count() > 1)
+                or (is_hpu_available() and torch.hpu.device_count() > 1)
+                or (is_mlu_available() and torch.mlu.device_count() > 1)
+                or (is_sdaa_available() and torch.sdaa.device_count() > 1)
+                or (is_musa_available() and torch.musa.device_count() > 1)
+                or (torch.cuda.is_available() and torch.cuda.device_count() > 1)
             )
         ):
             warned.append(

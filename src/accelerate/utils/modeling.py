@@ -33,11 +33,13 @@ from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
+    is_hpu_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
     is_peft_available,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
 )
@@ -52,6 +54,9 @@ if is_npu_available(check_device=False):
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_sdaa_available(check_device=False):
+    import torch_sdaa  # noqa: F401
 
 if is_musa_available(check_device=False):
     import torch_musa  # noqa: F401
@@ -88,15 +93,15 @@ def check_device_same(first_device, second_device):
     if first_device.type != second_device.type:
         return False
 
-    if first_device.type == "cuda" and first_device.index is None:
+    if first_device.type != "cpu" and first_device.index is None:
         # In case the first_device is a cuda device and have
         # the index attribute set to `None`, default it to `0`
-        first_device = torch.device("cuda", index=0)
+        first_device = torch.device(first_device.type, index=0)
 
-    if second_device.type == "cuda" and second_device.index is None:
+    if second_device.type != "cpu" and second_device.index is None:
         # In case the second_device is a cuda device and have
         # the index attribute set to `None`, default it to `0`
-        second_device = torch.device("cuda", index=0)
+        second_device = torch.device(second_device.type, index=0)
 
     return first_device == second_device
 
@@ -196,8 +201,8 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
         storage_ptr = tensor.untyped_storage().data_ptr()
         storage_size = tensor.untyped_storage().nbytes()
     except Exception:
-        # Fallback for torch==1.10
         try:
+            # Fallback for torch==1.10
             storage_ptr = tensor.storage().data_ptr()
             storage_size = tensor.storage().size() * _SIZE[tensor.dtype]
         except NotImplementedError:
@@ -312,10 +317,12 @@ def set_module_tensor_to_device(
                 device = f"npu:{device}"
             elif is_mlu_available():
                 device = f"mlu:{device}"
+            elif is_sdaa_available():
+                device = f"sdaa:{device}"
             elif is_musa_available():
                 device = f"musa:{device}"
-            elif is_xpu_available():
-                device = f"xpu:{device}"
+            elif is_hpu_available():
+                device = "hpu"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
@@ -577,7 +584,7 @@ def find_tied_parameters(model: torch.nn.Module, **kwargs):
     ```
     """
 
-    # get ALL model parameters and thier names
+    # get ALL model parameters and their names
     all_named_parameters = {name: param for name, param in model.named_parameters(remove_duplicate=False)}
 
     # get ONLY unique named parameters,
@@ -593,7 +600,7 @@ def find_tied_parameters(model: torch.nn.Module, **kwargs):
     for tied_param_name in tied_param_names:
         tied_param = all_named_parameters[tied_param_name]
         for param_name, param in no_duplicate_named_parameters.items():
-            # compare if parameters are the same, if so, group thier names together
+            # compare if parameters are the same, if so, group their names together
             if param is tied_param:
                 if param_name not in tied_param_groups:
                     tied_param_groups[param_name] = []
@@ -762,6 +769,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
+        elif is_sdaa_available():
+            for i in range(torch.sdaa.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device("sdaa", i))
+                    max_memory[i] = torch.sdaa.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         elif is_musa_available():
             for i in range(torch.musa.device_count()):
                 try:
@@ -775,6 +790,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
                     max_memory[i] = get_xpu_available_memory(i)
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_hpu_available():
+            for i in range(torch.hpu.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device("hpu", i))
+                    max_memory[i] = torch.hpu.mem_get_info(i)[0]
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -806,10 +829,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.npu.device_count()
     elif is_mlu_available():
         num_devices = torch.mlu.device_count()
+    elif is_sdaa_available():
+        num_devices = torch.sdaa.device_count()
     elif is_musa_available():
         num_devices = torch.musa.device_count()
     elif is_xpu_available():
         num_devices = torch.xpu.device_count()
+    elif is_hpu_available():
+        num_devices = torch.hpu.device_count()
     else:
         num_devices = torch.cuda.device_count()
     for device in gpu_devices:
@@ -935,10 +962,14 @@ def get_balanced_memory(
         expected_device_type = "npu"
     elif is_mlu_available():
         expected_device_type = "mlu"
+    elif is_sdaa_available():
+        expected_device_type = "sdaa"
     elif is_musa_available():
         expected_device_type = "musa"
     elif is_xpu_available():
         expected_device_type = "xpu"
+    elif is_hpu_available():
+        expected_device_type = "hpu"
     else:
         expected_device_type = "cuda"
     num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
@@ -1617,10 +1648,10 @@ def load_state_dict(checkpoint_file, device_map=None):
                 device = list(device_map.values())[0]
                 target_device = device
                 if isinstance(device, int):
-                    if is_xpu_available():
-                        target_device = f"xpu:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         target_device = f"npu:{device}"
+                    elif is_hpu_available():
+                        target_device = "hpu"
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1653,10 +1684,10 @@ def load_state_dict(checkpoint_file, device_map=None):
             for device in devices:
                 target_device = device
                 if isinstance(device, int):
-                    if is_xpu_available():
-                        target_device = f"xpu:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         target_device = f"npu:{device}"
+                    elif is_hpu_available():
+                        target_device = "hpu"
 
                 with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
                     for key in device_weights[device]:
@@ -1999,9 +2030,11 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
             DistributedType.FSDP,
             DistributedType.XLA,
         ]:
@@ -2033,10 +2066,14 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
         return xamp.GradScaler(**kwargs)
     elif is_mlu_available():
         return torch.mlu.amp.GradScaler(**kwargs)
+    elif is_sdaa_available():
+        return torch.sdaa.amp.GradScaler(**kwargs)
     elif is_musa_available():
         return torch.musa.amp.GradScaler(**kwargs)
     elif is_npu_available():
         return torch.npu.amp.GradScaler(**kwargs)
+    elif is_hpu_available():
+        return torch.amp.GradScaler("hpu", **kwargs)
     elif is_xpu_available():
         return torch.amp.GradScaler("xpu", **kwargs)
     else:

@@ -28,11 +28,13 @@ from packaging import version
 
 from .imports import (
     is_cuda_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_xpu_available,
 )
 from .versions import compare_versions
@@ -50,6 +52,8 @@ def clear_device_cache(garbage_collection=False):
         torch.xpu.empty_cache()
     elif is_mlu_available():
         torch.mlu.empty_cache()
+    elif is_sdaa_available():
+        torch.sdaa.empty_cache()
     elif is_musa_available():
         torch.musa.empty_cache()
     elif is_npu_available():
@@ -58,6 +62,9 @@ def clear_device_cache(garbage_collection=False):
         torch.mps.empty_cache()
     elif is_cuda_available():
         torch.cuda.empty_cache()
+    elif is_hpu_available():
+        # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
+        pass
 
 
 def release_memory(*objects):
@@ -99,10 +106,10 @@ def should_reduce_batch_size(exception: Exception) -> bool:
             An exception
     """
     _statements = [
-        "CUDA out of memory.",  # CUDA OOM
-        "XPU out of memory.",  # XPU OOM
+        " out of memory.",  # OOM for CUDA, HIP, XPU
         "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",  # CUDNN SNAFU
         "DefaultCPUAllocator: can't allocate memory",  # CPU OOM
+        "FATAL ERROR :: MODULE:PT_DEVMEM Allocation failed",  # HPU OOM
     ]
     if isinstance(exception, RuntimeError) and len(exception.args) == 1:
         return any(err in exception.args[0] for err in _statements)
