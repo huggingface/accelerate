@@ -270,9 +270,9 @@ def test_data_loader(data_loader, accelerator):
     sorted_all_examples = sorted(all_examples)
 
     # Check if all elements are present in the sorted list of iterated samples
-    assert (
-        len(set(sorted_all_examples)) == NUM_ELEMENTS
-    ), "Not all the dataset elements have been iterated in an epoch due to duplication of samples across processes."
+    assert len(set(sorted_all_examples)) == NUM_ELEMENTS, (
+        "Not all the dataset elements have been iterated in an epoch due to duplication of samples across processes."
+    )
 
 
 def test_stateful_dataloader(accelerator):

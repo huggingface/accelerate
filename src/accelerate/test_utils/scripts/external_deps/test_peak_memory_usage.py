@@ -255,9 +255,9 @@ def training_function(config, args):
         )
         train_total_peak_memory[f"epoch-{epoch}"] = tracemalloc.peaked + b2mb(tracemalloc.begin)
         if args.peak_memory_upper_bound is not None:
-            assert (
-                train_total_peak_memory[f"epoch-{epoch}"] <= args.peak_memory_upper_bound
-            ), "Peak memory usage exceeded the upper bound"
+            assert train_total_peak_memory[f"epoch-{epoch}"] <= args.peak_memory_upper_bound, (
+                "Peak memory usage exceeded the upper bound"
+            )
 
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
