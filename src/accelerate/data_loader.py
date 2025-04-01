@@ -960,7 +960,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         elif isinstance(sampler, Sampler):
             self.sampler.sampler = sampler
         else:
-            raise ValueError(f"{sampler} must be of type torch.utills.data.Sampler or torch.utils.data.BatchSampler")
+            raise ValueError(f"{sampler} must be of type torch.utils.data.Sampler or torch.utils.data.BatchSampler")
 
 
 def get_sampler(dataloader):
@@ -1150,8 +1150,10 @@ def prepare_data_loader(
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     if isinstance(dataloader.sampler, BatchSampler):
-        raise ValueError(
-            "Should not pass a BatchSampler do dataloader sampler argument. As per pytorch>2.1.0 documentation, please pass this to sampler instead"
+        logger.warning(
+            "BatchSampler was passed to sampler argument."
+            "If you have a custom Sampler that yields a list of batch indices at a time, please pass it as the batch_sampler argument instead."
+            "For more information, see https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader"
         )
 
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
@@ -1347,8 +1349,10 @@ def skip_first_batches(dataloader, num_batches=0):
 
     dataset = dataloader.dataset
     if isinstance(dataloader.sampler, BatchSampler):
-        raise ValueError(
-            "Should not pass a BatchSampler do dataloader sampler argument. As per the latest pytorch documentation, please pass this to sampler instead"
+        logger.warning(
+            "BatchSampler was passed to sampler argument."
+            "If you have a custom Sampler that yields a list of batch indices at a time, please pass it as the batch_sampler argument instead."
+            "For more information, see https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader"
         )
 
     if isinstance(dataset, IterableDataset):
