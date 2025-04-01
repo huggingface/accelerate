@@ -19,7 +19,7 @@ from typing import Callable, Optional, Union
 
 import torch
 from packaging import version
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler, Sampler
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
 from .state import DistributedType, GradientState, PartialState, is_torch_xla_available
@@ -631,10 +631,12 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         return get_sampler(self)
 
     def set_sampler(self, sampler):
-        if isinstance(sampler, BatchSampler):
-            self.sampler.batch_sampler = sampler
-        elif isinstance(sampler, Sampler):
+        if isinstance(self.sampler, BatchSampler):
             self.sampler.sampler = sampler
+        else:
+            self.batch_sampler.sampler = sampler
+            if hasattr(self.batch_sampler, "batch_sampler"):
+                self.batch_sampler.batch_sampler.sampler = sampler
 
 
 if is_torch_xla_available():
@@ -955,12 +957,12 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         return get_sampler(self)
 
     def set_sampler(self, sampler):
-        if isinstance(sampler, BatchSampler):
-            self.sampler.batch_sampler = sampler
-        elif isinstance(sampler, Sampler):
+        if isinstance(self.sampler, BatchSampler):
             self.sampler.sampler = sampler
         else:
-            raise ValueError(f"{sampler} must be of type torch.utils.data.Sampler or torch.utils.data.BatchSampler")
+            self.batch_sampler.sampler = sampler
+            if hasattr(self.batch_sampler, "batch_sampler"):
+                self.batch_sampler.batch_sampler.sampler = sampler
 
 
 def get_sampler(dataloader):
