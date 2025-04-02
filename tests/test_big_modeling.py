@@ -46,6 +46,7 @@ from accelerate.test_utils import (
     torch_device,
 )
 from accelerate.utils import is_hpu_available, offload_state_dict
+from accelerate.utils.versions import is_torch_version
 
 
 logger = logging.getLogger(__name__)
@@ -420,10 +421,13 @@ class BigModelingTester(unittest.TestCase):
         foo = torch.rand(n_vals, device=device_0)  # noqa: F841
 
         # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
+        oom_error = (
+            torch.OutOfMemoryError if is_torch_version(">=", "2.5.0") else torch_accelerator_module.OutOfMemoryError
+        )
         try:
             dispatch_model(model, device_map)
-        except torch_accelerator_module.OutOfMemoryError as e:
-            raise torch_accelerator_module.OutOfMemoryError(
+        except oom_error as e:
+            raise oom_error(
                 f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory. {e}"
             )
         except Exception as e:
@@ -501,11 +505,14 @@ class BigModelingTester(unittest.TestCase):
 
         original_pointer = model.compute1._hf_hook.weights_map["weight"].data_ptr()
 
+        oom_error = (
+            torch.OutOfMemoryError if is_torch_version(">=", "2.5.0") else torch_accelerator_module.OutOfMemoryError
+        )
         with torch.no_grad():
             try:
                 output = model(x)
-            except torch_accelerator_module.OutOfMemoryError as e:
-                raise torch_accelerator_module.OutOfMemoryError(
+            except oom_error as e:
+                raise oom_error(
                     f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory_with_nested_offload_cpu. {e}"
                 )
             except Exception as e:
