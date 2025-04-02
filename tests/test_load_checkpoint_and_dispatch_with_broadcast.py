@@ -86,7 +86,9 @@ def load_checkpoint_and_dispatch_fsdp2():
         ignored_params=set(),
     )
 
-    fsdp2_model._apply(lambda t: t.to_empty(device=device) if t.device == torch.device("meta") else t.to(device))
+    fsdp2_model._apply(
+        lambda t: torch.empty_like(t, device=device) if t.device == torch.device("meta") else t.to(device)
+    )
 
     load_checkpoint_and_dispatch(fsdp2_model, model_path, strict=True, broadcast_from_rank0=True)
 
@@ -112,7 +114,9 @@ def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
         broadcasted_model.tie_weights()
         assert isinstance(broadcasted_model, nn.Module)
 
-    broadcasted_model._apply(lambda t: t.to_empty(device=device) if t.device == torch.device("meta") else t.to(device))
+    broadcasted_model._apply(
+        lambda t: torch.empty_like(t, device=device) if t.device == torch.device("meta") else t.to(device)
+    )
 
     load_checkpoint_and_dispatch(broadcasted_model, model_path, strict=True, broadcast_from_rank0=True)
 
@@ -123,7 +127,7 @@ def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
         assert isinstance(non_broadcasted_model, nn.Module)
 
     non_broadcasted_model._apply(
-        lambda t: t.to_empty(device=device) if t.device == torch.device("meta") else t.to(device)
+        lambda t: torch.empty_like(t, device=device) if t.device == torch.device("meta") else t.to(device)
     )
 
     load_checkpoint_and_dispatch(non_broadcasted_model, model_path, strict=True, broadcast_from_rank0=False)
@@ -152,7 +156,9 @@ def load_checkpoint_and_dispatch_ddp():
         ddp_model.tie_weights()
         assert isinstance(ddp_model, nn.Module)
 
-    ddp_model._apply(lambda t: t.to_empty(device=device) if t.device == torch.device("meta") else t.to(device))
+    ddp_model._apply(
+        lambda t: torch.empty_like(t, device=device) if t.device == torch.device("meta") else t.to(device)
+    )
     ddp_model = DistributedDataParallel(ddp_model)
 
     load_checkpoint_and_dispatch(ddp_model.module, model_path, strict=True, broadcast_from_rank0=True)
