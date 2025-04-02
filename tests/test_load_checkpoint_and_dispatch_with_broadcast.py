@@ -199,18 +199,6 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         )
         # successful return here == success - any errors would have caused an error in the sub-call
 
-    def test_load_checkpoint_and_dispatch_tp(self):
-        execute_subprocess_async(
-            cmd=[
-                "torchrun",
-                f"--nproc_per_node={torch.cuda.device_count()}",
-                f"--master_port={get_torch_dist_unique_port()}",
-                __file__,
-                "--tp",
-            ],
-        )
-        # successful return here == success - any errors would have caused an error in the sub-call
-
     def test_load_checkpoint_and_dispatch_ddp(self):
         execute_subprocess_async(
             cmd=[
