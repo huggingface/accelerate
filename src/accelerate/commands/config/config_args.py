@@ -194,8 +194,6 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
-    # args for tp
-    tp_config: dict = None
     # args for megatron_lm
     megatron_lm_config: dict = None
     # args for ipex
