@@ -520,6 +520,8 @@ def load_checkpoint_and_dispatch(
     preload_module_classes: Optional[list[str]] = None,
     force_hooks: bool = False,
     strict: bool = False,
+    full_state_dict: bool = True,
+    broadcast_from_rank0: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -569,6 +571,12 @@ def load_checkpoint_and_dispatch(
         strict (`bool`, *optional*, defaults to `False`):
             Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
             state_dict.
+        full_state_dict (`bool`, *optional*, defaults to `True`): if this is set to `True`, all the tensors in the
+            loaded state_dict will be gathered. No ShardedTensor and DTensor will be in the loaded state_dict.
+        broadcast_from_rank0 (`False`, *optional*, defaults to `False`): when the option is `True`, a distributed
+            `ProcessGroup` must be initialized. rank0 should receive a full state_dict and will broadcast the tensors
+            in the state_dict one by one to other ranks. Other ranks will receive the tensors and shard (if applicable)
+            according to the local shards in the model.
 
     Example:
 
@@ -623,6 +631,8 @@ def load_checkpoint_and_dispatch(
         offload_state_dict=offload_state_dict,
         offload_buffers=offload_buffers,
         strict=strict,
+        full_state_dict=full_state_dict,
+        broadcast_from_rank0=broadcast_from_rank0,
     )
     if device_map is None:
         return model
