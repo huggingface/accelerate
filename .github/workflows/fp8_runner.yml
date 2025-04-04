@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install the library
         run: |
-            pip install -e .[test_prod]
+            pip install -e .[test_prod,test_fp8]
       - name: Show installed libraries
         run: |
           pip freeze
