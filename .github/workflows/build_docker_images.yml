@@ -102,8 +102,9 @@ jobs:
         id: date
         run: |
           echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
-          echo "base_year=$(date '+%Y')" >> $GITHUB_ENV
-          echo "base_month=$(date '+%m')" >> $GITHUB_ENV
+          # Get the previous month
+          echo "base_year=$(date -d 'last month' '+%Y')" >> $GITHUB_ENV
+          echo "base_month=$(date -d 'last month' '+%m')" >> $GITHUB_ENV
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
         with:
