@@ -40,7 +40,7 @@ extras["testing"] = extras["test_prod"] + extras["test_dev"]
 extras["deepspeed"] = ["deepspeed"]
 extras["rich"] = ["rich"]
 
-extras["test_fp8"] = ["torchao"]
+extras["test_fp8"] = ["torchao"] # note: TE for now needs to be done via pulling down the docker image directly
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive", "mlflow", "matplotlib"]
 extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
