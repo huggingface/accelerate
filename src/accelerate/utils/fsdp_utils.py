@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import functools
 import os
 import shutil
@@ -434,29 +435,37 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
-        model (`torch.nn.Module`): The model to load the state dict into
+        model (`torch.nn.Module`):
+            The model to load the state dict into, expected to be on meta device or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
     import torch.distributed as dist
     from torch.distributed.tensor import distribute_tensor
 
-    sharded_sd = model.state_dict()
+    # Model was previously copied to meta device
+    meta_sharded_sd = model.state_dict()
+    sharded_sd = {}
+
+    # Rank 0 distributes the full state dict to oteher ranks
     if accelerator.is_main_process:
-        for (param_name, full_param), sharded_param in zip(full_sd.items(), sharded_sd.values()):
+        for (param_name, full_param), sharded_param in zip(full_sd.items(), meta_sharded_sd.values()):
             full_param = full_param.detach().cuda()
             mesh = sharded_param.device_mesh
             dist.broadcast(full_param, src=0, group=mesh.get_group())
             sharded_tensor = distribute_tensor(full_param, mesh, sharded_param.placements)
             sharded_sd[param_name] = sharded_tensor
+    # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
     else:
-        for param_name, sharded_param in sharded_sd.items():
+        for param_name, sharded_param in meta_sharded_sd.items():
             full_tensor = torch.empty(sharded_param.size(), device="cuda", dtype=sharded_param.dtype)
             mesh = sharded_param.device_mesh
             dist.broadcast(full_tensor, src=0, group=mesh.get_group())
             sharded_tensor = distribute_tensor(full_tensor, mesh, sharded_param.placements)
             sharded_sd[param_name] = sharded_tensor
 
-    model.load_state_dict(sharded_sd)
+    # we set `assign=True` because our params are on meta device
+    model.load_state_dict(sharded_sd, assign=True)
+    return model
 
 
 def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping: dict):
@@ -483,6 +492,32 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
         raise KeyError(
             "A parameter in the optimizer couldn't be switched to its sharded version. This breaks the training. Please raise an issue on GitHub."
         )
+
+
+def get_non_persistent_buffer_fqns(model: torch.nn.Module) -> set[str]:
+    """
+    Recursively finds the Fully Qualified Names (FQNs) of all non-persistent buffers within a PyTorch model.
+
+    Args:
+        model (torch.nn.Module): The model to inspect.
+
+    Returns:
+        set[str]: A set containing the FQNs of all non-persistent buffers.
+    """
+    non_persistent_fqns = set()
+
+    def _find_non_persistent(module: torch.nn.Module, prefix: str):
+        if hasattr(module, "_non_persistent_buffers_set"):
+            for buffer_name in module._non_persistent_buffers_set:
+                fqn = f"{prefix}.{buffer_name}" if prefix else buffer_name
+                non_persistent_fqns.add(fqn)
+
+        for name, child_module in module.named_children():
+            child_prefix = f"{prefix}.{name}" if prefix else name
+            _find_non_persistent(child_module, child_prefix)
+
+    _find_non_persistent(model, "")
+    return non_persistent_fqns
 
 
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
@@ -545,6 +580,26 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
     }
 
+    if fsdp2_plugin.cpu_ram_efficient_loading:
+        # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
+        # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
+        # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.emtpy`), `fully_shard` would move it to GPU
+        # Afterwards, when we call `fsdp2_load_full_state_dict`, us creating the state_dict would result into briefly having two copies of model state_dict on the GPU -> VRAM spike
+
+        # We need to keep the original buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
+        # Also, these buffers aren't getting sharded by default
+        original_named_buffers = copy.deepcopy(dict(model.named_buffers()))
+        # We get the FQNs of all non-persistent buffers, to re-register them after
+        non_persistent_buffer_fqns = get_non_persistent_buffer_fqns(model)
+        # We move the model to meta device, as then sharding happens on meta device
+        model = model.to(torch.device("meta"))
+        # We need to re-tie the weights, not exactly sure why, but if we don't do this, reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
+        # We assume `transformers` models have a `tie_weights` method if they support it
+        try:
+            model.tie_weights()
+        except AttributeError:
+            pass
+
     auto_wrap_policy = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, auto_wrap_policy_type, model)
     if auto_wrap_policy is not None:
         # We skip the model itself, as that one is always wrapped
@@ -558,6 +613,21 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
         # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
         fsdp2_load_full_state_dict(accelerator, model, original_sd)
+
+        # We re-register the buffers, as they may not be in the state_dict
+        for fqn, buffer_tensor in original_named_buffers.items():
+            buffer_tensor = buffer_tensor.to(accelerator.device)
+
+            if "." in fqn:
+                parent_fqn, local_buffer_name = fqn.rsplit(".", 1)
+                parent_module = model.get_submodule(parent_fqn)
+            else:
+                local_buffer_name = fqn
+                parent_module = model
+
+            is_persistent = fqn not in non_persistent_buffer_fqns
+
+            parent_module.register_buffer(local_buffer_name, buffer_tensor, persistent=is_persistent)
 
     if accelerator.mixed_precision != "no" and model.dtype != torch.float32:
         # We upcast the model according to `deepspeed`'s implementation
