@@ -2,7 +2,6 @@ name: Test FP8 Runner
 
 on:
   workflow_dispatch:
-  push:
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
