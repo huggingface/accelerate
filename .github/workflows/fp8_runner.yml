@@ -11,7 +11,7 @@ jobs:
     runs-on:
       group: aws-g6e-12xlarge
     container:
-      image: huggingface/accelerate:gpu-fp8-transformerengine-release-1.6.0
+      image: huggingface/accelerate:gpu-fp8-transformerengine-nightly-$(date -d "yesterday" '+%Y-%m-%d')
       options: --gpus all --shm-size "16gb"
     steps:
       - uses: actions/checkout@v3
