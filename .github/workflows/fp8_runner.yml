@@ -17,4 +17,4 @@ jobs:
       - uses: actions/checkout@v3
       - name: Run FP8 tests
         run: |
-          conda activate accelerate; python -c "from accelerate import Accelerator; Accelerator(mixed_precision='fp8'); print(accelerator.state)"
+          source activate accelerate; python -c "from accelerate import Accelerator; Accelerator(mixed_precision='fp8'); print(accelerator.state)"
