@@ -12,9 +12,10 @@ jobs:
       prev-day: ${{ steps.set-prev-day.outputs.prev-day }}
     steps:
       - name: Set PREV_DAY
+        id: set-prev-day
         run: |
           PREV_DAY=$(date -d "yesterday" '+%Y-%m-%d')
-          echo "PREV_DAY=$PREV_DAY" >> $GITHUB_OUTPUT
+          echo "prev-day=$PREV_DAY" >> $GITHUB_OUTPUT
   run-fp8-tests:
     needs: set-prev-day
     runs-on:
