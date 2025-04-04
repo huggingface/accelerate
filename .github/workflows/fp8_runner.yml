@@ -14,7 +14,7 @@ jobs:
       - name: Set PREV_DAY
         run: |
           PREV_DAY=$(date -d "yesterday" '+%Y-%m-%d')
-          echo "PREV_DAY=$PREV_DAY" >> $GITHUB_ENV
+          echo "PREV_DAY=$PREV_DAY" >> $GITHUB_OUTPUT
   run-fp8-tests:
     needs: set-prev-day
     runs-on:
