@@ -1,0 +1,19 @@
+name: Test FP8 Runner
+
+on:
+  workflow_dispatch:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  run-fp8-tests:
+    runs-on: [aws-g6e-12xlarge-use1-public-80]
+    container:
+      image: huggingface/accelerate:gpu-fp8-transformerengine-release-1.6.0
+      options: --gpus all --shm-size "16gb"
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run FP8 tests
+        run: |
+          python -c "from accelerate import Accelerator; Accelerator(mixed_precision='fp8'); print(accelerator.state)"
