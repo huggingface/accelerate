@@ -25,7 +25,13 @@ jobs:
       options: --gpus all --shm-size "16gb"
     steps:
       - uses: actions/checkout@v3
-      - name: Run FP8 tests
-        shell: bash
+      - name: Install the library
         run: |
-          python -c "from accelerate import Accelerator; accelerator = Accelerator(mixed_precision='fp8'); print(accelerator.state)"
+            pip install -e .[test_prod]
+      - name: Show installed libraries
+        run: |
+          pip freeze
+      - name: Run TE FP8 tests
+        run: |
+          python -m pytest -s -v ./tests/test_fp8.py
+
