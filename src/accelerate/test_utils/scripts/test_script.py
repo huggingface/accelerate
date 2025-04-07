@@ -690,9 +690,14 @@ def test_split_between_processes_dataset(datasets_Dataset):
         expected_output = data["k"]
         
         with state.split_between_processes(data, apply_padding=True) as results:
-            assert len(results) == 2, (
-                f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
-            )
+            if state.num_processes == 1:
+                assert len(results) == 1, (
+                    f"Single process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+                )
+            else:
+                assert len(results) == 2, (
+                    f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+                )
             
             results_per_process = []
             for result in results:
