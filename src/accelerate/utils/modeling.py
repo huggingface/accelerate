@@ -357,7 +357,7 @@ def set_module_tensor_to_device(
             elif param_cls.__name__ in ["QTensor", "QBitsTensor"]:
                 new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(device)
             elif param_cls.__name__ in ["AffineQuantizedTensor"]:
-                new_value.to(device)
+                new_value = new_value.to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
 
