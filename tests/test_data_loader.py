@@ -34,7 +34,7 @@ from accelerate.data_loader import (
 )
 from accelerate.state import GradientState
 from accelerate.test_utils.testing import AccelerateTestCase, require_torchdata_stateful_dataloader
-from accelerate.utils import is_torchdata_stateful_dataloader_available
+from accelerate.utils import is_torchdata_stateful_dataloader_available, set_seed
 
 
 if is_torchdata_stateful_dataloader_available():
@@ -421,6 +421,36 @@ class DataLoaderTester(AccelerateTestCase):
         dataloader = prepare_data_loader(dataloader)
         for d in dataloader:
             assert isinstance(d, torch.Tensor)
+
+    @parameterized.expand([1, 2], name_func=parameterized_custom_name_func)
+    def test_reproducibility(self, num_processes):
+        set_seed(21)
+        dataset = list(range(6))
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+        dataloader = prepare_data_loader(dataloader, num_processes=num_processes)
+        vals_1 = []
+        for val in dataloader:
+            vals_1.append(val)
+
+        # check same order for same seed
+        set_seed(21)
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+        dataloader = prepare_data_loader(dataloader, num_processes=num_processes)
+        vals_2 = []
+        for val in dataloader:
+            vals_2.append(val)
+
+        assert vals_1 == vals_2
+
+        # check different order for different seed
+        set_seed(42)
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+        dataloader = prepare_data_loader(dataloader, num_processes=num_processes)
+        vals_3 = []
+        for val in dataloader:
+            vals_3.append(val)
+
+        assert vals_1 != vals_3
 
     def test_skip_batch_sampler(self):
         batch_sampler = BatchSampler(range(16), batch_size=4, drop_last=False)

@@ -79,7 +79,7 @@ def env_command(args):
         "PyTorch MLU available": str(pt_mlu_available),
         "PyTorch SDAA available": str(pt_sdaa_available),
         "PyTorch MUSA available": str(pt_musa_available),
-        "System RAM": f"{psutil.virtual_memory().total / 1024 ** 3:.2f} GB",
+        "System RAM": f"{psutil.virtual_memory().total / 1024**3:.2f} GB",
     }
     if pt_cuda_available:
         info["GPU type"] = torch.cuda.get_device_name()

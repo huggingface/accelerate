@@ -33,6 +33,7 @@ from ...utils import (
 )
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
+    FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
@@ -137,13 +138,15 @@ def get_cluster_input():
 
     ipex_config = {}
     mpirun_config = {}
-    if use_cpu:
+    if use_cpu or is_xpu_available():
         ipex_config["ipex"] = _ask_field(
-            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:",
+            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU/XPU? [yes/NO]:",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
         )
+
+    if use_cpu:
         if distributed_type == DistributedType.MULTI_CPU:
             use_mpirun = _ask_field(
                 "Do you want accelerate to launch mpirun? [yes/NO]: ",
@@ -159,25 +162,6 @@ def get_cluster_input():
                 )
                 mpirun_config["mpirun_hostfile"] = os.path.expanduser(mpirun_hostfile.strip())
                 mpirun_config["mpirun_ccl"] = _ask_field("Enter the number of oneCCL worker threads [1]: ", default=1)
-    if (
-        not use_cpu
-        and is_xpu_available()
-        and distributed_type
-        not in [
-            DistributedType.MULTI_GPU,
-            DistributedType.MULTI_NPU,
-            DistributedType.MULTI_MLU,
-            DistributedType.MULTI_SDAA,
-            DistributedType.XLA,
-            DistributedType.MULTI_MUSA,
-        ]
-    ):
-        ipex_config["use_xpu"] = _ask_field(
-            "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
 
     dynamo_config = {}
     use_dynamo = _ask_field(
@@ -244,9 +228,9 @@ def get_cluster_input():
         )
         if use_deepspeed:
             distributed_type = DistributedType.DEEPSPEED
-            assert (
-                is_deepspeed_available()
-            ), "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
+            assert is_deepspeed_available(), (
+                "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
+            )
 
         if distributed_type == DistributedType.DEEPSPEED:
             use_deepspeed_config = _ask_field(
@@ -399,18 +383,36 @@ def get_cluster_input():
         if use_fsdp:
             distributed_type = DistributedType.FSDP
         if distributed_type == DistributedType.FSDP:
-            sharding_strategy_query = "What should be your sharding strategy?"
-            fsdp_config["fsdp_sharding_strategy"] = _ask_options(
-                sharding_strategy_query,
-                FSDP_SHARDING_STRATEGY,
-                lambda x: FSDP_SHARDING_STRATEGY[int(x)],
+            fsdp_config["fsdp_version"] = _ask_options(
+                "What should be your FSDP version? [2]: ",
+                [1, 2],
+                lambda x: int(x) + 1,
+                default=1,
             )
+            fsdp_version = fsdp_config["fsdp_version"]  # extract to a variable to simplify usage later
+
+            if fsdp_version == 1:
+                sharding_strategy_query = "What should be your sharding strategy?"
+                fsdp_config["fsdp_reshard_after_forward"] = _ask_options(
+                    sharding_strategy_query,
+                    FSDP_SHARDING_STRATEGY,
+                    lambda x: FSDP_SHARDING_STRATEGY[int(x)],
+                )
+            else:
+                fsdp_config["fsdp_reshard_after_forward"] = _ask_field(
+                    "Do you want to enable resharding after forward? [YES/no]: ",
+                    _convert_yes_no_to_bool,
+                    default=True,
+                    error_message="Please enter yes or no.",
+                )
+
             fsdp_config["fsdp_offload_params"] = _ask_field(
                 "Do you want to offload parameters and gradients to CPU? [yes/NO]: ",
                 _convert_yes_no_to_bool,
                 default=False,
                 error_message="Please enter yes or no.",
             )
+
             fsdp_wrap_query = "What should be your auto wrap policy?"
             fsdp_config["fsdp_auto_wrap_policy"] = _ask_options(
                 fsdp_wrap_query,
@@ -436,46 +438,55 @@ def get_cluster_input():
                     int,
                     default=100000000,
                 )
-            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
-            fsdp_config["fsdp_backward_prefetch"] = _ask_options(
-                fsdp_backward_prefetch_query,
-                FSDP_BACKWARD_PREFETCH,
-                lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
-            )
+            # Removed in FSDP2, ask for user input for FSDP1
+            if fsdp_version == 1:
+                fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
+                fsdp_config["fsdp_backward_prefetch"] = _ask_options(
+                    fsdp_backward_prefetch_query,
+                    FSDP_BACKWARD_PREFETCH,
+                    lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
+                )
+
             fsdp_state_dict_type_query = "What should be your FSDP's state dict type?"
             fsdp_config["fsdp_state_dict_type"] = _ask_options(
                 fsdp_state_dict_type_query,
-                FSDP_STATE_DICT_TYPE,
-                lambda x: FSDP_STATE_DICT_TYPE[int(x)],
-                default=2,
+                FSDP_STATE_DICT_TYPE if fsdp_version == 1 else FSDP2_STATE_DICT_TYPE,
+                lambda x: FSDP_STATE_DICT_TYPE[int(x)] if fsdp_version == 1 else FSDP2_STATE_DICT_TYPE[int(x)],
+                default=0,
             )
-            fsdp_config["fsdp_forward_prefetch"] = _ask_field(
-                "Do you want to enable FSDP's forward prefetch policy? [yes/NO]: ",
-                _convert_yes_no_to_bool,
-                default=False,
-                error_message="Please enter yes or no.",
-            )
-            fsdp_config["fsdp_use_orig_params"] = _ask_field(
-                "Do you want to enable FSDP's `use_orig_params` feature? [YES/no]: ",
-                _convert_yes_no_to_bool,
-                default=True,
-                error_message="Please enter yes or no.",
-            )
+            # Not implemented in FSDP2, ask for user input for FSDP1
+            if fsdp_version == 1:
+                fsdp_config["fsdp_forward_prefetch"] = _ask_field(
+                    "Do you want to enable FSDP's forward prefetch policy? [yes/NO]: ",
+                    _convert_yes_no_to_bool,
+                    default=False,
+                    error_message="Please enter yes or no.",
+                )
+            # Obsolete in FSDP2, ask for user input for FSDP1
+            if fsdp_version == 1:
+                fsdp_config["fsdp_use_orig_params"] = _ask_field(
+                    "Do you want to enable FSDP's `use_orig_params` feature? [YES/no]: ",
+                    _convert_yes_no_to_bool,
+                    default=True,
+                    error_message="Please enter yes or no.",
+                )
             fsdp_config["fsdp_cpu_ram_efficient_loading"] = _ask_field(
                 "Do you want to enable CPU RAM efficient model loading? Only applicable for 🤗 Transformers models. [YES/no]: ",
                 _convert_yes_no_to_bool,
                 default=True,
                 error_message="Please enter yes or no.",
             )
-            if fsdp_config["fsdp_cpu_ram_efficient_loading"]:
-                fsdp_config["fsdp_sync_module_states"] = True
-            else:
-                fsdp_config["fsdp_sync_module_states"] = _ask_field(
-                    "Do you want each individually wrapped FSDP unit to broadcast module parameters from rank 0 at the start? [YES/no]: ",
-                    _convert_yes_no_to_bool,
-                    default=True,
-                    error_message="Please enter yes or no.",
-                )
+            # Obsolete in FSDP2, ask for user input for FSDP1
+            if fsdp_version == 1:
+                if fsdp_config["fsdp_cpu_ram_efficient_loading"]:
+                    fsdp_config["fsdp_sync_module_states"] = True
+                else:
+                    fsdp_config["fsdp_sync_module_states"] = _ask_field(
+                        "Do you want each individually wrapped FSDP unit to broadcast module parameters from rank 0 at the start? [YES/no]: ",
+                        _convert_yes_no_to_bool,
+                        default=True,
+                        error_message="Please enter yes or no.",
+                    )
             fsdp_config["fsdp_activation_checkpointing"] = _ask_field(
                 "Do you want to enable FSDP activation checkpointing? [yes/NO]: ",
                 _convert_yes_no_to_bool,

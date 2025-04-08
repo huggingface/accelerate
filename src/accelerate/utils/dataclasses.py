@@ -23,10 +23,11 @@ import functools
 import logging
 import os
 import warnings
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union, get_args
 
 import torch
 
@@ -192,14 +193,14 @@ class DistributedDataParallelKwargs(KwargsHandler):
     def register_comm_hook(self, model):
         from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
 
-        hook_map: Dict[DDPCommunicationHookType, Callable] = {
+        hook_map: dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
             DDPCommunicationHookType.BF16: default_hooks.bf16_compress_hook,
             DDPCommunicationHookType.POWER_SGD: powerSGD_hook.powerSGD_hook,
             DDPCommunicationHookType.BATCHED_POWER_SGD: powerSGD_hook.batched_powerSGD_hook,
         }
 
-        wrapper_map: Dict[DDPCommunicationHookType, Callable] = {
+        wrapper_map: dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_wrapper,
             DDPCommunicationHookType.BF16: default_hooks.bf16_compress_wrapper,
         }
@@ -355,7 +356,7 @@ class TERecipeKwargs(KwargsHandler):
     fp8_format: FP8Format = None
     amax_history_len: int = None
     amax_compute_algo: AmaxComputeAlgorithm = None
-    override_linear_precision: Tuple[bool, bool, bool] = None
+    override_linear_precision: tuple[bool, bool, bool] = None
 
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
@@ -483,8 +484,8 @@ class ProfileKwargs(KwargsHandler):
             to None, which means profiling does not store json files.
     """
 
-    activities: Optional[List[ProfilerActivity]] = None
-    schedule_option: Optional[Dict[str, int]] = None
+    activities: Optional[list[ProfilerActivity]] = None
+    schedule_option: Optional[dict[str, int]] = None
     on_trace_ready: Optional[Callable] = None
     record_shapes: bool = False
     profile_memory: bool = False
@@ -530,7 +531,7 @@ class ProfileKwargs(KwargsHandler):
         Returns:
             torch.profiler.profile: The profiler object.
         """
-        activities: Optional[List[ProfilerActivity]] = None
+        activities: Optional[list[ProfilerActivity]] = None
         if self.activities is not None:
             activities = [self._get_profiler_activity(activity) for activity in self.activities]
         schedule: Optional[torch.profiler.schedule] = None
@@ -1451,22 +1452,31 @@ class FullyShardedDataParallelPlugin:
     This plugin is used to enable fully sharded data parallelism.
 
     Args:
+        fsdp_version (`int`, defaults to `1`):
+            The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to
+            FSDP2 format.
         sharding_strategy (`Union[str, torch.distributed.fsdp.ShardingStrategy]`, defaults to `'FULL_SHARD'`):
             Sharding strategy to use. Should be either a `str` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Is deprecated in favor of
+            `reshard_after_forward`.
+        reshard_after_forward (`Union[str, torch.distributed.fsdp.ShardingStrategy, bool]`, defaults to `'FULL_SHARD'` for `fsdp_version=1` and `True` for `fsdp_version=2`):
+            Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
         backward_prefetch (`Union[str, torch.distributed.fsdp.BackwardPrefetch]`, defaults to `'NO_PREFETCH'`):
             Backward prefetch strategy to use. Should be either a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`.
-        mixed_precision_policy (`Optional[Union[dict, torch.distributed.fsdp.MixedPrecision]]`, defaults to `None`):
+        mixed_precision_policy (`Optional[Union[dict, torch.distributed.fsdp.MixedPrecision, torch.distributed.fsdp.MixedPrecisionPolicy]]`, defaults to `None`):
             A config to enable mixed precision training with FullyShardedDataParallel. If passing in a `dict`, it
-            should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`.
+            should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`, can be an instance of
+            `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2.
         auto_wrap_policy (`Optional(Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]), defaults to `NO_WRAP`):
             A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one
             of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. See
             `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like.
-        cpu_offload (`Union[bool, torch.distributed.fsdp.CPUOffload]`, defaults to `False`):
+        cpu_offload (`Union[bool, torch.distributed.fsdp.CPUOffload, torch.distributed.fsdp.CPUOffloadPolicy]`, defaults to `False`):
             Whether to offload parameters to CPU. Should be either a `bool` or an instance of
-            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`.
+            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or
+            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2.
         ignored_modules (`Optional[Iterable[torch.nn.Module]]`, defaults to `None`):
             A list of modules to ignore when wrapping with FSDP.
         state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
@@ -1507,23 +1517,40 @@ class FullyShardedDataParallelPlugin:
             is `size_based_wrap`.
     """
 
+    fsdp_version: int = field(
+        default=None,
+        metadata={
+            "help": "The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to FSDP2 format."
+        },
+    )
+
     sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
         default=None,
         metadata={
-            "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'"
+            "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'. Is deprecated in favor of `reshard_after_forward` "
         },
     )
-    backward_prefetch: Union[str, "torch.distributed.fsdp.BackwardPrefetch"] = field(
+
+    reshard_after_forward: Union[str, "torch.distributed.fsdp.ShardingStrategy", bool] = field(
         default=None,
         metadata={
-            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'"
+            "help": "Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'"
         },
     )
-    mixed_precision_policy: Optional[Union[dict, "torch.distributed.fsdp.MixedPrecision"]] = field(
+    backward_prefetch: Optional[Union[str, "torch.distributed.fsdp.BackwardPrefetch"]] = field(
+        default=None,
+        metadata={
+            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'. This becomes obsolete in FSDP2."
+        },
+    )
+    mixed_precision_policy: Optional[
+        Union[dict, "torch.distributed.fsdp.MixedPrecision", "torch.distributed.fsdp.MixedPrecisionPolicy"]
+    ] = field(
         default=None,
         metadata={
             "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
             "If passing in a `dict`, it should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`."
+            "Can also be an instance of `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2."
         },
     )
     auto_wrap_policy: Optional[Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]] = (
@@ -1535,10 +1562,10 @@ class FullyShardedDataParallelPlugin:
             },
         )
     )
-    cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload"] = field(
+    cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload", "torch.distributed.fsdp.CPUOffloadPolicy"] = field(
         default=None,
         metadata={
-            "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`. Defaults to `False`"
+            "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2. Defaults to `False`"
         },
     )
     ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
@@ -1577,9 +1604,11 @@ class FullyShardedDataParallelPlugin:
             "Enabling this can help lower the number of CUDA malloc retries."
         },
     )
-    use_orig_params: bool = field(
+    use_orig_params: Optional[bool] = field(
         default=None,
-        metadata={"help": "Whether to use the original parameters for the optimizer. Defaults to `False`"},
+        metadata={
+            "help": "Whether to use the original parameters for the optimizer. Defaults to `False`. This becomes obsolete in FSDP2."
+        },
     )
     param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
         default=None,
@@ -1589,12 +1618,12 @@ class FullyShardedDataParallelPlugin:
             "Only applicable when `sync_module_states` is `True`. By default is a `lambda` which calls `to_empty` on the module."
         },
     )
-    sync_module_states: bool = field(
+    sync_module_states: Optional[bool] = field(
         default=None,
         metadata={
             "help": "Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 "
             "to ensure they are the same across all ranks after initialization. Defaults to `False` unless "
-            "`cpu_ram_efficient_loading` is `True`, then will be forcibly enabled."
+            "`cpu_ram_efficient_loading` is `True`, then will be forcibly enabled. This becomes obsolete in FSDP2."
         },
     )
     forward_prefetch: bool = field(
@@ -1619,7 +1648,7 @@ class FullyShardedDataParallelPlugin:
             "Only applicable for 🤗 Transformers. When using this, `sync_module_states` needs to be `True`. Defaults to `False`."
         },
     )
-    transformer_cls_names_to_wrap: Optional[List[str]] = field(
+    transformer_cls_names_to_wrap: Optional[list[str]] = field(
         default=None,
         metadata={
             "help": "A list of transformer layer class names to wrap. Only applicable when `auto_wrap_policy` is `transformer_based_wrap`."
@@ -1635,27 +1664,69 @@ class FullyShardedDataParallelPlugin:
     def __post_init__(self):
         from torch.distributed.fsdp import (
             BackwardPrefetch,
-            CPUOffload,
             ShardingStrategy,
         )
 
+        _fsdp2_warnings = set()
+
         env_prefix = "FSDP_"
         # Strategy: By default we should always assume that values are passed in, else we check the environment variables
-        if self.sharding_strategy is None:
-            self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
-        if isinstance(self.sharding_strategy, str):
-            # We need to remap based on custom enum values for user readability
-            if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
-                self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
-            if isinstance(self.sharding_strategy, int) or self.sharding_strategy.isdigit():
-                self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
+        if self.fsdp_version is None:
+            self.fsdp_version = int(os.environ.get(env_prefix + "VERSION", "1"))
+
+        if self.sharding_strategy is not None:
+            # We cannot properly detect all of the cases, as by default `args.fsdp_sharding_strategy` is set to `fully_shard`
+            # Therefore we issue a warning only if the user has explicitly set it inside their plugin
+            _fsdp2_warnings.add(
+                "sharding_strategy is deprecated in favor of reshard_after_forward. "
+                "This will be removed in a future version of Accelerate."
+            )
+        if self.fsdp_version == 1:
+            if self.sharding_strategy is None:
+                self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
+            if isinstance(self.sharding_strategy, str):
+                if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
+                    self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
+                if isinstance(self.sharding_strategy, int) or self.sharding_strategy.isdigit():
+                    self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
+                else:
+                    self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
+
+        # Fallback to `reshard_after_forward` in FSDP1 if `sharding_strategy` is not set
+        if self.reshard_after_forward is None and self.sharding_strategy is None:
+            reshard_after_forward = os.environ.get(
+                env_prefix + "RESHARD_AFTER_FORWARD", "true" if self.fsdp_version == 2 else "FULL_SHARD"
+            )
+            if self.fsdp_version == 2:
+                self.reshard_after_forward = str_to_bool(reshard_after_forward.lower(), to_bool=True)
             else:
-                self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
+                self.reshard_after_forward = reshard_after_forward
+        if isinstance(self.reshard_after_forward, str):
+            if self.fsdp_version == 2:
+                self.reshard_after_forward = str_to_bool(self.reshard_after_forward.lower(), to_bool=True)
+            else:
+                # We need to remap based on custom enum values for user readability
+                if self.reshard_after_forward.upper() in FSDP_SHARDING_STRATEGY:
+                    self.reshard_after_forward = FSDP_SHARDING_STRATEGY.index(self.reshard_after_forward.upper()) + 1
+                if isinstance(self.reshard_after_forward, int) or self.reshard_after_forward.isdigit():
+                    self.reshard_after_forward = ShardingStrategy(int(self.reshard_after_forward))
+                else:
+                    self.reshard_after_forward = ShardingStrategy[self.reshard_after_forward.upper()]
+
+        if self.fsdp_version == 2 and not isinstance(self.reshard_after_forward, bool):
+            raise ValueError(
+                f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP2, please set to a `bool`"
+            )
+        if self.fsdp_version == 1 and isinstance(self.reshard_after_forward, bool):
+            raise ValueError(
+                f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP1, please set to a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
+            )
 
         if self.cpu_offload is None:
             self.cpu_offload = str_to_bool(os.environ.get(env_prefix + "OFFLOAD_PARAMS", "False")) == 1
-        if isinstance(self.cpu_offload, bool):
-            self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
+
+        self.set_cpu_offload()  # abstracted away to hide imports due to version checks
+        self.validate_cpu_offload()
 
         if self.backward_prefetch is None:
             self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
@@ -1668,6 +1739,9 @@ class FullyShardedDataParallelPlugin:
                 self.backward_prefetch = BackwardPrefetch(int(self.backward_prefetch))
             else:
                 self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
+        if self.fsdp_version == 2 and self.backward_prefetch is not None:
+            _fsdp2_warnings.add("backward_prefetch is not supported in FSDP2. Setting backward prefetch to None.")
+            self.backward_prefetch = None
 
         self.set_state_dict_type()
 
@@ -1697,14 +1771,25 @@ class FullyShardedDataParallelPlugin:
             elif self.auto_wrap_policy.upper() == "NO_WRAP":
                 self.auto_wrap_policy = None
 
-        if self.use_orig_params is None:
+        if self.use_orig_params is None and self.fsdp_version == 1:
             self.use_orig_params = str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False")) == 1
+        if self.fsdp_version == 2 and self.use_orig_params is not None:
+            _fsdp2_warnings.add("use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters.")
+            self.use_orig_params = None
 
-        if self.sync_module_states is None:
+        if self.sync_module_states is None and self.fsdp_version == 1:
             self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
+        if self.fsdp_version == 2 and self.sync_module_states is not None:
+            _fsdp2_warnings.add(
+                "sync_module_states is obsolete in FSDP2, as it is not needed anymore."
+                "Setting sync_module_states to None."
+            )
+            self.sync_module_states = None
 
-        if self.forward_prefetch is None:
+        if self.forward_prefetch is None and self.fsdp_version == 1:
             self.forward_prefetch = str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False")) == 1
+        if self.fsdp_version == 2 and self.forward_prefetch is not None:
+            raise ValueError("forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version=1`")
 
         if self.activation_checkpointing is None:
             self.activation_checkpointing = (
@@ -1715,8 +1800,8 @@ class FullyShardedDataParallelPlugin:
             self.cpu_ram_efficient_loading = (
                 str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")) == 1
             )
-
-        if self.cpu_ram_efficient_loading and not self.sync_module_states:
+        # There's no need to specify sync_module_states in FSDP2
+        if self.fsdp_version == 1 and self.cpu_ram_efficient_loading and not self.sync_module_states:
             warnings.warn(
                 "sync_module_states cannot be False since efficient cpu ram loading enabled. "
                 "Setting sync_module_states to True."
@@ -1725,6 +1810,8 @@ class FullyShardedDataParallelPlugin:
 
         if isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)
+        if self.mixed_precision_policy is not None:
+            self.validate_mixed_precision_policy()
 
         if self.sync_module_states:
             if is_npu_available():
@@ -1747,6 +1834,10 @@ class FullyShardedDataParallelPlugin:
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
+        #  Single warning for all deprecation warnings due to FSDP2 conversion
+        if _fsdp2_warnings:
+            logger.warning("Multiple deprecation warnings due to FSDP2 conversion:\n".join(_fsdp2_warnings))
+
     def set_state_dict_type(self, state_dict_type=None):
         """
         Set the state dict config based on the `StateDictType`.
@@ -1765,7 +1856,9 @@ class FullyShardedDataParallelPlugin:
             self.state_dict_type = state_dict_type
 
         if self.state_dict_type is None:
-            self.state_dict_type = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
+            self.state_dict_type = os.environ.get(
+                "FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT" if self.fsdp_version == 1 else "SHARDED_STATE_DICT"
+            )
         if isinstance(self.state_dict_type, str):
             if self.state_dict_type.isdigit():
                 self.state_dict_type = StateDictType(int(self.state_dict_type))
@@ -1782,6 +1875,13 @@ class FullyShardedDataParallelPlugin:
                 self.state_dict_config = ShardedStateDictConfig(offload_to_cpu=True)
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
+
+        # TODO(s1ro1): add support for FULL_STATE_DICT in FSDP2
+        if self.fsdp_version == 2 and self.state_dict_type != StateDictType.SHARDED_STATE_DICT:
+            raise ValueError(
+                "FSDP2 only supports SHARDED_STATE_DICT for now. "
+                "Please set `fsdp_state_dict_type` to `SHARDED_STATE_DICT`."
+            )
 
     def set_auto_wrap_policy(self, model):
         """
@@ -1836,27 +1936,82 @@ class FullyShardedDataParallelPlugin:
 
         buffer_type = torch.float32 if buffer_autocast else dtype
 
-        from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
+        if self.fsdp_version == 1:
+            from torch.distributed.fsdp import MixedPrecision
+        elif self.fsdp_version == 2:
+            from torch.distributed.fsdp import MixedPrecisionPolicy as MixedPrecision
 
         if override or self.mixed_precision_policy is None:
-            self.mixed_precision_policy = MixedPrecision(
-                param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
-            )
+            dtype_args = {"param_dtype": dtype, "reduce_dtype": dtype}
+            if self.fsdp_version == 1:
+                dtype_args["buffer_dtype"] = buffer_type
+            else:
+                dtype_args["output_dtype"] = dtype
+            # TODO(s1ro1): `cast_forward_inputs` for FSDP2?
+            self.mixed_precision_policy = MixedPrecision(**dtype_args)
         elif isinstance(self.mixed_precision_policy, dict):
             # Check for incompatible types
-            missing_keys = [
-                k for k in ["param_dtype", "reduce_dtype", "buffer_dtype"] if k not in self.mixed_precision_policy
-            ]
+            valid_keys = ["param_dtype", "reduce_dtype"] + (
+                ["buffer_dtype"] if self.fsdp_version == 1 else ["output_dtype"]
+            )
+            missing_keys = [k for k in valid_keys if k not in self.mixed_precision_policy]
             invalid_values = [
                 k for k, v in self.mixed_precision_policy.items() if v not in mixed_precision_mapping.values()
             ]
             if missing_keys or invalid_values:
                 raise ValueError(
                     f"Invalid mixed precision policy: {self.mixed_precision_policy}. "
-                    f"Must be a `dict` with keys `param_dtype`, `reduce_dtype`, and `buffer_dtype`. "
+                    f"Must be a `dict` with keys {valid_keys}."
                     f"Values must be one of {list(mixed_precision_mapping.values())}"
                 )
             self.mixed_precision_policy = MixedPrecision(**self.mixed_precision_policy)
+
+    def validate_mixed_precision_policy(self):
+        """
+        Validates the mixed precision policy, abstracted away to not bring in the imports if not needed.
+        """
+        if self.fsdp_version == 2:
+            from torch.distributed.fsdp import MixedPrecisionPolicy as MixedPrecision
+        else:
+            from torch.distributed.fsdp import MixedPrecision
+
+        if not isinstance(self.mixed_precision_policy, MixedPrecision):
+            required_type = (
+                "`torch.distributed.fsdp.MixedPrecisionPolicy`"
+                if self.fsdp_version == 2
+                else "`torch.distributed.fsdp.MixedPrecision`"
+            )
+            raise ValueError(f"mixed_precision_policy must be an instance of {required_type}.")
+
+    def set_cpu_offload(self):
+        if self.fsdp_version == 2:
+            from torch.distributed.fsdp import CPUOffloadPolicy, OffloadPolicy
+        else:
+            from torch.distributed.fsdp import CPUOffload
+
+        if isinstance(self.cpu_offload, bool):
+            if self.fsdp_version == 2:
+                if not self.cpu_offload:
+                    self.cpu_offload = OffloadPolicy()
+                else:
+                    self.cpu_offload = CPUOffloadPolicy()
+            else:
+                self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
+
+    def validate_cpu_offload(self):
+        if self.fsdp_version == 2:
+            from torch.distributed.fsdp import OffloadPolicy
+        else:
+            from torch.distributed.fsdp import CPUOffload
+
+        if self.fsdp_version == 2 and not isinstance(self.cpu_offload, OffloadPolicy):
+            raise ValueError(
+                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.OffloadPolicy` in FSDP2, got {self.cpu_offload}"
+            )
+        if self.fsdp_version == 1 and not isinstance(self.cpu_offload, CPUOffload):
+            raise ValueError(
+                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.CPUOffload` in FSDP1, got {self.cpu_offload}"
+            )
 
 
 @dataclass
@@ -2074,7 +2229,7 @@ class MegatronLMPlugin:
         default=0,
         metadata={"help": "Minumum value for learning rate. The scheduler clip values below this threshold."},
     )
-    consumed_samples: List[int] = field(
+    consumed_samples: list[int] = field(
         default=None,
         metadata={
             "help": "Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call."
@@ -2123,7 +2278,7 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom train step class."},
     )
-    custom_train_step_kwargs: Optional[Dict[str, Any]] = field(
+    custom_train_step_kwargs: Optional[dict[str, Any]] = field(
         default=None,
         metadata={"help": "Custom train step kwargs."},
     )
@@ -2152,7 +2307,7 @@ class MegatronLMPlugin:
 
     # remaining args such as enabling Alibi/ROPE positional embeddings,
     # wandb logging, Multi-Query Attention, etc.
-    other_megatron_args: Optional[Dict[str, Any]] = field(
+    other_megatron_args: Optional[dict[str, Any]] = field(
         default=None,
         metadata={"help": "Other Megatron-LM arguments. Please refer Megatron-LM"},
     )
@@ -2513,14 +2668,14 @@ class BnbQuantizationConfig:
         },
     )
 
-    skip_modules: List[str] = field(
+    skip_modules: list[str] = field(
         default=None,
         metadata={
             "help": "an explicit list of the modules that we don't quantize. The dtype of these modules will be `torch_dtype`."
         },
     )
 
-    keep_in_fp32_modules: List[str] = field(
+    keep_in_fp32_modules: list[str] = field(
         default=None,
         metadata={"help": "an explicit list of the modules that we don't quantize. We keep them in `torch.float32`."},
     )

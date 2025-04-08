@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import random
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -151,6 +151,6 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         generator.set_state(rng_state)
 
 
-def synchronize_rng_states(rng_types: List[Union[str, RNGType]], generator: Optional[torch.Generator] = None):
+def synchronize_rng_states(rng_types: list[Union[str, RNGType]], generator: Optional[torch.Generator] = None):
     for rng_type in rng_types:
         synchronize_rng_state(RNGType(rng_type), generator=generator)

@@ -439,24 +439,24 @@ class AcceleratorTester(AccelerateTestCase):
         model, optimizer, scheduler, train_dl, valid_dl, dummy_obj = accelerator.prepare(
             model, optimizer, scheduler, train_dl, valid_dl, dummy_obj
         )
-        assert (
-            getattr(dummy_obj, "_is_accelerate_prepared", False) is False
-        ), "Dummy object should have `_is_accelerate_prepared` set to `True`"
-        assert (
-            getattr(model, "_is_accelerate_prepared", False) is True
-        ), "Model is missing `_is_accelerator_prepared` or is set to `False`"
-        assert (
-            getattr(optimizer, "_is_accelerate_prepared", False) is True
-        ), "Optimizer is missing `_is_accelerator_prepared` or is set to `False`"
-        assert (
-            getattr(scheduler, "_is_accelerate_prepared", False) is True
-        ), "Scheduler is missing `_is_accelerator_prepared` or is set to `False`"
-        assert (
-            getattr(train_dl, "_is_accelerate_prepared", False) is True
-        ), "Train Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
-        assert (
-            getattr(valid_dl, "_is_accelerate_prepared", False) is True
-        ), "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
+        assert getattr(dummy_obj, "_is_accelerate_prepared", False) is False, (
+            "Dummy object should have `_is_accelerate_prepared` set to `True`"
+        )
+        assert getattr(model, "_is_accelerate_prepared", False) is True, (
+            "Model is missing `_is_accelerator_prepared` or is set to `False`"
+        )
+        assert getattr(optimizer, "_is_accelerate_prepared", False) is True, (
+            "Optimizer is missing `_is_accelerator_prepared` or is set to `False`"
+        )
+        assert getattr(scheduler, "_is_accelerate_prepared", False) is True, (
+            "Scheduler is missing `_is_accelerator_prepared` or is set to `False`"
+        )
+        assert getattr(train_dl, "_is_accelerate_prepared", False) is True, (
+            "Train Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
+        )
+        assert getattr(valid_dl, "_is_accelerate_prepared", False) is True, (
+            "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
+        )
 
     @require_cuda_or_xpu
     @slow

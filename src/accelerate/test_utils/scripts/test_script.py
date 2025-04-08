@@ -112,9 +112,9 @@ def process_execution_check():
             assert text.startswith("Currently in the main process\n"), "Main process was not first"
             if num_processes > 1:
                 assert text.endswith("Now on another process\n"), "Main process was not first"
-            assert (
-                text.count("Now on another process\n") == accelerator.num_processes - 1
-            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {accelerator.num_processes}"
+            assert text.count("Now on another process\n") == accelerator.num_processes - 1, (
+                f"Only wrote to file {text.count('Now on another process') + 1} times, not {accelerator.num_processes}"
+            )
         except AssertionError:
             path.unlink()
             raise
@@ -351,13 +351,13 @@ def custom_sampler_check():
     dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index)
     # We need just ensure that `dl.batch_sampler` (or `dl.batch_sampler.batch_sampler` is indeed the old batch sampler
     if hasattr(dl.batch_sampler, "batch_sampler"):
-        assert isinstance(
-            dl.batch_sampler.batch_sampler, CustomBatchSampler
-        ), "Custom sampler was changed after calling `prepare_data_loader`"
+        assert isinstance(dl.batch_sampler.batch_sampler, CustomBatchSampler), (
+            "Custom sampler was changed after calling `prepare_data_loader`"
+        )
     else:
-        assert isinstance(
-            dl.batch_sampler, CustomBatchSampler
-        ), "Custom sampler was changed after calling `prepare_data_loader`"
+        assert isinstance(dl.batch_sampler, CustomBatchSampler), (
+            "Custom sampler was changed after calling `prepare_data_loader`"
+        )
 
 
 def check_seedable_sampler():
@@ -400,9 +400,9 @@ def check_seedable_sampler_in_batch_sampler_shard():
     )
 
     target_sampler = prepared_data_loader.batch_sampler.batch_sampler.sampler
-    assert isinstance(
-        target_sampler, SeedableRandomSampler
-    ), "Sampler in BatchSamplerShard is not SeedableRandomSampler."
+    assert isinstance(target_sampler, SeedableRandomSampler), (
+        "Sampler in BatchSamplerShard is not SeedableRandomSampler."
+    )
 
 
 def check_seedable_sampler_with_data_seed():
@@ -666,31 +666,31 @@ def test_split_between_processes_dataset(datasets_Dataset):
     state = AcceleratorState()
     data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes)])
     with state.split_between_processes(data, apply_padding=False) as results:
-        assert (
-            len(results) == 2
-        ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+        assert len(results) == 2, (
+            f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+        )
 
     data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
     with state.split_between_processes(data, apply_padding=False) as results:
         if state.is_last_process:
-            assert (
-                len(results) == 1
-            ), f"Last process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+            assert len(results) == 1, (
+                f"Last process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+            )
         else:
-            assert (
-                len(results) == 2
-            ), f"One of the intermediate processes did not receive two items. Process index: {state.process_index}; Length: {len(results)}"
+            assert len(results) == 2, (
+                f"One of the intermediate processes did not receive two items. Process index: {state.process_index}; Length: {len(results)}"
+            )
 
     data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
     with state.split_between_processes(data, apply_padding=True) as results:
         if state.num_processes == 1:
-            assert (
-                len(results) == 1
-            ), f"Single process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+            assert len(results) == 1, (
+                f"Single process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+            )
         else:
-            assert (
-                len(results) == 2
-            ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+            assert len(results) == 2, (
+                f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+            )
 
     state.wait_for_everyone()
 
@@ -699,18 +699,18 @@ def test_split_between_processes_list():
     state = AcceleratorState()
     data = list(range(0, 2 * state.num_processes))
     with state.split_between_processes(data) as results:
-        assert (
-            len(results) == 2
-        ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+        assert len(results) == 2, (
+            f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+        )
 
     data = list(range(0, (3 * state.num_processes) - 1))
     with state.split_between_processes(data, apply_padding=True) as results:
         if state.is_last_process:
             # Test that the last process gets the extra item(s)
             num_samples_per_device = math.ceil(len(data) / state.num_processes)
-            assert (
-                len(results) == num_samples_per_device
-            ), f"Last process did not get the extra item(s). Process index: {state.process_index}; Length: {len(results)}"
+            assert len(results) == num_samples_per_device, (
+                f"Last process did not get the extra item(s). Process index: {state.process_index}; Length: {len(results)}"
+            )
     state.wait_for_everyone()
 
 
@@ -737,17 +737,17 @@ def test_split_between_processes_nested_dict():
             elif state.process_index == 3:
                 assert results["b"] == data_copy["b"][-2:]
             if state.process_index == 0:
-                assert torch.allclose(
-                    results["c"], data_copy["c"][: 8 // state.num_processes]
-                ), f"Did not obtain expected values on process 0, expected `{data['c'][: 8 // state.num_processes]}`, received: {results['c']}"
+                assert torch.allclose(results["c"], data_copy["c"][: 8 // state.num_processes]), (
+                    f"Did not obtain expected values on process 0, expected `{data['c'][: 8 // state.num_processes]}`, received: {results['c']}"
+                )
             elif state.num_processes == 2:
-                assert torch.allclose(
-                    results["c"], data_copy["c"][4:]
-                ), f"Did not obtain expected values on process 2, expected `{data['c'][4:]}`, received: {results['c']}"
+                assert torch.allclose(results["c"], data_copy["c"][4:]), (
+                    f"Did not obtain expected values on process 2, expected `{data['c'][4:]}`, received: {results['c']}"
+                )
             elif state.process_index == 3:
-                assert torch.allclose(
-                    results["c"], data_copy["c"][-2:]
-                ), f"Did not obtain expected values on process 4, expected `{data['c'][-2:]}`, received: {results['c']}"
+                assert torch.allclose(results["c"], data_copy["c"][-2:]), (
+                    f"Did not obtain expected values on process 4, expected `{data['c'][-2:]}`, received: {results['c']}"
+                )
 
     state.wait_for_everyone()
 
@@ -773,13 +773,13 @@ def test_split_between_processes_evenly():
         num_extras = len(data) % state.num_processes
         with state.split_between_processes(data) as results:
             if state.process_index < num_extras:
-                assert (
-                    len(results) == num_samples_per_process + 1
-                ), f"Each Process should have even elements. Expected: {num_samples_per_process + 1}, Actual: {len(results)}"
+                assert len(results) == num_samples_per_process + 1, (
+                    f"Each Process should have even elements. Expected: {num_samples_per_process + 1}, Actual: {len(results)}"
+                )
             else:
-                assert (
-                    len(results) == num_samples_per_process
-                ), f"Each Process should have even elements. Expected: {num_samples_per_process}, Actual: {len(results)}"
+                assert len(results) == num_samples_per_process, (
+                    f"Each Process should have even elements. Expected: {num_samples_per_process}, Actual: {len(results)}"
+                )
     state.wait_for_everyone()
 
 

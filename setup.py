@@ -19,7 +19,7 @@ extras = {}
 extras["quality"] = [
     "black ~= 23.1",  # hf-doc-builder has a hidden dependency on `black`
     "hf-doc-builder >= 0.3.0",
-    "ruff ~= 0.6.4",
+    "ruff ~= 0.11.2",
 ]
 extras["docs"] = []
 extras["test_prod"] = ["pytest>=7.2.0,<=8.0.0", "pytest-xdist", "pytest-subtests", "parameterized", "pytest-order"]
@@ -49,7 +49,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="1.6.0.dev0",
+    version="1.7.0.dev0",
     description="Accelerate",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -88,7 +88,7 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
 )

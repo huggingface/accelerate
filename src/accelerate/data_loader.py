@@ -15,7 +15,7 @@
 import importlib
 import math
 from contextlib import suppress
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 from packaging import version
@@ -992,7 +992,7 @@ def prepare_data_loader(
     process_index: Optional[int] = None,
     split_batches: bool = False,
     put_on_device: bool = False,
-    rng_types: Optional[List[Union[str, RNGType]]] = None,
+    rng_types: Optional[list[Union[str, RNGType]]] = None,
     dispatch_batches: Optional[bool] = None,
     even_batches: bool = True,
     slice_fn_for_dispatch: Optional[Callable] = None,
@@ -1181,7 +1181,9 @@ def prepare_data_loader(
         # isinstance(dataloader.sampler, RandomSampler) indicates the original dataloader has `shuffle` enabled.
         generator = torch.Generator(
             device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
-        ).manual_seed(42)
+        )
+        seed = int(torch.empty((), dtype=torch.int64).random_().item())
+        generator.manual_seed(seed)
         dataloader.generator = generator
         dataloader.sampler.generator = generator
     # No change if no multiprocess
@@ -1203,6 +1205,8 @@ def prepare_data_loader(
                     sampler.generator = torch.Generator(
                         device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
                     )
+                    seed = int(torch.empty((), dtype=torch.int64).random_().item())
+                    sampler.generator.manual_seed(seed)
                 synchronized_generator = sampler.generator
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(

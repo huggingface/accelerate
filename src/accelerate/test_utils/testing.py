@@ -24,7 +24,7 @@ import unittest
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import List, Union
+from typing import Union
 from unittest import mock
 
 import torch
@@ -399,6 +399,16 @@ def require_multi_xpu(test_case):
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
 
+def require_multi_gpu_or_xpu(test_case):
+    """
+    Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
+    GPUs or XPUs.
+    """
+    return unittest.skipUnless(
+        (is_cuda_available() or is_xpu_available()) and device_count > 1, "test requires multiple GPUs or XPUs"
+    )(test_case)
+
+
 def require_deepspeed(test_case):
     """
     Decorator marking a test that requires DeepSpeed installed. These tests are skipped when DeepSpeed isn't installed
@@ -623,7 +633,7 @@ class MockingTestCase(unittest.TestCase):
     ```
     """
 
-    def add_mocks(self, mocks: Union[mock.Mock, List[mock.Mock]]):
+    def add_mocks(self, mocks: Union[mock.Mock, list[mock.Mock]]):
         """
         Add custom mocks for tests that should be repeated on each test. Should be called during
         `MockingTestCase.setUp`, after `super().setUp()`.
@@ -731,7 +741,7 @@ class SubprocessCallException(Exception):
     pass
 
 
-def run_command(command: List[str], return_stdout=False, env=None):
+def run_command(command: list[str], return_stdout=False, env=None):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
     if an error occured while running `command`

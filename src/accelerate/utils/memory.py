@@ -106,8 +106,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
             An exception
     """
     _statements = [
-        "CUDA out of memory.",  # CUDA OOM
-        "XPU out of memory.",  # XPU OOM
+        " out of memory.",  # OOM for CUDA, HIP, XPU
         "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",  # CUDNN SNAFU
         "DefaultCPUAllocator: can't allocate memory",  # CPU OOM
         "FATAL ERROR :: MODULE:PT_DEVMEM Allocation failed",  # HPU OOM

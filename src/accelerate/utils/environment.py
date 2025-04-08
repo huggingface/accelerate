@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache, wraps
 from shutil import which
-from typing import List, Optional
+from typing import Optional, Union
 
 import torch
 from packaging.version import parse
@@ -56,7 +56,7 @@ def convert_dict_to_env_variables(current_env: dict):
     return valid_env_items
 
 
-def str_to_bool(value) -> int:
+def str_to_bool(value, to_bool: bool = False) -> Union[int, bool]:
     """
     Converts a string representation of truth to `True` (1) or `False` (0).
 
@@ -64,9 +64,9 @@ def str_to_bool(value) -> int:
     """
     value = value.lower()
     if value in ("y", "yes", "t", "true", "on", "1"):
-        return 1
+        return 1 if not to_bool else True
     elif value in ("n", "no", "f", "false", "off", "0"):
-        return 0
+        return 0 if not to_bool else False
     else:
         raise ValueError(f"invalid truth value {value}")
 
@@ -91,7 +91,7 @@ def parse_choice_from_env(key, default="no"):
     return value
 
 
-def are_libraries_initialized(*library_names: str) -> List[str]:
+def are_libraries_initialized(*library_names: str) -> list[str]:
     """
     Checks if any of `library_names` are imported in the environment. Will return any names that are.
     """

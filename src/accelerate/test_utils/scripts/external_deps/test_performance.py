@@ -161,9 +161,9 @@ def training_function(config, args):
                     and linear_decay_scheduler
                     and accelerator.state.mixed_precision == "no"
                 ):
-                    assert (
-                        lr_scheduler.get_last_lr()[0] == expected_lr_after_first_optim_step
-                    ), f"Wrong lr found at second step, expected {expected_lr_after_first_optim_step}, got {lr_scheduler.get_last_lr()[0]}"
+                    assert lr_scheduler.get_last_lr()[0] == expected_lr_after_first_optim_step, (
+                        f"Wrong lr found at second step, expected {expected_lr_after_first_optim_step}, got {lr_scheduler.get_last_lr()[0]}"
+                    )
                     lr_scheduler_check_completed = True
 
         model.eval()
@@ -199,14 +199,14 @@ def training_function(config, args):
 
     # check that the LR is 0
     if linear_decay_scheduler and accelerator.state.mixed_precision == "no":
-        assert (
-            lr_scheduler.get_last_lr()[0] == 0
-        ), f"Wrong lr found at last step, expected 0, got {lr_scheduler.get_last_lr()[0]}"
+        assert lr_scheduler.get_last_lr()[0] == 0, (
+            f"Wrong lr found at last step, expected 0, got {lr_scheduler.get_last_lr()[0]}"
+        )
 
     if args.performance_lower_bound is not None:
-        assert (
-            args.performance_lower_bound <= best_performance
-        ), f"Best performance metric {best_performance} is lower than the lower bound {args.performance_lower_bound}"
+        assert args.performance_lower_bound <= best_performance, (
+            f"Best performance metric {best_performance} is lower than the lower bound {args.performance_lower_bound}"
+        )
 
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
@@ -216,9 +216,9 @@ def training_function(config, args):
     # Finally try saving the model
     accelerator.save_model(model, args.output_dir)
     accelerator.wait_for_everyone()
-    assert Path(
-        args.output_dir, SAFE_WEIGHTS_NAME
-    ).exists(), "Model was not saved when calling `Accelerator.save_model`"
+    assert Path(args.output_dir, SAFE_WEIGHTS_NAME).exists(), (
+        "Model was not saved when calling `Accelerator.save_model`"
+    )
     accelerator.end_training()
 
 

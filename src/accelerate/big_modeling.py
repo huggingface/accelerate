@@ -16,7 +16,7 @@ import logging
 import os
 from contextlib import contextmanager
 from functools import wraps
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -171,8 +171,8 @@ def cpu_offload(
     model: nn.Module,
     execution_device: Optional[torch.device] = None,
     offload_buffers: bool = False,
-    state_dict: Optional[Dict[str, torch.Tensor]] = None,
-    preload_module_classes: Optional[List[str]] = None,
+    state_dict: Optional[dict[str, torch.Tensor]] = None,
+    preload_module_classes: Optional[list[str]] = None,
 ):
     """
     Activates full CPU offload for a model. As a result, all parameters of the model will be offloaded and only one
@@ -262,7 +262,7 @@ def disk_offload(
     offload_dir: Union[str, os.PathLike],
     execution_device: Optional[torch.device] = None,
     offload_buffers: bool = False,
-    preload_module_classes: Optional[List[str]] = None,
+    preload_module_classes: Optional[list[str]] = None,
 ):
     """
     Activates full disk offload for a model. As a result, all parameters of the model will be offloaded as
@@ -305,14 +305,14 @@ def disk_offload(
 
 def dispatch_model(
     model: nn.Module,
-    device_map: Dict[str, Union[str, int, torch.device]],
+    device_map: dict[str, Union[str, int, torch.device]],
     main_device: Optional[torch.device] = None,
-    state_dict: Optional[Dict[str, torch.Tensor]] = None,
+    state_dict: Optional[dict[str, torch.Tensor]] = None,
     offload_dir: Optional[Union[str, os.PathLike]] = None,
-    offload_index: Optional[Dict[str, str]] = None,
+    offload_index: Optional[dict[str, str]] = None,
     offload_buffers: bool = False,
-    skip_keys: Optional[Union[str, List[str]]] = None,
-    preload_module_classes: Optional[List[str]] = None,
+    skip_keys: Optional[Union[str, list[str]]] = None,
+    preload_module_classes: Optional[list[str]] = None,
     force_hooks: bool = False,
 ):
     """
@@ -495,8 +495,6 @@ def dispatch_model(
             device = f"sdaa:{device}"
         elif is_musa_available() and isinstance(device, int):
             device = f"musa:{device}"
-        elif is_xpu_available() and isinstance(device, int):
-            device = f"xpu:{device}"
         if device != "disk":
             model.to(device)
         else:
@@ -511,15 +509,15 @@ def dispatch_model(
 def load_checkpoint_and_dispatch(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
-    device_map: Optional[Union[str, Dict[str, Union[int, str, torch.device]]]] = None,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
+    device_map: Optional[Union[str, dict[str, Union[int, str, torch.device]]]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     offload_buffers: bool = False,
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: Optional[bool] = None,
-    skip_keys: Optional[Union[str, List[str]]] = None,
-    preload_module_classes: Optional[List[str]] = None,
+    skip_keys: Optional[Union[str, list[str]]] = None,
+    preload_module_classes: Optional[list[str]] = None,
     force_hooks: bool = False,
     strict: bool = False,
 ):
@@ -596,8 +594,7 @@ def load_checkpoint_and_dispatch(
     """
     if isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
         raise ValueError(
-            "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
-            "'sequential'."
+            "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or 'sequential'."
         )
     if isinstance(device_map, str):
         if device_map != "sequential":
