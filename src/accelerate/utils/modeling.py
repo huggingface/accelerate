@@ -506,18 +506,26 @@ def check_tied_parameters_in_config(model: nn.Module):
     has_tied_module = False
 
     if "PreTrainedModel" in [c.__name__ for c in inspect.getmro(model.__class__)]:
+        has_tied_word_embedding = False
+        model_decoder_config = None
+        if hasattr(model, "config"):
+            model_decoder_config = (
+                model.config.get_text_config(decoder=True)
+                if hasattr(model.config, "get_text_config")
+                else model.config
+            )
         has_tied_word_embedding = (
-            hasattr(model, "config")
-            and getattr(model.config, "tie_word_embeddings", False)
+            model_decoder_config is not None
+            and getattr(model_decoder_config, "tie_word_embeddings", False)
             and model.get_output_embeddings()
         )
+
         has_tied_encoder_decoder = (
             hasattr(model, "config")
             and getattr(model.config, "is_encoder_decoder", False)
             and getattr(model.config, "tie_encoder_decoder", False)
         )
         has_tied_module = any(hasattr(module, "_tie_weights") for module in model.modules())
-
     return any([has_tied_word_embedding, has_tied_encoder_decoder, has_tied_module])
 
 
@@ -1109,7 +1117,6 @@ def _init_infer_auto_device_map(
 
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     tied_parameters = find_tied_parameters(model)
-
     if check_tied_parameters_in_config(model) and len(tied_parameters) == 0:
         logger.warn(
             "The model weights are not tied. Please use the `tie_weights` method before using the `infer_auto_device` function."
