@@ -810,6 +810,8 @@ def get_cluster_input():
                             default=False,
                         )
                         fp8_config["override_linear_precision"] = (fprop, dgrad, wgrad)
+                    else:
+                        fp8_config["override_linear_precision"] = (False, False, False)
 
                 elif fp8_config["backend"] == "MSAMP":
                     if not is_msamp_available():
