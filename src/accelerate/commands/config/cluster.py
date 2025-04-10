@@ -21,6 +21,7 @@ from ...utils import (
     DistributedType,
     is_deepspeed_available,
     is_fp8_available,
+    is_hpu_available,
     is_mlu_available,
     is_mps_available,
     is_msamp_available,
@@ -60,6 +61,7 @@ def get_cluster_input():
             "No distributed training",
             "multi-CPU",
             "multi-XPU",
+            "multi-HPU",
             "multi-GPU",
             "multi-NPU",
             "multi-MLU",
@@ -88,6 +90,7 @@ def get_cluster_input():
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_CPU,
+        DistributedType.MULTI_HPU,
     ]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
@@ -212,6 +215,7 @@ def get_cluster_input():
         in [
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
@@ -373,6 +377,7 @@ def get_cluster_input():
         DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_XPU,
+        DistributedType.MULTI_HPU,
     ]:
         use_fsdp = _ask_field(
             "Do you want to use FullyShardedDataParallel? [yes/NO]: ",
@@ -582,6 +587,7 @@ def get_cluster_input():
     if distributed_type in [
         DistributedType.MULTI_CPU,
         DistributedType.MULTI_XPU,
+        DistributedType.MULTI_HPU,
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
@@ -626,6 +632,7 @@ def get_cluster_input():
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
             DistributedType.NO,
         ]
         and not use_cpu
@@ -641,6 +648,8 @@ def get_cluster_input():
             machine_type = "MUSA(s)"
         elif is_xpu_available():
             machine_type = "XPU(s)"
+        elif is_hpu_available():
+            machine_type = "HPU(s)"
         else:
             machine_type = "GPU(s)"
         gpu_ids = _ask_field(
