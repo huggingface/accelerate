@@ -1698,7 +1698,7 @@ def load_state_dict(checkpoint_file, device_map=None):
 
             return tensors
     else:
-        return torch.load(checkpoint_file, map_location=torch.device("cpu"))
+        return torch.load(checkpoint_file, map_location=torch.device("cpu"), weights_only=True)
 
 
 def get_state_dict_offloaded_model(model: nn.Module):
