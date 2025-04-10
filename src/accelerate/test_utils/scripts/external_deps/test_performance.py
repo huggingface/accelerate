@@ -258,7 +258,7 @@ def main():
         "--tp_plan",
         type=str,
         default=None,
-        help="To use TP or not",
+        help="pass 'auto' to use TP",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}
