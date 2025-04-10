@@ -221,8 +221,6 @@ class ClusterConfig(BaseConfig):
             self.deepspeed_config = {}
         if self.fsdp_config is None:
             self.fsdp_config = {}
-        if self.tp_config is None:
-            self.tp_config = {}
         if self.megatron_lm_config is None:
             self.megatron_lm_config = {}
         if self.ipex_config is None:
