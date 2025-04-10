@@ -21,6 +21,7 @@ from ...utils import (
     DistributedType,
     is_deepspeed_available,
     is_fp8_available,
+    is_hpu_available,
     is_mlu_available,
     is_mps_available,
     is_msamp_available,
@@ -30,7 +31,6 @@ from ...utils import (
     is_transformer_engine_available,
     is_transformers_available,
     is_xpu_available,
-    is_hpu_available,
 )
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
