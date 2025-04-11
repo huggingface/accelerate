@@ -49,7 +49,7 @@ class TPIntegrationTest(TempDirTestCase):
     def test_working_of_tp(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = get_launch_command(
-            num_processes=self.test_tp_size, num_machines=1, machine_rank=0, tp_size=self.test_tp_size
+            num_processes=self.test_tp_size, num_machines=1, machine_rank=0
         )
         cmd.extend(
             [
