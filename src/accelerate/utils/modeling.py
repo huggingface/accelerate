@@ -26,7 +26,8 @@ from collections import OrderedDict, defaultdict
 from typing import Optional, Union
 
 import torch
-import torch.nn as nn
+from torch import distributed as dist
+from torch import nn
 
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
@@ -1785,6 +1786,8 @@ def load_checkpoint_in_model(
     keep_in_fp32_modules: list[str] = None,
     offload_8bit_bnb: bool = False,
     strict: bool = False,
+    full_state_dict: bool = True,
+    broadcast_from_rank0: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -1825,6 +1828,12 @@ def load_checkpoint_in_model(
         strict (`bool`, *optional*, defaults to `False`):
             Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
             state_dict.
+        full_state_dict (`bool`, *optional*, defaults to `True`): if this is set to `True`, all the tensors in the
+            loaded state_dict will be gathered. No ShardedTensor and DTensor will be in the loaded state_dict.
+        broadcast_from_rank0 (`False`, *optional*, defaults to `False`): when the option is `True`, a distributed
+            `ProcessGroup` must be initialized. rank0 should receive a full state_dict and will broadcast the tensors
+            in the state_dict one by one to other ranks. Other ranks will receive the tensors and shard (if applicable)
+            according to the local shards in the model.
 
     """
     if offload_8bit_bnb:
@@ -1905,12 +1914,41 @@ def load_checkpoint_in_model(
     unexpected_keys = set()
     model_keys = set(model.state_dict().keys())
     buffer_names = [name for name, _ in model.named_buffers()]
+    model_devices = {t.device for t in model.state_dict().values() if isinstance(t, torch.Tensor)}
+    model_physical_devices = model_devices - {torch.device("meta")}
     for checkpoint_file in checkpoint_files:
-        loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
         if device_map is None:
-            model.load_state_dict(loaded_checkpoint, strict=strict)
+            # exception for multi-device loading was made for the meta device in torch v2.7.0
+            # https://github.com/pytorch/pytorch/blob/v2.6.0/torch/distributed/checkpoint/state_dict.py#L557-L563
+            # https://github.com/pytorch/pytorch/blob/v2.7.0-rc2/torch/distributed/checkpoint/state_dict.py#L575-L587
+            if is_torch_version(">=", "2.2.0") and (
+                (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1
+            ):
+                from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
+
+                broadcast_from_rank0 &= is_torch_version(">=", "2.4.0")
+                loaded_checkpoint = (
+                    load_state_dict(checkpoint_file, device_map=device_map)
+                    if not broadcast_from_rank0 or dist.get_rank() == 0
+                    else {}
+                )
+                set_model_state_dict(
+                    model,
+                    loaded_checkpoint,
+                    options=StateDictOptions(
+                        full_state_dict=full_state_dict,
+                        strict=strict,
+                        **({"broadcast_from_rank0": broadcast_from_rank0} if is_torch_version(">=", "2.4.0") else {}),
+                    ),
+                )
+            else:
+                loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+                model.load_state_dict(loaded_checkpoint, strict=strict)
+
             unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
         else:
+            loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+
             for param_name, param in loaded_checkpoint.items():
                 # skip SCB parameter (for 8-bit serialization)
                 if "SCB" in param_name:
