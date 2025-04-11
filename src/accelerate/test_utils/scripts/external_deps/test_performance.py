@@ -14,6 +14,7 @@
 import argparse
 import json
 import os
+from contextlib import nullcontext
 from pathlib import Path
 
 import evaluate
@@ -24,7 +25,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import SAFE_WEIGHTS_NAME, set_seed
+from accelerate.utils import SAFE_WEIGHTS_NAME, TorchTensorParallelPlugin, set_seed
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
@@ -80,7 +81,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: 
 
 def training_function(config, args):
     # Initialize accelerator
-    accelerator = Accelerator()
+    accelerator = Accelerator(torch_tp_plugin=TorchTensorParallelPlugin(tp_size=args.tp_size))
 
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
@@ -91,9 +92,10 @@ def training_function(config, args):
 
     set_seed(seed)
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size, model_name)
-
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, return_dict=True)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name, return_dict=True, tp_plan=args.tp_plan, tp_size=args.tp_size
+    )
 
     if args.add_pad_token:
         if model.config.pad_token_id is None:
@@ -150,7 +152,13 @@ def training_function(config, args):
                 outputs = model(**batch)
                 loss = outputs.loss
                 accelerator.backward(loss)
-                optimizer.step()
+                context = nullcontext
+                if args.tp_plan is not None:
+                    from torch.distributed._tensor.experimental import implicit_replication
+
+                    context = implicit_replication
+                with context():
+                    optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
@@ -213,12 +221,15 @@ def training_function(config, args):
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
             json.dump(performance_metric, f)
 
-    # Finally try saving the model
-    accelerator.save_model(model, args.output_dir)
+    # TODO: skip saving of the model test for TP until the feature lands
+    if args.tp_plan is None:
+        # Finally try saving the model
+        accelerator.save_model(model, args.output_dir)
     accelerator.wait_for_everyone()
-    assert Path(args.output_dir, SAFE_WEIGHTS_NAME).exists(), (
-        "Model was not saved when calling `Accelerator.save_model`"
-    )
+    if args.tp_plan is None:
+        assert Path(args.output_dir, SAFE_WEIGHTS_NAME).exists(), (
+            "Model was not saved when calling `Accelerator.save_model`"
+        )
     accelerator.end_training()
 
 
@@ -254,6 +265,18 @@ def main():
         type=bool,
         default=False,
         help="To add pad token if not exists.",
+    )
+    parser.add_argument(
+        "--tp_plan",
+        type=str,
+        default=None,
+        help="pass 'auto' to use TP",
+    )
+    parser.add_argument(
+        "--tp_size",
+        type=int,
+        default=None,
+        help="TP size to be used to shard the model",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}

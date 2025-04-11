@@ -369,7 +369,7 @@ def get_cluster_input():
                         )
 
     fsdp_config = {}
-    tp_config = {}
+
     if distributed_type in [
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
@@ -498,21 +498,7 @@ def get_cluster_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
-        if not use_fsdp:
-            use_tp = _ask_field(
-                "Do you want to use TensorParallel? [yes/NO]: ",
-                _convert_yes_no_to_bool,
-                default=False,
-                error_message="Please enter yes or no.",
-            )
-            if use_tp:
-                distributed_type = DistributedType.TP
-            if distributed_type == DistributedType.TP:
-                tp_config["tp_size"] = _ask_field(
-                    "What should be your Tensor Parallel degree? [1]: ",
-                    int,
-                    default=1,
-                )
+
     megatron_lm_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:
         use_megatron_lm = _ask_field(
@@ -857,7 +843,6 @@ def get_cluster_input():
         fp8_config=fp8_config,
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
-        tp_config=tp_config,
         megatron_lm_config=megatron_lm_config,
         ipex_config=ipex_config,
         mpirun_config=mpirun_config,
