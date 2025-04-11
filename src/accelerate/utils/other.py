@@ -256,7 +256,7 @@ def load(f, map_location=None, **kwargs):
             torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS)
         else:
             kwargs.pop("weights_only", None)
-        loaded_obj = torch.load(f, map_location=map_location, **kwargs, weights_only=True)
+        loaded_obj = torch.load(f, map_location=map_location, **kwargs)
     finally:
         if is_weights_only_available():
             torch.serialization.clear_safe_globals()
