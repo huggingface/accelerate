@@ -37,7 +37,7 @@ from ..utils import (
     is_xpu_available,
 )
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
-from ..utils.other import is_port_in_use, merge_dicts
+from ..utils.other import get_free_port, is_port_in_use, merge_dicts
 from ..utils.versions import compare_versions
 from .dataclasses import DistributedType, SageMakerDistributedType
 
@@ -219,6 +219,18 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     # only need to check port availability in main process, in case we have to start multiple launchers on the same machine
     # for some reasons like splitting log files.
     need_port_check = num_machines <= 1 or int(args.machine_rank) == 0
+
+    # get free port and update configurations
+    if need_port_check and main_process_port == 0:
+        main_process_port = get_free_port()
+        if num_machines > 1 and getattr(args, "same_network", False):
+            args.master_port = str(main_process_port)
+        elif num_machines <= 1:
+            args.master_port = str(main_process_port)
+        if hasattr(args, "rdzv_endpoint") and args.rdzv_endpoint:
+            host = args.rdzv_endpoint.split(":")[0]
+            args.rdzv_endpoint = f"{host}:{main_process_port}"
+
     if need_port_check and is_port_in_use(main_process_port):
         raise ConnectionError(
             f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
