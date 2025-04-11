@@ -1592,11 +1592,14 @@ class Accelerator:
             elif self.distributed_type == DistributedType.TP:
                 if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
                     raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
-                if hasattr(model, "supports_tp_plan") and not model.supports_tp_plan:
+                if not hasattr(model, "tp_size"):
                     raise NotImplementedError(
-                        "Provided model does not support tensor parallelism. \
-                        Tensor parallelism plan can be added as base_model_tp_plan to model config class \
-                        and _tp_plan attribute to model class."
+                        "Model should undergo tensor parallel before passing it to accelerate."
+                        "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
+                    )
+                if model.tp_size != self.state.torch_tp_plugin.tp_size:
+                    raise ValueError(
+                        f"tp_size in the plugin {self.state.torch_tp_plugin.tp_size} should be same as model's tp size {model.tp_size}"
                     )
             elif self.is_fsdp2:
                 model = fsdp2_prepare_model(self, model)
