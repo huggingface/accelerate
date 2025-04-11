@@ -14,8 +14,8 @@
 import argparse
 import json
 import os
-from pathlib import Path
 from contextlib import nullcontext
+from pathlib import Path
 
 import evaluate
 import torch
@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import SAFE_WEIGHTS_NAME, set_seed, TorchTensorParallelPlugin
+from accelerate.utils import SAFE_WEIGHTS_NAME, TorchTensorParallelPlugin, set_seed
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
@@ -93,7 +93,9 @@ def training_function(config, args):
     set_seed(seed)
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size, model_name)
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, return_dict=True, tp_plan=args.tp_plan, tp_size=args.tp_size)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name, return_dict=True, tp_plan=args.tp_plan, tp_size=args.tp_size
+    )
 
     if args.add_pad_token:
         if model.config.pad_token_id is None:
@@ -153,6 +155,7 @@ def training_function(config, args):
                 context = nullcontext
                 if args.tp_plan is not None:
                     from torch.distributed._tensor.experimental import implicit_replication
+
                     context = implicit_replication
                 with context():
                     optimizer.step()
