@@ -160,7 +160,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             input_model_file = os.path.join(input_dir, weights_name)
             logger.info(f"Loading model from {input_model_file}")
-            state_dict = torch.load(input_model_file)
+            state_dict = torch.load(input_model_file, weights_only=True)
             logger.info(f"Model loaded from {input_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.LOCAL_STATE_DICT:
             weights_name = (
@@ -170,7 +170,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             )
             input_model_file = os.path.join(input_dir, weights_name)
             logger.info(f"Loading model from {input_model_file}")
-            state_dict = torch.load(input_model_file)
+            state_dict = torch.load(input_model_file, weights_only=True)
             logger.info(f"Model loaded from {input_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT:
             ckpt_dir = (
@@ -265,7 +265,7 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
                 )
                 input_optimizer_file = os.path.join(input_dir, optimizer_name)
                 logger.info(f"Loading Optimizer state from {input_optimizer_file}")
-                optim_state = torch.load(input_optimizer_file)
+                optim_state = torch.load(input_optimizer_file, weights_only=True)
                 logger.info(f"Optimizer state loaded from {input_optimizer_file}")
         else:
             ckpt_dir = (

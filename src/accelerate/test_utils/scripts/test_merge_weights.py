@@ -98,7 +98,7 @@ def check_safetensors_weights(path, model):
 
 
 def check_pytorch_weights(path, model):
-    nonsafe_state_dict = torch.load(path / "pytorch_model.bin")
+    nonsafe_state_dict = torch.load(path / "pytorch_model.bin", weights_only=True)
     nonsafe_loaded_model = TinyModel()
     check_weights("diff", model.state_dict(), nonsafe_loaded_model.state_dict())
     nonsafe_loaded_model.load_state_dict(nonsafe_state_dict)
