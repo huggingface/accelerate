@@ -80,8 +80,13 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: 
 
 
 def training_function(config, args):
+    accelerator_kwargs = {}
+    # need this for DeepSpeed tests as `args.tp_size` would be None and `torch.distributed.init_device_mesh` would fail
+    if args.tp_size is not None:
+        accelerator_kwargs["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=args.tp_size)
+
     # Initialize accelerator
-    accelerator = Accelerator(torch_tp_plugin=TorchTensorParallelPlugin(tp_size=args.tp_size))
+    accelerator = Accelerator(**accelerator_kwargs)
 
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
