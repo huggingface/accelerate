@@ -2034,8 +2034,11 @@ class TorchTensorParallelPlugin:
     torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
 
     def __post_init__(self):
-        if self.tp_size == 1:
-            raise ValueError("Provide TP degree > 1.")
+        if not isinstance(self.tp_size, int):
+            raise ValueError(f"`tp_size` set to {self.tp_size}, please set to an `int`.")
+
+        if self.tp_size <= 1:
+            raise ValueError("`tp_size` must be greater than 1.")
 
         if is_torch_version("<", BETA_TP_AVAILABLE_PYTORCH_VERSION):
             raise ValueError(
