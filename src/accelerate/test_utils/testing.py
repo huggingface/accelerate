@@ -35,6 +35,7 @@ import accelerate
 from ..state import AcceleratorState
 from ..utils import (
     check_cuda_fp8_capability,
+    compare_versions,
     gather,
     is_bnb_available,
     is_clearml_available,
@@ -421,7 +422,10 @@ def require_tp(test_case):
     """
     Decorator marking a test that requires TP installed. These tests are skipped when TP isn't installed
     """
-    return unittest.skipUnless(is_torch_version(">=", "2.3.0"), "test requires torch version >= 2.3.0")(test_case)
+    return unittest.skipUnless(
+        is_torch_version(">=", "2.3.0") and compare_versions("transformers", ">=", "4.52.0"),
+        "test requires torch version >= 2.3.0 and transformers version >= 4.52.0",
+    )(test_case)
 
 
 def require_torch_min_version(test_case=None, version=None):
