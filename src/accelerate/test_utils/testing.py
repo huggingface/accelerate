@@ -16,6 +16,7 @@ import asyncio
 import inspect
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -24,7 +25,7 @@ import unittest
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import List, Union
+from typing import Union
 from unittest import mock
 
 import torch
@@ -34,6 +35,7 @@ import accelerate
 from ..state import AcceleratorState
 from ..utils import (
     check_cuda_fp8_capability,
+    compare_versions,
     gather,
     is_bnb_available,
     is_clearml_available,
@@ -420,7 +422,10 @@ def require_tp(test_case):
     """
     Decorator marking a test that requires TP installed. These tests are skipped when TP isn't installed
     """
-    return unittest.skipUnless(is_torch_version(">=", "2.3.0"), "test requires torch version >= 2.3.0")(test_case)
+    return unittest.skipUnless(
+        is_torch_version(">=", "2.3.0") and compare_versions("transformers", ">=", "4.52.0"),
+        "test requires torch version >= 2.3.0 and transformers version >= 4.52.0",
+    )(test_case)
 
 
 def require_torch_min_version(test_case=None, version=None):
@@ -633,7 +638,7 @@ class MockingTestCase(unittest.TestCase):
     ```
     """
 
-    def add_mocks(self, mocks: Union[mock.Mock, List[mock.Mock]]):
+    def add_mocks(self, mocks: Union[mock.Mock, list[mock.Mock]]):
         """
         Add custom mocks for tests that should be repeated on each test. Should be called during
         `MockingTestCase.setUp`, after `super().setUp()`.
@@ -737,11 +742,33 @@ def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet
     return result
 
 
+def pytest_xdist_worker_id():
+    """
+    Returns an int value of worker's numerical id under `pytest-xdist`'s concurrent workers `pytest -n N` regime, or 0
+    if `-n 1` or `pytest-xdist` isn't being used.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    worker = re.sub(r"^gw", "", worker, 0, re.M)
+    return int(worker)
+
+
+def get_torch_dist_unique_port():
+    """
+    Returns a port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
+
+    Under `pytest-xdist` it adds a delta number based on a worker id so that concurrent tests don't try to use the same
+    port at once.
+    """
+    port = 29500
+    uniq_delta = pytest_xdist_worker_id()
+    return port + uniq_delta
+
+
 class SubprocessCallException(Exception):
     pass
 
 
-def run_command(command: List[str], return_stdout=False, env=None):
+def run_command(command: list[str], return_stdout=False, env=None):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
     if an error occured while running `command`

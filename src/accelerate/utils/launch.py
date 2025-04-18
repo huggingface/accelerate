@@ -18,7 +18,7 @@ import subprocess
 import sys
 from ast import literal_eval
 from shutil import which
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import torch
 
@@ -77,7 +77,7 @@ def _get_mpirun_args():
         return mpi_app, "-f", "-n", "-ppn", ""
 
 
-def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
+def setup_fp8_env(args: argparse.Namespace, current_env: dict[str, str]):
     """
     Setup the FP8 environment variables.
     """
@@ -95,7 +95,7 @@ def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
     return current_env
 
 
-def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
+def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict[str, str]]:
     """
     Prepares and returns the command list and an environment with the correct simple launcher environment variables.
     """
@@ -186,13 +186,12 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_ipex_available():
         current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
-        current_env["ACCELERATE_USE_XPU"] = str(args.use_xpu).lower()
     if args.enable_cpu_affinity:
         current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return cmd, current_env
 
 
-def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
+def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     """
     Prepares and returns an environment with the correct multi-GPU environment variables.
     """
@@ -283,7 +282,13 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         if args.fsdp_cpu_ram_efficient_loading and not args.fsdp_sync_module_states:
             raise ValueError("When using `--fsdp_cpu_ram_efficient_loading` set `--fsdp_sync_module_states` to `True`")
 
+        current_env["FSDP_VERSION"] = str(args.fsdp_version) if hasattr(args, "fsdp_version") else "1"
+
+        # For backwards compatibility, we support this in launched scripts,
+        # however, we do not ask users for this in `accelerate config` CLI
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
+
+        current_env["FSDP_RESHARD_AFTER_FORWARD"] = str(args.fsdp_reshard_after_forward).lower()
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
         if args.fsdp_auto_wrap_policy is not None:
@@ -299,10 +304,6 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
-
-    if args.use_tp:
-        current_env["ACCELERATE_USE_TP"] = "true"
-        current_env["TP_SIZE"] = str(args.tp_size)
 
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"
@@ -325,7 +326,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     return current_env
 
 
-def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
+def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict[str, str]]:
     """
     Prepares and returns the command list and an environment with the correct DeepSpeed environment variables.
     """
@@ -470,8 +471,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
 
 
 def prepare_tpu(
-    args: argparse.Namespace, current_env: Dict[str, str], pod: bool = False
-) -> Tuple[argparse.Namespace, Dict[str, str]]:
+    args: argparse.Namespace, current_env: dict[str, str], pod: bool = False
+) -> tuple[argparse.Namespace, dict[str, str]]:
     """
     Prepares and returns an environment with the correct TPU environment variables.
     """
@@ -489,7 +490,7 @@ def prepare_tpu(
     return args, current_env
 
 
-def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
+def _convert_nargs_to_dict(nargs: list[str]) -> dict[str, str]:
     if len(nargs) < 0:
         return {}
     # helper function to infer type for argsparser
@@ -533,7 +534,7 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
 
 def prepare_sagemager_args_inputs(
     sagemaker_config: SageMakerConfig, args: argparse.Namespace
-) -> Tuple[argparse.Namespace, Dict[str, Any]]:
+) -> tuple[argparse.Namespace, dict[str, Any]]:
     # configure environment
     print("Configuring Amazon SageMaker environment")
     os.environ["AWS_DEFAULT_REGION"] = sagemaker_config.region

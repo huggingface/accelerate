@@ -19,14 +19,16 @@ import json
 import os
 import time
 from functools import wraps
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import yaml
+from packaging import version
 
 from .logging import get_logger
 from .state import PartialState
 from .utils import (
     LoggerType,
+    compare_versions,
     is_aim_available,
     is_clearml_available,
     is_comet_ml_available,
@@ -360,8 +362,8 @@ class WandBTracker(GeneralTracker):
     def log_table(
         self,
         table_name: str,
-        columns: List[str] = None,
-        data: List[List[Any]] = None,
+        columns: list[str] = None,
+        data: list[list[Any]] = None,
         dataframe: Any = None,
         step: Optional[int] = None,
         **kwargs,
@@ -402,11 +404,16 @@ class CometMLTracker(GeneralTracker):
 
     API keys must be stored in a Comet config file.
 
+    Note:
+        For `comet_ml` versions < 3.41.0, additional keyword arguments are passed to `comet_ml.Experiment` instead:
+        https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/Experiment/#comet_ml.Experiment.__init__
+
     Args:
         run_name (`str`):
             The name of the experiment run.
         **kwargs (additional keyword arguments, *optional*):
-            Additional key word arguments passed along to the `Experiment.__init__` method.
+            Additional key word arguments passed along to the `comet_ml.start` method:
+            https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/start/
     """
 
     name = "comet_ml"
@@ -417,9 +424,15 @@ class CometMLTracker(GeneralTracker):
         super().__init__()
         self.run_name = run_name
 
-        from comet_ml import Experiment
+        import comet_ml
 
-        self.writer = Experiment(project_name=run_name, **kwargs)
+        comet_version = version.parse(comet_ml.__version__)
+        if compare_versions(comet_version, ">=", "3.41.0"):
+            self.writer = comet_ml.start(project_name=run_name, **kwargs)
+        else:
+            logger.info("Update `comet_ml` (>=3.41.0) for experiment reuse and offline support.")
+            self.writer = comet_ml.Experiment(project_name=run_name, **kwargs)
+
         logger.debug(f"Initialized CometML project {self.run_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -440,7 +453,7 @@ class CometMLTracker(GeneralTracker):
                 `str`, `float`, `int`, or `None`.
         """
         self.writer.log_parameters(values)
-        logger.debug("Stored initial configuration hyperparameters to CometML")
+        logger.debug("Stored initial configuration hyperparameters to Comet")
 
     @on_main_process
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
@@ -466,15 +479,15 @@ class CometMLTracker(GeneralTracker):
                 self.writer.log_other(k, v, **kwargs)
             elif isinstance(v, dict):
                 self.writer.log_metrics(v, step=step, **kwargs)
-        logger.debug("Successfully logged to CometML")
+        logger.debug("Successfully logged to Comet")
 
     @on_main_process
     def finish(self):
         """
-        Closes `comet-ml` writer
+        Flush `comet-ml` writer
         """
         self.writer.end()
-        logger.debug("CometML run closed")
+        logger.debug("Comet run flushed")
 
 
 class AimTracker(GeneralTracker):
@@ -537,7 +550,7 @@ class AimTracker(GeneralTracker):
             self.writer.track(value, name=key, step=step, **kwargs)
 
     @on_main_process
-    def log_images(self, values: dict, step: Optional[int] = None, kwargs: Optional[Dict[str, dict]] = None):
+    def log_images(self, values: dict, step: Optional[int] = None, kwargs: Optional[dict[str, dict]] = None):
         """
         Logs `images` to the current run.
 
@@ -613,7 +626,7 @@ class MLflowTracker(GeneralTracker):
         experiment_name: str = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         run_id: Optional[str] = None,
-        tags: Optional[Union[Dict[str, Any], str]] = None,
+        tags: Optional[Union[dict[str, Any], str]] = None,
         nested_run: Optional[bool] = False,
         run_name: Optional[str] = None,
         description: Optional[str] = None,
@@ -820,7 +833,7 @@ class ClearMLTracker(GeneralTracker):
         return self.task.connect_configuration(values)
 
     @on_main_process
-    def log(self, values: Dict[str, Union[int, float]], step: Optional[int] = None, **kwargs):
+    def log(self, values: dict[str, Union[int, float]], step: Optional[int] = None, **kwargs):
         """
         Logs `values` dictionary to the current run. The dictionary keys must be strings. The dictionary values must be
         ints or floats
@@ -875,8 +888,8 @@ class ClearMLTracker(GeneralTracker):
     def log_table(
         self,
         table_name: str,
-        columns: List[str] = None,
-        data: List[List[Any]] = None,
+        columns: list[str] = None,
+        data: list[list[Any]] = None,
         dataframe: Any = None,
         step: Optional[int] = None,
         **kwargs,
@@ -1022,7 +1035,7 @@ LOGGER_TYPE_TO_CLASS = {
 
 
 def filter_trackers(
-    log_with: List[Union[str, LoggerType, GeneralTracker]],
+    log_with: list[Union[str, LoggerType, GeneralTracker]],
     logging_dir: Union[str, os.PathLike] = None,
 ):
     """

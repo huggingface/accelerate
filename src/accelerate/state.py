@@ -21,7 +21,7 @@ import warnings
 import weakref
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import torch
 
@@ -48,6 +48,7 @@ from .utils import (
     is_npu_available,
     is_sdaa_available,
     is_torch_xla_available,
+    is_xccl_available,
     is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
@@ -58,6 +59,7 @@ from .utils.dataclasses import SageMakerDistributedType
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
@@ -276,8 +278,8 @@ class PartialState:
                 # XLA needs device setting first for `set_replication`
                 self.set_device()
                 xm.set_replication(self.device, xm.get_xla_supported_devices())
-                self.num_processes = xm.xrt_world_size()
-                self.process_index = xm.get_ordinal()
+                self.num_processes = xr.world_size()
+                self.process_index = xr.global_ordinal()
                 if is_torch_xla_available(check_is_tpu=True):
                     self.local_process_index = xm.get_local_ordinal()
                 else:
@@ -768,6 +770,10 @@ class PartialState:
                 if backend is None:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
+            elif is_xpu_available() and is_xccl_available():
+                if backend is None:
+                    backend = "xccl"
+                distributed_type = DistributedType.MULTI_XPU
 
         if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
@@ -966,7 +972,7 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
-                if os.environ.get("ACCELERATE_USE_TP", "false") == "true" or self.torch_tp_plugin is not None:
+                if self.torch_tp_plugin is not None:
                     self.distributed_type = DistributedType.TP
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
                 if is_ipex_available():
@@ -1050,6 +1056,10 @@ class AcceleratorState:
         Whether the Accelerator is configured for distributed training
         """
         return PartialState().use_distributed
+
+    @property
+    def is_fsdp2(self) -> bool:
+        return self.distributed_type == DistributedType.FSDP and self.fsdp_plugin.fsdp_version == 2
 
     @property
     def is_last_process(self) -> bool:
@@ -1203,7 +1213,7 @@ class GradientState:
 
     _shared_state = SharedDict()
 
-    def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
+    def __init__(self, gradient_accumulation_plugin: GradientAccumulationPlugin | None = None):
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True

@@ -175,7 +175,7 @@ def create_ascii_table(headers: list, rows: list, title: str):
     for i, line in enumerate(rows):
         centered_line = [t.center(column_widths[i]) for i, t in enumerate(line)]
         table += f"{pattern % tuple(centered_line)}\n"
-    table += f'└{"┴".join([in_between * n for n in column_widths])}┘'
+    table += f"└{'┴'.join([in_between * n for n in column_widths])}┘"
 
     return table
 

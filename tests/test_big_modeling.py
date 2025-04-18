@@ -13,6 +13,7 @@
 # limitations under the License.
 import copy
 import gc
+import itertools
 import logging
 import os
 import unittest
@@ -46,6 +47,7 @@ from accelerate.test_utils import (
     torch_device,
 )
 from accelerate.utils import is_hpu_available, offload_state_dict
+from accelerate.utils.versions import is_torch_version
 
 
 logger = logging.getLogger(__name__)
@@ -420,10 +422,13 @@ class BigModelingTester(unittest.TestCase):
         foo = torch.rand(n_vals, device=device_0)  # noqa: F841
 
         # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
+        oom_error = (
+            torch.OutOfMemoryError if is_torch_version(">=", "2.5.0") else torch_accelerator_module.OutOfMemoryError
+        )
         try:
             dispatch_model(model, device_map)
-        except torch_accelerator_module.OutOfMemoryError as e:
-            raise torch_accelerator_module.OutOfMemoryError(
+        except oom_error as e:
+            raise oom_error(
                 f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory. {e}"
             )
         except Exception as e:
@@ -501,11 +506,14 @@ class BigModelingTester(unittest.TestCase):
 
         original_pointer = model.compute1._hf_hook.weights_map["weight"].data_ptr()
 
+        oom_error = (
+            torch.OutOfMemoryError if is_torch_version(">=", "2.5.0") else torch_accelerator_module.OutOfMemoryError
+        )
         with torch.no_grad():
             try:
                 output = model(x)
-            except torch_accelerator_module.OutOfMemoryError as e:
-                raise torch_accelerator_module.OutOfMemoryError(
+            except oom_error as e:
+                raise oom_error(
                     f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory_with_nested_offload_cpu. {e}"
                 )
             except Exception as e:
@@ -794,6 +802,23 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
+    def test_load_checkpoint_and_dispatch_device_map_none(self):
+        model = ModelForTest()
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = ModelForTest()
+            new_model = load_checkpoint_and_dispatch(new_model, checkpoint, device_map=None)
+
+        for (name, tensor), (new_name, new_tensor) in zip(
+            itertools.chain(model.named_parameters(), model.named_buffers()),
+            itertools.chain(new_model.named_parameters(), new_model.named_buffers()),
+        ):
+            assert name == new_name
+            torch.testing.assert_close(tensor, new_tensor, msg=new_name)
 
     @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device

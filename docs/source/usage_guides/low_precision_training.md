@@ -39,7 +39,7 @@ from accelerate import Accelerator
 accelerator = Accelerator(mixed_precision="fp8")
 ```
 
-By default, if `MS-AMP` is available in your environment, Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize one of the `RecipeKwargs` dataclasses such as [`utils.AORecipeKwargs`], [`utils.TERecipeKwargs`], or [`utils.MSAMPRecipeKwargs`]; you can also nclarify it in your config `yaml`/during `accelerate launch`:
+By default, if `MS-AMP` is available in your environment, Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize one of the `RecipeKwargs` dataclasses such as [`utils.AORecipeKwargs`], [`utils.TERecipeKwargs`], or [`utils.MSAMPRecipeKwargs`]; you can also clarify it in your config `yaml`/during `accelerate launch`:
 
 ```{python}
 from accelerate import Accelerator

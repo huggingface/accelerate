@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import functools
-from typing import Dict, List, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -249,8 +250,8 @@ class AlignDevicesHook(ModelHook):
         weights_map: Optional[Mapping] = None,
         offload_buffers: bool = False,
         place_submodules: bool = False,
-        skip_keys: Optional[Union[str, List[str]]] = None,
-        tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
+        skip_keys: Optional[Union[str, list[str]]] = None,
+        tied_params_map: Optional[dict[int, dict[torch.device, torch.Tensor]]] = None,
     ):
         self.execution_device = execution_device
         self.offload = offload
@@ -411,9 +412,9 @@ class AlignDevicesHook(ModelHook):
 def attach_execution_device_hook(
     module: torch.nn.Module,
     execution_device: Union[int, str, torch.device],
-    skip_keys: Optional[Union[str, List[str]]] = None,
-    preload_module_classes: Optional[List[str]] = None,
-    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
+    skip_keys: Optional[Union[str, list[str]]] = None,
+    preload_module_classes: Optional[list[str]] = None,
+    tied_params_map: Optional[dict[int, dict[torch.device, torch.Tensor]]] = None,
 ):
     """
     Recursively attaches `AlignDevicesHook` to all submodules of a given model to make sure they have the right
@@ -463,9 +464,9 @@ def attach_align_device_hook(
     weights_map: Optional[Mapping] = None,
     offload_buffers: bool = False,
     module_name: str = "",
-    skip_keys: Optional[Union[str, List[str]]] = None,
-    preload_module_classes: Optional[List[str]] = None,
-    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
+    skip_keys: Optional[Union[str, list[str]]] = None,
+    preload_module_classes: Optional[list[str]] = None,
+    tied_params_map: Optional[dict[int, dict[torch.device, torch.Tensor]]] = None,
 ):
     """
     Recursively attaches `AlignDevicesHook` to all submodules of a given model that have direct parameters and/or
@@ -553,14 +554,14 @@ def remove_hook_from_submodules(module: nn.Module):
 
 def attach_align_device_hook_on_blocks(
     module: nn.Module,
-    execution_device: Optional[Union[torch.device, Dict[str, torch.device]]] = None,
-    offload: Union[bool, Dict[str, bool]] = False,
+    execution_device: Optional[Union[torch.device, dict[str, torch.device]]] = None,
+    offload: Union[bool, dict[str, bool]] = False,
     weights_map: Mapping = None,
     offload_buffers: bool = False,
     module_name: str = "",
-    skip_keys: Optional[Union[str, List[str]]] = None,
-    preload_module_classes: Optional[List[str]] = None,
-    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
+    skip_keys: Optional[Union[str, list[str]]] = None,
+    preload_module_classes: Optional[list[str]] = None,
+    tied_params_map: Optional[dict[int, dict[torch.device, torch.Tensor]]] = None,
 ):
     """
     Attaches `AlignDevicesHook` to all blocks of a given model as needed.
