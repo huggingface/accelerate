@@ -151,7 +151,6 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
         `torch.nn.Module`: The same module, with the hook attached (the module is modified in place, so the result can
         be discarded).
     """
-
     if append and (getattr(module, "_hf_hook", None) is not None):
         old_hook = module._hf_hook
         remove_hook_from_module(module)
@@ -737,3 +736,30 @@ class UserCpuOffloadHook:
 
     def remove(self):
         remove_hook_from_module(self.model)
+
+
+class LayerwiseCastingHook(ModelHook):
+    r"""
+    A hook that casts the weights of a module to a high precision dtype for computation, and to a low precision dtype
+    for storage. This process may lead to quality loss in the output, but can significantly reduce the memory
+    footprint.
+    """
+
+    _is_stateful = False
+
+    def __init__(self, storage_dtype: torch.dtype, compute_dtype: torch.dtype, non_blocking: bool) -> None:
+        self.storage_dtype = storage_dtype
+        self.compute_dtype = compute_dtype
+        self.non_blocking = non_blocking
+
+    def init_hook(self, module: torch.nn.Module):
+        module.to(dtype=self.storage_dtype, non_blocking=self.non_blocking)
+        return module
+
+    def pre_forward(self, module: torch.nn.Module, *args, **kwargs):
+        module.to(dtype=self.compute_dtype, non_blocking=self.non_blocking)
+        return args, kwargs
+
+    def post_forward(self, module: torch.nn.Module, output):
+        module.to(dtype=self.storage_dtype, non_blocking=self.non_blocking)
+        return output

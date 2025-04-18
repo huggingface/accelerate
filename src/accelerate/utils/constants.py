@@ -14,6 +14,8 @@
 
 import operator as op
 
+import torch
+
 
 SCALER_NAME = "scaler.pt"
 MODEL_NAME = "pytorch_model"
@@ -90,3 +92,12 @@ TORCH_DISTRIBUTED_OPERATION_TYPES = CUDA_DISTRIBUTED_TYPES + [
     "MULTI_CPU",
     "MULTI_HPU",
 ]
+SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING = (
+    torch.nn.Conv1d,
+    torch.nn.Conv2d,
+    torch.nn.Conv3d,
+    torch.nn.ConvTranspose1d,
+    torch.nn.ConvTranspose2d,
+    torch.nn.ConvTranspose3d,
+    torch.nn.Linear,
+)
