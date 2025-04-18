@@ -682,17 +682,6 @@ def attach_layerwise_casting_hooks(
         non_blocking (`bool`, defaults to `False`):
             If `True`, the weight casting operations are non-blocking.
     """
-    # if skip_modules_classes is None and skip_modules_pattern is None:
-    #     add_hook_to_module(
-    #         module,
-    #         LayerwiseCastingHook(storage_dtype=storage_dtype, compute_dtype=compute_dtype, non_blocking=non_blocking),
-    #         append=True,
-    #     )
-    #     return
-    # else:
-    #     _attach_layerwise_casting_hooks(
-    #         module, storage_dtype, compute_dtype, skip_modules_pattern, skip_modules_classes, non_blocking
-    #     )
     _attach_layerwise_casting_hooks(
         module, storage_dtype, compute_dtype, skip_modules_pattern, skip_modules_classes, non_blocking
     )
