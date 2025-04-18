@@ -498,16 +498,16 @@ class ModelEstimatorTester(unittest.TestCase):
             total_training_size_estimate = total_size_estimate * 4
 
             assert precision_str == output[i][0], f"Output is missing precision `{precision_str}`"
-            assert (
-                largest_layer_estimate == output[i][1]
-            ), f"Calculation for largest layer size in `{precision_str}` is incorrect."
+            assert largest_layer_estimate == output[i][1], (
+                f"Calculation for largest layer size in `{precision_str}` is incorrect."
+            )
 
-            assert (
-                total_size_estimate == output[i][2]
-            ), f"Calculation for total size in `{precision_str}` is incorrect."
-            assert total_training_size_estimate == max(
-                output[i][3].values()
-            ), f"Calculation for total training size in `{precision_str}` is incorrect."
+            assert total_size_estimate == output[i][2], (
+                f"Calculation for total size in `{precision_str}` is incorrect."
+            )
+            assert total_training_size_estimate == max(output[i][3].values()), (
+                f"Calculation for total training size in `{precision_str}` is incorrect."
+            )
 
     @require_transformers
     def test_transformers_model(self):
@@ -515,12 +515,12 @@ class ModelEstimatorTester(unittest.TestCase):
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 90669056, 433249280
-        assert (
-            largest_layer == output[0][1]
-        ), f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
-        assert (
-            total_size == output[0][2]
-        ), f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+        assert largest_layer == output[0][1], (
+            f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
+        )
+        assert total_size == output[0][2], (
+            f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+        )
 
     @require_transformers
     def test_no_split_modules(self):
@@ -538,12 +538,12 @@ class ModelEstimatorTester(unittest.TestCase):
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 9437184, 102441032
-        assert (
-            largest_layer == output[0][1]
-        ), f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
-        assert (
-            total_size == output[0][2]
-        ), f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+        assert largest_layer == output[0][1], (
+            f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
+        )
+        assert total_size == output[0][2], (
+            f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+        )
 
 
 class ToFSDP2Tester(unittest.TestCase):

@@ -177,9 +177,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
             env["FSDP_BACKWARD_PREFETCH"] = prefetch_policy
             with patch_environment(**env), ctx as cm:
                 fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert (
-                    fsdp_plugin.backward_prefetch == expected_value
-                ), f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
+                assert fsdp_plugin.backward_prefetch == expected_value, (
+                    f"Actual: {fsdp_plugin.backward_prefetch} != Expected: {expected_value}"
+                )
                 if cm:
                     self.assertTrue(any(_warning_message_fsdp2 in out for out in cm.output))
 

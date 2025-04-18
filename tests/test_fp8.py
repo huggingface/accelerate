@@ -55,9 +55,9 @@ def can_convert_te_model():
 
 
 def maintain_proper_deepspeed_config(expected_version):
-    assert (
-        AcceleratorState().deepspeed_plugin.zero_stage == expected_version
-    ), f"Expected zero stage {expected_version} but got {AcceleratorState().deepspeed_plugin.zero_stage}"
+    assert AcceleratorState().deepspeed_plugin.zero_stage == expected_version, (
+        f"Expected zero stage {expected_version} but got {AcceleratorState().deepspeed_plugin.zero_stage}"
+    )
 
 
 def can_convert_ao_model():

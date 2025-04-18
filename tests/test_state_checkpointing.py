@@ -421,9 +421,9 @@ if __name__ == "__main__":
     for group in optimizer.param_groups:
         param_device = group["params"][0].device
         break
-    assert (
-        param_device.type == torch.device("cpu").type
-    ), f"Loaded optimizer states did not match, expected to be loaded on the CPU but got {param_device}"
+    assert param_device.type == torch.device("cpu").type, (
+        f"Loaded optimizer states did not match, expected to be loaded on the CPU but got {param_device}"
+    )
 
     # Check device state
     model.to(accelerator.device)
@@ -431,9 +431,9 @@ if __name__ == "__main__":
     for group in optimizer.param_groups:
         param_device = group["params"][0].device
         break
-    assert (
-        param_device.type == accelerator.device.type
-    ), f"Loaded optimizer states did not match, expected to be loaded on {accelerator.device} but got {param_device}"
+    assert param_device.type == accelerator.device.type, (
+        f"Loaded optimizer states did not match, expected to be loaded on {accelerator.device} but got {param_device}"
+    )
 
     # Check error
     with pytest.raises(TypeError, match="Unsupported optimizer map location passed"):
