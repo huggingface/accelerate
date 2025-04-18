@@ -120,6 +120,8 @@ class BatchSamplerShard(BatchSampler):
             The number of processes running concurrently.
         process_index (`int`, *optional*, defaults to 0):
             The index of the current process.
+        process_cp_rank (`int`, *optional*, defaults to 0):
+            The rank of the current process in the current CP group.
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the shards should be created by splitting a batch to give a piece of it on each process, or by
             yielding different full batches on each process.
@@ -146,6 +148,7 @@ class BatchSamplerShard(BatchSampler):
         batch_sampler: BatchSampler,
         num_processes: int = 1,
         process_index: int = 0,
+        process_cp_rank: Optional[int] = None,
         split_batches: bool = False,
         even_batches: bool = True,
     ):
@@ -157,6 +160,7 @@ class BatchSamplerShard(BatchSampler):
         self.batch_sampler = batch_sampler
         self.num_processes = num_processes
         self.process_index = process_index
+        self.process_cp_rank = process_cp_rank # rank of the process in the current CP group
         self.split_batches = split_batches
         self.even_batches = even_batches
         self.batch_size = getattr(batch_sampler, "batch_size", None)
@@ -990,6 +994,7 @@ def prepare_data_loader(
     device: Optional[torch.device] = None,
     num_processes: Optional[int] = None,
     process_index: Optional[int] = None,
+    process_cp_rank: Optional[int] = None,
     split_batches: bool = False,
     put_on_device: bool = False,
     rng_types: Optional[list[Union[str, RNGType]]] = None,
@@ -1017,6 +1022,8 @@ def prepare_data_loader(
             The number of processes running concurrently. Will default to the value given by [`~state.PartialState`].
         process_index (`int`, *optional*):
             The index of the current process. Will default to the value given by [`~state.PartialState`].
+        process_cp_rank (`int`, *optional*):
+            The rank of the current process in the current CP group. Will default to the value given by `torch_device_mesh`
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
             yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
@@ -1097,7 +1104,7 @@ def prepare_data_loader(
 
     if process_index is None:
         process_index = state.process_index
-
+    
     if torch_device_mesh:
         if state.distributed_type == DistributedType.DEEPSPEED:
             # In DeepSpeed, the optimizer sharing level in DP is determined by the config file.
@@ -1107,8 +1114,11 @@ def prepare_data_loader(
             # - Processes with the same DP rank will receive the same batch.
             if "tp" in torch_device_mesh.mesh_dim_names:
                 submesh_tp_size = torch_device_mesh["tp"].size()
-            process_index = process_index // submesh_tp_size
-            num_processes = num_processes // submesh_tp_size
+            if "cp" in torch_device_mesh.mesh_dim_names:
+                submesh_cp_size = torch_device_mesh["cp"].size()
+                process_cp_rank = torch_device_mesh["cp"].get_rank()
+            process_index = process_index // (submesh_tp_size * submesh_cp_size)
+            num_processes = num_processes // (submesh_tp_size * submesh_cp_size)
         else:
             # when device mesh is used, specifically with TP
             # then there is need to update process_index and num_processes
@@ -1122,13 +1132,17 @@ def prepare_data_loader(
             submesh_fsdp_size = 1
             submesh_dp_size = 1
             submesh_tp_size = 1
+            submesh_cp_size = 1
             if "tp" in torch_device_mesh.mesh_dim_names:
                 submesh_tp_size = torch_device_mesh["tp"].size()
+            if "cp" in torch_device_mesh.mesh_dim_names:
+                submesh_cp_size = torch_device_mesh["cp"].size()
+                process_cp_rank = torch_device_mesh["cp"].get_rank()
             if "dp" in torch_device_mesh.mesh_dim_names:
                 submesh_dp_size = torch_device_mesh["dp"].size()
             if "fsdp" in torch_device_mesh.mesh_dim_names:
                 submesh_fsdp_size = torch_device_mesh["fsdp"].size()
-            process_index = process_index // submesh_tp_size
+            process_index = process_index // (submesh_tp_size * submesh_cp_size) # TODO: replace this with torch_device_mesh.get_rank()
             num_processes = submesh_fsdp_size * submesh_dp_size
 
     # Sanity check
@@ -1213,6 +1227,7 @@ def prepare_data_loader(
                 batch_sampler,
                 num_processes=num_processes,
                 process_index=process_index,
+                process_cp_rank=process_cp_rank,
                 split_batches=split_batches,
                 even_batches=even_batches,
             )

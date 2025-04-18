@@ -890,6 +890,7 @@ class AcceleratorState:
         dynamo_plugin=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
+        nanotron_plugin=None,
         torch_tp_plugin=None,
         megatron_lm_plugin=None,
         _from_accelerator: bool = False,
@@ -906,6 +907,7 @@ class AcceleratorState:
             self.deepspeed_plugins = None
             self.use_ipex = None
             self.torch_tp_plugin = torch_tp_plugin
+            self.nanotron_plugin = nanotron_plugin
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
@@ -974,6 +976,8 @@ class AcceleratorState:
                     self.megatron_lm_plugin = megatron_lm_plugin
                 if self.torch_tp_plugin is not None:
                     self.distributed_type = DistributedType.TP
+                if self.nanotron_plugin is not None:
+                    self.distributed_type = DistributedType.NANOTRON
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
                 if is_ipex_available():
                     # check if user disables it explicitly

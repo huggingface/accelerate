@@ -73,6 +73,7 @@ from .utils import (
     TERecipeKwargs,
     TorchDynamoPlugin,
     TorchTensorParallelPlugin,
+    NanotronPlugin,
     apply_fp8_autowrap,
     check_os_kernel,
     clean_state_dict_for_safetensors,
@@ -208,6 +209,9 @@ class Accelerator:
         torch_tp_plugin ([`~utils.TorchTensorParallelPlugin`], *optional*):
             Tweak your torch tensor parallel. This argument is optional and can be configured directly using
             *accelerate config*
+        nanotron_plugin ([`~utils.NanotronPlugin`], *optional*):
+            Tweak your nanotron related args using this argument. This argument is optional and can be configured
+            directly using *accelerate config*
         megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -278,6 +282,7 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         torch_tp_plugin: TorchTensorParallelPlugin | None = None,
+        nanotron_plugin: NanotronPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
@@ -397,6 +402,9 @@ class Accelerator:
         if torch_tp_plugin is not None and not isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
             raise TypeError("`torch_tp_plugin` must be a TorchTensorParallelPlugin object.")
 
+        if nanotron_plugin is not None and not isinstance(nanotron_plugin, NanotronPlugin):
+            raise TypeError("`nanotron_plugin` must be a NanotronPlugin object.")
+
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
                 MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" else None
@@ -457,6 +465,7 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
             torch_tp_plugin=torch_tp_plugin,
+            nanotron_plugin=nanotron_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             **kwargs,
@@ -1432,6 +1441,8 @@ class Accelerator:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
+        elif self.distributed_type == DistributedType.NANOTRON:
+            result = self._prepare_nanotron(*args)
         else:
             if self.fp8_backend == "MSAMP":
                 args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
@@ -1799,6 +1810,11 @@ class Accelerator:
         for param_group in optimizer.param_groups:
             param_group["params"] = [mapping[p] for p in param_group["params"]]
 
+        return result
+
+    def _prepare_nanotron(self, *args):
+        result = tuple(self._prepare_one(obj, first_pass=True) for obj in args)
+        result = tuple(self._prepare_one(obj) for obj in args) # TODO: not sure why we do this twice
         return result
 
     def _prepare_deepspeed(self, *args):
@@ -2217,6 +2233,8 @@ class Accelerator:
             return self.state.torch_tp_plugin.torch_device_mesh
         elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
+        elif self.distributed_type == DistributedType.NANOTRON:
+            return self.state.nanotron_plugin.torch_device_mesh
         return None
 
     def _prepare_msamp(self, *args, device_placement):

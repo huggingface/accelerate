@@ -582,6 +582,7 @@ class DistributedType(str, enum.Enum):
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
     TP = "TP"
+    NANOTRON = "NANOTRON"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
     MULTI_HPU = "MULTI_HPU"
@@ -2058,6 +2059,47 @@ class TorchTensorParallelPlugin:
         # it is only used for preparing data loader
         self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
 
+@dataclass
+class NanotronPlugin:
+    """
+    This plugin is used to enable tensor and context parallelism using PyTorch >= 2.0.
+    """
+
+    tp_size: int = field(
+        default=1,
+        metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
+    )
+    cp_size: int = field(
+        default=1,
+        metadata={"help": "context parallel size will be used in the device mesh preparation"},
+    )
+    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
+    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
+
+    def __post_init__(self):
+        if not isinstance(self.tp_size, int):
+            raise ValueError(f"`tp_size` set to {self.tp_size}, please set to an `int`.")
+        if not isinstance(self.cp_size, int):
+            raise ValueError(f"`cp_size` set to {self.cp_size}, please set to an `int`.")
+
+        # if is_torch_version("<", BETA_TP_AVAILABLE_PYTORCH_VERSION):
+        #     raise ValueError(
+        #         f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
+        #     )
+        from torch.distributed.device_mesh import init_device_mesh
+
+        # support for other devices has to be investigated
+        if is_hpu_available(init_hccl=True):
+            device = "hpu"
+        else:
+            device = "cuda"
+
+        # device mesh is not used for model sharding
+        # it is only used for preparing data loader
+        self.torch_device_mesh = init_device_mesh(device, (self.tp_size, self.cp_size), mesh_dim_names=("tp","cp"))
+
+        self.cp_rank = self.torch_device_mesh["cp"].get_rank()
+        self.tp_rank = self.torch_device_mesh["tp"].get_rank()
 
 @dataclass
 class MegatronLMPlugin:
