@@ -437,9 +437,9 @@ class Accelerator:
         self.has_fp8_handler = False
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(handler, KwargsHandler), (
-                    f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
-                )
+                assert isinstance(
+                    handler, KwargsHandler
+                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
                 # Add the handler class to the set of found handlers
                 if handler.__class__ in found_handlers:
                     raise ValueError(f"You can only pass one {handler.__class__} in `kwargs_handlers`.")
@@ -2183,29 +2183,52 @@ class Accelerator:
                     " to https://github.com/intel/intel-extension-for-pytorch."
                 )
 
-        model = None
-        optimizer = None
+        # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
+        if is_ipex_available():
+            import intel_extension_for_pytorch as ipex
+
+        models = []
+        optimizers = []
         result = [obj for obj in args]
-        for obj in result:
+        for i, obj in enumerate(result):
             if isinstance(obj, torch.nn.Module):
                 model = obj
                 model.train()
+                models.append((i, model))
             elif isinstance(obj, (torch.optim.Optimizer)):
-                optimizer = obj
-        if optimizer is not None and model is not None:
-            dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
+                optimizers.append((i, obj))
+
+        # Impossible to determine what to do if multiple models and/or optimizers are provided
+        if len(optimizers) > 1 or (len(models) > 1 and len(optimizers) == 1):
+            raise ValueError(
+                "Prepare with IPEX expects either 1+ models and no optimizer OR a single model-optimizer pair."
+            )
+
+        # Nothing to do
+        if len(models) == 0 and len(optimizers) == 0:
+            return result
+
+        dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
+        # Multiple models and no optimizer (inference) are provided
+        if len(models) > 0 and len(optimizers) == 0:
+            for i, model in models:
+                if self.device.type == "xpu" and next(model.parameters()).device.type == "cpu":
+                    model = model.to(self.device)
+                    model, _ = ipex.optimize(model, optimizer=None, dtype=dtype, inplace=True, level="O1")
+                    # Replace in result
+                    result[i] = model
+
+        # A single model-optimizer pair (training) is provided
+        if len(models) == 1 and len(optimizers) == 1:
+            i_model, model = models[0]
+            i_optimizer, optimizer = optimizers[0]
             if self.device.type == "xpu" and next(model.parameters()).device.type == "cpu":
                 model = model.to(self.device)
-            # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
-            if is_ipex_available():
-                import intel_extension_for_pytorch as ipex
+            model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
+            # Replace in result
+            result[i_model] = model
+            result[i_optimizer] = optimizer
 
-                model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
-        for i in range(len(result)):
-            if isinstance(result[i], torch.nn.Module):
-                result[i] = model
-            elif isinstance(result[i], (torch.optim.Optimizer)):
-                result[i] = optimizer
         return tuple(result)
 
     def _prepare_device_mesh(self):
