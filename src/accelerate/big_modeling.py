@@ -659,11 +659,10 @@ def attach_layerwise_casting_hooks(
     non_blocking: bool = False,
 ) -> None:
     r"""
-    Applies layerwise casting to a given module. The module expected here is a PyTorch nn.Module.
-
-    Example:
-
-    TODO
+    Applies layerwise casting to a given module. The module expected here is a PyTorch `nn.Module`. This is helpful for
+    reducing memory requirements when one doesn't want to fully quantize a model. Model params can be kept in say,
+    `torch.float8_e4m3fn` and upcasted to a higher precision like `torch.bfloat16` during forward pass and downcasted
+    back to `torch.float8_e4m3fn` to realize memory savings.
 
     Args:
         module (`torch.nn.Module`):
@@ -681,6 +680,31 @@ def attach_layerwise_casting_hooks(
             A list of module classes to skip during the layerwise casting process.
         non_blocking (`bool`, defaults to `False`):
             If `True`, the weight casting operations are non-blocking.
+
+    Example:
+
+    ```python
+    >>> from accelerate.hooks import attach_layerwise_casting_hooks
+    >>> from transformers import AutoModelForCausalLM
+    >>> import torch
+
+    >>> # Model
+    >>> checkpoint = "EleutherAI/gpt-j-6B"
+    >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+    >>> # Attach hooks and perform inference
+    >>> attach_layerwise_casting_hooks(model, storage_dtype=torch.float8_e4m3fn, compute_dtype=torch.bfloat16)
+    >>> with torch.no_grad():
+    ...     model(...)
+    ```
+
+    Users can also pass modules they want to avoid from getting downcasted.
+
+    ```py
+    >>> attach_layerwise_casting_hooks(
+    ...     model, storage_dtype=torch.float8_e4m3fn, compute_dtype=torch.bfloat16, skip_modules_pattern=["norm"]
+    ... )
+    ```
     """
     _attach_layerwise_casting_hooks(
         module, storage_dtype, compute_dtype, skip_modules_pattern, skip_modules_classes, non_blocking
