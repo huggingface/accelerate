@@ -1018,8 +1018,7 @@ def prepare_data_loader(
             The number of processes running concurrently. Will default to the value given by
             [`~state.PartialState.num_processes`].
         process_index (`int`, *optional*):
-            The index of the current process. Will default to the value given by
-            [`~state.PartialState.process_index`].
+            The index of the current process. Will default to the value given by [`~state.PartialState.process_index`].
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
             yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
@@ -1045,11 +1044,11 @@ def prepare_data_loader(
             all workers.
         slice_fn_for_dispatch (`Callable`, *optional*):
             If passed, this function will be used to slice tensors across `num_processes`. Will default to
-            [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will
-            be ignored otherwise.
+            [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will be
+            ignored otherwise.
         use_seedable_sampler (`bool`, *optional*, defaults to `False`):
-            Whether to use the [`~data_loader.SeedableRandomSampler`] instead of the default `RandomSampler` for
-            better reproducibility.
+            Whether to use the [`~data_loader.SeedableRandomSampler`] instead of the default `RandomSampler` for better
+            reproducibility.
         data_seed (`int`, *optional*):
             The seed to use for the random number generator of the sampler if `use_seedable_sampler` is `True`.
         non_blocking (`bool`, *optional*, defaults to `False`):
@@ -1433,8 +1432,8 @@ def skip_first_batches(dataloader, num_batches=0):
 
 class CustomTypesDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
     """
-    A dataloader that can handle any iterable type that implements `__iter__`. This class is designed to be a
-    barebones wrapper that only handles device placement and basic iteration.
+    A dataloader that can handle any iterable type that implements `__iter__`. This class is designed to be a barebones
+    wrapper that only handles device placement and basic iteration.
 
     Args:
         dataset (Iterable):
@@ -1491,7 +1490,7 @@ class CustomTypesDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
             try:
                 item = next(iterator)
                 current_batch.append(item)
-                
+
                 if len(current_batch) == self.batch_size:
                     batch = torch.tensor(current_batch)
                     if self.device is not None:

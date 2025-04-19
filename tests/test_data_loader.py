@@ -23,13 +23,13 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
     BatchSamplerShard,
+    CustomTypesDataLoader,
     DataLoaderDispatcher,
     DataLoaderShard,
     DataLoaderStateMixin,
     IterableDatasetShard,
     SkipBatchSampler,
     SkipDataLoader,
-    CustomTypesDataLoader,
     prepare_data_loader,
     skip_first_batches,
 )
@@ -904,6 +904,8 @@ class CustomTypesDataLoaderTester(AccelerateTestCase):
         Test that CustomTypesDataLoader can handle any iterable type that implements __iter__
         """
         accelerator = Accelerator()
+        # Ensure accelerator is initialized
+        assert accelerator is not None
 
         # Test with a simple list
         data = [1, 2, 3, 4, 5, 6, 7, 8]
