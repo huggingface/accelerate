@@ -471,7 +471,7 @@ class ProfileKwargs(KwargsHandler):
             Callable that is called at each step when schedule returns `ProfilerAction.RECORD_AND_SAVE` during the
             profiling.
         record_shapes (`bool`, *optional*, default to `False`):
-            Save information about operator’s input shapes.
+            Save information about operator's input shapes.
         profile_memory (`bool`, *optional*, default to `False`):
             Track tensor memory allocation/deallocation
         with_stack (`bool`, *optional*, default to `False`):
@@ -795,6 +795,9 @@ class DataLoaderConfiguration:
             If set to `True`, the dataloader prepared by the Accelerator will be backed by
             [torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed.
+        custom_types (`bool`, defaults to `False`):
+            If set to `True`, the dataloader prepared by the Accelerator will support custom iterable types that
+            implement `__iter__`. This allows for more flexibility in the types of data loaders that can be used.
     """
 
     split_batches: bool = field(
@@ -851,6 +854,13 @@ class DataLoaderConfiguration:
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
+        },
+    )
+    custom_types: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator will support custom iterable types that"
+            " implement `__iter__`. This allows for more flexibility in the types of data loaders that can be used."
         },
     )
 
