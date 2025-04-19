@@ -50,22 +50,37 @@ def disable_fsdp_ram_efficient_loading():
     os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "False"
 
 
-def _get_model_state_dict(model, adapter_only=False):
+def _get_model_state_dict(model, adapter_only=False, sd_options=None):
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict
+
+    sd = get_model_state_dict(model, options=sd_options)
     if adapter_only and is_peft_model(model):
         from peft import get_peft_model_state_dict
 
-        return get_peft_model_state_dict(model, adapter_name=model.active_adapter)
-    else:
-        return model.state_dict()
+        return get_peft_model_state_dict(model, state_dict=sd, adapter_name=model.active_adapter)
+    return sd
 
 
-def _set_model_state_dict(model, state_dict, adapter_only=False):
+def _set_model_state_dict(model, state_dict, adapter_only=False, sd_options=None):
     if adapter_only and is_peft_model(model):
         from peft import set_peft_model_state_dict
 
         return set_peft_model_state_dict(model, state_dict, adapter_name=model.active_adapter)
-    else:
+    elif sd_options is None:
         return model.load_state_dict(state_dict)
+    else:
+        from torch.distributed.checkpoint.state_dict import set_model_state_dict
+
+        return set_model_state_dict(model, state_dict, options=sd_options)
+
+
+def _prepare_sd_options(fsdp_plugin):
+    from torch.distributed.checkpoint.state_dict import StateDictOptions
+    from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+
+    sd_options = StateDictOptions(full_state_dict=fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT)
+
+    return sd_options
 
 
 def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False):
@@ -90,9 +105,10 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
         if fsdp_plugin.fsdp_version == 1
         else nullcontext()
     )
+    sd_options = _prepare_sd_options(fsdp_plugin)
 
     with ctx:
-        state_dict = _get_model_state_dict(model, adapter_only=adapter_only)
+        state_dict = _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
@@ -147,6 +163,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
         if fsdp_plugin.fsdp_version == 1
         else nullcontext()
     )
+    sd_options = _prepare_sd_options(fsdp_plugin)
 
     with ctx:
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
@@ -188,12 +205,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             state_dict = state_dict["model"]
             logger.info(f"Model loaded from {ckpt_dir}")
 
-        if fsdp_plugin.fsdp_version == 1:
-            load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only)
-        else:
-            from torch.distributed.checkpoint.state_dict import set_model_state_dict
-
-            load_result = set_model_state_dict(model, state_dict)
+        load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only, sd_options=sd_options)
     return load_result
 
 
