@@ -29,6 +29,7 @@ from accelerate.data_loader import (
     IterableDatasetShard,
     SkipBatchSampler,
     SkipDataLoader,
+    CustomTypesDataLoader,
     prepare_data_loader,
     skip_first_batches,
 )
@@ -895,3 +896,69 @@ class StatefulDataLoaderTester(AccelerateTestCase):
 
         gradient_state = GradientState()
         assert gradient_state.active_dataloader is None
+
+
+class CustomTypesDataLoaderTester(AccelerateTestCase):
+    def test_custom_types_dataloader(self):
+        """
+        Test that CustomTypesDataLoader can handle any iterable type that implements __iter__
+        """
+        accelerator = Accelerator()
+
+        # Test with a simple list
+        data = [1, 2, 3, 4, 5, 6, 7, 8]
+        dl = CustomTypesDataLoader(data, batch_size=2)
+        assert [t.tolist() for t in dl] == [[1, 2], [3, 4], [5, 6], [7, 8]]
+
+        # Test with a custom iterable class
+        class MyIterable:
+            def __init__(self, data):
+                self.data = data
+
+            def __iter__(self):
+                return iter(self.data)
+
+        data = MyIterable([1, 2, 3, 4, 5, 6, 7, 8])
+        dl = CustomTypesDataLoader(data, batch_size=2)
+        assert [t.tolist() for t in dl] == [[1, 2], [3, 4], [5, 6], [7, 8]]
+
+        # Test with device placement
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        dl = CustomTypesDataLoader(data, batch_size=2, device=device)
+        for batch in dl:
+            assert batch.device == device
+
+        # Test with non_blocking
+        dl = CustomTypesDataLoader(data, batch_size=2, device=device, _non_blocking=True)
+        for batch in dl:
+            assert batch.device == device
+
+        # Test with rng_types
+        dl = CustomTypesDataLoader(data, batch_size=2, rng_types=["torch"])
+        assert [t.tolist() for t in dl] == [[1, 2], [3, 4], [5, 6], [7, 8]]
+
+        # Test with skip_batches
+        dl = CustomTypesDataLoader(data, batch_size=2, skip_batches=2)
+        assert [t.tolist() for t in dl] == [[5, 6], [7, 8]]
+
+        # Test with _drop_last
+        dl = CustomTypesDataLoader(data, batch_size=3, _drop_last=True)
+        assert [t.tolist() for t in dl] == [[1, 2, 3], [4, 5, 6]]
+
+        # Test with set_epoch
+        class EpochIterable:
+            def __init__(self, data):
+                self.data = data
+                self.epoch = 0
+
+            def __iter__(self):
+                return iter(self.data[self.epoch % len(self.data)])
+
+            def set_epoch(self, epoch):
+                self.epoch = epoch
+
+        data = EpochIterable([[1, 2, 3, 4], [5, 6, 7, 8]])
+        dl = CustomTypesDataLoader(data, batch_size=2)
+        assert [t.tolist() for t in dl] == [[1, 2], [3, 4]]
+        dl.set_epoch(1)
+        assert [t.tolist() for t in dl] == [[5, 6], [7, 8]]

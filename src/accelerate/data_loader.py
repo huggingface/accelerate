@@ -1000,34 +1000,30 @@ def prepare_data_loader(
     data_seed: Optional[int] = None,
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
+    custom_types: bool = False,
     torch_device_mesh=None,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
 
-    Depending on the value of the `drop_last` attribute of the `dataloader` passed, it will either stop the iteration
-    at the first batch that would be too small / not present on all processes or loop with indices from the beginning.
+    Depending on the value of `dispatch_batches`, will either iterate through the dataloader on the main process and
+    dispatch batches to others (if `True`), or give each process its own iterator (if `False`).
 
     Args:
-        dataloader (`torch.utils.data.dataloader.DataLoader`):
+        dataloader (`torch.utils.data.DataLoader`):
             The data loader to split across several devices.
         device (`torch.device`):
             The target device for the returned `DataLoader`.
         num_processes (`int`, *optional*):
-            The number of processes running concurrently. Will default to the value given by [`~state.PartialState`].
+            The number of processes running concurrently. Will default to the value given by
+            [`~state.PartialState.num_processes`].
         process_index (`int`, *optional*):
-            The index of the current process. Will default to the value given by [`~state.PartialState`].
+            The index of the current process. Will default to the value given by
+            [`~state.PartialState.process_index`].
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
             yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
             `num_processes` batches at each iteration).
-
-            Another way to see this is that the observed batch size will be the same as the initial `dataloader` if
-            this option is set to `True`, the batch size of the initial `dataloader` multiplied by `num_processes`
-            otherwise.
-
-            Setting this option to `True` requires that the batch size of the `dataloader` is a round multiple of
-            `batch_size`.
         put_on_device (`bool`, *optional*, defaults to `False`):
             Whether or not to put the batches on `device` (only works if the batches are nested list, tuples or
             dictionaries of tensors).
@@ -1038,50 +1034,56 @@ def prepare_data_loader(
             - `"torch"`: the base torch random number generator
             - `"cuda"`: the CUDA random number generator (GPU only)
             - `"xla"`: the XLA random number generator (TPU only)
-            - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
-              dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
-
+            - `"generator"`: an optional `torch.Generator`
         dispatch_batches (`bool`, *optional*):
-            If set to `True`, the dataloader prepared is only iterated through on the main process and then the batches
-            are split and broadcast to each process. Will default to `True` when the underlying dataset is an
-            `IterableDataset`, `False` otherwise.
+            Whether to iterate through the dataloader on the main process and dispatch batches to others, or give each
+            process its own iterator (which will yield the same batches in all processes). By default, will be set to
+            `True` if the underlying dataset is an `IterableDataset`, `False` otherwise.
         even_batches (`bool`, *optional*, defaults to `True`):
             If set to `True`, in cases where the total batch size across all processes does not exactly divide the
             dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
             all workers.
-        slice_fn_for_dispatch (`Callable`, *optional*`):
+        slice_fn_for_dispatch (`Callable`, *optional*):
             If passed, this function will be used to slice tensors across `num_processes`. Will default to
-            [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will be
-            ignored otherwise.
+            [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will
+            be ignored otherwise.
         use_seedable_sampler (`bool`, *optional*, defaults to `False`):
-            Whether to use the [`~data_loader.SeedableRandomSampler`] instead of a `RandomSampler` for better
-            reproducability. Comes at a cost of potentially different performances due to different shuffling
-            algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
-            `self.set_epoch`
-        data_seed (`int`, *optional*, defaults to `None`):
-            The seed to use for the underlying generator when using `use_seedable_sampler`. If `None`, the generator
-            will use the current default seed from torch.
+            Whether to use the [`~data_loader.SeedableRandomSampler`] instead of the default `RandomSampler` for
+            better reproducibility.
+        data_seed (`int`, *optional*):
+            The seed to use for the random number generator of the sampler if `use_seedable_sampler` is `True`.
         non_blocking (`bool`, *optional*, defaults to `False`):
-            If set to `True`, dataloader will utilize non-blocking host-to-device transfers. If the dataloader has
-            `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
+            Whether to use non-blocking device transfers.
         use_stateful_dataloader (`bool`, *optional*, defaults to `False`):
-            "If set to true, the dataloader prepared by the Accelerator will be backed by "
-            "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
-            This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
-        torch_device_mesh (`torch.distributed.DeviceMesh`, *optional*, defaults to `None`):
-            PyTorch device mesh.
-
+            Whether to use the `StatefulDataLoader` from `torchdata` instead of the regular `DataLoader`.
+        custom_types (`bool`, *optional*, defaults to `False`):
+            Whether to use the `CustomTypesDataLoader` to handle custom iterable types.
+        torch_device_mesh (`torch.device_mesh`, *optional*):
+            The device mesh to use for distributed training.
 
     Returns:
-        `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
+        `torch.utils.data.DataLoader`: A new data loader that will yield the portion of the batches
 
-    <Tip warning={true}>
+    <Tip>
 
-    `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
-    equal to `False`
+        This method works by first checking if your dataloader is a `StatefulDataLoader` (if `use_stateful_dataloader`
+        is `True`), in which case it will return the dataloader directly. Otherwise, it will wrap the dataloader in a
+        `DataLoaderShard` or `DataLoaderDispatcher` depending on the value of `dispatch_batches`.
 
     </Tip>
     """
+    if custom_types:
+        return CustomTypesDataLoader(
+            dataloader,
+            device=device if put_on_device else None,
+            rng_types=rng_types,
+            synchronized_generator=None,
+            skip_batches=0,
+            _drop_last=dataloader.drop_last,
+            _non_blocking=non_blocking,
+            batch_size=dataloader.batch_size,
+        )
+
     if dispatch_batches is None:
         if not put_on_device:
             dispatch_batches = False
@@ -1427,3 +1429,114 @@ def skip_first_batches(dataloader, num_batches=0):
         dataloader = MpDeviceLoaderWrapper(dataloader, device)
 
     return dataloader
+
+
+class CustomTypesDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
+    """
+    A dataloader that can handle any iterable type that implements `__iter__`. This class is designed to be a
+    barebones wrapper that only handles device placement and basic iteration.
+
+    Args:
+        dataset (Iterable):
+            Any iterable object that implements `__iter__`.
+        device (`torch.device`, *optional*):
+            If passed, the device to put all batches on.
+        rng_types (list of `str` or [`~utils.RNGType`]):
+            The list of random number generators to synchronize at the beginning of each iteration.
+        synchronized_generator (`torch.Generator`, *optional*):
+            A random number generator to keep synchronized across processes.
+        skip_batches (`int`, *optional*, defaults to 0):
+            The number of batches to skip at the beginning.
+        _drop_last: (`bool`, *optional*, defaults to `False`):
+            Whether to drop the last incomplete batch.
+        _non_blocking: (`bool`, *optional*, defaults to `False`):
+            Whether to use non-blocking device transfers.
+    """
+
+    def __init__(
+        self,
+        dataset,
+        device=None,
+        rng_types=None,
+        synchronized_generator=None,
+        skip_batches=0,
+        _drop_last: bool = False,
+        _non_blocking: bool = False,
+        batch_size: int = 1,
+        **kwargs,
+    ):
+        # We don't need to initialize the base DataLoaderAdapter since we're not using a PyTorch DataLoader
+        self.dataset = dataset
+        self.device = device
+        self.rng_types = rng_types
+        self.synchronized_generator = synchronized_generator
+        self.skip_batches = skip_batches
+        self.gradient_state = GradientState()
+        self._drop_last = _drop_last
+        self._non_blocking = _non_blocking
+        self.batch_size = batch_size
+        self.iteration = 0
+
+    def __iter__(self):
+        if self.rng_types is not None:
+            synchronize_rng_states(self.rng_types, self.synchronized_generator)
+        self.begin()
+
+        self.set_epoch(self.iteration)
+        iterator = iter(self.dataset)
+        batch_index = 0
+        current_batch = []
+
+        while True:
+            try:
+                item = next(iterator)
+                current_batch.append(item)
+                
+                if len(current_batch) == self.batch_size:
+                    batch = torch.tensor(current_batch)
+                    if self.device is not None:
+                        batch = send_to_device(batch, self.device, non_blocking=self._non_blocking)
+                    if batch_index >= self.skip_batches:
+                        yield batch
+                    batch_index += 1
+                    current_batch = []
+            except StopIteration:
+                if len(current_batch) > 0 and not self._drop_last:
+                    batch = torch.tensor(current_batch)
+                    if self.device is not None:
+                        batch = send_to_device(batch, self.device, non_blocking=self._non_blocking)
+                    if batch_index >= self.skip_batches:
+                        yield batch
+                self.end_of_dataloader = True
+                break
+
+        self.iteration += 1
+        self.end()
+
+    def __len__(self):
+        if hasattr(self.dataset, "__len__"):
+            total_length = len(self.dataset)
+            if self._drop_last:
+                return total_length // self.batch_size
+            return (total_length + self.batch_size - 1) // self.batch_size
+        raise TypeError(f"object of type {type(self.dataset)} has no len()")
+
+    def set_epoch(self, epoch: int):
+        if self.iteration != epoch:
+            self.iteration = epoch
+        if hasattr(self.dataset, "set_epoch"):
+            self.dataset.set_epoch(epoch)
+
+    @property
+    def total_batch_size(self):
+        if hasattr(self.dataset, "batch_size"):
+            return self.dataset.batch_size
+        return self.batch_size
+
+    @property
+    def total_dataset_length(self):
+        if hasattr(self.dataset, "total_length"):
+            return self.dataset.total_length
+        elif hasattr(self.dataset, "__len__"):
+            return len(self.dataset)
+        raise TypeError(f"object of type {type(self.dataset)} has no len()")
