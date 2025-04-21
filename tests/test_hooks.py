@@ -60,17 +60,33 @@ class PostForwardHook(ModelHook):
 
 
 class HooksModelTester(unittest.TestCase):
-    def check_dtype_for_layerwise_upcasting(self, module, storage_dtype, compute_dtype, patterns_to_check=None):
+    def check_dtype_for_layerwise_upcasting(
+        self,
+        module,
+        storage_dtype,
+        compute_dtype,
+        patterns_to_check=None,
+    ):
         for name, submodule in module.named_modules():
-            if not isinstance(submodule, SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING):
-                continue
-            dtype_to_check = storage_dtype
-            if patterns_to_check and any(re.search(pattern, name) for pattern in patterns_to_check):
-                dtype_to_check = compute_dtype
+            attrs = []
             if getattr(submodule, "weight", None) is not None:
-                self.assertEqual(submodule.weight.dtype, dtype_to_check)
+                attrs.append(("weight", submodule.weight))
             if getattr(submodule, "bias", None) is not None:
-                self.assertEqual(submodule.bias.dtype, dtype_to_check)
+                attrs.append(("bias", submodule.bias))
+
+            if not isinstance(submodule, SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING):
+                if patterns_to_check is None:
+                    for _, tensor in attrs:
+                        self.assertNotEqual(tensor, storage_dtype)
+                continue
+
+            if patterns_to_check and any(re.search(pat, name) for pat in patterns_to_check):
+                expected = compute_dtype
+            else:
+                expected = storage_dtype
+
+            for _, tensor in attrs:
+                self.assertEqual(tensor.dtype, expected)
 
     def test_add_and_remove_hooks(self):
         test_model = ModelForTest()
