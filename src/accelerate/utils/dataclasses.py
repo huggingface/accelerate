@@ -1881,11 +1881,10 @@ class FullyShardedDataParallelPlugin:
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
 
-        # TODO(s1ro1): add support for FULL_STATE_DICT in FSDP2
-        if self.fsdp_version == 2 and self.state_dict_type != StateDictType.SHARDED_STATE_DICT:
+        if self.fsdp_version == 2 and self.state_dict_type == StateDictType.LOCAL_STATE_DICT:
             raise ValueError(
-                "FSDP2 only supports SHARDED_STATE_DICT for now. "
-                "Please set `fsdp_state_dict_type` to `SHARDED_STATE_DICT`."
+                "FSDP2 does not support LOCAL_STATE_DICT. "
+                "Please set `fsdp_state_dict_type` to `SHARDED_STATE_DICT` or `FULL_STATE_DICT`."
             )
 
     def set_auto_wrap_policy(self, model):
