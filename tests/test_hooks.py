@@ -64,7 +64,7 @@ class HooksModelTester(unittest.TestCase):
         self,
         module,
         storage_dtype,
-        compute_dtype,
+        loading_type,
         patterns_to_check=None,
     ):
         for name, submodule in module.named_modules():
@@ -77,11 +77,11 @@ class HooksModelTester(unittest.TestCase):
             if not isinstance(submodule, SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING):
                 if patterns_to_check is None:
                     for _, tensor in attrs:
-                        self.assertNotEqual(tensor, storage_dtype)
+                        self.assertEqual(tensor.dtype, loading_type)
                 continue
 
             if patterns_to_check and any(re.search(pat, name) for pat in patterns_to_check):
-                expected = compute_dtype
+                expected = loading_type
             else:
                 expected = storage_dtype
 
@@ -442,6 +442,7 @@ class HooksModelTester(unittest.TestCase):
     )
     def test_layerwise_upcasting_inference(self, storage_dtype, compute_dtype, skip_modules_pattern=None):
         test_model = ModelForTest()
+        loading_dtype = next(test_model.parameters()).data.dtype
         inputs = torch.randn(2, 3)
         inputs = inputs.to(compute_dtype) if inputs.dtype == torch.float32 else inputs
 
@@ -452,7 +453,7 @@ class HooksModelTester(unittest.TestCase):
             skip_modules_pattern=skip_modules_pattern,
         )
         patterns_to_check = skip_modules_pattern if skip_modules_pattern else None
-        self.check_dtype_for_layerwise_upcasting(test_model, storage_dtype, compute_dtype, patterns_to_check)
+        self.check_dtype_for_layerwise_upcasting(test_model, storage_dtype, loading_dtype, patterns_to_check)
 
         with torch.no_grad():
             _ = test_model(inputs)
