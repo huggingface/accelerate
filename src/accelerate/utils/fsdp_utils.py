@@ -50,22 +50,51 @@ def disable_fsdp_ram_efficient_loading():
     os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "False"
 
 
-def _get_model_state_dict(model, adapter_only=False):
+def _get_model_state_dict(model, adapter_only=False, sd_options=None):
     if adapter_only and is_peft_model(model):
         from peft import get_peft_model_state_dict
 
         return get_peft_model_state_dict(model, adapter_name=model.active_adapter)
+
+    # Invariant: `sd_options` is not None only for FSDP2
+    if sd_options is not None:
+        from torch.distributed.checkpoint.state_dict import get_model_state_dict
+
+        return get_model_state_dict(model, options=sd_options)
     else:
         return model.state_dict()
 
 
-def _set_model_state_dict(model, state_dict, adapter_only=False):
+def _set_model_state_dict(model, state_dict, adapter_only=False, sd_options=None):
     if adapter_only and is_peft_model(model):
         from peft import set_peft_model_state_dict
 
         return set_peft_model_state_dict(model, state_dict, adapter_name=model.active_adapter)
+
+    # Invariant: `sd_options` is not None only for FSDP2
+    if sd_options is not None:
+        from torch.distributed.checkpoint.state_dict import set_model_state_dict
+
+        return set_model_state_dict(model, state_dict, options=sd_options)
     else:
         return model.load_state_dict(state_dict)
+
+
+def _prepare_sd_options(fsdp_plugin):
+    sd_options = None
+
+    # we use this only for FSDP2, as it requires torch >= 2.6.0 and this api requires torch >= 2.2.0
+    if fsdp_plugin.fsdp_version == 2:
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+        from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+
+        sd_options = StateDictOptions(
+            full_state_dict=fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT,
+            cpu_offload=getattr(fsdp_plugin.state_dict_config, "offload_to_cpu", False),
+            broadcast_from_rank0=getattr(fsdp_plugin.state_dict_config, "rank0_only", False),
+        )
+
+    return sd_options
 
 
 def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False):
@@ -76,7 +105,7 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
     os.makedirs(output_dir, exist_ok=True)
-    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT and fsdp_plugin.fsdp_version == 1:
+    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
         # FSDP raises error when single GPU is used with `offload_to_cpu=True` for FULL_STATE_DICT
         # so, only enable it when num_processes>1
         is_multi_process = accelerator.num_processes > 1
@@ -90,9 +119,10 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
         if fsdp_plugin.fsdp_version == 1
         else nullcontext()
     )
+    sd_options = _prepare_sd_options(fsdp_plugin)
 
     with ctx:
-        state_dict = _get_model_state_dict(model, adapter_only=adapter_only)
+        state_dict = _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
@@ -133,7 +163,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
     accelerator.wait_for_everyone()
-    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT and fsdp_plugin.fsdp_version == 1:
+    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
         # FSDP raises error when single GPU is used with `offload_to_cpu=True` for FULL_STATE_DICT
         # so, only enable it when num_processes>1
         is_multi_process = accelerator.num_processes > 1
@@ -147,6 +177,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
         if fsdp_plugin.fsdp_version == 1
         else nullcontext()
     )
+    sd_options = _prepare_sd_options(fsdp_plugin)
 
     with ctx:
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
@@ -188,12 +219,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             state_dict = state_dict["model"]
             logger.info(f"Model loaded from {ckpt_dir}")
 
-        if fsdp_plugin.fsdp_version == 1:
-            load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only)
-        else:
-            from torch.distributed.checkpoint.state_dict import set_model_state_dict
-
-            load_result = set_model_state_dict(model, state_dict)
+        load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only, sd_options=sd_options)
     return load_result
 
 
@@ -214,11 +240,15 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
         else nullcontext()
     )
 
+    sd_options = _prepare_sd_options(fsdp_plugin)
+
     with ctx:
-        if fsdp_plugin.fsdp_version == 1:
-            optim_state = FSDP.optim_state_dict(model, optimizer)
+        if fsdp_plugin.fsdp_version == 2:
+            from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+
+            optim_state = get_optimizer_state_dict(model, optimizer, options=sd_options)
         else:
-            optim_state = optimizer.state_dict()
+            optim_state = FSDP.optim_state_dict(model, optimizer)
 
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             if accelerator.process_index == 0:
@@ -244,7 +274,6 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
 def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     import torch.distributed.checkpoint as dist_cp
-    from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -256,6 +285,7 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
         if fsdp_plugin.fsdp_version == 1
         else nullcontext()
     )
+    sd_options = _prepare_sd_options(fsdp_plugin)
     with ctx:
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             optim_state = None
@@ -274,28 +304,22 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
                 else input_dir
             )
             logger.info(f"Loading Optimizer from {ckpt_dir}")
-            if fsdp_plugin.fsdp_version == 1:
-                optim_state = load_sharded_optimizer_state_dict(
-                    model_state_dict=_get_model_state_dict(model, adapter_only=adapter_only),
-                    optimizer_key="optimizer",
-                    storage_reader=dist_cp.FileSystemReader(ckpt_dir),
-                )
-            else:
-                optim_state = {"optimizer": optimizer.state_dict()}
-                dist_cp.load(
-                    optim_state,
-                    checkpoint_id=ckpt_dir,
-                    storage_reader=dist_cp.FileSystemReader(ckpt_dir),
-                )
+            optim_state = {"optimizer": optimizer.state_dict()}
+            dist_cp.load(
+                optim_state,
+                checkpoint_id=ckpt_dir,
+                storage_reader=dist_cp.FileSystemReader(ckpt_dir),
+            )
             optim_state = optim_state["optimizer"]
             logger.info(f"Optimizer loaded from {ckpt_dir}")
+
         if fsdp_plugin.fsdp_version == 1:
             flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
             optimizer.load_state_dict(flattened_osd)
         else:
-            # we can't do `set_state_dict` here because it does a step of the optimizer which breaks with grad-scaler
-            # TODO(siro1): investigate
-            optimizer.load_state_dict(optim_state)
+            from torch.distributed.checkpoint.state_dict import set_optimizer_state_dict
+
+            set_optimizer_state_dict(model, optimizer, optim_state, options=sd_options)
 
 
 def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: str, safe_serialization: bool = True):
