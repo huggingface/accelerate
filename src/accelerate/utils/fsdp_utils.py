@@ -147,7 +147,7 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
             logger.info(f"Saving model to {ckpt_dir}")
             state_dict = {"model": state_dict}
 
-            dist_cp.save_state_dict(
+            dist_cp.save(
                 state_dict=state_dict,
                 storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
                 planner=DefaultSavePlanner(),
@@ -210,8 +210,8 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
                 else input_dir
             )
             logger.info(f"Loading model from {ckpt_dir}")
-            state_dict = {"model": _get_model_state_dict(model, adapter_only=adapter_only)}
-            dist_cp.load_state_dict(
+            state_dict = {"model": _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)}
+            dist_cp.load(
                 state_dict=state_dict,
                 storage_reader=dist_cp.FileSystemReader(ckpt_dir),
                 planner=DefaultLoadPlanner(),
@@ -263,7 +263,7 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
             ckpt_dir = os.path.join(output_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
             os.makedirs(ckpt_dir, exist_ok=True)
             logger.info(f"Saving Optimizer state to {ckpt_dir}")
-            dist_cp.save_state_dict(
+            dist_cp.save(
                 state_dict={"optimizer": optim_state},
                 storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
                 planner=DefaultSavePlanner(),
