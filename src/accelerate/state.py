@@ -829,6 +829,13 @@ class PartialState:
             device_index = self.local_process_index % device_module.device_count()
             self.device = torch.device(device, device_index)
             device_module.set_device(self.device)
+            
+            # Warn if there are more processes than GPUs
+            if device == "cuda" and self.num_processes > device_module.device_count():
+                warnings.warn(
+                    f"There are fewer GPUs ({device_module.device_count()}) than processes ({self.num_processes}). "
+                    "Some processes will not have exclusive GPU access."
+                )
 
     def destroy_process_group(self, group=None):
         """
