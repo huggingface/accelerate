@@ -697,19 +697,34 @@ def test_split_between_processes_dataset(datasets_Dataset):
 
 def test_split_between_processes_list():
     state = AcceleratorState()
+    # Test basic split (no padding)
     data = list(range(0, 2 * state.num_processes))
     with state.split_between_processes(data) as results:
         assert len(results) == 2, (
             f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
         )
 
+    # Test split with padding for uneven distribution
     data = list(range(0, (3 * state.num_processes) - 1))
+    num_samples_per_process, num_extras = divmod(len(data), state.num_processes)
+    expected_length = num_samples_per_process + (1 if state.process_index < num_extras else 0)
+    
     with state.split_between_processes(data, apply_padding=True) as results:
-        if state.is_last_process:
-            # Test that the last process gets the extra item(s)
-            num_samples_per_device = math.ceil(len(data) / state.num_processes)
-            assert len(results) == num_samples_per_device, (
-                f"Last process did not get the extra item(s). Process index: {state.process_index}; Length: {len(results)}"
+        # With padding, all processes should have the same length of data
+        # The expected length is num_samples_per_process + 1 if extras > 0
+        expected_padded_length = num_samples_per_process + (1 if num_extras > 0 else 0)
+        assert len(results) == expected_padded_length, (
+            f"Process did not get correct padded length. Process index: {state.process_index}; "
+            f"Expected: {expected_padded_length}, Got: {len(results)}"
+        )
+        
+        # Check that padding uses the last element
+        if state.process_index >= num_extras and num_extras > 0:
+            # Processes that receive padding should have the last element repeated
+            assert results[-1] == results[-2], (
+                f"Padding was not applied correctly. Process index: {state.process_index}; "
+                f"Last two elements should be the same, got: {results[-2:]}; "
+                f"Original slice length would be {expected_length}"
             )
     state.wait_for_everyone()
 
