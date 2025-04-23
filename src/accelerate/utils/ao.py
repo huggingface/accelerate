@@ -17,15 +17,16 @@ Needed utilities for torchao FP8 training.
 """
 
 from functools import partial
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import torch
 
 from .imports import is_torchao_available, torchao_required
 
 
-if is_torchao_available():
-    from torchao.float8.float8_linear import Float8LinearConfig
+if TYPE_CHECKING:
+    if is_torchao_available():
+        from torchao.float8.float8_linear import Float8LinearConfig
 
 
 def find_first_last_linear_layers(model: torch.nn.Module):
