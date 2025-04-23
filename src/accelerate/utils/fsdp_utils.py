@@ -632,6 +632,13 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
             parent_module.register_buffer(local_buffer_name, buffer_tensor, persistent=False)
 
+        # We need to tie the weights again, as call to `load_full_state_dict` breaks the tie
+        # Needs to be called both here and above
+        # removing this call makes the have slightly different loss
+        # removing the call above leads to extra memory usage as explained in the comment above
+        if hasattr(model, "tie_weights"):
+            model.tie_weights()
+
     if accelerator.mixed_precision != "no" and model.dtype != torch.float32:
         # We upcast the model according to `deepspeed`'s implementation
         # More info about this can be found in `accelerator.py:prepare_model`s FSDP1 section
