@@ -3597,8 +3597,11 @@ class Accelerator:
 
                 state_dict = clone_tensors_for_torch_save(self.unwrap_model(model).state_dict())
         elif self.is_fsdp2:
-            with torch.no_grad():
-                state_dict = {k: v.full_tensor() for k, v in model.state_dict().items()}
+            from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
+
+            # This hangs if `cpu_offload` is also True
+            options = StateDictOptions(full_state_dict=True, broadcast_from_rank0=True)
+            state_dict = get_model_state_dict(model, options=options)
         elif self.distributed_type == DistributedType.FSDP:
             from torch.distributed.fsdp import FullStateDictConfig, StateDictType
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP

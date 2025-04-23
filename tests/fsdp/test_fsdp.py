@@ -38,6 +38,7 @@ from accelerate.test_utils.testing import (
 from accelerate.utils import is_bf16_available, is_fp16_available, is_hpu_available, patch_environment, set_seed
 from accelerate.utils.constants import (
     FSDP2_PYTORCH_VERSION,
+    FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
@@ -204,10 +205,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
         fsdp_version = self.current_fsdp_version
         for i, state_dict_type in enumerate(FSDP_STATE_DICT_TYPE):
-            # FSDP2 only supports SHARDED_STATE_DICT, else raises ValueError
             cm = (
                 self.assertRaises(ValueError)
-                if (fsdp_version == 2 and state_dict_type != "SHARDED_STATE_DICT")
+                if (fsdp_version == 2 and state_dict_type not in FSDP2_STATE_DICT_TYPE)
                 else nullcontext()
             )
             env = self.fsdp_envs[fsdp_version].copy()
@@ -229,11 +229,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
         # We can also override the state_dict_type,
         # typical case: user trains with sharded, but final save is with full
-        # Note: we do not test this for FSDP2 because FSDP2 only supports SHARDED_STATE_DICT
-        if fsdp_version == 1:
-            fsdp_plugin = FullyShardedDataParallelPlugin(state_dict_type="FULL_STATE_DICT")
-            fsdp_plugin.set_state_dict_type("SHARDED_STATE_DICT")
-            assert fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT
+        fsdp_plugin = FullyShardedDataParallelPlugin(state_dict_type="FULL_STATE_DICT")
+        fsdp_plugin.set_state_dict_type("SHARDED_STATE_DICT")
+        assert fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT
 
     def test_auto_wrap_policy(self):
         fsdp_version = self.current_fsdp_version
@@ -548,6 +546,7 @@ class FSDPIntegrationTest(TempDirTestCase):
         )
 
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
+            fsdp_state_dict_types = FSDP_STATE_DICT_TYPE if fsdp_version == 1 else FSDP2_STATE_DICT_TYPE
             cmd_config = cmd.copy()
             if fsdp_version == 1:
                 cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
@@ -556,14 +555,10 @@ class FSDPIntegrationTest(TempDirTestCase):
             if strategy != "FULL_SHARD":
                 continue
             state_dict_config_index = len(cmd_config)
-            for state_dict_type in FSDP_STATE_DICT_TYPE:
+            for state_dict_type in fsdp_state_dict_types:
                 # Todo: Currently failing for `LOCAL_STATE_DICT` with error
                 # Unexpected key(s) in state_dict: "_fsdp_wrapped_module._flat_param".
                 if state_dict_type == "LOCAL_STATE_DICT":
-                    continue
-
-                # TODO(s1ro1): FSDP2 only supports `SHARDED_STATE_DICT`
-                if fsdp_version == 2 and state_dict_type != "SHARDED_STATE_DICT":
                     continue
 
                 cmd_config = cmd_config[:state_dict_config_index]
