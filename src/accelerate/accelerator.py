@@ -437,9 +437,9 @@ class Accelerator:
         self.has_fp8_handler = False
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(handler, KwargsHandler), (
-                    f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
-                )
+                assert isinstance(
+                    handler, KwargsHandler
+                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
                 # Add the handler class to the set of found handlers
                 if handler.__class__ in found_handlers:
                     raise ValueError(f"You can only pass one {handler.__class__} in `kwargs_handlers`.")
@@ -2176,16 +2176,15 @@ class Accelerator:
         only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock pytorch
         starting from version 2.4.
         """
-        if self.state.use_ipex:
-            if not is_ipex_available():
-                raise ImportError(
-                    "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
-                    " to https://github.com/intel/intel-extension-for-pytorch."
-                )
 
         # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
         if is_ipex_available():
             import intel_extension_for_pytorch as ipex
+        else:
+            raise ImportError(
+                "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
+            )
 
         models = []
         optimizers = []
