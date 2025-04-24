@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import functools
 import os
 import shutil
@@ -25,7 +26,7 @@ import torch
 from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, OPTIMIZER_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import get_module_class_from_name
-from .modeling import is_peft_model
+from .modeling import get_non_persistent_buffers, is_peft_model
 from .other import get_module_children_bottom_up, is_compiled_module, save
 from .versions import is_torch_version
 
@@ -458,29 +459,68 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
-        model (`torch.nn.Module`): The model to load the state dict into
+        model (`torch.nn.Module`):
+            The model to load the state dict into, expected to be on meta device or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
     import torch.distributed as dist
     from torch.distributed.tensor import distribute_tensor
 
-    sharded_sd = model.state_dict()
+    # Model was previously copied to meta device
+    meta_sharded_sd = model.state_dict()
+    sharded_sd = {}
+
+    # Rank 0 distributes the full state dict to other ranks
+    def _infer_parameter_dtype(model, param_name, empty_param):
+        old_param = model.get_parameter_or_buffer(param_name)
+
+        is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+        casting_dtype = None
+        is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+
+        if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+            casting_dtype = old_param.dtype
+
+        return old_param is not None and old_param.is_contiguous(), casting_dtype
+
+    def _cast_and_contiguous(tensor, to_contiguous, dtype):
+        if dtype is None:
+            tensor = tensor.to(dtype=dtype)
+        if to_contiguous:
+            tensor = tensor.contiguous()
+        return tensor
+
     if accelerator.is_main_process:
-        for (param_name, full_param), sharded_param in zip(full_sd.items(), sharded_sd.values()):
+        for (param_name, full_param), sharded_param in zip(full_sd.items(), meta_sharded_sd.values()):
             full_param = full_param.detach().cuda()
             mesh = sharded_param.device_mesh
             dist.broadcast(full_param, src=0, group=mesh.get_group())
             sharded_tensor = distribute_tensor(full_param, mesh, sharded_param.placements)
+            to_contiguous, casting_dtype = _infer_parameter_dtype(
+                model,
+                param_name,
+                full_param,
+            )
+            sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
             sharded_sd[param_name] = sharded_tensor
+    # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
     else:
-        for param_name, sharded_param in sharded_sd.items():
+        for param_name, sharded_param in meta_sharded_sd.items():
             full_tensor = torch.empty(sharded_param.size(), device="cuda", dtype=sharded_param.dtype)
             mesh = sharded_param.device_mesh
             dist.broadcast(full_tensor, src=0, group=mesh.get_group())
             sharded_tensor = distribute_tensor(full_tensor, mesh, sharded_param.placements)
+            to_contiguous, casting_dtype = _infer_parameter_dtype(
+                model,
+                param_name,
+                full_tensor,
+            )
+            sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
             sharded_sd[param_name] = sharded_tensor
 
-    model.load_state_dict(sharded_sd)
+    # we set `assign=True` because our params are on meta device
+    model.load_state_dict(sharded_sd, assign=True)
+    return model
 
 
 def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping: dict):
@@ -569,6 +609,26 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
     }
 
+    if fsdp2_plugin.cpu_ram_efficient_loading:
+        # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
+        # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
+        # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.emtpy`), `fully_shard` would move it to GPU
+        # Afterwards, when we call `fsdp2_load_full_state_dict`, us creating the state_dict would result into briefly having two copies of model state_dict on the GPU -> VRAM spike
+
+        # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
+        # Also, these buffers aren't getting sharded by default
+        # We get the FQNs of all non-persistent buffers, to re-register them after
+        non_persistent_buffer_fqns = get_non_persistent_buffers(model, recurse=True, fqns=True)
+        original_non_persistent_buffers = copy.deepcopy(
+            {k: v for k, v in model.named_buffers() if k in non_persistent_buffer_fqns}
+        )
+        # We move the model to meta device, as then sharding happens on meta device
+        model = model.to(torch.device("meta"))
+        # We need to re-tie the weights, not exactly sure why, but if we don't do this, reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
+        # We assume `transformers` models have a `tie_weights` method if they support it
+        if hasattr(model, "tie_weights"):
+            model.tie_weights()
+
     auto_wrap_policy = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, auto_wrap_policy_type, model)
     if auto_wrap_policy is not None:
         # We skip the model itself, as that one is always wrapped
@@ -582,6 +642,26 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
         # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
         fsdp2_load_full_state_dict(accelerator, model, original_sd)
+
+        # We re-register the buffers, as they may not be in the state_dict
+        for fqn, buffer_tensor in original_non_persistent_buffers.items():
+            buffer_tensor = buffer_tensor.to(accelerator.device)
+
+            if "." in fqn:
+                parent_fqn, local_buffer_name = fqn.rsplit(".", 1)
+                parent_module = model.get_submodule(parent_fqn)
+            else:
+                local_buffer_name = fqn
+                parent_module = model
+
+            parent_module.register_buffer(local_buffer_name, buffer_tensor, persistent=False)
+
+        # We need to tie the weights again, as call to `load_full_state_dict` breaks the tie
+        # Needs to be called both here and above
+        # removing this call makes the have slightly different loss
+        # removing the call above leads to extra memory usage as explained in the comment above
+        if hasattr(model, "tie_weights"):
+            model.tie_weights()
 
     if accelerator.mixed_precision != "no" and model.dtype != torch.float32:
         # We upcast the model according to `deepspeed`'s implementation

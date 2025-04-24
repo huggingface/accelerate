@@ -441,7 +441,7 @@ def named_module_tensors(
                 yield named_buffer
 
 
-def get_non_persistent_buffers(module: nn.Module, recurse: bool = False):
+def get_non_persistent_buffers(module: nn.Module, recurse: bool = False, fqns: bool = False):
     """
     Gather all non persistent buffers of a given modules into a set
 
@@ -450,12 +450,17 @@ def get_non_persistent_buffers(module: nn.Module, recurse: bool = False):
             The module we want the non persistent buffers on.
         recurse (`bool`, *optional*, defaults to `False`):
             Whether or not to go look in every submodule or just return the direct non persistent buffers.
+        fqns (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the fully-qualified names of the non persistent buffers.
     """
 
     non_persistent_buffers_set = module._non_persistent_buffers_set
     if recurse:
-        for _, m in module.named_modules():
-            non_persistent_buffers_set |= m._non_persistent_buffers_set
+        for n, m in module.named_modules():
+            if fqns:
+                non_persistent_buffers_set |= {n + "." + b for b in m._non_persistent_buffers_set}
+            else:
+                non_persistent_buffers_set |= m._non_persistent_buffers_set
 
     return non_persistent_buffers_set
 
