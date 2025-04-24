@@ -693,7 +693,7 @@ def fsdp2_prepare_auto_wrap_policy(
             The auto wrap policy function to be applied to the model
     """
     if auto_wrap_policy_type == "transformer":
-        no_split_modules = model._no_split_modules
+        no_split_modules = getattr(model, "_no_split_modules", None)
         if no_split_modules is None:
             no_split_modules = []
         transformer_cls_names_to_wrap = list(no_split_modules)
@@ -715,7 +715,8 @@ def fsdp2_prepare_auto_wrap_policy(
     elif auto_wrap_policy_type == "size":
 
         def policy(module: torch.nn.Module) -> bool:
-            return module.numel() > fsdp2_plugin.min_num_params
+            module_num_params = sum(p.numel() for p in module.parameters())
+            return module_num_params > fsdp2_plugin.min_num_params
     else:
         return None
 
