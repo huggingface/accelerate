@@ -663,7 +663,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    if accelerator.mixed_precision != "no" and model.dtype != torch.float32:
+    if accelerator.mixed_precision != "no":
         # We upcast the model according to `deepspeed`'s implementation
         # More info about this can be found in `accelerator.py:prepare_model`s FSDP1 section
         model = model.to(torch.float32)
