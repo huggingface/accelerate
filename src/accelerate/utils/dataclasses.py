@@ -999,7 +999,7 @@ class TorchDynamoPlugin(KwargsHandler):
     options: Any = field(default=None, metadata={"help": "A dictionary of options to pass to the backend."})
     disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
 
-    regional_compilation: bool = field(
+    use_regional_compilation: bool = field(
         default=False,
         metadata={
             "help": (
