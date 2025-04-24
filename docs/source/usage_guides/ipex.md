@@ -95,7 +95,7 @@ accelerate launch examples/nlp_example.py
 ```
 
 > [!CAUTION]
-> `accelerator.prepare` can currently only handle simultaneously preparing multiple models for  (and no optimizer) OR a single model-optimizer pair for training. Other attempts (e.g., two model-optimizer pairs) will raise a verbose error. To work around this limitation, consider separately using `accelerator.prepare` for each model-optimizer pair.
+> `accelerator.prepare` can currently only handle simultaneously preparing multiple models  (and no optimizer) OR a single model-optimizer pair for training. Other attempts (e.g., two model-optimizer pairs) will raise a verbose error. To work around this limitation, consider separately using `accelerator.prepare` for each model-optimizer pair.
 
 **Scenario 2**: Acceleration of distributed CPU training
 we use Intel oneCCL for communication, combined with Intel® MPI library to deliver flexible, efficient, scalable cluster messaging on Intel® architecture. you could refer the [here](https://huggingface.co/docs/transformers/perf_train_cpu_many) for the installation guide
