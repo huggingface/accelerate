@@ -663,7 +663,10 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    if accelerator.mixed_precision != "no" and model.dtype != torch.float32:
+    # There is no `dtype` attribution for nn.Module
+    # Set it to None if it doesn't exist and do the upcast always
+    model_dtype = getattr(model, "dtype", None)
+    if accelerator.mixed_precision != "no" and (model_dtype is None or model_dtype != torch.float32):
         # We upcast the model according to `deepspeed`'s implementation
         # More info about this can be found in `accelerator.py:prepare_model`s FSDP1 section
         model = model.to(torch.float32)
@@ -693,7 +696,7 @@ def fsdp2_prepare_auto_wrap_policy(
             The auto wrap policy function to be applied to the model
     """
     if auto_wrap_policy_type == "transformer":
-        no_split_modules = model._no_split_modules
+        no_split_modules = getattr(model, "_no_split_modules", None)
         if no_split_modules is None:
             no_split_modules = []
         transformer_cls_names_to_wrap = list(no_split_modules)
@@ -715,7 +718,8 @@ def fsdp2_prepare_auto_wrap_policy(
     elif auto_wrap_policy_type == "size":
 
         def policy(module: torch.nn.Module) -> bool:
-            return module.numel() > fsdp2_plugin.min_num_params
+            module_num_params = sum(p.numel() for p in module.parameters())
+            return module_num_params > fsdp2_plugin.min_num_params
     else:
         return None
 
