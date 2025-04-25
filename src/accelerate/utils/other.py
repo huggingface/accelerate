@@ -75,7 +75,7 @@ def has_compiled_regions(module: torch.nn.Module) -> bool:
     return False
 
 
-def compile_regions(module: torch.nn.Module, root: bool = True, **compile_kwargs) -> torch.nn.Module:
+def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
     """
     Performs a version of the regional compilation recipe where we target repeated blocks of the same class and compile
     them sequentially to hit the compiler's cache. This allows us to speed up the compilation time / cold start of
@@ -90,25 +90,28 @@ def compile_regions(module: torch.nn.Module, root: bool = True, **compile_kwargs
             Additional keyword arguments to pass to `torch.compile()`.
     """
 
-    if isinstance(module, torch.nn.ModuleList):
-        if all(isinstance(submodule, module[0].__class__) for submodule in module):
-            new_module = torch.nn.ModuleList()
-            for submodule in module:
-                new_module.append(torch.compile(submodule, **compile_kwargs))
-        else:
+    def _compile_regions(module, **compile_kwargs):
+        if isinstance(module, torch.nn.ModuleList):
+            if all(isinstance(submodule, module[0].__class__) for submodule in module):
+                new_module = torch.nn.ModuleList()
+                for submodule in module:
+                    new_module.append(torch.compile(submodule, **compile_kwargs))
+            else:
+                new_module = torch.compile(module, **compile_kwargs)
+
+        elif module._modules:  # Non-leaf node
+            new_module = module.__class__.__new__(module.__class__)
+            new_module.__dict__.update(module.__dict__)
+            new_module._modules = {}
+            for name, submodule in module.named_children():
+                new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
+
+        else:  # Leaf node
             new_module = torch.compile(module, **compile_kwargs)
 
-    elif module._modules:  # Non-leaf node
-        new_module = module.__class__.__new__(module.__class__)
-        new_module.__dict__.update(module.__dict__)
-        new_module._modules = {}
-        for name, submodule in module.named_children():
-            new_module.add_module(name, compile_regions(submodule, root=False, **compile_kwargs))
+    new_module = _compile_regions(module, **compile_kwargs)
 
-    else:  # Leaf node
-        new_module = torch.compile(module, **compile_kwargs)
-
-    if root and not hasattr(new_module, "_orig_mod"):
+    if hasattr(new_module, "_orig_mod"):
         # Keeps a reference to the original module to decompile/unwrap it later
         new_module.__dict__["_orig_mod"] = module
 
