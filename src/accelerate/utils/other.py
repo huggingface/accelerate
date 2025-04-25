@@ -78,8 +78,8 @@ def has_compiled_submodules(module: torch.nn.Module) -> bool:
 def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
     """
     Performs a version of the regional compilation recipe where we target repeated blocks of the same class and compile
-    them sequentially to hit the compiler's cache. This is useful for models with repeated blocks of the same class,
-    such as transformers models.
+    them sequentially to hit the compiler's cache. This allows us to speed up the compilation time / cold start of
+    models like LLMs and Transformers in general.
 
     See: https://pytorch.org/tutorials/recipes/regional_compilation.html
 
