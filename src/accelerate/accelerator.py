@@ -124,7 +124,7 @@ from .utils.constants import (
     PROFILE_PATTERN_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
-from .utils.other import is_compiled_module
+from .utils.other import compile_regions, is_compiled_module
 
 
 if is_deepspeed_available():
@@ -1748,7 +1748,7 @@ class Accelerator:
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if self.state.dynamo_plugin.use_regional_compilation:
-                model = self.compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
+                model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
             else:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
@@ -3835,28 +3835,3 @@ class Accelerator:
         elif self.state.deepspeed_plugin is not None and self.state.deepspeed_plugin.enable_msamp:
             return "MSAMP"
         return None
-
-    @staticmethod
-    def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
-        """
-        Compiles regions of the model and returns a new instance of the model without copying parameters (like
-        `torch.compile`).
-        """
-
-        if isinstance(module, torch.nn.ModuleList):
-            # Create a new ModuleList
-            new_modulelist = torch.nn.ModuleList()
-            for submodule in module:
-                new_modulelist.append(torch.compile(submodule, **compile_kwargs))
-            return new_modulelist
-        elif module._modules:  # Non-leaf node
-            # Create a new module of the same type
-            new_module = module.__class__.__new__(module.__class__)
-            new_module.__dict__.update(module.__dict__)
-            new_module._modules = {}
-            # Process children
-            for name, submodule in module.named_children():
-                new_module.add_module(name, TorchDynamoPlugin.compile_regions(submodule, **compile_kwargs))
-            return new_module
-        else:  # Leaf node
-            return torch.compile(module, **compile_kwargs)

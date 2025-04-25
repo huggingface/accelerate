@@ -50,13 +50,72 @@ if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
-def is_compiled_module(module):
+def is_compiled_module(module: torch.nn.Module) -> bool:
     """
     Check whether the module was compiled with torch.compile()
     """
     if not hasattr(torch, "_dynamo"):
         return False
+
     return isinstance(module, torch._dynamo.eval_frame.OptimizedModule)
+
+
+def has_compiled_submodules(module: torch.nn.Module) -> bool:
+    """
+    Check whether the module has compiled regions.
+    """
+    if not hasattr(torch, "_dynamo"):
+        return False
+
+    if module._modules:
+        for submodule in module.modules():
+            if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
+                return True
+
+    return
+
+
+def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
+    """
+    Performs a version of the regional compilation recipe where we target repeated blocks of the same class and compile
+    them sequentially to hit the compiler's cache. This is useful for models with repeated blocks of the same class,
+    such as transformers models.
+
+    See: https://pytorch.org/tutorials/recipes/regional_compilation.html
+
+    Args:
+        module (`torch.nn.Module`):
+            The model to compile.
+        **compile_kwargs:
+            Additional keyword arguments to pass to `torch.compile()`.
+    """
+
+    if isinstance(module, torch.nn.ModuleList):
+        submodule_class_name = module[0].__class__.__name__
+
+        if all(submodule.__class__.__name__ == submodule_class_name for submodule in module):
+            # If all submodules are the same class, compile them sequentially to hit the cache
+            new_module = torch.nn.ModuleList()
+            for submodule in module:
+                new_module.append(torch.compile(submodule, **compile_kwargs))
+        else:
+            # If not, compile the whole module
+            new_module = torch.compile(module, **compile_kwargs)
+    elif module._modules:  # Non-leaf node
+        new_module = module.__class__.__new__(module.__class__)
+        new_module.__dict__.update(module.__dict__)
+        new_module._modules = {}
+        for name, submodule in module.named_children():
+            new_module.add_module(name, compile_regions(submodule, **compile_kwargs))
+    else:  # Leaf node
+        new_module = torch.compile(module, **compile_kwargs)
+
+    if not hasattr(new_module, "_orig_mod"):
+        # this will keep a reference to the original module
+        # so that we can decompile/unwrap it later
+        new_module._orig_mod = module
+
+    return new_module
 
 
 def extract_model_from_parallel(
@@ -82,7 +141,9 @@ def extract_model_from_parallel(
     options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
 
     is_compiled = is_compiled_module(model)
-    if is_compiled:
+    has_compiled_regions = has_compiled_submodules(model)
+
+    if is_compiled and not has_compiled_regions:
         compiled_model = model
         model = model._orig_mod
 
@@ -128,7 +189,7 @@ def extract_model_from_parallel(
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
-    if keep_torch_compile and is_compiled:
+    if keep_torch_compile and (is_compiled or has_compiled_regions):
         compiled_model._orig_mod = model
         model = compiled_model
 
