@@ -62,7 +62,7 @@ def is_compiled_module(module: torch.nn.Module) -> bool:
 
 def has_compiled_submodules(module: torch.nn.Module) -> bool:
     """
-    Check whether the module has compiled regions.
+    Check whether the module has submodules that were compiled with torch.compile()
     """
     if not hasattr(torch, "_dynamo"):
         return False
@@ -72,7 +72,7 @@ def has_compiled_submodules(module: torch.nn.Module) -> bool:
             if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
                 return True
 
-    return
+    return False
 
 
 def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
