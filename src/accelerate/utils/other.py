@@ -140,7 +140,7 @@ def extract_model_from_parallel(
     is_compiled = is_compiled_module(model)
     has_compiled = has_compiled_regions(model)
 
-    if is_compiled and not has_compiled:
+    if is_compiled and has_compiled:
         compiled_model = model
         model = model._orig_mod
 
