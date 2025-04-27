@@ -561,30 +561,16 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
         self.set_epoch(self.iteration)
         dataloader_iter = self.base_dataloader.__iter__()
-        # We iterate one batch ahead to check when we are at the end
-        try:
-            current_batch = next(dataloader_iter)
-        except StopIteration:
-            yield
 
-        batch_index = 0
-        while True:
-            try:
-                # But we still move it to the device so it is done before `StopIteration` is reached
+        for batch_index, current_batch in enumerate(dataloader_iter):
+            if batch_index >= self.skip_batches:
                 if self.device is not None:
                     current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
                 self._update_state_dict()
-                next_batch = next(dataloader_iter)
-                if batch_index >= self.skip_batches:
-                    yield current_batch
-                batch_index += 1
-                current_batch = next_batch
-            except StopIteration:
-                self.end_of_dataloader = True
-                self._update_state_dict()
-                if batch_index >= self.skip_batches:
-                    yield current_batch
-                break
+                yield current_batch
+
+        self.end_of_dataloader = True
+        self._update_state_dict()
 
         self.iteration += 1
         self.end()
