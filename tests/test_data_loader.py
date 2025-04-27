@@ -491,6 +491,10 @@ class DataLoaderTester(AccelerateTestCase):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2)
         assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
+    def test_skip_data_loader_shard(self):
+        dataloader = DataLoaderShard(list(range(16)), batch_size=4, skip_batches=2)
+        assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
+
     def test_skip_first_batches(self):
         dataloader = DataLoader(list(range(16)), batch_size=4)
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
@@ -562,6 +566,11 @@ class StatefulDataLoaderTester(AccelerateTestCase):
     @require_torchdata_stateful_dataloader
     def test_skip_data_loader(self):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
+        assert isinstance(dataloader, StatefulDataLoader)
+        assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
+
+    def test_skip_data_loader_shard(self):
+        dataloader = DataLoaderShard(list(range(16)), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
         assert isinstance(dataloader, StatefulDataLoader)
         assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
