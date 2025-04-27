@@ -1391,10 +1391,10 @@ def skip_first_batches(dataloader, num_batches=0):
             # Need to manually skip batches in the dataloader
             kwargs["skip_batches"] = num_batches
         elif sampler_is_batch_sampler:
+            kwargs["batch_sampler"] = new_batch_sampler
+        else:
             kwargs["sampler"] = new_batch_sampler
             kwargs["batch_size"] = dataloader.batch_size
-        else:
-            kwargs["batch_sampler"] = new_batch_sampler
         dataloader = DataLoaderShard(
             dataset,
             device=dataloader.device,
