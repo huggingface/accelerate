@@ -33,7 +33,7 @@ from accelerate.utils.imports import is_torch_version, is_transformers_available
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
 
-if is_torch_version("2.5",">=") and _torch_distributed_available:
+if is_torch_version(">=","2.5") and _torch_distributed_available:
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed._tensor import DTensor
     from torch.distributed.device_mesh import init_device_mesh
