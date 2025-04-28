@@ -54,6 +54,7 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
 @manage_process_group
 def load_checkpoint_and_dispatch_fsdp2():
     from torch.distributed._tensor import DTensor
+
     torch.cuda.set_device(device := torch.device(dist.get_rank()))
 
     pretrained_model_name_or_path = "bigscience/bloom-560m"
