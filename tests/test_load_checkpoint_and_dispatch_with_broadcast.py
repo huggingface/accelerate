@@ -22,22 +22,15 @@ import torch
 from huggingface_hub import hf_hub_download
 from torch import distributed as dist
 from torch import nn
+from torch.distributed._composable.fsdp import fully_shard
+from torch.distributed.device_mesh import init_device_mesh
+from torch.distributed.fsdp.wrap import _recursive_wrap, transformer_auto_wrap_policy
 from torch.nn.parallel import DistributedDataParallel
 
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.test_utils import execute_subprocess_async, get_torch_dist_unique_port, require_multi_gpu
 from accelerate.test_utils.testing import require_torch_min_version, require_transformers
-from accelerate.utils.imports import is_torch_version, is_transformers_available
-
-
-# Cache this result has it's a C FFI call which can be pretty time-consuming
-_torch_distributed_available = torch.distributed.is_available()
-
-if is_torch_version(">=","2.5") and _torch_distributed_available:
-    from torch.distributed._composable.fsdp import fully_shard
-    from torch.distributed._tensor import DTensor
-    from torch.distributed.device_mesh import init_device_mesh
-    from torch.distributed.fsdp.wrap import _recursive_wrap, transformer_auto_wrap_policy
+from accelerate.utils.imports import is_transformers_available
 
 
 if is_transformers_available():
@@ -60,6 +53,7 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
 
 @manage_process_group
 def load_checkpoint_and_dispatch_fsdp2():
+    from torch.distributed._tensor import DTensor
     torch.cuda.set_device(device := torch.device(dist.get_rank()))
 
     pretrained_model_name_or_path = "bigscience/bloom-560m"
