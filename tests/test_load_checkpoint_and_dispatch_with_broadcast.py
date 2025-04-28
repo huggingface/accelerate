@@ -23,6 +23,7 @@ from huggingface_hub import hf_hub_download
 from torch import distributed as dist
 from torch import nn
 from torch.distributed._composable.fsdp import fully_shard
+from torch.distributed._tensor import DTensor
 from torch.distributed.device_mesh import init_device_mesh
 from torch.distributed.fsdp.wrap import _recursive_wrap, transformer_auto_wrap_policy
 from torch.nn.parallel import DistributedDataParallel
@@ -53,8 +54,6 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
 
 @manage_process_group
 def load_checkpoint_and_dispatch_fsdp2():
-    from torch.distributed._tensor import DTensor
-
     torch.cuda.set_device(device := torch.device(dist.get_rank()))
 
     pretrained_model_name_or_path = "bigscience/bloom-560m"
