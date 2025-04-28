@@ -195,6 +195,13 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     """
     Prepares and returns an environment with the correct multi-GPU environment variables.
     """
+    # get free port and update configurations
+    if args.main_process_port == 0:
+        args.main_process_port = get_free_port()
+
+    elif args.main_process_port is None:
+        args.main_process_port = 29500
+
     num_processes = args.num_processes
     num_machines = args.num_machines
     main_process_ip = args.main_process_ip
@@ -213,24 +220,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         if main_process_port is not None:
             args.master_port = str(main_process_port)
 
-    if main_process_port is None:
-        main_process_port = 29500
-
     # only need to check port availability in main process, in case we have to start multiple launchers on the same machine
     # for some reasons like splitting log files.
     need_port_check = num_machines <= 1 or int(args.machine_rank) == 0
-
-    # get free port and update configurations
-    if need_port_check and main_process_port == 0:
-        main_process_port = get_free_port()
-        if num_machines > 1 and getattr(args, "same_network", False):
-            args.master_port = str(main_process_port)
-        elif num_machines <= 1:
-            args.master_port = str(main_process_port)
-        if hasattr(args, "rdzv_endpoint") and args.rdzv_endpoint:
-            host = args.rdzv_endpoint.split(":")[0]
-            args.rdzv_endpoint = f"{host}:{main_process_port}"
-
     if need_port_check and is_port_in_use(main_process_port):
         raise ConnectionError(
             f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
@@ -346,6 +338,13 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
     """
     Prepares and returns the command list and an environment with the correct DeepSpeed environment variables.
     """
+    # get free port and update configurations
+    if args.main_process_port == 0:
+        args.main_process_port = get_free_port()
+
+    elif args.main_process_port is None:
+        args.main_process_port = 29500
+
     num_processes = args.num_processes
     num_machines = args.num_machines
     main_process_ip = args.main_process_ip
@@ -406,9 +405,6 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
         args.nproc_per_node = str(num_processes)
         if main_process_port is not None:
             args.master_port = str(main_process_port)
-
-    if main_process_port is None:
-        main_process_port = 29500
 
     # only need to check port availability in main process, in case we have to start multiple launchers on the same machine
     # for some reasons like splitting log files.
