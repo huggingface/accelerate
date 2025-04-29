@@ -203,6 +203,12 @@ def load_accelerator_state(
             An optional *GradScaler* instance to load
         map_location (`str`, *optional*):
             What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
+        optimizer_load_kwargs (`dict`, *optional*):
+            Additional arguments that can be passed to the optimizer's `load` function.
+        scheduler_load_kwargs (`dict`, *optional*):
+            Additional arguments that can be passed to the scheduler's `load` function.
+        dataloader_load_kwargs (`dict`, *optional*):
+            Additional arguments that can be passed to the dataloader's `load` function.
         load_model_func_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the model's `load_state_dict` method.
 
