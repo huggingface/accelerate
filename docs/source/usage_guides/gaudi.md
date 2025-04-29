@@ -35,5 +35,3 @@ The following features are not part of the Accelerate library and requires [Opti
 - `compile_regions` which compiles modules with `torch.compile` one by one instead of compiling the full model at once.
 - `fast_ddp` which implements DDP by applying an all-reduce on gradients instead of the Torch DDP wrapper.
 - `minimize_memory` which is used for fp8 training and enables to not keep fp8 weights in memory between the forward and backward passes, leading to a smaller memory footprint at the cost of additional fp8 casts.
-
-Additionally, you may need to set `PT_HPU_LAZY_MODE=0` because some features are not optimized for the lazy mode of Intel Gaudi. You can also use [Optimum for Intel Gaudi](https://huggingface.co/docs/optimum/main/en/habana/index) if you want to run those features in lazy mode.
