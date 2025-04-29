@@ -15,7 +15,7 @@
 import importlib
 import math
 from contextlib import suppress
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 from packaging import version
@@ -89,7 +89,9 @@ class SeedableRandomSampler(RandomSampler):
 
     def __iter__(self):
         if self.generator is None:
-            self.generator = torch.Generator()
+            self.generator = torch.Generator(
+                device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
+            )
             self.generator.manual_seed(self.initial_seed)
 
         # Allow `self.epoch` to modify the seed of the generator
@@ -990,7 +992,7 @@ def prepare_data_loader(
     process_index: Optional[int] = None,
     split_batches: bool = False,
     put_on_device: bool = False,
-    rng_types: Optional[List[Union[str, RNGType]]] = None,
+    rng_types: Optional[list[Union[str, RNGType]]] = None,
     dispatch_batches: Optional[bool] = None,
     even_batches: bool = True,
     slice_fn_for_dispatch: Optional[Callable] = None,
@@ -1096,27 +1098,38 @@ def prepare_data_loader(
     if process_index is None:
         process_index = state.process_index
 
-    # when device mesh is used, specifically with TP
-    # then there is need to update process_index and num_processes
-    # to bring in the effect of generating same batch across TP ranks
-    # and different batch across FSDP and DP ranks.
-    # Example:
-    # if device mesh is (dp,fsdp,tp) = (2, 2, 3)
-    # ranks would range from 0...11
-    # from data angle ranks should look like 0 0 0 1 1 1 2 2 2 3 3 3
-    # processes with same ranks/ids would receive the same batch
     if torch_device_mesh:
-        submesh_fsdp_size = 1
-        submesh_dp_size = 1
-        submesh_tp_size = 1
-        if "tp" in torch_device_mesh.mesh_dim_names:
-            submesh_tp_size = torch_device_mesh["tp"].size()
-        if "dp" in torch_device_mesh.mesh_dim_names:
-            submesh_dp_size = torch_device_mesh["dp"].size()
-        if "fsdp" in torch_device_mesh.mesh_dim_names:
-            submesh_fsdp_size = torch_device_mesh["fsdp"].size()
-        process_index = process_index // submesh_tp_size
-        num_processes = submesh_fsdp_size * submesh_dp_size
+        if state.distributed_type == DistributedType.DEEPSPEED:
+            # In DeepSpeed, the optimizer sharing level in DP is determined by the config file.
+            # Only considers "dp" and "tp".
+            # Given a device mesh (dp, tp) = (2, 3):
+            # - From the data parallel perspective, ranks should be structured as: 0 0 0 1 1 1
+            # - Processes with the same DP rank will receive the same batch.
+            if "tp" in torch_device_mesh.mesh_dim_names:
+                submesh_tp_size = torch_device_mesh["tp"].size()
+            process_index = process_index // submesh_tp_size
+            num_processes = num_processes // submesh_tp_size
+        else:
+            # when device mesh is used, specifically with TP
+            # then there is need to update process_index and num_processes
+            # to bring in the effect of generating same batch across TP ranks
+            # and different batch across FSDP and DP ranks.
+            # Example:
+            # if device mesh is (dp,fsdp,tp) = (2, 2, 3)
+            # ranks would range from 0...11
+            # from data angle ranks should look like 0 0 0 1 1 1 2 2 2 3 3 3
+            # processes with same ranks/ids would receive the same batch
+            submesh_fsdp_size = 1
+            submesh_dp_size = 1
+            submesh_tp_size = 1
+            if "tp" in torch_device_mesh.mesh_dim_names:
+                submesh_tp_size = torch_device_mesh["tp"].size()
+            if "dp" in torch_device_mesh.mesh_dim_names:
+                submesh_dp_size = torch_device_mesh["dp"].size()
+            if "fsdp" in torch_device_mesh.mesh_dim_names:
+                submesh_fsdp_size = torch_device_mesh["fsdp"].size()
+            process_index = process_index // submesh_tp_size
+            num_processes = submesh_fsdp_size * submesh_dp_size
 
     # Sanity check
     if split_batches:
@@ -1156,13 +1169,21 @@ def prepare_data_loader(
             data_source=sampler.data_source,
             replacement=sampler.replacement,
             num_samples=sampler._num_samples,
-            generator=getattr(sampler, "generator", torch.Generator()),
+            generator=getattr(
+                sampler,
+                "generator",
+                torch.Generator(device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"),
+            ),
             data_seed=data_seed,
         )
 
     if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
         # isinstance(dataloader.sampler, RandomSampler) indicates the original dataloader has `shuffle` enabled.
-        generator = torch.Generator().manual_seed(42)
+        generator = torch.Generator(
+            device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
+        )
+        seed = int(torch.empty((), dtype=torch.int64).random_().item())
+        generator.manual_seed(seed)
         dataloader.generator = generator
         dataloader.sampler.generator = generator
     # No change if no multiprocess
@@ -1181,7 +1202,11 @@ def prepare_data_loader(
         else:
             if not use_seedable_sampler and hasattr(sampler, "generator"):
                 if sampler.generator is None:
-                    sampler.generator = torch.Generator()
+                    sampler.generator = torch.Generator(
+                        device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
+                    )
+                    seed = int(torch.empty((), dtype=torch.int64).random_().item())
+                    sampler.generator.manual_seed(seed)
                 synchronized_generator = sampler.generator
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(

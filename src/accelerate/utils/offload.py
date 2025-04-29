@@ -15,7 +15,7 @@
 import json
 import os
 from collections.abc import Mapping
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -82,7 +82,7 @@ def save_offload_index(index, offload_folder):
         json.dump(current_index, f, indent=2)
 
 
-def offload_state_dict(save_dir: Union[str, os.PathLike], state_dict: Dict[str, torch.Tensor]):
+def offload_state_dict(save_dir: Union[str, os.PathLike], state_dict: dict[str, torch.Tensor]):
     """
     Offload a state dict in a given folder.
 
@@ -140,7 +140,7 @@ class OffloadedWeightsLoader(Mapping):
 
     def __init__(
         self,
-        state_dict: Dict[str, torch.Tensor] = None,
+        state_dict: dict[str, torch.Tensor] = None,
         save_folder: Optional[Union[str, os.PathLike]] = None,
         index: Mapping = None,
         device=None,
@@ -191,7 +191,7 @@ class OffloadedWeightsLoader(Mapping):
         return len(self.all_keys)
 
 
-def extract_submodules_state_dict(state_dict: Dict[str, torch.Tensor], submodule_names: List[str]):
+def extract_submodules_state_dict(state_dict: dict[str, torch.Tensor], submodule_names: list[str]):
     """
     Extract the sub state-dict corresponding to a list of given submodules.
 

@@ -39,11 +39,13 @@ from accelerate.utils import (
     convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
+    is_hpu_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
     patch_environment,
@@ -73,7 +75,6 @@ options_to_group = {
     "tpu": "TPU",
     "use_deepspeed": "DeepSpeed Arguments",
     "use_fsdp": "FSDP Arguments",
-    "use_tp": "PyTorch TP Arguments",
     "use_megatron_lm": "Megatron-LM Arguments",
     "fp8_backend": "FP8 Arguments",
 }
@@ -263,22 +264,17 @@ def launch_command_parser(subparsers=None):
         help="Whether to use fsdp.",
     )
     paradigm_args.add_argument(
-        "--use_tp",
-        default=False,
-        action="store_true",
-        help="Whether to use PyTorch TP.",
-    )
-    paradigm_args.add_argument(
         "--use_megatron_lm",
         default=False,
         action="store_true",
         help="Whether to use Megatron-LM.",
     )
+
     paradigm_args.add_argument(
         "--use_xpu",
-        default=False,
+        default=None,
         action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
+        help="Whether to use IPEX plugin to speed up training on XPU specifically. This argument is deprecated and ignored, will be removed in Accelerate v1.20.",
     )
 
     # distributed GPU training arguments
@@ -504,7 +500,7 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_multinode_launcher",
         default=None,
         type=str,
-        help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
+        help="DeepSpeed multi-node launcher to use, e.g. `pdsh`, `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5). If unspecified, will default to `pdsh`.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_moe_layer_cls_names",
@@ -517,6 +513,13 @@ def launch_command_parser(subparsers=None):
     # fsdp arguments
     fsdp_args = parser.add_argument_group("FSDP Arguments", "Arguments related to Fully Shared Data Parallelism.")
     fsdp_args.add_argument(
+        "--fsdp_version",
+        type=str,
+        default="1",
+        choices=["1", "2"],
+        help="FSDP version to use. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
         "--fsdp_offload_params",
         default="false",
         type=str,
@@ -528,11 +531,18 @@ def launch_command_parser(subparsers=None):
         default=1e8,
         help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
     )
+    # We enable this for backwards compatibility, throw a warning if this is set in `FullyShardedDataParallelPlugin`
     fsdp_args.add_argument(
         "--fsdp_sharding_strategy",
         type=str,
         default="FULL_SHARD",
-        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
+        help="FSDP's sharding strategy. (useful only when `use_fsdp` flag is passed and `fsdp_version=1`).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_reshard_after_forward",
+        type=str,
+        default="true",
+        help="FSDP's Reshard After Forward Strategy. (useful only when `use_fsdp` flag is passed). Supports either boolean (FSDP2) or `FULL_SHARD | SHARD_GRAD_OP | NO_RESHARD` (FSDP1).",
     )
     fsdp_args.add_argument(
         "--fsdp_auto_wrap_policy",
@@ -593,15 +603,6 @@ def launch_command_parser(subparsers=None):
         default="false",
         type=str,
         help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
-    )
-
-    # tp args
-    tp_args = parser.add_argument_group("TP Arguments", "Arguments related to Tensor Parallelism using PyToch.")
-    tp_args.add_argument(
-        "--tp_size",
-        default=1,
-        type=int,
-        help="PyTorch Tensor Parallelism (TP) degree. Set a value greater than 1 to activate. (useful only when `use_tp` flag is passed)",
     )
 
     # megatron_lm args
@@ -985,9 +986,9 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def _validate_launch_command(args):
     # Sanity checks
-    if sum([args.multi_gpu, args.cpu, args.tpu, args.use_deepspeed, args.use_fsdp, args.use_tp]) > 1:
+    if sum([args.multi_gpu, args.cpu, args.tpu, args.use_deepspeed, args.use_fsdp]) > 1:
         raise ValueError(
-            "You can only use one of `--cpu`, `--multi_gpu`, `--tpu`, `--use_deepspeed`, `--use_fsdp`, `--use_tp` at a time."
+            "You can only use one of `--cpu`, `--multi_gpu`, `--tpu`, `--use_deepspeed`, `--use_fsdp` at a time."
         )
     if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
@@ -1004,7 +1005,6 @@ def _validate_launch_command(args):
             and not args.tpu_use_cluster
             and not args.use_deepspeed
             and not args.use_fsdp
-            and not args.use_tp
             and not args.use_megatron_lm
         ):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
@@ -1015,14 +1015,15 @@ def _validate_launch_command(args):
                     DistributedType.MULTI_GPU,
                     DistributedType.MULTI_NPU,
                     DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_SDAA,
                     DistributedType.MULTI_MUSA,
                     DistributedType.MULTI_XPU,
+                    DistributedType.MULTI_HPU,
                 )
                 else False
             )
             args.tpu = defaults.distributed_type == DistributedType.XLA
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
-            args.use_tp = defaults.distributed_type == DistributedType.TP
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
         if args.gpu_ids is None:
@@ -1068,10 +1069,7 @@ def _validate_launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
                 mp_from_config_flag = True
         else:
-            if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
-                native_amp = True
-            else:
-                native_amp = is_bf16_available(True)
+            native_amp = is_bf16_available(True)
             if (
                 args.mixed_precision == "bf16"
                 and not native_amp
@@ -1086,14 +1084,18 @@ def _validate_launch_command(args):
             raise ValueError("You need to manually pass in `--num_processes` using this config yaml.")
     else:
         if args.num_processes is None:
-            if args.use_xpu and is_xpu_available():
+            if is_xpu_available():
                 args.num_processes = torch.xpu.device_count()
             elif is_mlu_available():
                 args.num_processes = torch.mlu.device_count()
+            elif is_sdaa_available():
+                args.num_processes = torch.sdaa.device_count()
             elif is_musa_available():
                 args.num_processes = torch.musa.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
+            elif is_hpu_available():
+                args.num_processes = torch.hpu.device_count()
             else:
                 args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
@@ -1103,11 +1105,13 @@ def _validate_launch_command(args):
             not args.multi_gpu
             and args.num_processes > 1
             and (
-                (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
-                or (is_mlu_available() and torch.mlu.device_count() > 1)
-                or (is_musa_available() and torch.musa.device_count() > 1)
+                (is_xpu_available() and torch.xpu.device_count() > 1)
                 or (is_npu_available() and torch.npu.device_count() > 1)
-                or (torch.cuda.device_count() > 1)
+                or (is_hpu_available() and torch.hpu.device_count() > 1)
+                or (is_mlu_available() and torch.mlu.device_count() > 1)
+                or (is_sdaa_available() and torch.sdaa.device_count() > 1)
+                or (is_musa_available() and torch.musa.device_count() > 1)
+                or (torch.cuda.is_available() and torch.cuda.device_count() > 1)
             )
         ):
             warned.append(
@@ -1146,6 +1150,12 @@ def _validate_launch_command(args):
                     f"\t`--num_cpu_threads_per_process` was set to `{args.num_cpu_threads_per_process}` to improve out-of-box performance when training on CPUs"
                 )
 
+    if args.use_xpu is not None:
+        logger.warning(
+            "use_xpu is deprecated and ignored, will be removed in Accelerate v1.20. "
+            "XPU is a PyTorch native citizen now, we don't need extra argument to enable it any more."
+        )
+
     if any(warned):
         message = "The following values were not passed to `accelerate launch` and had defaults used instead:\n"
         message += "\n".join(warned)
@@ -1166,8 +1176,6 @@ def launch_command(args):
         args.deepspeed_fields_from_accelerate_config = ",".join(args.deepspeed_fields_from_accelerate_config)
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
-        multi_gpu_launcher(args)
-    elif args.use_tp and not args.cpu:
         multi_gpu_launcher(args)
     elif args.use_megatron_lm and not args.cpu:
         multi_gpu_launcher(args)

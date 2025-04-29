@@ -158,7 +158,7 @@ The following arguments are useful for selecting which training paradigm to use.
 * `--use_deepspeed` (`bool`) -- Whether or not to use DeepSpeed for training.
 * `--use_fsdp` (`bool`) -- Whether or not to use FullyShardedDataParallel for training.
 * `--use_megatron_lm` (`bool`) -- Whether or not to use Megatron-LM for training.
-* `--use_xpu` (`bool`) -- Whether to use IPEX plugin to speed up training on XPU specifically.
+* `--use_xpu` (`bool`) -- Whether to use IPEX plugin to speed up training on XPU specifically. **This argument is deprecated and ignored, will be removed in Accelerate v1.20**
 
 **Distributed GPU Arguments**:
 

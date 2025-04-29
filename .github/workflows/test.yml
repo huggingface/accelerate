@@ -38,9 +38,9 @@ jobs:
           test_rest
         ]
     steps:
-    - uses: actions/checkout@v3.1.0
+    - uses: actions/checkout@v4
     - name: Set up python 3.9
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: 3.9
         cache: 'pip'
@@ -52,7 +52,7 @@ jobs:
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
         if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
         if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torchvision==0.18.1 torch==2.3.1; fi
-        pip install pytest-reportlog tabulate setuptools
+        pip install pytest-reportlog tabulate setuptools importlib_metadata
 
     - name: Show installed libraries
       run: |

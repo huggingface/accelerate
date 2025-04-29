@@ -18,7 +18,7 @@ import tempfile
 import unittest
 import warnings
 from collections import OrderedDict
-from typing import Dict, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -31,6 +31,7 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    require_non_hpu,
     torch_device,
 )
 from accelerate.utils.modeling import (
@@ -181,6 +182,7 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest().to(torch_device)
         self.check_set_module_tensor_for_device(model, torch_device, "meta")
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_set_module_tensor_between_gpus(self):
         model = ModelForTest().to(torch_device)
@@ -447,6 +449,7 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.batchnorm.running_mean.device == torch.device("meta")
         assert model.linear2.weight.device == torch.device("cpu")
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_in_model_two_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
@@ -496,7 +499,7 @@ class ModelingUtilsTester(unittest.TestCase):
             assert new_model.float_param.dtype == torch.float16
 
     @parameterized.expand([(None,), ({"": "cpu"},)])
-    def test_load_checkpoint_in_model_unexpected_keys(self, device_map: Optional[Dict]):
+    def test_load_checkpoint_in_model_unexpected_keys(self, device_map: Optional[dict]):
         model = ModelForTest()
 
         state_dict = model.state_dict()

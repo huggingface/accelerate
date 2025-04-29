@@ -33,13 +33,13 @@ def one_cycle_test(num_processes=2, step_scheduler_with_optimizer=True, split_ba
     # Optimizer has stepped
     scheduler.step()
     if step_scheduler_with_optimizer or (num_processes == 1):
-        assert (
-            scheduler.scheduler.last_epoch == num_processes
-        ), f"Last Epoch ({scheduler.scheduler.last_epoch}) != Num Processes ({num_processes})"
+        assert scheduler.scheduler.last_epoch == num_processes, (
+            f"Last Epoch ({scheduler.scheduler.last_epoch}) != Num Processes ({num_processes})"
+        )
     else:
-        assert (
-            scheduler.scheduler.last_epoch != num_processes
-        ), f"Last Epoch ({scheduler.scheduler.last_epoch}) == Num Processes ({num_processes})"
+        assert scheduler.scheduler.last_epoch != num_processes, (
+            f"Last Epoch ({scheduler.scheduler.last_epoch}) == Num Processes ({num_processes})"
+        )
 
 
 def lambda_test(num_processes=2, step_scheduler_with_optimizer=True, split_batches=False):
@@ -53,18 +53,18 @@ def lambda_test(num_processes=2, step_scheduler_with_optimizer=True, split_batch
     optimizer._is_overflow = False
     scheduler.step()
     expected_lr = 1 - (num_processes if (step_scheduler_with_optimizer and not split_batches) else 1) / 10
-    assert (
-        scheduler.get_last_lr()[0] == expected_lr
-    ), f"Wrong lr found at first step, expected {expected_lr}, got {scheduler.get_last_lr()[0]}"
+    assert scheduler.get_last_lr()[0] == expected_lr, (
+        f"Wrong lr found at first step, expected {expected_lr}, got {scheduler.get_last_lr()[0]}"
+    )
 
     # Optimizer has not stepped
     optimizer._is_overflow = True
     scheduler.step()
     if not step_scheduler_with_optimizer:
         expected_lr = 1 - 2 / 10
-    assert (
-        scheduler.get_last_lr()[0] == expected_lr
-    ), f"Wrong lr found at second step, expected {expected_lr}, got {scheduler.get_last_lr()[0]}"
+    assert scheduler.get_last_lr()[0] == expected_lr, (
+        f"Wrong lr found at second step, expected {expected_lr}, got {scheduler.get_last_lr()[0]}"
+    )
 
 
 def accumulation_test(num_processes: int = 2):
@@ -92,12 +92,12 @@ def accumulation_test(num_processes: int = 2):
                 scheduler.step()
 
             if i == (10 * num_steps - 2):
-                assert (
-                    scheduler.get_last_lr()[0] != 0
-                ), f"Wrong lr found at second-to-last step, expected non-zero, got {scheduler.get_last_lr()[0]}. num_steps: {num_steps}"
-        assert (
-            scheduler.get_last_lr()[0] == 0
-        ), f"Wrong lr found at last step, expected 0, got {scheduler.get_last_lr()[0]}"
+                assert scheduler.get_last_lr()[0] != 0, (
+                    f"Wrong lr found at second-to-last step, expected non-zero, got {scheduler.get_last_lr()[0]}. num_steps: {num_steps}"
+                )
+        assert scheduler.get_last_lr()[0] == 0, (
+            f"Wrong lr found at last step, expected 0, got {scheduler.get_last_lr()[0]}"
+        )
         GradientState._reset_state()
 
 

@@ -14,9 +14,10 @@
 
 import logging
 import os
+import re
 from contextlib import contextmanager
 from functools import wraps
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -24,6 +25,7 @@ import torch.nn as nn
 from .hooks import (
     AlignDevicesHook,
     CpuOffload,
+    LayerwiseCastingHook,
     UserCpuOffloadHook,
     add_hook_to_module,
     attach_align_device_hook,
@@ -41,12 +43,14 @@ from .utils import (
     is_mlu_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_xpu_available,
     load_checkpoint_in_model,
     offload_state_dict,
     parse_flag_from_env,
     retie_parameters,
 )
+from .utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 from .utils.other import recursive_getattr
 
 
@@ -170,8 +174,8 @@ def cpu_offload(
     model: nn.Module,
     execution_device: Optional[torch.device] = None,
     offload_buffers: bool = False,
-    state_dict: Optional[Dict[str, torch.Tensor]] = None,
-    preload_module_classes: Optional[List[str]] = None,
+    state_dict: Optional[dict[str, torch.Tensor]] = None,
+    preload_module_classes: Optional[list[str]] = None,
 ):
     """
     Activates full CPU offload for a model. As a result, all parameters of the model will be offloaded and only one
@@ -261,7 +265,7 @@ def disk_offload(
     offload_dir: Union[str, os.PathLike],
     execution_device: Optional[torch.device] = None,
     offload_buffers: bool = False,
-    preload_module_classes: Optional[List[str]] = None,
+    preload_module_classes: Optional[list[str]] = None,
 ):
     """
     Activates full disk offload for a model. As a result, all parameters of the model will be offloaded as
@@ -304,14 +308,14 @@ def disk_offload(
 
 def dispatch_model(
     model: nn.Module,
-    device_map: Dict[str, Union[str, int, torch.device]],
+    device_map: dict[str, Union[str, int, torch.device]],
     main_device: Optional[torch.device] = None,
-    state_dict: Optional[Dict[str, torch.Tensor]] = None,
+    state_dict: Optional[dict[str, torch.Tensor]] = None,
     offload_dir: Optional[Union[str, os.PathLike]] = None,
-    offload_index: Optional[Dict[str, str]] = None,
+    offload_index: Optional[dict[str, str]] = None,
     offload_buffers: bool = False,
-    skip_keys: Optional[Union[str, List[str]]] = None,
-    preload_module_classes: Optional[List[str]] = None,
+    skip_keys: Optional[Union[str, list[str]]] = None,
+    preload_module_classes: Optional[list[str]] = None,
     force_hooks: bool = False,
 ):
     """
@@ -466,6 +470,8 @@ def dispatch_model(
             model.npu = add_warning(model.npu, model)
         elif is_mlu_available():
             model.mlu = add_warning(model.mlu, model)
+        elif is_sdaa_available():
+            model.sdaa = add_warning(model.sdaa, model)
         elif is_musa_available():
             model.musa = add_warning(model.musa, model)
         elif is_xpu_available():
@@ -488,10 +494,10 @@ def dispatch_model(
             device = f"npu:{device}"
         elif is_mlu_available() and isinstance(device, int):
             device = f"mlu:{device}"
+        elif is_sdaa_available() and isinstance(device, int):
+            device = f"sdaa:{device}"
         elif is_musa_available() and isinstance(device, int):
             device = f"musa:{device}"
-        elif is_xpu_available() and isinstance(device, int):
-            device = f"xpu:{device}"
         if device != "disk":
             model.to(device)
         else:
@@ -506,17 +512,19 @@ def dispatch_model(
 def load_checkpoint_and_dispatch(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
-    device_map: Optional[Union[str, Dict[str, Union[int, str, torch.device]]]] = None,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
+    device_map: Optional[Union[str, dict[str, Union[int, str, torch.device]]]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     offload_buffers: bool = False,
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: Optional[bool] = None,
-    skip_keys: Optional[Union[str, List[str]]] = None,
-    preload_module_classes: Optional[List[str]] = None,
+    skip_keys: Optional[Union[str, list[str]]] = None,
+    preload_module_classes: Optional[list[str]] = None,
     force_hooks: bool = False,
     strict: bool = False,
+    full_state_dict: bool = True,
+    broadcast_from_rank0: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -566,6 +574,12 @@ def load_checkpoint_and_dispatch(
         strict (`bool`, *optional*, defaults to `False`):
             Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
             state_dict.
+        full_state_dict (`bool`, *optional*, defaults to `True`): if this is set to `True`, all the tensors in the
+            loaded state_dict will be gathered. No ShardedTensor and DTensor will be in the loaded state_dict.
+        broadcast_from_rank0 (`False`, *optional*, defaults to `False`): when the option is `True`, a distributed
+            `ProcessGroup` must be initialized. rank0 should receive a full state_dict and will broadcast the tensors
+            in the state_dict one by one to other ranks. Other ranks will receive the tensors and shard (if applicable)
+            according to the local shards in the model.
 
     Example:
 
@@ -591,8 +605,7 @@ def load_checkpoint_and_dispatch(
     """
     if isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
         raise ValueError(
-            "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
-            "'sequential'."
+            "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or 'sequential'."
         )
     if isinstance(device_map, str):
         if device_map != "sequential":
@@ -621,6 +634,8 @@ def load_checkpoint_and_dispatch(
         offload_state_dict=offload_state_dict,
         offload_buffers=offload_buffers,
         strict=strict,
+        full_state_dict=full_state_dict,
+        broadcast_from_rank0=broadcast_from_rank0,
     )
     if device_map is None:
         return model
@@ -633,3 +648,102 @@ def load_checkpoint_and_dispatch(
         preload_module_classes=preload_module_classes,
         force_hooks=force_hooks,
     )
+
+
+def attach_layerwise_casting_hooks(
+    module: torch.nn.Module,
+    storage_dtype: torch.dtype,
+    compute_dtype: torch.dtype,
+    skip_modules_pattern: Union[str, tuple[str, ...]] = None,
+    skip_modules_classes: Optional[tuple[type[torch.nn.Module], ...]] = None,
+    non_blocking: bool = False,
+) -> None:
+    r"""
+    Applies layerwise casting to a given module. The module expected here is a PyTorch `nn.Module`. This is helpful for
+    reducing memory requirements when one doesn't want to fully quantize a model. Model params can be kept in say,
+    `torch.float8_e4m3fn` and upcasted to a higher precision like `torch.bfloat16` during forward pass and downcasted
+    back to `torch.float8_e4m3fn` to realize memory savings.
+
+    Args:
+        module (`torch.nn.Module`):
+            The module whose leaf modules will be cast to a high precision dtype for computation, and to a low
+            precision dtype for storage.
+        storage_dtype (`torch.dtype`):
+            The dtype to cast the module to before/after the forward pass for storage.
+        compute_dtype (`torch.dtype`):
+            The dtype to cast the module to during the forward pass for computation.
+        skip_modules_pattern (`tuple[str, ...]`, defaults to `None`):
+            A list of patterns to match the names of the modules to skip during the layerwise casting process. If set
+            to `None` alongside `skip_modules_classes` being `None`, the layerwise casting is applied directly to the
+            module instead of its internal submodules.
+        skip_modules_classes (`tuple[type[torch.nn.Module], ...]`, defaults to `None`):
+            A list of module classes to skip during the layerwise casting process.
+        non_blocking (`bool`, defaults to `False`):
+            If `True`, the weight casting operations are non-blocking.
+
+    Example:
+
+    ```python
+    >>> from accelerate.hooks import attach_layerwise_casting_hooks
+    >>> from transformers import AutoModelForCausalLM
+    >>> import torch
+
+    >>> # Model
+    >>> checkpoint = "EleutherAI/gpt-j-6B"
+    >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+    >>> # Attach hooks and perform inference
+    >>> attach_layerwise_casting_hooks(model, storage_dtype=torch.float8_e4m3fn, compute_dtype=torch.bfloat16)
+    >>> with torch.no_grad():
+    ...     model(...)
+    ```
+
+    Users can also pass modules they want to avoid from getting downcasted.
+
+    ```py
+    >>> attach_layerwise_casting_hooks(
+    ...     model, storage_dtype=torch.float8_e4m3fn, compute_dtype=torch.bfloat16, skip_modules_pattern=["norm"]
+    ... )
+    ```
+    """
+    _attach_layerwise_casting_hooks(
+        module, storage_dtype, compute_dtype, skip_modules_pattern, skip_modules_classes, non_blocking
+    )
+
+
+def _attach_layerwise_casting_hooks(
+    module: torch.nn.Module,
+    storage_dtype: torch.dtype,
+    compute_dtype: torch.dtype,
+    skip_modules_pattern: Union[str, tuple[str, ...]] = None,
+    skip_modules_classes: Optional[tuple[type[torch.nn.Module], ...]] = None,
+    non_blocking: bool = False,
+    _prefix: str = "",
+):
+    should_skip = (skip_modules_classes is not None and isinstance(module, skip_modules_classes)) or (
+        skip_modules_pattern is not None and any(re.search(pattern, _prefix) for pattern in skip_modules_pattern)
+    )
+    if should_skip:
+        logger.debug(f'Skipping layerwise casting for layer "{_prefix}"')
+        return
+
+    if isinstance(module, SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING):
+        logger.debug(f'Applying layerwise casting to layer "{_prefix}"')
+        add_hook_to_module(
+            module,
+            LayerwiseCastingHook(storage_dtype=storage_dtype, compute_dtype=compute_dtype, non_blocking=non_blocking),
+            append=True,
+        )
+        return
+
+    for name, submodule in module.named_children():
+        layer_name = f"{_prefix}.{name}" if _prefix else name
+        _attach_layerwise_casting_hooks(
+            submodule,
+            storage_dtype,
+            compute_dtype,
+            skip_modules_pattern,
+            skip_modules_classes,
+            non_blocking,
+            _prefix=layer_name,
+        )

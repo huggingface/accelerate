@@ -23,14 +23,17 @@ import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
+from accelerate.commands.to_fsdp2 import to_fsdp2_command, to_fsdp2_command_parser
 from accelerate.commands.tpu import tpu_command_launcher, tpu_command_parser
 from accelerate.test_utils.testing import (
     capture_call_output,
     path_in_accelerate_package,
     require_multi_device,
+    require_non_hpu,
     require_timm,
     require_transformers,
     run_command,
+    run_first,
 )
 from accelerate.utils import patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
@@ -64,6 +67,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         if cls.changed_path.is_file():
             cls.changed_path.rename(cls.config_path)
 
+    @run_first
     def test_no_config(self):
         args = ["--monitor_interval", "0.1", str(self.test_file_path)]
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
@@ -71,6 +75,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         args = self.parser.parse_args(["--monitor_interval", "0.1", str(self.test_file_path)])
         launch_command(args)
 
+    @run_first
     def test_config_compatibility(self):
         invalid_configs = ["fp8", "invalid", "mpi", "sagemaker"]
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
@@ -80,6 +85,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                 args = self.parser.parse_args(["--config_file", str(config), str(self.test_file_path)])
                 launch_command(args)
 
+    @run_first
     def test_invalid_keys(self):
         config_path = self.test_config_path / "invalid_keys.yaml"
         with self.assertRaises(
@@ -89,10 +95,13 @@ class AccelerateLauncherTester(unittest.TestCase):
             args = self.parser.parse_args(["--config_file", str(config_path), str(self.test_file_path)])
             launch_command(args)
 
+    @run_first
     def test_accelerate_test(self):
         args = accelerate_test_cmd.test_command_parser().parse_args([])
         accelerate_test_cmd.test_command(args)
 
+    @run_first
+    @require_non_hpu
     @require_multi_device
     def test_notebook_launcher(self):
         """
@@ -206,7 +215,7 @@ class LaunchArgTester(unittest.TestCase):
         args = self.parser.parse_args(["test.py"])
         for arg in args.__dict__:
             if "_" in arg:
-                bad_arg = f'--{arg.replace("_", "-")}'
+                bad_arg = f"--{arg.replace('_', '-')}"
                 # Need an exception for `num-processes` since it's in the docstring
                 if bad_arg == "--num-processes":
                     assert help_return.count(bad_arg) == 1, f"Found {bad_arg} in `accelerate launch -h`"
@@ -489,16 +498,16 @@ class ModelEstimatorTester(unittest.TestCase):
             total_training_size_estimate = total_size_estimate * 4
 
             assert precision_str == output[i][0], f"Output is missing precision `{precision_str}`"
-            assert (
-                largest_layer_estimate == output[i][1]
-            ), f"Calculation for largest layer size in `{precision_str}` is incorrect."
+            assert largest_layer_estimate == output[i][1], (
+                f"Calculation for largest layer size in `{precision_str}` is incorrect."
+            )
 
-            assert (
-                total_size_estimate == output[i][2]
-            ), f"Calculation for total size in `{precision_str}` is incorrect."
-            assert total_training_size_estimate == max(
-                output[i][3].values()
-            ), f"Calculation for total training size in `{precision_str}` is incorrect."
+            assert total_size_estimate == output[i][2], (
+                f"Calculation for total size in `{precision_str}` is incorrect."
+            )
+            assert total_training_size_estimate == max(output[i][3].values()), (
+                f"Calculation for total training size in `{precision_str}` is incorrect."
+            )
 
     @require_transformers
     def test_transformers_model(self):
@@ -506,12 +515,12 @@ class ModelEstimatorTester(unittest.TestCase):
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 90669056, 433249280
-        assert (
-            largest_layer == output[0][1]
-        ), f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
-        assert (
-            total_size == output[0][2]
-        ), f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+        assert largest_layer == output[0][1], (
+            f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
+        )
+        assert total_size == output[0][2], (
+            f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+        )
 
     @require_transformers
     def test_no_split_modules(self):
@@ -529,9 +538,104 @@ class ModelEstimatorTester(unittest.TestCase):
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 9437184, 102441032
-        assert (
-            largest_layer == output[0][1]
-        ), f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
-        assert (
-            total_size == output[0][2]
-        ), f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+        assert largest_layer == output[0][1], (
+            f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
+        )
+        assert total_size == output[0][2], (
+            f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
+        )
+
+
+class ToFSDP2Tester(unittest.TestCase):
+    """
+    Test case for verifying the `accelerate to-fsdp2` CLI outputs.
+    """
+
+    parser = to_fsdp2_command_parser()
+    test_config_path = Path("tests/test_configs")
+
+    @classmethod
+    def setUpClass(cls):
+        if (cls.test_config_path / "latest_fsdp.yaml").exists():
+            cls.original_config = load_config_from_file(str(cls.test_config_path / "latest_fsdp.yaml"))
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.original_config is not None:
+            cls.original_config.to_yaml_file(str(cls.test_config_path / "latest_fsdp.yaml"))
+
+    def tearDown(self):
+        if (self.test_config_path / "output.yaml").exists():
+            (self.test_config_path / "output.yaml").unlink()
+
+    def test_nonexistent_config_file(self):
+        with self.assertRaises(FileNotFoundError, msg="Config file `nonexistent.yaml` not found"):
+            args = self.parser.parse_args(["--config_file", "nonexistent.yaml"])
+            to_fsdp2_command(args)
+
+    def test_no_output_without_overwrite(self):
+        with self.assertRaises(ValueError, msg="If --overwrite is not set, --output_file must be provided"):
+            args = self.parser.parse_args(["--config_file", str(self.test_config_path / "latest_fsdp.yaml")])
+            to_fsdp2_command(args)
+
+    @patch("pathlib.Path.exists")
+    def test_overwrite_when_output_file_exists(self, mock_exists):
+        mock_exists.side_effect = (
+            lambda: str(mock_exists._mock_self) == "output.yaml" or mock_exists._mock_self.exists()
+        )
+
+        with self.assertRaises(
+            FileExistsError, msg="Output file `output.yaml` already exists and --overwrite is not set"
+        ):
+            args = self.parser.parse_args(
+                ["--config_file", str(self.test_config_path / "latest_fsdp.yaml"), "--output_file", "output.yaml"]
+            )
+            to_fsdp2_command(args)
+
+    def test_fsdp2_config(self):
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                str(self.test_config_path / "latest_fsdp.yaml"),
+                "--output_file",
+                str(self.test_config_path / "output.yaml"),
+            ]
+        )
+        to_fsdp2_command(args)
+
+        config = load_config_from_file(str(self.test_config_path / "output.yaml"))
+        assert isinstance(config, ClusterConfig)
+        assert config.fsdp_config["fsdp_version"] == 2
+
+    def test_config_already_fsdp2(self):
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                str(self.test_config_path / "latest_fsdp.yaml"),
+                "--output_file",
+                str(self.test_config_path / "output.yaml"),
+            ]
+        )
+
+        mock_config = {"fsdp_config": {"fsdp_version": 2}}
+
+        with patch("accelerate.commands.to_fsdp2.load_config", return_value=mock_config):
+            with self.assertLogs(level="WARNING") as cm:
+                to_fsdp2_command(args)
+
+            assert "Config already specfies FSDP2, skipping conversion..." in cm.output[0]
+
+    # Has to be the last test because it overwrites the config file
+    def test_fsdp2_overwrite(self):
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                str(self.test_config_path / "latest_fsdp.yaml"),
+                "--overwrite",
+            ]
+        )
+        to_fsdp2_command(args)
+
+        config = load_config_from_file(str(self.test_config_path / "latest_fsdp.yaml"))
+        assert isinstance(config, ClusterConfig)
+        assert config.fsdp_config["fsdp_version"] == 2

@@ -22,6 +22,7 @@ from .utils import DistributedType, honor_type, is_lomo_available, is_torch_xla_
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
 
 
 def move_to_device(state, device):
@@ -150,7 +151,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             and self.accelerator_state.distributed_type == DistributedType.XLA
         ):
             gradients = xm._fetch_gradients(self.optimizer)
-            xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
+            xm.all_reduce("sum", gradients, scale=1.0 / xr.world_size())
             self.gradient_state.is_xla_gradients_synced = True
 
         if is_lomo_available():

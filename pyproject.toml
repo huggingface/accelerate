@@ -1,6 +1,6 @@
 [tool.ruff]
 line-length = 119
-target-version = "py38"
+target-version = "py39"
 
 [tool.ruff.lint]
 preview = true
