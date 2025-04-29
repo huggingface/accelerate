@@ -180,6 +180,9 @@ def load_accelerator_state(
     process_index,
     scaler=None,
     map_location=None,
+    optimizer_load_kwargs=None,
+    scheduler_load_kwargs=None,
+    dataloader_load_kwargs=None,
     **load_model_func_kwargs,
 ):
     """
@@ -235,7 +238,7 @@ def load_accelerator_state(
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = input_dir.joinpath(optimizer_name)
-        optimizer_state = load(input_optimizer_file, map_location=map_location)
+        optimizer_state = load(input_optimizer_file, map_location=map_location, **optimizer_load_kwargs)
         optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
@@ -243,7 +246,7 @@ def load_accelerator_state(
     for i, scheduler in enumerate(schedulers):
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         input_scheduler_file = input_dir.joinpath(scheduler_name)
-        scheduler_state = load(input_scheduler_file)
+        scheduler_state = load(input_scheduler_file, map_location=None, **scheduler_load_kwargs)
         scheduler.load_state_dict(scheduler_state)
     logger.info("All scheduler states loaded successfully")
 
@@ -261,7 +264,7 @@ def load_accelerator_state(
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
             if input_dataloader_state_dict_file.exists():
-                state_dict = load(input_dataloader_state_dict_file)
+                state_dict = load(input_dataloader_state_dict_file, map_location=None, **dataloader_load_kwargs)
                 dataloader.load_state_dict(state_dict)
     logger.info("All dataloader sampler states loaded successfully")
 

@@ -437,9 +437,9 @@ class Accelerator:
         self.has_fp8_handler = False
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(handler, KwargsHandler), (
-                    f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
-                )
+                assert isinstance(
+                    handler, KwargsHandler
+                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
                 # Add the handler class to the set of found handlers
                 if handler.__class__ in found_handlers:
                     raise ValueError(f"You can only pass one {handler.__class__} in `kwargs_handlers`.")
@@ -3354,7 +3354,14 @@ class Accelerator:
         self._load_model_state_pre_hook[handle.id] = hook
         return handle
 
-    def load_state(self, input_dir: str = None, **load_model_func_kwargs):
+    def load_state(
+        self,
+        input_dir: str = None,
+        optimizer_load_kwargs: dict[str, Any] = None,
+        scheduler_load_kwargs: dict[str, Any] = None,
+        dataloader_load_kwargs: dict[str, Any] = None,
+        **load_model_func_kwargs,
+    ):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
@@ -3473,6 +3480,9 @@ class Accelerator:
             self.state.process_index,
             self.scaler,
             map_location,
+            optimizer_load_kwargs,
+            scheduler_load_kwargs,
+            dataloader_load_kwargs,
             **load_model_func_kwargs,
         )
         if "step" in override_attributes:
