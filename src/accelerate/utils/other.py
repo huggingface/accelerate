@@ -90,7 +90,7 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
             Additional keyword arguments to pass to `torch.compile()`.
     """
 
-    def _compile_regions(module, **compile_kwargs):
+    def _compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
         if isinstance(module, torch.nn.ModuleList):
             if all(isinstance(submodule, module[0].__class__) for submodule in module):
                 new_module = torch.nn.ModuleList()
@@ -98,16 +98,16 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
                     new_module.append(torch.compile(submodule, **compile_kwargs))
             else:
                 new_module = torch.compile(module, **compile_kwargs)
-
         elif module._modules:  # Non-leaf node
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
             new_module._modules = {}
             for name, submodule in module.named_children():
                 new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
-
         else:  # Leaf node
             new_module = torch.compile(module, **compile_kwargs)
+
+        return new_module
 
     new_module = _compile_regions(module, **compile_kwargs)
 
