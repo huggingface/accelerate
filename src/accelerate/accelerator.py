@@ -3357,9 +3357,9 @@ class Accelerator:
     def load_state(
         self,
         input_dir: str = None,
-        optimizer_load_kwargs: dict[str, Any] = None,
-        scheduler_load_kwargs: dict[str, Any] = None,
-        dataloader_load_kwargs: dict[str, Any] = None,
+        optimizer_load_kwargs: dict[str, Any] = {},
+        scheduler_load_kwargs: dict[str, Any] = {},
+        dataloader_load_kwargs: dict[str, Any] = {},
         **load_model_func_kwargs,
     ):
         """

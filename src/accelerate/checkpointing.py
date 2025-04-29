@@ -180,9 +180,9 @@ def load_accelerator_state(
     process_index,
     scaler=None,
     map_location=None,
-    optimizer_load_kwargs=None,
-    scheduler_load_kwargs=None,
-    dataloader_load_kwargs=None,
+    optimizer_load_kwargs={},
+    scheduler_load_kwargs={},
+    dataloader_load_kwargs={},
     **load_model_func_kwargs,
 ):
     """
