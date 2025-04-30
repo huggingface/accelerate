@@ -708,7 +708,7 @@ def test_split_between_processes_list():
     data = list(range(0, (3 * state.num_processes) - 1))
     num_samples_per_process, num_extras = divmod(len(data), state.num_processes)
     expected_length = num_samples_per_process + (1 if state.process_index < num_extras else 0)
-    
+
     with state.split_between_processes(data, apply_padding=True) as results:
         # With padding, all processes should have the same length of data
         # The expected length is num_samples_per_process + 1 if extras > 0
@@ -717,7 +717,7 @@ def test_split_between_processes_list():
             f"Process did not get correct padded length. Process index: {state.process_index}; "
             f"Expected: {expected_padded_length}, Got: {len(results)}"
         )
-        
+
         # Check that padding uses the last element
         if state.process_index >= num_extras and num_extras > 0:
             # Processes that receive padding should have the last element repeated
