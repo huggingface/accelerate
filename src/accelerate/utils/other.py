@@ -111,7 +111,7 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
 
     new_module = _compile_regions(module, **compile_kwargs)
 
-    if hasattr(new_module, "_orig_mod"):
+    if not hasattr(new_module, "_orig_mod"):
         # Keeps a reference to the original module to decompile/unwrap it later
         new_module.__dict__["_orig_mod"] = module
 
@@ -143,7 +143,7 @@ def extract_model_from_parallel(
     is_compiled = is_compiled_module(model)
     has_compiled = has_compiled_regions(model)
 
-    if is_compiled and has_compiled:
+    if is_compiled or has_compiled:
         compiled_model = model
         model = model._orig_mod
 

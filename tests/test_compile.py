@@ -17,7 +17,7 @@ import torch
 from torch.utils.benchmark import Timer
 
 from accelerate.test_utils import require_huggingface_suite, require_non_cpu, torch_device
-from accelerate.utils import compile_regions, release_memory
+from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
 
 
 MODEL_ID = "gpt2"
@@ -29,16 +29,44 @@ INFRENCE_STMT = "model(input_ids, use_cache=False)"
 COMPILE_STMT = f"torch._dynamo.reset(); torch._inductor.utils.clear_inductor_caches(); {INFRENCE_STMT}"
 
 
-@require_non_cpu
 @require_huggingface_suite
 class RegionalCompilationTester(unittest.TestCase):
-    def test_regional_compilation_cold_start(self):
+    def _get_model_and_inputs(self):
         from transformers import AutoConfig, AutoModelForCausalLM
 
         with torch.device(torch_device):
             config = AutoConfig.from_pretrained(MODEL_ID)
             model = AutoModelForCausalLM.from_config(config)
             input_ids = torch.randint(0, 1000, (4, 128), dtype=torch.int64)
+
+        return model, input_ids
+
+    def test_dynamo_extract_model_keep_torch_compile(self):
+        model, _ = self._get_model_and_inputs()
+        compiled_model = compile_regions(model)
+
+        # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
+        distributed_model = torch.nn.parallel.DataParallel(model)
+        distributed_compiled_model = compile_regions(distributed_model)
+        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=True)
+
+        assert compiled_model._orig_mod == compiled_model_unwrapped._orig_mod
+
+    def test_dynamo_extract_model_remove_torch_compile(self):
+        model, _ = self._get_model_and_inputs()
+        compiled_model = compile_regions(model)
+
+        # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
+        distributed_model = torch.nn.parallel.DataParallel(model)
+        distributed_compiled_model = compile_regions(distributed_model)
+        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=False)
+
+        assert compiled_model._orig_mod == compiled_model_unwrapped
+
+    @require_non_cpu
+    @require_huggingface_suite
+    def test_regional_compilation_cold_start(self):
+        model, input_ids = self._get_model_and_inputs()
 
         regional_compilation_model = compile_regions(model)
         regional_compilation_cold_start = (
@@ -62,13 +90,10 @@ class RegionalCompilationTester(unittest.TestCase):
 
         release_memory(model, full_compilation_model, regional_compilation_model)
 
+    @require_non_cpu
+    @require_huggingface_suite
     def test_regional_compilation_inference_speedup(self):
-        from transformers import AutoConfig, AutoModelForCausalLM
-
-        with torch.device(torch_device):
-            config = AutoConfig.from_pretrained(MODEL_ID)
-            model = AutoModelForCausalLM.from_config(config)
-            input_ids = torch.randint(0, 1000, (4, 128), dtype=torch.int64)
+        model, input_ids = self._get_model_and_inputs()
 
         baseline_inference_latency = (
             Timer(stmt=INFRENCE_STMT, globals={"model": model, "input_ids": input_ids}).timeit(INFERENCE_ITERS).median
