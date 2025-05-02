@@ -609,7 +609,16 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
     }
 
-    if fsdp2_plugin.cpu_ram_efficient_loading:
+    model_has_params4bit = False
+    for name, param in model.named_parameters():
+        # this is a temporary fix whereby loading models with bnb params cannot be moved from
+        # GPU to a meta device due with FSDP2 because torch operations don't return the original class type
+        # bypassing the move to meta will still cause the VRAM spike, but at least it still will load
+        if param.__class__.__name__ == "Params4bit":
+            model_has_params4bit = True
+            break
+
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
         # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
         # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.emtpy`), `fully_shard` would move it to GPU
@@ -643,6 +652,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
         fsdp2_load_full_state_dict(accelerator, model, original_sd)
 
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # We re-register the buffers, as they may not be in the state_dict
         for fqn, buffer_tensor in original_non_persistent_buffers.items():
             buffer_tensor = buffer_tensor.to(accelerator.device)
