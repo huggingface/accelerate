@@ -71,6 +71,8 @@
       title: Big Model Inference
     - local: usage_guides/distributed_inference
       title: Distributed inference
+    - local: usage_guides/compilation
+      title: Compilation
     title: Inference
   title: How to guides
 - sections:
