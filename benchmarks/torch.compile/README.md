@@ -31,6 +31,20 @@ The script will automatically download the model configurations, create models, 
 
 ## Results
 
+The benchmark results are summarized in the following figures:
+
+- Compilation time is how long it takes to run the first forward pass.
+- Speedup factor is the ratio of non-compiled baseline inference time to the fully/regionally compiled inference time.
+
+<p align="center">
+  <img src="imgs/compilation_time.png" width="80%" alt="Compilation Time">
+</p>
+<p align="center">
+  <img src="imgs/speedup_factor.png" width="80%" alt="Speedup Factor">
+</p>
+
+Full results are available in the tables below:
+
 ```markdown
 [-------------------------------------------------- NousResearch/Llama-3.2-1B ---------------------------------------------------]
                             |  Inference time (1x128)  |  Inference time (4x128)  |  Compile time (1x128)  |  Compile time (4x128)
@@ -79,18 +93,19 @@ Regional compilation provides significantly faster compilation times compared to
 - **Regional compilation**: Takes only ~2-3 seconds across all model sizes.
 - **Speed improvement**: Regional compilation is **5-9x faster** to compile.
 
-### Inference Performance
+### Inference Time
 
 Regional compilation delivers inference performance close to full compilation:
 
-- For smaller models (1B-3B): Full compilation has a slight edge in single batch inference
-- For larger models (8B-13B): Regional compilation matches or slightly outperforms full compilation
-- Starting from batch size 4: Both compilation strategies perform nearly identically
+- For batch size 1:
+  - For smaller models (1B-3B): Full compilation has a slight edge over regional compilation.
+  - For larger models (8B-13B): Regional compilation performs similarly to full compilation.
+- For batch size 4: Regional compilation performs similarly to full compilation across all models.
 
 ## Key Takeaways
 
 1. **Comparable Performance**: Regional compilation delivers performance speedups similar to full compilation, especially for larger models.
 2. **Faster Compilation**: Regional compilation significantly reduces the time taken to compile models, making it a more efficient choice for deployment.
-3. **Batch Size Impact**: The performance difference between compilation strategies diminishes with larger batch sizes, indicating that the overhead of compilation is less impactful in those scenarios.
-4. **Model Size Consideration**: The benefits of regional compilation are more pronounced in larger models, where the compilation time savings can be substantial.
+3. **Batch Size Impact**: At batch size 4, full compilation and regional compilation perform nearly identically.
+4. **Model Size Impact**: Even with a small batch size, full compilation and regional compilation perform similarly for larger models (8B-13B).
 5. **Practical Application**: For real-world applications, regional compilation is a practical choice for optimizing training cold start times, especially when working with large models.
