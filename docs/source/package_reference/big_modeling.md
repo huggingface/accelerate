@@ -87,7 +87,7 @@ rendered properly in your Markdown viewer.
 
 ### attach_layerwise_casting_hooks
 
-[[autodoc]] hooks.attach_layerwise_casting_hooks
+[[autodoc]] big_modeling.attach_layerwise_casting_hooks
 
 ## Removing Hooks
 
