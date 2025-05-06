@@ -1004,7 +1004,7 @@ class TorchDynamoPlugin(KwargsHandler):
         metadata={
             "help": (
                 # https://pytorch.org/tutorials/recipes/regional_compilation.html
-                "This recipe to reduces the cold start compilation time of torch.compile() by choosing to "
+                "Use it to reduce the cold start compilation time of torch.compile() by choosing to "
                 "compile a repeated region of the model (e.g. a Decoder Layer) instead of the entire model. "
                 "This is useful for models with large number of repeated regions like LLMs."
             )
