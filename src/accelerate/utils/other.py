@@ -88,6 +88,37 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
             The model to compile.
         **compile_kwargs:
             Additional keyword arguments to pass to `torch.compile()`.
+
+    Returns:
+        `torch.nn.Module`: A new instance of the model with some compiled regions.
+
+    Example:
+    ```python
+    >>> from accelerate.utils import compile_regions
+    >>> from transformers import AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> compiled_model = compile_regions(model, mode="reduce-overhead")
+    >>> compiled_model.transformer.h[0]
+    OptimizedModule(
+        (_orig_mod): GPT2Block(
+                (ln_1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+                (attn): GPT2Attention(
+                (c_attn): Conv1D(nf=2304, nx=768)
+                (c_proj): Conv1D(nf=768, nx=768)
+                (attn_dropout): Dropout(p=0.1, inplace=False)
+                (resid_dropout): Dropout(p=0.1, inplace=False)
+            )
+            (ln_2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+            (mlp): GPT2MLP(
+                (c_fc): Conv1D(nf=3072, nx=768)
+                (c_proj): Conv1D(nf=768, nx=3072)
+                (act): NewGELUActivation()
+                (dropout): Dropout(p=0.1, inplace=False)
+            )
+        )
+    )
+    ```
     """
 
     def _compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
