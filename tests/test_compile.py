@@ -41,27 +41,37 @@ class RegionalCompilationTester(unittest.TestCase):
 
         return model, input_ids
 
-    def test_dynamo_extract_model_keep_torch_compile(self):
+    def test_regions_are_compiled(self):
+        model, _ = self._get_model_and_inputs()
+        compiled_model = compile_regions(model, mode="reduce-overhead")
+
+        # Check that the compiled model keeps a reference to the original model
+        assert hasattr(compiled_model, "_orig_mod")
+        assert compiled_model._orig_mod is model
+
+        # Check that the compiled_model.transformer.h[i] and compiled_model.lm_head are compiled separately
+        assert isinstance(compiled_model.transformer.h[0], torch._dynamo.eval_frame.OptimizedModule)
+        assert isinstance(compiled_model.lm_head, torch._dynamo.eval_frame.OptimizedModule)
+
+    def test_extract_model_keep_torch_compile(self):
         model, _ = self._get_model_and_inputs()
         compiled_model = compile_regions(model)
 
-        # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
         distributed_model = torch.nn.parallel.DataParallel(model)
         distributed_compiled_model = compile_regions(distributed_model)
         compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=True)
 
-        assert compiled_model._orig_mod == compiled_model_unwrapped._orig_mod
+        assert compiled_model._orig_mod is compiled_model_unwrapped._orig_mod
 
-    def test_dynamo_extract_model_remove_torch_compile(self):
+    def test_extract_model_remove_torch_compile(self):
         model, _ = self._get_model_and_inputs()
         compiled_model = compile_regions(model)
 
-        # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
         distributed_model = torch.nn.parallel.DataParallel(model)
         distributed_compiled_model = compile_regions(distributed_model)
         compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=False)
 
-        assert compiled_model._orig_mod == compiled_model_unwrapped
+        assert compiled_model._orig_mod is compiled_model_unwrapped
 
     @require_non_cpu
     @require_huggingface_suite
