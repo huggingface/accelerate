@@ -8,7 +8,7 @@ The benchmark evaluates three approaches:
 
 - **Baseline**: No compilation, standard PyTorch eager execution.
 - **Full compilation**: Using PyTorch's `torch.compile()` on the entire model.
-- **Regional compilation**: Instead of trying to compile the whole model, which usually creates a big problem space for optimization. Regional compilation targets the repeated block first (usually a decoder/encoder layer), so that the compiler would re-use its cached graph /  generated code for the other blocks, reducing the cold start compilation time observed on the first call.
+- **Regional compilation**: Using `accelerate.utils.compile_regions()` which targets specific blocks of the model to optimize compilation time.
 
 Each approach is tested with different batch sizes (1 and 4) and sequence lengths (128) on various LLaMA-based models ranging from 1B to 13B parameters. We purposefully run the forward pass outside of the `torch.no_grad()` context to simulate performance in a training environment, where gradients are needed.
 

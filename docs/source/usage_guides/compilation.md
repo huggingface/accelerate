@@ -36,11 +36,14 @@ model = accelerator.prepare(model)
 
 ## Regional Compilation
 
-Instead of trying to compile the whole model, which usually has a big problem space for optimization. Regional compilation finds and compiles a repeated block first (usually a decoder/encoder layer), so that the compiler would re-use its cached/optimized generated code for the other blocks, reducing the cold start compilation time observed on the first inference call.
+Instead of trying to compile the whole model, which usually has a big problem space for optimization. Regional compilation     targets repeated blocks of the same class and compile them sequentially to hit the compiler's cache. For example, in `GPT2LMHeadModel`, the repeated block/class is `GPT2Block`, and can be accessed as `model.transformer.h[0]`.
+
+This allows us to speed up the compilation overhead / cold start of models like LLMs and Transformers in general.
+See <https://pytorch.org/tutorials/recipes/regional_compilation.html> for more details.
 
 ### How to Use Regional Compilation
 
-To apply regional compilation, uou can simply enable it by setting `use_regional_compilation=True` in the `TorchDynamoPlugin` configuration. This will automatically apply regional compilation to your model.
+It can be enabled by setting `use_regional_compilation=True` in the `TorchDynamoPlugin` configuration:
 
 ```python
 # Configure the compilation backend
@@ -53,6 +56,8 @@ accelerator = Accelerator(dynamo_plugin=dynamo_plugin)
 # This will apply compile_regions to your model
 model = accelerator.prepare(model)
 ```
+
+You could also use the `accelerate.utils.compile_regions` utility directly the same way you would use `torch.compile`.
 
 ### Benefits of Regional Compilation
 
