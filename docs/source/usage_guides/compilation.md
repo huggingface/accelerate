@@ -14,7 +14,7 @@ The first execution of compiled code typically takes longer as it includes the c
 
 ## Using `torch.compile` with Accelerate
 
-Accelerate provides `TorchDynamoPlugin` for easy integration with `torch.compile`.
+Accelerate provides `TorchDynamoPlugin` for easy and seemless integration of `torch.compile` into your training scripts.
 
 ```python
 from accelerate import Accelerator
@@ -33,6 +33,8 @@ accelerator = Accelerator(dynamo_plugin=dynamo_plugin)
 # This will apply torch.compile to your model
 model = accelerator.prepare(model)
 ```
+
+It is compatible with all other features and plugins of Accelerate, including mixed precision, distributed training (DDP, FSDP, Deepspeed), etc.
 
 ## Regional Compilation
 
