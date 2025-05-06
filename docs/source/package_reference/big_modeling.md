@@ -63,6 +63,10 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] hooks.SequentialHook
 
+### LayerwiseCastingHook
+
+[[autodoc]] hooks.LayerwiseCastingHook
+
 ## Adding Hooks
 
 ### add_hook_to_module
@@ -80,6 +84,10 @@ rendered properly in your Markdown viewer.
 ### attach_align_device_hook_on_blocks
 
 [[autodoc]] hooks.attach_align_device_hook_on_blocks
+
+### attach_layerwise_casting_hooks
+
+[[autodoc]] big_modeling.attach_layerwise_casting_hooks
 
 ## Removing Hooks
 
