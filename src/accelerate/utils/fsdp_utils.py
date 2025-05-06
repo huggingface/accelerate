@@ -472,7 +472,13 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
     # Rank 0 distributes the full state dict to other ranks
     def _infer_parameter_dtype(model, param_name, empty_param):
-        old_param = model.get_parameter_or_buffer(param_name)
+        try:
+            old_param = model.get_parameter_or_buffer(param_name)
+        except AttributeError:
+            # Need this for LORA, as there some params are not *parameters* of sorts
+            base_param_name, local_param_name = param_name.rsplit(".", 1)
+            submodule = model.get_submodule(base_param_name)
+            old_param = getattr(submodule, local_param_name)
 
         is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
         casting_dtype = None
