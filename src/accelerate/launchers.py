@@ -132,8 +132,9 @@ def notebook_launcher(
             f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
         )
 
-    if (in_colab or in_kaggle) and \
-        ((os.environ.get("TPU_NAME", None) is not None) or (os.environ.get("PJRT_DEVICE", "") == "TPU")):
+    if (in_colab or in_kaggle) and (
+        (os.environ.get("TPU_NAME", None) is not None) or (os.environ.get("PJRT_DEVICE", "") == "TPU")
+    ):
         # TPU launch
         import torch_xla.distributed.xla_multiprocessing as xmp
 
@@ -145,7 +146,7 @@ def notebook_launcher(
             )
 
         launcher = PrepareForLaunch(function, distributed_type="XLA")
-        print(f"Launching a training on TPU cores.")
+        print("Launching a training on TPU cores.")
         xmp.spawn(launcher, args=args, start_method="fork")
     elif in_colab and get_gpu_info()[1] < 2:
         # No need for a distributed launch otherwise as it's either CPU or one GPU.
