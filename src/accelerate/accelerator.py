@@ -1675,24 +1675,24 @@ class Accelerator:
                 #   * this attribute will always set by init_utils.init_core_state so its always not None.
                 #   * mixed_precision.param_dtype only regards _fwd_bwd_param_dtype
                 #   * if model is loaded in 16bit, and even if mixed_precision.param_dtype is None,
-                #     we sill want to upcast the flat_param.
+                #     we still want to upcast the flat_param.
                 if self.mixed_precision != "no":  # if mixed precision is set
                     upcasted_log = []
                     for module in FSDP.fsdp_modules(model):
                         # Referencing DeepSpeed Zero3
                         # - in Init, params are converted to 16bit while partitioning.
-                        # - in accelerator.prepare, deepspeed.initalize is called to:
-                        #   * creates the DeepSpeeedEngine.
+                        # - in accelerator.prepare, deepspeed.initialize is called to:
+                        #   * creates the DeepSpeedEngine.
                         #   * since zero_optimization() is True , calls engine._configure_zero_optimizer.
                         #
-                        # Inside the DeepSpeed Zero3 optimizer configuration, which initalizes
+                        # Inside the DeepSpeed Zero3 optimizer configuration, which initializes
                         # DeepSpeedZeroOptimizer_Stage3, during which:
                         #   * trainable_param_groups are obtained from the attached optimizer
                         #     (already partitioned in 16bit).
                         #   * then _setup_for_real_optimizer -> _create_fp32_partitions
                         #     which performs the fp32 upcasting.
 
-                        # To mimick DeepSeepds's casting in FSDP, we look at the (single) FlatParameter held
+                        # To mimic DeepSeepds's casting in FSDP, we look at the (single) FlatParameter held
                         # within an FSDP wrapper. This FlatParameter will be seen by the optimizer.
                         #  - even though there is a torch.device('meta') guard below, we
                         #    expect _init_utils._init_param_handle_from_module to already
@@ -3194,7 +3194,7 @@ class Accelerator:
 
         If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled
         then checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater
-        than `total_limit` then the oldest save is deleted. Each checkpoint is saved in seperate folders named
+        than `total_limit` then the oldest save is deleted. Each checkpoint is saved in separate folders named
         `checkpoint_<iteration>`.
 
         Otherwise they are just saved to `output_dir`.
