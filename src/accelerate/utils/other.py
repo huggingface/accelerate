@@ -307,6 +307,19 @@ def is_port_in_use(port: int = None) -> bool:
         return s.connect_ex(("localhost", port)) == 0
 
 
+def get_free_port() -> int:
+    """
+    Gets a free port on `localhost`. Useful for automatic port selection when port 0 is specified in distributed
+    training scenarios.
+
+    Returns:
+        int: An available port number
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))  # bind to port 0 for OS to assign a free port
+        return s.getsockname()[1]
+
+
 def convert_bytes(size):
     "Converts `size` from bytes to the largest possible unit"
     for x in ["bytes", "KB", "MB", "GB", "TB"]:
