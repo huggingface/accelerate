@@ -735,3 +735,19 @@ def get_fsdp2_grad_scaler(**kwargs):
     from torch.amp.grad_scaler import GradScaler
 
     return GradScaler(**kwargs)
+
+
+def fsdp2_canonicalize_names(named_params: dict) -> dict:
+    """Removes parameter name modifiers in order to map them back to their original names.
+
+    See huggingface/accelerate#3554 for more context.
+
+    Args:
+        named_params (`dict`): The named parameters dictionary to canonicalize.
+
+    Returns:
+        `dict`: The canonicalized named parameters dictionary
+    """
+    named_params = {k.replace("._checkpoint_wrapped_module", ""): v for k, v in named_params.items()}
+    named_params = {k.replace("_orig_mod.", ""): v for k, v in named_params.items() if k.startswith("_orig_mod")}
+    return named_params
