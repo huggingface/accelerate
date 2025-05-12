@@ -33,8 +33,6 @@ import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
-from accelerate.utils.imports import is_torchao_available
-
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -103,6 +101,7 @@ from .utils import (
     is_npu_available,
     is_torch_version,
     is_torch_xla_available,
+    is_torchao_available,
     is_transformer_engine_available,
     is_xpu_available,
     load_fsdp_model,
@@ -125,7 +124,7 @@ from .utils.constants import (
     PROFILE_PATTERN_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
-from .utils.other import is_compiled_module
+from .utils.other import compile_regions, is_compiled_module
 
 
 if is_deepspeed_available():
@@ -1748,7 +1747,10 @@ class Accelerator:
             model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
-            model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+            if self.state.dynamo_plugin.use_regional_compilation:
+                model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
+            else:
+                model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
     def _prepare_ao(self, *args):
@@ -2028,7 +2030,10 @@ class Accelerator:
 
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
-                engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
+                if self.state.dynamo_plugin.use_regional_compilation:
+                    engine.module = compile_regions(engine.module, **compile_kwargs)
+                else:
+                    engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
             if optimizer is not None:
                 optimizer = DeepSpeedOptimizerWrapper(optimizer)
             if scheduler is not None:
