@@ -490,7 +490,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         return old_param is not None and old_param.is_contiguous(), casting_dtype
 
     def _cast_and_contiguous(tensor, to_contiguous, dtype):
-        if dtype is None:
+        if dtype is not None:
             tensor = tensor.to(dtype=dtype)
         if to_contiguous:
             tensor = tensor.contiguous()
