@@ -220,6 +220,7 @@ from .fsdp_utils import (
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
     ensure_weights_retied,
+    fsdp2_canonicalize_names,
     fsdp2_load_full_state_dict,
     fsdp2_prepare_model,
     fsdp2_switch_optimizer_parameters,

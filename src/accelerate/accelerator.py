@@ -80,6 +80,7 @@ from .utils import (
     convert_outputs_to_fp32,
     ensure_weights_retied,
     extract_model_from_parallel,
+    fsdp2_canonicalize_names,
     fsdp2_prepare_model,
     fsdp2_switch_optimizer_parameters,
     gather,
@@ -1441,10 +1442,8 @@ class Accelerator:
         if should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
-            if fsdp2_should_fix_optimizer and self.state.fsdp_plugin.activation_checkpointing:
-                new_named_params = {
-                    k.replace("._checkpoint_wrapped_module", ""): v for k, v in new_named_params.items()
-                }
+            if fsdp2_should_fix_optimizer:
+                new_named_params = fsdp2_canonicalize_names(new_named_params)
             # 3. building a map from the first to the second
             mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
             # 4. using that map to update the parameters of the optimizer
