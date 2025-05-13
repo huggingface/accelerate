@@ -194,7 +194,7 @@ For instance, here is how you would run the NLP example `examples/by_feature/dee
 ```bash
 compute_environment: LOCAL_MACHINE
 deepspeed_config:
- deepspeed_config_file: /home/ubuntu/accelerate/examples/configs/deepspeed_config_templates/zero_stage2_config.json
+ deepspeed_config_file: /home/ubuntu/accelerate/examples/deepspeed_config_templates/zero_stage2_config.json
  zero3_init_flag: true
 distributed_type: DEEPSPEED
 fsdp_config: {}
@@ -275,7 +275,7 @@ accelerate launch examples/by_feature/deepspeed_with_config_support.py \
 ```bash
 compute_environment: LOCAL_MACHINE
 deepspeed_config:
- deepspeed_config_file: /home/ubuntu/accelerate/examples/configs/deepspeed_config_templates/zero_stage3_offload_config.json
+ deepspeed_config_file: /home/ubuntu/accelerate/examples/deepspeed_config_templates/zero_stage3_offload_config.json
  zero3_init_flag: true
 distributed_type: DEEPSPEED
 fsdp_config: {}

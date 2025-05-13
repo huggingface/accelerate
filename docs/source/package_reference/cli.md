@@ -164,7 +164,7 @@ The following arguments are useful for selecting which training paradigm to use.
 
 The following arguments are only useful when `multi_gpu` is passed or multi-gpu training is configured through `accelerate config`: 
 
-* `--gpu_ids` (`str`) -- What GPUs (by id) should be used for training on this machine as a comma-seperated list
+* `--gpu_ids` (`str`) -- What GPUs (by id) should be used for training on this machine as a comma-separated list
 * `--same_network` (`bool`) -- Whether all machines used for multinode training exist on the same local network.
 * `--machine_rank` (`int`) -- The rank of the machine on which this script is launched.
 * `--main_process_ip` (`str`) -- The IP address of the machine of rank 0.

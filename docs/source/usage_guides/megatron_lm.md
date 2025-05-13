@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) enables training large transformer language models at scale.
 It provides efficient tensor, pipeline and sequence based model parallelism for pre-training transformer based
 Language Models such as [GPT](https://arxiv.org/abs/2005.14165) (Decoder Only), [BERT](https://arxiv.org/pdf/1810.04805.pdf) (Encoder Only) and [T5](https://arxiv.org/abs/1910.10683) (Encoder-Decoder).
-For detailed information and how things work behind the scene please refer the github [repo](https://github.com/NVIDIA/Megatron-LM).
+For detailed information and how things work behind the scene please refer to the github [repo](https://github.com/NVIDIA/Megatron-LM).
 
 ## What is integrated?
 
@@ -30,7 +30,7 @@ a. **Tensor Parallelism (TP)**: Reduces memory footprint without much additional
 Each tensor is split into multiple chunks with each shard residing on separate GPU. At each step, the same mini-batch of data is processed
 independently and in parallel by each shard followed by syncing across all GPUs (`all-reduce` operation). 
 In a simple transformer layer, this leads to 2 `all-reduces` in the forward path and 2 in the backward path.
-For more details, please refer research paper [Megatron-LM: Training Multi-Billion Parameter Language Models Using
+For more details, please refer to the research paper [Megatron-LM: Training Multi-Billion Parameter Language Models Using
 Model Parallelism](https://arxiv.org/pdf/1909.08053.pdf) and 
 this section of blogpost [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#tensor-parallelism).
 
@@ -45,7 +45,7 @@ this section of blogpost [The Technology Behind BLOOM Training](https://huggingf
 
 c. **Sequence Parallelism (SP)**: Reduces memory footprint without any additional communication. Only applicable when using TP.
 It reduces activation memory required as it prevents the same copies to be on the tensor parallel ranks 
-post `all-reduce` by replacing then with `reduce-scatter` and `no-op` operation would be replaced by `all-gather`. 
+post `all-reduce` by replacing them with `reduce-scatter` and `no-op` operation would be replaced by `all-gather`. 
 As `all-reduce = reduce-scatter + all-gather`, this saves a ton of activation memory at no added communication cost. 
 To put it simply, it shards the outputs of each transformer layer along sequence dimension, e.g., 
 if the sequence length is `1024` and the TP size is `4`, each GPU will have `256` tokens (1024/4) for each sample. 
@@ -56,7 +56,7 @@ d. **Data Parallelism (DP)** via Distributed Optimizer: Reduces the memory footp
 (versus the traditional method of replicating the optimizer state across data parallel ranks). 
 For example, when using Adam optimizer with mixed-precision training, each parameter accounts for 12 bytes of memory.
 This gets distributed equally across the GPUs, i.e., each parameter would account for 3 bytes (12/4) if we have 4 GPUs.
-For more details, please refer the research paper [ZeRO: Memory Optimizations Toward Training Trillion
+For more details, please refer to the research paper [ZeRO: Memory Optimizations Toward Training Trillion
 Parameter Models](https://arxiv.org/pdf/1910.02054.pdf) and following section of blog 
 [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#zero-data-parallelism).
 
@@ -66,7 +66,7 @@ For example, for GPT-3, this leads to 70% reduction in required memory for activ
 only 2.7% FLOPs overhead for recomputation of activations. For more details, please refer to the research paper 
 [Reducing Activation Recomputation in Large Transformer Models](https://arxiv.org/pdf/2205.05198.pdf).
 
-f. **Fused Kernels**: Fused Softmax, Mixed Precision Fused Layer Norm and  Fused gradient accumulation to weight gradient computation of linear layer.
+f. **Fused Kernels**: Fused Softmax, Mixed Precision Fused Layer Norm and Fused gradient accumulation to weight gradient computation of linear layer.
 PyTorch JIT compiled Fused GeLU and Fused Bias+Dropout+Residual addition.
 
 g. **Support for Indexed datasets**: Efficient binary format of datasets for large scale training. Support for the `mmap`, `cached` index file and the `lazy` loader format.
@@ -445,7 +445,7 @@ python checkpoint_utils/megatgron_gpt2/checkpoint_reshaping_and_interoperability
 ## Megatron-LM GPT models support returning logits and `megatron_generate` function for text generation
 
 1. Returning logits require setting `require_logits=True` in MegatronLMPlugin as shown below. 
-These would be available on the in the last stage of pipeline.
+These would be available in the last stage of pipeline.
 ```python
 megatron_lm_plugin = MegatronLMPlugin(return_logits=True)
 ```
@@ -569,7 +569,7 @@ setting is synonymous with gradient accumulation.
 
 7. When using Megatron-LM, use `accelerator.save_state` and `accelerator.load_state` for saving and loading checkpoints.
 
-8. Below are the mapping from Megatron-LM model architectures to the the equivalent transformers model architectures.
+8. Below are the mapping from Megatron-LM model architectures to the equivalent transformers model architectures.
 Only these transformers model architectures are supported.
 
 a. Megatron-LM [BertModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/bert_model.py) : 

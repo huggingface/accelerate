@@ -26,7 +26,7 @@ You will also learn how to setup a few requirements needed for ensuring your env
 
 ## Configuring the Environment
 
-Before any training can be performed, a Accelerate config file must exist in the system. Usually this can be done by running the following in a terminal and answering the prompts:
+Before any training can be performed, an Accelerate config file must exist in the system. Usually this can be done by running the following in a terminal and answering the prompts:
 
 ```bash
 accelerate config
@@ -52,7 +52,7 @@ os._exit(00)  # Restart the notebook
 
 ## Preparing the Dataset and Model
 
-Next you should prepare your dataset. As mentioned at earlier, great care should be taken when preparing the `DataLoaders` and model to make sure that **nothing** is put on *any* GPU. 
+Next you should prepare your dataset. As mentioned earlier, great care should be taken when preparing the `DataLoaders` and model to make sure that **nothing** is put on *any* GPU. 
 
 If you do, it is recommended to put that specific code into a function and call that from within the notebook launcher interface, which will be shown later. 
 

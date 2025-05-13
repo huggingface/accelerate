@@ -472,7 +472,13 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
     # Rank 0 distributes the full state dict to other ranks
     def _infer_parameter_dtype(model, param_name, empty_param):
-        old_param = model.get_parameter_or_buffer(param_name)
+        try:
+            old_param = model.get_parameter_or_buffer(param_name)
+        except AttributeError:
+            # Need this for LORA, as there some params are not *parameters* of sorts
+            base_param_name, local_param_name = param_name.rsplit(".", 1)
+            submodule = model.get_submodule(base_param_name)
+            old_param = getattr(submodule, local_param_name)
 
         is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
         casting_dtype = None
@@ -484,7 +490,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         return old_param is not None and old_param.is_contiguous(), casting_dtype
 
     def _cast_and_contiguous(tensor, to_contiguous, dtype):
-        if dtype is None:
+        if dtype is not None:
             tensor = tensor.to(dtype=dtype)
         if to_contiguous:
             tensor = tensor.contiguous()
@@ -735,3 +741,19 @@ def get_fsdp2_grad_scaler(**kwargs):
     from torch.amp.grad_scaler import GradScaler
 
     return GradScaler(**kwargs)
+
+
+def fsdp2_canonicalize_names(named_params: dict) -> dict:
+    """Removes parameter name modifiers in order to map them back to their original names.
+
+    See huggingface/accelerate#3554 for more context.
+
+    Args:
+        named_params (`dict`): The named parameters dictionary to canonicalize.
+
+    Returns:
+        `dict`: The canonicalized named parameters dictionary
+    """
+    named_params = {k.replace("._checkpoint_wrapped_module", ""): v for k, v in named_params.items()}
+    named_params = {k.replace("_orig_mod.", ""): v for k, v in named_params.items() if k.startswith("_orig_mod")}
+    return named_params

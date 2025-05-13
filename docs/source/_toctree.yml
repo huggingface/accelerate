@@ -66,6 +66,8 @@
       title: IPEX training with CPU
     - local: usage_guides/gaudi
       title: Intel Gaudi
+    - local: usage_guides/compilation
+      title: Compilation
     title: Training
   - isExpanded: true
     sections:

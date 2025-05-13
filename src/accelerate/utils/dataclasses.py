@@ -999,6 +999,18 @@ class TorchDynamoPlugin(KwargsHandler):
     options: Any = field(default=None, metadata={"help": "A dictionary of options to pass to the backend."})
     disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
 
+    use_regional_compilation: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                # https://pytorch.org/tutorials/recipes/regional_compilation.html
+                "Use it to reduce the cold start compilation time of torch.compile() by choosing to "
+                "compile a repeated region of the model (e.g. a Decoder Layer) instead of the entire model. "
+                "This is useful for models with large number of repeated regions like LLMs."
+            )
+        },
+    )
+
     def __post_init__(self):
         prefix = "ACCELERATE_DYNAMO_"
         if self.backend is None:
@@ -1015,6 +1027,11 @@ class TorchDynamoPlugin(KwargsHandler):
         dynamo_config = copy.deepcopy(self.__dict__)
         dynamo_config["backend"] = dynamo_config["backend"].value.lower()
         return dynamo_config
+
+    def to_kwargs(self):
+        kwargs = super().to_kwargs()
+        kwargs.pop("use_regional_compilation", None)
+        return kwargs
 
 
 @dataclass
@@ -1812,6 +1829,16 @@ class FullyShardedDataParallelPlugin:
                 "Setting sync_module_states to True."
             )
             self.sync_module_states = True
+
+        if self.cpu_ram_efficient_loading != bool(
+            str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False"))
+        ):
+            env_var = env_prefix + "CPU_RAM_EFFICIENT_LOADING"
+            warnings.warn(
+                f"The `cpu_ram_efficient_loading` flag for `FullyShardedDataParallelPlugin` does not match the environment variable {env_var}. "
+                "Setting environment variable to match `cpu_ram_efficient_loading`."
+            )
+            os.environ[env_var] = str(self.cpu_ram_efficient_loading)
 
         if isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)
