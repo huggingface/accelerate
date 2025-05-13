@@ -143,19 +143,17 @@ def load_and_quantize_model(
                         param.to(torch.float32)
             elif torch.is_floating_point(param):
                 param.to(dtype)
-        if model_device.type == "cuda":
-            # move everything to cpu in the first place because we can't do quantization if the weights are already on cuda
-            model.cuda(torch.cuda.current_device())
-            torch.cuda.empty_cache()
-        elif torch.cuda.is_available():
+        if model_device.type == "cuda" or torch.cuda.is_available():
             model.to(torch.cuda.current_device())
+            torch.cuda.empty_cache()
         elif torch.xpu.is_available():
             model.to(torch.xpu.current_device())
+            torch.xpu.empty_cache()
         else:
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+            raise RuntimeError("No GPU or Intel XPU found. A GPU or Intel XPU is needed for quantization.")
         logger.info(
-            f"The model device type is {model_device.type}. However, gpu is needed for quantization."
-            "We move the model to gpu."
+            f"The model device type is {model_device.type}. However, gpu or intel xpu is needed for quantization."
+            "We move the model to it."
         )
         return model
 
