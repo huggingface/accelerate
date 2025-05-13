@@ -755,5 +755,5 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
         `dict`: The canonicalized named parameters dictionary
     """
     named_params = {k.replace("._checkpoint_wrapped_module", ""): v for k, v in named_params.items()}
-    named_params = {k.replace("_orig_mod.", ""): v for k, v in named_params.items() if k.startswith("_orig_mod")}
+    named_params = {k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k: v for k, v in named_params.items()}
     return named_params
