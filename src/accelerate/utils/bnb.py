@@ -143,12 +143,13 @@ def load_and_quantize_model(
                         param.to(torch.float32)
             elif torch.is_floating_point(param):
                 param.to(dtype)
-        if model_device.type == "cuda" or torch.cuda.is_available():
-            model.to(torch.cuda.current_device())
+        if model_device.type == "cuda":
+            model.cuda(torch.cuda.current_device())
             torch.cuda.empty_cache()
+        elif torch.cuda.is_available():
+            model.to(torch.cuda.current_device())
         elif torch.xpu.is_available():
             model.to(torch.xpu.current_device())
-            torch.xpu.empty_cache()
         else:
             raise RuntimeError("No GPU or Intel XPU found. A GPU or Intel XPU is needed for quantization.")
         logger.info(
