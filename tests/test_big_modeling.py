@@ -36,7 +36,6 @@ from accelerate.big_modeling import (
 from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import (
     require_bnb,
-    require_cuda,
     require_cuda_or_xpu,
     require_multi_device,
     require_multi_gpu_or_xpu,
@@ -542,7 +541,7 @@ class BigModelingTester(unittest.TestCase):
     )
     def test_dispatch_model_tied_weights_memory_with_nested_offload_disk(self):
         # Test that we do not duplicate tied weights at any point during dispatch_model call.
-      
+
         torch_accelerator_module = getattr(torch, torch_device_type)
 
         torch_accelerator_module.empty_cache()  # Needed in case we run several tests in a row.
@@ -608,7 +607,11 @@ class BigModelingTester(unittest.TestCase):
 
             assert (free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130
 
-            oom_error = torch.OutOfMemoryError if hasattr(torch, "OutOfMemoryError") else torch_accelerator_module.OutOfMemoryError
+            oom_error = (
+                torch.OutOfMemoryError
+                if hasattr(torch, "OutOfMemoryError")
+                else torch_accelerator_module.OutOfMemoryError
+            )
             with torch.no_grad():
                 try:
                     output = model(x)
