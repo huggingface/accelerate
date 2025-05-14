@@ -246,6 +246,12 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether to enable dynamic shape tracing.",
     )
+    resource_args.add_argument(
+        "--dynamo_use_regional_compilation",
+        default=False,
+        action="store_true",
+        help="Whether to enable regional compilation.",
+    )
 
     # Training Paradigm arguments
     paradigm_args = parser.add_argument_group(

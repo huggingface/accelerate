@@ -1000,13 +1000,13 @@ class TorchDynamoPlugin(KwargsHandler):
     disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
 
     use_regional_compilation: bool = field(
-        default=False,
+        default=None,
         metadata={
             "help": (
                 # https://pytorch.org/tutorials/recipes/regional_compilation.html
                 "Use it to reduce the cold start compilation time of torch.compile() by choosing to "
-                "compile a repeated region of the model (e.g. a Decoder Layer) instead of the entire model. "
-                "This is useful for models with large number of repeated regions like LLMs."
+                "compile repeated regions of the model (e.g. a Decoder Layers) and the rest of the model "
+                "separately. This is useful for models with large number of repeated regions like LLMs."
             )
         },
     )
@@ -1016,11 +1016,18 @@ class TorchDynamoPlugin(KwargsHandler):
         if self.backend is None:
             self.backend = os.environ.get(prefix + "BACKEND", "no")
         self.backend = DynamoBackend(self.backend.upper())
+
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")
         if self.fullgraph is None:
             self.fullgraph = str_to_bool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
-        if self.dynamic is None:
+        if self.use_regional_compilation is None:
+            self.use_regional_compilation = (
+                str_to_bool(os.environ.get(prefix + "USE_REGIONAL_COMPILATION", "False")) == 1
+            )
+
+        # should stay as None if not set by argument or env var
+        if self.dynamic is None and os.environ.get(prefix + "USE_DYNAMIC") is not None:
             self.dynamic = str_to_bool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
 
     def to_dict(self):

@@ -182,6 +182,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
     current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
+    current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_ipex_available():
@@ -280,6 +281,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
     current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
+    current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     if args.use_fsdp:
         current_env["ACCELERATE_USE_FSDP"] = "true"
@@ -589,6 +591,7 @@ def prepare_sagemager_args_inputs(
         "ACCELERATE_DYNAMO_MODE": args.dynamo_mode,
         "ACCELERATE_DYNAMO_USE_FULLGRAPH": str(args.dynamo_use_fullgraph),
         "ACCELERATE_DYNAMO_USE_DYNAMIC": str(args.dynamo_use_dynamic),
+        "ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION": str(args.dynamo_use_regional_compilation),
         "ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     if args.mixed_precision.lower() == "fp8":
