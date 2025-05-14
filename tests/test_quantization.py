@@ -543,8 +543,7 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
         del self.model_fp16
         del self.model_8bit
 
-        gc.collect()
-        torch.cuda.empty_cache()
+        clear_device_cache(garbage_collection=True)
 
     def test_memory_footprint(self):
         r"""
@@ -663,8 +662,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         del self.model_fp16
         del self.model_4bit
 
-        gc.collect()
-        torch.cuda.empty_cache()
+        clear_device_cache(garbage_collection=True)
 
     def test_memory_footprint(self):
         r"""
