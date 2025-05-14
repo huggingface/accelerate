@@ -46,8 +46,9 @@ from accelerate.test_utils import (
     torch_device,
 )
 from accelerate.utils import is_hpu_available, offload_state_dict
-from accelerate.utils.versions import is_torch_version
 from accelerate.utils.memory import clear_device_cache
+from accelerate.utils.versions import is_torch_version
+
 
 logger = logging.getLogger(__name__)
 torch_device_type = torch_device
