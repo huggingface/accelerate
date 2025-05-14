@@ -47,7 +47,7 @@ from accelerate.test_utils import (
 )
 from accelerate.utils import is_hpu_available, offload_state_dict
 from accelerate.utils.versions import is_torch_version
-
+from accelerate.utils.memory import clear_device_cache
 
 logger = logging.getLogger(__name__)
 torch_device_type = torch_device
@@ -378,7 +378,7 @@ class BigModelingTester(unittest.TestCase):
 
         torch_accelerator_module = getattr(torch, torch_device_type)
 
-        torch_accelerator_module.empty_cache()  # Needed in case we run several tests in a row.
+        clear_device_cache()  # Needed in case we run several tests in a row.
 
         model = nn.Sequential(
             OrderedDict(
@@ -442,7 +442,7 @@ class BigModelingTester(unittest.TestCase):
         # Test that we do not duplicate tied weights at any point during dispatch_model call.
 
         torch_accelerator_module = getattr(torch, torch_device_type)
-        torch_accelerator_module.empty_cache()  # Needed in case we run several tests in a row.
+        clear_device_cache()  # Needed in case we run several tests in a row.
 
         class SubModule(torch.nn.Module):
             def __init__(self, ref_to_parameter):
@@ -520,7 +520,7 @@ class BigModelingTester(unittest.TestCase):
 
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
-        torch_accelerator_module.empty_cache()
+        clear_device_cache()
 
         free_memory_bytes_after_infer = torch_accelerator_module.mem_get_info(torch_device)[0]
 
@@ -544,7 +544,7 @@ class BigModelingTester(unittest.TestCase):
 
         torch_accelerator_module = getattr(torch, torch_device_type)
 
-        torch_accelerator_module.empty_cache()  # Needed in case we run several tests in a row.
+        clear_device_cache()  # Needed in case we run several tests in a row.
 
         class SubModule(torch.nn.Module):
             def __init__(self, ref_to_parameter):
@@ -624,7 +624,7 @@ class BigModelingTester(unittest.TestCase):
 
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
-            torch_accelerator_module.empty_cache()
+            clear_device_cache()
 
             free_memory_bytes_after_infer = torch_accelerator_module.mem_get_info(device_0)[0]
 
