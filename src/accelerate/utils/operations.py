@@ -316,6 +316,10 @@ def _gpu_gather(tensor):
     state = PartialState()
     gather_op = torch.distributed.all_gather_into_tensor
 
+    # FIXME: the below 2 lines are added to work-aound a bug related to INT64 collectives in oneCCL. Remove them once pytorch-2.9 is released.
+    if state.device.type == "xpu":
+        torch.xpu.synchronize()
+
     def _gpu_gather_one(tensor):
         if tensor.ndim == 0:
             tensor = tensor.clone()[None]
