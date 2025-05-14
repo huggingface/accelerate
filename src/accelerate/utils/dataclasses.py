@@ -1004,9 +1004,10 @@ class TorchDynamoPlugin(KwargsHandler):
         metadata={
             "help": (
                 # https://pytorch.org/tutorials/recipes/regional_compilation.html
-                "Use it to reduce the cold start compilation time of torch.compile() by choosing to "
-                "compile repeated regions of the model (e.g. a Decoder Layers) and the rest of the model "
-                "separately. This is useful for models with large number of repeated regions like LLMs."
+                "Use it to reduce the cold start compilation time of torch.compile() by targeting repeated "
+                "blocks of the same class and compiling them sequentially to hit the compiler's cache. For "
+                "example, in `GPT2LMHeadModel`, the repeated block/class is `GPT2Block`, and can be accessed "
+                "as `model.transformer.h[0]`. The rest of the model (e.g model.lm_head) is compiled separately."
             )
         },
     )
