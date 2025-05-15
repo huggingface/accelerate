@@ -180,7 +180,8 @@ def load_accelerator_state(
     process_index,
     scaler=None,
     map_location=None,
-    **load_kwargs,
+    load_kwargs=None,
+    **load_model_func_kwargs,
 ):
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
@@ -202,6 +203,8 @@ def load_accelerator_state(
             What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
         load_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the `load`, `load_model` and `load_state_dict` functions.
+        load_model_func_kwargs (`dict`, *optional*):
+            Additional arguments that can be passed to the model's `load_state_dict` method.
 
     Returns:
         `dict`: Contains the `Accelerator` attributes to override while loading the state.
@@ -223,12 +226,12 @@ def load_accelerator_state(
         ending = f"_{i}" if i > 0 else ""
         input_model_file = input_dir.joinpath(f"{SAFE_MODEL_NAME}{ending}.safetensors")
         if input_model_file.exists():
-            load_model(model, input_model_file, device=str(map_location))
+            load_model(model, input_model_file, device=str(map_location), **load_model_func_kwargs)
         else:
             # Load with torch
             input_model_file = input_dir.joinpath(f"{MODEL_NAME}{ending}.bin")
             state_dict = load(input_model_file, map_location=map_location)
-            model.load_state_dict(state_dict, **load_kwargs)
+            model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
     # Optimizer states
@@ -243,8 +246,8 @@ def load_accelerator_state(
     for i, scheduler in enumerate(schedulers):
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         input_scheduler_file = input_dir.joinpath(scheduler_name)
-        scheduler_state = load(input_scheduler_file, map_location=None, **load_kwargs)
-        scheduler.load_state_dict(scheduler_state, **load_kwargs)
+        scheduler_state = load(input_scheduler_file, **load_kwargs)
+        scheduler.load_state_dict(scheduler_state)
     logger.info("All scheduler states loaded successfully")
 
     for i, dataloader in enumerate(dataloaders):
@@ -261,8 +264,8 @@ def load_accelerator_state(
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
             if input_dataloader_state_dict_file.exists():
-                state_dict = load(input_dataloader_state_dict_file, map_location=None, **load_kwargs)
-                dataloader.load_state_dict(state_dict, **load_kwargs)
+                state_dict = load(input_dataloader_state_dict_file, **load_kwargs)
+                dataloader.load_state_dict(state_dict)
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
