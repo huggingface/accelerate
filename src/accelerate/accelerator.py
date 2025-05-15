@@ -3361,7 +3361,7 @@ class Accelerator:
     def load_state(
         self,
         input_dir: str = None,
-        load_kwargs: dict | None = None,
+        **load_kwargs,
     ):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
@@ -3481,7 +3481,7 @@ class Accelerator:
             self.state.process_index,
             self.scaler,
             map_location,
-            load_kwargs,
+            **load_kwargs,
         )
         if "step" in override_attributes:
             self.step = override_attributes["step"]
