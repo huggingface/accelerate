@@ -488,7 +488,9 @@ class PartialState:
                             end_index = len(inputs)
                         result_idcs = list(range(start_index, end_index))
                         if apply_padding:
-                            result_idcs += [end_index - 1] * (num_samples_per_process + (1 if num_extras > 0 else 0) - len(result_idcs))
+                            result_idcs += [end_index - 1] * (
+                                num_samples_per_process + (1 if num_extras > 0 else 0) - len(result_idcs)
+                            )
                         return inputs.select(result_idcs)
                 return inputs
 

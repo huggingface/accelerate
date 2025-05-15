@@ -706,11 +706,9 @@ def test_split_between_processes_dataset(datasets_Dataset):
         state.wait_for_everyone()
 
         gathered_results = gather_object(results_per_process)
-        output = [r["k"] for r in gathered_results[:len(data)]]
+        output = [r["k"] for r in gathered_results[: len(data)]]
 
-        assert expected_output == output, (
-            f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
-        )
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_list():
@@ -741,11 +739,9 @@ def test_split_between_processes_list():
         state.wait_for_everyone()
 
         gathered_results = gather_object(results_per_process)
-        output = gathered_results[:len(data)]
+        output = gathered_results[: len(data)]
 
-        assert expected_output == output, (
-            f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
-        )
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_nested_dict():
@@ -815,11 +811,9 @@ def test_split_between_processes_tensor():
         state.wait_for_everyone()
 
         gathered_results = gather_object(results_per_process)
-        output = gathered_results[:len(data)]
+        output = gathered_results[: len(data)]
 
-        assert expected_output == output, (
-            f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
-        )
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_evenly():
