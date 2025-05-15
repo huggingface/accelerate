@@ -985,6 +985,11 @@ class TorchDynamoPlugin(KwargsHandler):
             A dictionary of options to pass to the backend.
         disable (`bool`, defaults to `False`):
             Turn torch.compile() into a no-op for testing
+        use_regional_compilation (`bool`, defaults to `None`):
+            Use it to reduce the cold start compilation time of torch.compile() by targeting repeated blocks of the same
+            class and compiling them sequentially to hit the compiler's cache. For example, in `GPT2LMHeadModel`, the
+            repeated block/class is `GPT2Block`, and can be accessed as `model.transformer.h[0]`. The rest of the model
+            (e.g model.lm_head) is compiled separately.
     """
 
     backend: DynamoBackend = field(
