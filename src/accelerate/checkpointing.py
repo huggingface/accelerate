@@ -236,7 +236,7 @@ def load_accelerator_state(
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = input_dir.joinpath(optimizer_name)
         optimizer_state = load(input_optimizer_file, map_location=map_location, **load_kwargs)
-        optimizers[i].load_state_dict(optimizer_state, **load_kwargs)
+        optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
     # Scheduler states
