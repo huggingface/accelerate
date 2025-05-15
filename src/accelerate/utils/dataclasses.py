@@ -1032,8 +1032,7 @@ class TorchDynamoPlugin(KwargsHandler):
                 str_to_bool(os.environ.get(prefix + "USE_REGIONAL_COMPILATION", "False")) == 1
             )
 
-        # should stay as None if not set by argument or env var
-        if self.dynamic is None and os.environ.get(prefix + "USE_DYNAMIC") is not None:
+        if self.dynamic is None and os.environ.get(prefix + "USE_DYNAMIC", None) is not None:
             self.dynamic = str_to_bool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
 
     def to_dict(self):
