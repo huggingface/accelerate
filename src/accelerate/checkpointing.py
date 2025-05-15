@@ -223,7 +223,7 @@ def load_accelerator_state(
         ending = f"_{i}" if i > 0 else ""
         input_model_file = input_dir.joinpath(f"{SAFE_MODEL_NAME}{ending}.safetensors")
         if input_model_file.exists():
-            load_model(model, input_model_file, device=str(map_location), **load_kwargs)
+            load_model(model, input_model_file, device=str(map_location))
         else:
             # Load with torch
             input_model_file = input_dir.joinpath(f"{MODEL_NAME}{ending}.bin")
