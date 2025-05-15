@@ -180,7 +180,7 @@ def load_accelerator_state(
     process_index,
     scaler=None,
     map_location=None,
-    **load_kwargs,
+    load_kwargs=None,
 ):
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
