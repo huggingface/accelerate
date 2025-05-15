@@ -3357,10 +3357,7 @@ class Accelerator:
     def load_state(
         self,
         input_dir: str = None,
-        optimizer_load_kwargs: dict[str, Any] = {},
-        scheduler_load_kwargs: dict[str, Any] = {},
-        dataloader_load_kwargs: dict[str, Any] = {},
-        **load_model_func_kwargs,
+        **load_kwargs,
     ):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
@@ -3421,11 +3418,11 @@ class Accelerator:
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Loading DeepSpeed Model and Optimizer")
                 ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
-                model.load_checkpoint(input_dir, ckpt_id, **load_model_func_kwargs)
+                model.load_checkpoint(input_dir, ckpt_id, **load_kwargs)
                 logger.info(f"DeepSpeed Model and Optimizer loaded from input dir {os.path.join(input_dir, ckpt_id)}")
             elif self.distributed_type == DistributedType.MEGATRON_LM:
                 logger.info("Loading Megatron-LM Model, Optimizer and Scheduler")
-                model.load_checkpoint(input_dir)
+                model.load_checkpoint(input_dir, **load_kwargs)
                 logger.info(f"Megatron-LM Model , Optimizer and Scheduler loaded from input dir {input_dir}")
             else:
                 models.append(model)
@@ -3457,7 +3454,7 @@ class Accelerator:
         for hook in self._load_model_state_pre_hook.values():
             hook(models, input_dir)
 
-        map_location = load_model_func_kwargs.pop("map_location", None)
+        map_location = load_kwargs.pop("map_location", None)
         if map_location is None:
             if self.num_processes > 1 and self.distributed_type in (
                 DistributedType.MULTI_GPU,
@@ -3480,10 +3477,7 @@ class Accelerator:
             self.state.process_index,
             self.scaler,
             map_location,
-            optimizer_load_kwargs,
-            scheduler_load_kwargs,
-            dataloader_load_kwargs,
-            **load_model_func_kwargs,
+            **load_kwargs,
         )
         if "step" in override_attributes:
             self.step = override_attributes["step"]
