@@ -35,6 +35,7 @@ class TestPrepareMultiGpuEnv(unittest.TestCase):
             dynamo_mode="default",
             dynamo_use_fullgraph=False,
             dynamo_use_dynamic=False,
+            dynamo_use_regional_compilation=False,
             use_fsdp=False,
             fsdp_cpu_ram_efficient_loading=False,
             fsdp_sync_module_states=False,

@@ -38,7 +38,7 @@ It is compatible with all other features and plugins of Accelerate, including mi
 
 ## Regional Compilation
 
-Instead of trying to compile the whole model, which usually has a big problem space for optimization. Regional compilation     targets repeated blocks of the same class and compile them sequentially to hit the compiler's cache. For example, in `GPT2LMHeadModel`, the repeated block/class is `GPT2Block`, and can be accessed as `model.transformer.h[0]`.
+Instead of trying to compile the whole model, which usually has a big problem space for optimization. Regional compilation targets repeated blocks of the same class and compiles them sequentially to hit the compiler's cache. For example, in `GPT2LMHeadModel`, the repeated block/class is `GPT2Block`, and can be accessed as `model.transformer.h[0]`. The rest of the model (e.g model.lm_head) is compiled separately.
 
 This allows us to speed up the compilation overhead / cold start of models like LLMs and Transformers in general.
 See <https://pytorch.org/tutorials/recipes/regional_compilation.html> for more details.

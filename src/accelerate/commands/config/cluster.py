@@ -207,6 +207,12 @@ def get_cluster_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
+            dynamo_config[prefix + "use_regional_compilation"] = _ask_field(
+                "Do you want to enable regional compilation? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
 
     use_mps = not use_cpu and is_mps_available()
     deepspeed_config = {}
