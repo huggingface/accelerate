@@ -33,8 +33,6 @@ import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
-from accelerate.utils.imports import is_torchao_available
-
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -82,6 +80,7 @@ from .utils import (
     convert_outputs_to_fp32,
     ensure_weights_retied,
     extract_model_from_parallel,
+    fsdp2_canonicalize_names,
     fsdp2_prepare_model,
     fsdp2_switch_optimizer_parameters,
     gather,
@@ -103,6 +102,7 @@ from .utils import (
     is_npu_available,
     is_torch_version,
     is_torch_xla_available,
+    is_torchao_available,
     is_transformer_engine_available,
     is_xpu_available,
     load_fsdp_model,
@@ -125,7 +125,7 @@ from .utils.constants import (
     PROFILE_PATTERN_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
-from .utils.other import is_compiled_module
+from .utils.other import compile_regions, is_compiled_module
 
 
 if is_deepspeed_available():
@@ -1442,10 +1442,8 @@ class Accelerator:
         if should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
-            if fsdp2_should_fix_optimizer and self.state.fsdp_plugin.activation_checkpointing:
-                new_named_params = {
-                    k.replace("._checkpoint_wrapped_module", ""): v for k, v in new_named_params.items()
-                }
+            if fsdp2_should_fix_optimizer:
+                new_named_params = fsdp2_canonicalize_names(new_named_params)
             # 3. building a map from the first to the second
             mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
             # 4. using that map to update the parameters of the optimizer
@@ -1675,24 +1673,24 @@ class Accelerator:
                 #   * this attribute will always set by init_utils.init_core_state so its always not None.
                 #   * mixed_precision.param_dtype only regards _fwd_bwd_param_dtype
                 #   * if model is loaded in 16bit, and even if mixed_precision.param_dtype is None,
-                #     we sill want to upcast the flat_param.
+                #     we still want to upcast the flat_param.
                 if self.mixed_precision != "no":  # if mixed precision is set
                     upcasted_log = []
                     for module in FSDP.fsdp_modules(model):
                         # Referencing DeepSpeed Zero3
                         # - in Init, params are converted to 16bit while partitioning.
-                        # - in accelerator.prepare, deepspeed.initalize is called to:
-                        #   * creates the DeepSpeeedEngine.
+                        # - in accelerator.prepare, deepspeed.initialize is called to:
+                        #   * creates the DeepSpeedEngine.
                         #   * since zero_optimization() is True , calls engine._configure_zero_optimizer.
                         #
-                        # Inside the DeepSpeed Zero3 optimizer configuration, which initalizes
+                        # Inside the DeepSpeed Zero3 optimizer configuration, which initializes
                         # DeepSpeedZeroOptimizer_Stage3, during which:
                         #   * trainable_param_groups are obtained from the attached optimizer
                         #     (already partitioned in 16bit).
                         #   * then _setup_for_real_optimizer -> _create_fp32_partitions
                         #     which performs the fp32 upcasting.
 
-                        # To mimick DeepSeepds's casting in FSDP, we look at the (single) FlatParameter held
+                        # To mimic DeepSeepds's casting in FSDP, we look at the (single) FlatParameter held
                         # within an FSDP wrapper. This FlatParameter will be seen by the optimizer.
                         #  - even though there is a torch.device('meta') guard below, we
                         #    expect _init_utils._init_param_handle_from_module to already
@@ -1748,7 +1746,10 @@ class Accelerator:
             model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
-            model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+            if self.state.dynamo_plugin.use_regional_compilation:
+                model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
+            else:
+                model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
     def _prepare_ao(self, *args):
@@ -2028,7 +2029,10 @@ class Accelerator:
 
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
-                engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
+                if self.state.dynamo_plugin.use_regional_compilation:
+                    engine.module = compile_regions(engine.module, **compile_kwargs)
+                else:
+                    engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
             if optimizer is not None:
                 optimizer = DeepSpeedOptimizerWrapper(optimizer)
             if scheduler is not None:
@@ -3194,7 +3198,7 @@ class Accelerator:
 
         If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled
         then checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater
-        than `total_limit` then the oldest save is deleted. Each checkpoint is saved in seperate folders named
+        than `total_limit` then the oldest save is deleted. Each checkpoint is saved in separate folders named
         `checkpoint_<iteration>`.
 
         Otherwise they are just saved to `output_dir`.

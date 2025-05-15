@@ -985,6 +985,11 @@ class TorchDynamoPlugin(KwargsHandler):
             A dictionary of options to pass to the backend.
         disable (`bool`, defaults to `False`):
             Turn torch.compile() into a no-op for testing
+        use_regional_compilation (`bool`, defaults to `None`):
+            Use it to reduce the cold start compilation time of torch.compile() by targeting repeated blocks of the
+            same class and compiling them sequentially to hit the compiler's cache. For example, in `GPT2LMHeadModel`,
+            the repeated block/class is `GPT2Block`, and can be accessed as `model.transformer.h[0]`. The rest of the
+            model (e.g model.lm_head) is compiled separately.
     """
 
     backend: DynamoBackend = field(
@@ -999,22 +1004,46 @@ class TorchDynamoPlugin(KwargsHandler):
     options: Any = field(default=None, metadata={"help": "A dictionary of options to pass to the backend."})
     disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
 
+    use_regional_compilation: bool = field(
+        default=None,
+        metadata={
+            "help": (
+                # https://pytorch.org/tutorials/recipes/regional_compilation.html
+                "Use it to reduce the cold start compilation time of torch.compile() by targeting repeated "
+                "blocks of the same class and compiling them sequentially to hit the compiler's cache. For "
+                "example, in `GPT2LMHeadModel`, the repeated block/class is `GPT2Block`, and can be accessed "
+                "as `model.transformer.h[0]`. The rest of the model (e.g model.lm_head) is compiled separately."
+            )
+        },
+    )
+
     def __post_init__(self):
         prefix = "ACCELERATE_DYNAMO_"
         if self.backend is None:
             self.backend = os.environ.get(prefix + "BACKEND", "no")
         self.backend = DynamoBackend(self.backend.upper())
+
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")
         if self.fullgraph is None:
             self.fullgraph = str_to_bool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
-        if self.dynamic is None:
+        if self.use_regional_compilation is None:
+            self.use_regional_compilation = (
+                str_to_bool(os.environ.get(prefix + "USE_REGIONAL_COMPILATION", "False")) == 1
+            )
+
+        if self.dynamic is None and os.environ.get(prefix + "USE_DYNAMIC", None) is not None:
             self.dynamic = str_to_bool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
 
     def to_dict(self):
         dynamo_config = copy.deepcopy(self.__dict__)
         dynamo_config["backend"] = dynamo_config["backend"].value.lower()
         return dynamo_config
+
+    def to_kwargs(self):
+        kwargs = super().to_kwargs()
+        kwargs.pop("use_regional_compilation", None)
+        return kwargs
 
 
 @dataclass
@@ -1812,6 +1841,16 @@ class FullyShardedDataParallelPlugin:
                 "Setting sync_module_states to True."
             )
             self.sync_module_states = True
+
+        if self.cpu_ram_efficient_loading != bool(
+            str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False"))
+        ):
+            env_var = env_prefix + "CPU_RAM_EFFICIENT_LOADING"
+            warnings.warn(
+                f"The `cpu_ram_efficient_loading` flag for `FullyShardedDataParallelPlugin` does not match the environment variable {env_var}. "
+                "Setting environment variable to match `cpu_ram_efficient_loading`."
+            )
+            os.environ[env_var] = str(self.cpu_ram_efficient_loading)
 
         if isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)

@@ -370,10 +370,10 @@ class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
         super().__init__(optimizer, device_placement=False, scaler=None)
 
     def zero_grad(self, set_to_none=None):
-        pass  # `model(**batch)` is doing that automatically. Therefore, it's implementation is not needed
+        pass  # `model(**batch)` is doing that automatically. Therefore, its implementation is not needed
 
     def step(self):
-        pass  # `model(**batch)` is doing that automatically. Therefore, it's implementation is not needed
+        pass  # `model(**batch)` is doing that automatically. Therefore, its implementation is not needed
 
     @property
     def step_was_skipped(self):
@@ -416,7 +416,7 @@ class MegatronLMSchedulerWrapper(AcceleratedScheduler):
         super().__init__(scheduler, optimizers)
 
     def step(self, *args, **kwargs):
-        return  # `model(**batch)` is doing that automatically. Therefore, it's implementation is not needed
+        return  # `model(**batch)` is doing that automatically. Therefore, its implementation is not needed
 
 
 def prepare_scheduler(accelerator, optimizer, scheduler):
@@ -630,7 +630,7 @@ class GPTTrainStep(AbstractTrainStep):
             labels = tokens_[:, 1:].contiguous()
             tokens = tokens_[:, :-1].contiguous()
 
-            # Get the masks and postition ids.
+            # Get the masks and position ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
                 tokens, self.eod_token, self.reset_position_ids, self.reset_attention_mask, self.eod_mask_loss
             )
@@ -647,7 +647,7 @@ class GPTTrainStep(AbstractTrainStep):
             tokens_ = torch.concat([tokens_, padding], dim=1)
             labels = tokens_[:, 1:].contiguous()
             tokens = tokens_[:, :-1].contiguous()
-            # Get the masks and postition ids.
+            # Get the masks and position ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
                 tokens, self.eod_token, self.reset_position_ids, self.reset_attention_mask, True
             )
@@ -1348,7 +1348,7 @@ class MegatronEngine(torch.nn.Module):
             sizes_list = [
                 prompts_tokens_tensor.size(0),  # Batch size
                 prompts_tokens_tensor.size(1),
-            ]  # Sequence lenght
+            ]  # Sequence length
 
         # First, broadcast the sizes.
         sizes_tensor = broadcast_int_list(2, int_list=sizes_list, rank=0)

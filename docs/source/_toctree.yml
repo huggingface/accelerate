@@ -64,6 +64,10 @@
       title: Apple M1 GPUs
     - local: usage_guides/ipex
       title: IPEX training with CPU
+    - local: usage_guides/gaudi
+      title: Intel Gaudi
+    - local: usage_guides/compilation
+      title: Compilation
     title: Training
   - isExpanded: true
     sections:
@@ -93,7 +97,7 @@
   - local: concept_guides/training_tpu
     title: Training on TPUs
   title: Concepts and fundamentals
-- sections: 
+- sections:
   - local: package_reference/accelerator
     title: Accelerator
   - local: package_reference/state

@@ -771,7 +771,7 @@ class SubprocessCallException(Exception):
 def run_command(command: list[str], return_stdout=False, env=None):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
-    if an error occured while running `command`
+    if an error occurred while running `command`
     """
     # Cast every path in `command` to a string
     for i, c in enumerate(command):

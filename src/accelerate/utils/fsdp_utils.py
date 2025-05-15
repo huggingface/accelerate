@@ -472,7 +472,13 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
     # Rank 0 distributes the full state dict to other ranks
     def _infer_parameter_dtype(model, param_name, empty_param):
-        old_param = model.get_parameter_or_buffer(param_name)
+        try:
+            old_param = model.get_parameter_or_buffer(param_name)
+        except AttributeError:
+            # Need this for LORA, as there some params are not *parameters* of sorts
+            base_param_name, local_param_name = param_name.rsplit(".", 1)
+            submodule = model.get_submodule(base_param_name)
+            old_param = getattr(submodule, local_param_name)
 
         is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
         casting_dtype = None
@@ -484,7 +490,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         return old_param is not None and old_param.is_contiguous(), casting_dtype
 
     def _cast_and_contiguous(tensor, to_contiguous, dtype):
-        if dtype is None:
+        if dtype is not None:
             tensor = tensor.to(dtype=dtype)
         if to_contiguous:
             tensor = tensor.contiguous()
@@ -609,7 +615,16 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
     }
 
-    if fsdp2_plugin.cpu_ram_efficient_loading:
+    model_has_params4bit = False
+    for name, param in model.named_parameters():
+        # this is a temporary fix whereby loading models with bnb params cannot be moved from
+        # GPU to a meta device due with FSDP2 because torch operations don't return the original class type
+        # bypassing the move to meta will still cause the VRAM spike, but at least it still will load
+        if param.__class__.__name__ == "Params4bit":
+            model_has_params4bit = True
+            break
+
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
         # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
         # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.emtpy`), `fully_shard` would move it to GPU
@@ -643,6 +658,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
         fsdp2_load_full_state_dict(accelerator, model, original_sd)
 
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # We re-register the buffers, as they may not be in the state_dict
         for fqn, buffer_tensor in original_non_persistent_buffers.items():
             buffer_tensor = buffer_tensor.to(accelerator.device)
@@ -735,3 +751,21 @@ def get_fsdp2_grad_scaler(**kwargs):
     from torch.amp.grad_scaler import GradScaler
 
     return GradScaler(**kwargs)
+
+
+def fsdp2_canonicalize_names(named_params: dict) -> dict:
+    """Removes parameter name modifiers in order to map them back to their original names.
+
+    See huggingface/accelerate#3554 for more context.
+
+    Args:
+        named_params (`dict`): The named parameters dictionary to canonicalize.
+
+    Returns:
+        `dict`: The canonicalized named parameters dictionary
+    """
+    named_params = {k.replace("._checkpoint_wrapped_module", ""): v for k, v in named_params.items()}
+    named_params = {
+        k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k: v for k, v in named_params.items()
+    }
+    return named_params

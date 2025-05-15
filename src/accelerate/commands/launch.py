@@ -246,6 +246,12 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether to enable dynamic shape tracing.",
     )
+    resource_args.add_argument(
+        "--dynamo_use_regional_compilation",
+        default=False,
+        action="store_true",
+        help="Whether to enable regional compilation.",
+    )
 
     # Training Paradigm arguments
     paradigm_args = parser.add_argument_group(
@@ -282,7 +288,7 @@ def launch_command_parser(subparsers=None):
     distributed_args.add_argument(
         "--gpu_ids",
         default=None,
-        help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
+        help="What GPUs (by id) should be used for training on this machine as a comma-separated list",
     )
     distributed_args.add_argument(
         "--same_network",
@@ -707,7 +713,7 @@ def launch_command_parser(subparsers=None):
         "--fp8_override_linear_precision",
         type=lambda x: tuple(map(str_to_bool, x.split(","))),
         default=(False, False, False),
-        help="Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision. Should be passed in a comma-seperated string of booleans (useful only when `--fp8_backend=te` is passed).",
+        help="Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision. Should be passed in a comma-separated string of booleans (useful only when `--fp8_backend=te` is passed).",
     )
     fp8_args.add_argument(
         "--fp8_opt_level",

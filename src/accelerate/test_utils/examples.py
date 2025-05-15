@@ -28,7 +28,7 @@ def get_function_contents_by_name(lines: list[str], name: str):
 
     Args:
         lines (`List[str]`):
-            Source code of a script seperated by line.
+            Source code of a script separated by line.
         name (`str`):
             The name of the function to extract. Should be either `training_function` or `main`
     """
@@ -54,7 +54,7 @@ def clean_lines(lines: list[str]):
 
     Args:
         lines (`List[str]`):
-            Source code of a script seperated by line.
+            Source code of a script separated by line.
     """
     return [line for line in lines if not line.lstrip().startswith("#") and line != "\n"]
 

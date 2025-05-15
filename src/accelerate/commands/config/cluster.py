@@ -207,6 +207,12 @@ def get_cluster_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
+            dynamo_config[prefix + "use_regional_compilation"] = _ask_field(
+                "Do you want to enable regional compilation? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
 
     use_mps = not use_cpu and is_mps_available()
     deepspeed_config = {}
@@ -639,7 +645,7 @@ def get_cluster_input():
         else:
             machine_type = "GPU(s)"
         gpu_ids = _ask_field(
-            f"What {machine_type} (by id) should be used for training on this machine as a comma-seperated list? [all]:",
+            f"What {machine_type} (by id) should be used for training on this machine as a comma-separated list? [all]:",
             default="all",
         )
 
@@ -703,7 +709,7 @@ def get_cluster_input():
                     )
                     tpu_command_file = os.path.abspath(tpu_command_file)
                 else:
-                    print("Please enter each command seperately you wish to run on startup in each pod.")
+                    print("Please enter each command separately you wish to run on startup in each pod.")
                     tpu_commands = []
                     another_command = True
                     while another_command:
@@ -721,11 +727,11 @@ def get_cluster_input():
                             error_message="Please enter yes or no.",
                         )
             tpu_vm = _ask_field(
-                "If not using an instance group, what are the names of the Compute VM instances to be used, seperated by a comma: ",
+                "If not using an instance group, what are the names of the Compute VM instances to be used, separated by a comma: ",
                 default="",
             ).split(",")
             tpu_env = _ask_field(
-                "What environment variables do you wish to set in each pod, seperated by a comma: ",
+                "What environment variables do you wish to set in each pod, separated by a comma: ",
                 default="",
             ).split(",")
 

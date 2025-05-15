@@ -33,6 +33,7 @@ from accelerate.utils import (
     DataLoaderConfiguration,
     DistributedType,
     gather,
+    gather_object,
     is_bf16_available,
     is_datasets_available,
     is_fp16_available,
@@ -680,19 +681,34 @@ def test_split_between_processes_dataset(datasets_Dataset):
             assert len(results) == 2, (
                 f"One of the intermediate processes did not receive two items. Process index: {state.process_index}; Length: {len(results)}"
             )
-
-    data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
-    with state.split_between_processes(data, apply_padding=True) as results:
-        if state.num_processes == 1:
-            assert len(results) == 1, (
-                f"Single process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
-            )
-        else:
-            assert len(results) == 2, (
-                f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
-            )
-
     state.wait_for_everyone()
+
+    odd_data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
+    even_data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes)])
+
+    for data in [odd_data, even_data]:
+        expected_output = data["k"]
+
+        with state.split_between_processes(data, apply_padding=True) as results:
+            if state.num_processes == 1:
+                assert len(results) == len(data), (
+                    f"Single process did not receive all items. Process index: {state.process_index}; Length: {len(results)}"
+                )
+            else:
+                assert len(results) == 2, (
+                    f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+                )
+
+            results_per_process = []
+            for result in results:
+                results_per_process.append(result)
+
+        state.wait_for_everyone()
+
+        gathered_results = gather_object(results_per_process)
+        output = [r["k"] for r in gathered_results[: len(data)]]
+
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_list():
@@ -702,16 +718,30 @@ def test_split_between_processes_list():
         assert len(results) == 2, (
             f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
         )
-
-    data = list(range(0, (3 * state.num_processes) - 1))
-    with state.split_between_processes(data, apply_padding=True) as results:
-        if state.is_last_process:
-            # Test that the last process gets the extra item(s)
-            num_samples_per_device = math.ceil(len(data) / state.num_processes)
-            assert len(results) == num_samples_per_device, (
-                f"Last process did not get the extra item(s). Process index: {state.process_index}; Length: {len(results)}"
-            )
     state.wait_for_everyone()
+
+    even_data = list(range(0, (2 * state.num_processes)))
+    odd_data = list(range(0, (2 * state.num_processes) - 1))
+    for data in [odd_data, even_data]:
+        expected_output = data
+
+        with state.split_between_processes(data, apply_padding=True) as results:
+            num_samples_per_device = math.ceil(len(data) / state.num_processes)
+            # Test all processes gets the correct number of item(s)
+            assert len(results) == num_samples_per_device, (
+                f"Process {state.device} did not get the correct number of item(s). Process index: {state.process_index}; Length: {len(results)}"
+            )
+
+            results_per_process = []
+            for result in results:
+                results_per_process.append(result)
+
+        state.wait_for_everyone()
+
+        gathered_results = gather_object(results_per_process)
+        output = gathered_results[: len(data)]
+
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_nested_dict():
@@ -762,7 +792,28 @@ def test_split_between_processes_tensor():
             else:
                 expected = torch.tensor([[4, 5, 6, 7]]).to(state.device)
             torch.testing.assert_close(results, expected)
-    state.wait_for_everyone()
+        state.wait_for_everyone()
+
+    even_data = torch.tensor([[i] for i in range(2 * state.num_processes)]).to(state.device)
+    odd_data = torch.tensor([[i] for i in range(2 * state.num_processes - 1)]).to(state.device)
+    for data in [even_data, odd_data]:
+        expected_output = [torch.tensor(i) for i in data.tolist()]
+
+        with state.split_between_processes(data, apply_padding=True) as results:
+            num_samples_per_device = math.ceil(len(data) / state.num_processes)
+            assert len(results) == num_samples_per_device, (
+                f"Process {state.device} did not get the correct number of item(s). Process index: {state.process_index}; Length: {len(results)}"
+            )
+            results_per_process = []
+            for result in results:
+                results_per_process.append(result.to("cpu"))
+
+        state.wait_for_everyone()
+
+        gathered_results = gather_object(results_per_process)
+        output = gathered_results[: len(data)]
+
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_evenly():

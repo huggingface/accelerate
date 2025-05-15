@@ -37,7 +37,7 @@ from ..utils import (
     is_xpu_available,
 )
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
-from ..utils.other import is_port_in_use, merge_dicts
+from ..utils.other import get_free_port, is_port_in_use, merge_dicts
 from ..utils.versions import compare_versions
 from .dataclasses import DistributedType, SageMakerDistributedType
 
@@ -182,6 +182,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
     current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
+    current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_ipex_available():
@@ -195,6 +196,13 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     """
     Prepares and returns an environment with the correct multi-GPU environment variables.
     """
+    # get free port and update configurations
+    if args.main_process_port == 0:
+        args.main_process_port = get_free_port()
+
+    elif args.main_process_port is None:
+        args.main_process_port = 29500
+
     num_processes = args.num_processes
     num_machines = args.num_machines
     main_process_ip = args.main_process_ip
@@ -212,9 +220,6 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         args.nproc_per_node = str(num_processes)
         if main_process_port is not None:
             args.master_port = str(main_process_port)
-
-    if main_process_port is None:
-        main_process_port = 29500
 
     # only need to check port availability in main process, in case we have to start multiple launchers on the same machine
     # for some reasons like splitting log files.
@@ -276,6 +281,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
     current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
+    current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     if args.use_fsdp:
         current_env["ACCELERATE_USE_FSDP"] = "true"
@@ -330,6 +336,13 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
     """
     Prepares and returns the command list and an environment with the correct DeepSpeed environment variables.
     """
+    # get free port and update configurations
+    if args.main_process_port == 0:
+        args.main_process_port = get_free_port()
+
+    elif args.main_process_port is None:
+        args.main_process_port = 29500
+
     num_processes = args.num_processes
     num_machines = args.num_machines
     main_process_ip = args.main_process_ip
@@ -390,9 +403,6 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
         args.nproc_per_node = str(num_processes)
         if main_process_port is not None:
             args.master_port = str(main_process_port)
-
-    if main_process_port is None:
-        main_process_port = 29500
 
     # only need to check port availability in main process, in case we have to start multiple launchers on the same machine
     # for some reasons like splitting log files.
@@ -581,6 +591,7 @@ def prepare_sagemager_args_inputs(
         "ACCELERATE_DYNAMO_MODE": args.dynamo_mode,
         "ACCELERATE_DYNAMO_USE_FULLGRAPH": str(args.dynamo_use_fullgraph),
         "ACCELERATE_DYNAMO_USE_DYNAMIC": str(args.dynamo_use_dynamic),
+        "ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION": str(args.dynamo_use_regional_compilation),
         "ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     if args.mixed_precision.lower() == "fp8":
