@@ -19,6 +19,7 @@ import sys
 from ast import literal_eval
 from shutil import which
 from typing import Any
+import warnings
 
 import torch
 
@@ -225,10 +226,13 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     # for some reasons like splitting log files.
     need_port_check = num_machines <= 1 or int(args.machine_rank) == 0
     if need_port_check and is_port_in_use(main_process_port):
-        raise ConnectionError(
-            f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
-            "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
-            " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
+        args.standalone = True
+        warnings.warn(
+            f"Port `{main_process_port}` is already in use. "
+            "Accelerate will attempt to launch in a standalone-like mode by finding an open port automatically for this session. "
+            "If this current attempt fails, or for more control in future runs, please specify a different port "
+            "(e.g., `--main_process_port <your_chosen_port>`) or use `--main_process_port 0` for automatic selection "
+            "in your launch command or Accelerate config file."
         )
 
     if args.module and args.no_python:
@@ -408,10 +412,13 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
     # for some reasons like splitting log files.
     need_port_check = num_machines <= 1 or int(args.machine_rank) == 0
     if need_port_check and is_port_in_use(main_process_port):
-        raise ConnectionError(
-            f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
-            "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
-            " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
+        args.standalone = True
+        warnings.warn(
+            f"Port `{main_process_port}` is already in use. "
+            "Accelerate will attempt to launch in a standalone-like mode by finding an open port automatically for this session. "
+            "If this current attempt fails, or for more control in future runs, please specify a different port "
+            "(e.g., `--main_process_port <your_chosen_port>`) or use `--main_process_port 0` for automatic selection "
+            "in your launch command or Accelerate config file."
         )
 
     if args.module and args.no_python:
