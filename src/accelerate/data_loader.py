@@ -1007,6 +1007,7 @@ def prepare_data_loader(
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
     torch_device_mesh=None,
+    multiprocessing_context=None,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -1076,6 +1077,8 @@ def prepare_data_loader(
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
         torch_device_mesh (`torch.distributed.DeviceMesh`, *optional*, defaults to `None`):
             PyTorch device mesh.
+        multiprocessing_context (`multiprocessing.context`, *optional*, defaults to `None`):
+            Multiprocessing starting method of PyTorch dataloader. Supporting `fork`, `spawn` and `forkserver`.
 
 
     Returns:
@@ -1240,6 +1243,8 @@ def prepare_data_loader(
         for k in _PYTORCH_DATALOADER_KWARGS
         if k not in ignore_kwargs
     }
+
+    kwargs["multiprocessing_context"] = dataloader.multiprocessing_context
 
     # Need to provide batch_size as batch_sampler is None for Iterable dataset
     if new_batch_sampler is None:
