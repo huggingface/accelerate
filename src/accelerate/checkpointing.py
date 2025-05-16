@@ -202,7 +202,7 @@ def load_accelerator_state(
         map_location (`str`, *optional*):
             What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
         load_kwargs (`dict`, *optional*):
-            Additional arguments that can be passed to the `load`, `load_model` and `load_state_dict` functions.
+            Additional arguments that can be passed to the `load` function.
         load_model_func_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the model's `load_state_dict` method.
 
