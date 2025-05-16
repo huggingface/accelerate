@@ -148,14 +148,14 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
-        current_env["MASTER_ADDR"] = args.main_process_ip
-        current_env["MASTER_PORT"] = str(args.main_process_port)
+        assert args.main_process_ip is not None, "When using multiple machines, you need to specify the main process IP."
+        assert args.main_process_port is not None, "When using multiple machines, you need to specify the main process port."
 
-        if args.mpirun_hostfile is not None:
-            current_env["CCL_WORKER_COUNT"] = str(mpirun_ccl)
-    elif args.num_processes > 1:
-        current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
-        current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
+    current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
+    current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
+    current_env["CCL_WORKER_COUNT"] = str(mpirun_ccl)
+    current_env["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
+    current_env["KMP_BLOCKTIME"] = str(1)
 
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
