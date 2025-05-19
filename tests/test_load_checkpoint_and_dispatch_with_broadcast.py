@@ -50,7 +50,7 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
         # FIXME currently, we still need specify "ccl" backend to use torch-ccl,
-        #       pytorch built-in xccl will be available from PyTorch 2.9, will remove thisafter we have xccl
+        #       pytorch built-in xccl will be available from PyTorch 2.9, will remove this after we have xccl
         if torch_device == "xpu" and not is_xccl_available():
             dist.init_process_group(backend="ccl", world_size=torch_accelerator_module.device_count())
         else:
