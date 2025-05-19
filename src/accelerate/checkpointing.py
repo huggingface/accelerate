@@ -220,6 +220,9 @@ def load_accelerator_state(
     elif map_location == "on_device":
         map_location = PartialState().device
 
+    if load_kwargs is None:
+        load_kwargs = {}
+
     input_dir = Path(input_dir)
     # Model states
     for i, model in enumerate(models):
