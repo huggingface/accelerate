@@ -28,10 +28,10 @@ from accelerate.test_utils.testing import (
     TempDirTestCase,
     get_launch_command,
     is_hpu_available,
+    is_xpu_available,
     require_fp16,
     require_huggingface_suite,
     require_multi_device,
-    require_non_xpu,
     require_pippy,
     require_schedulefree,
     require_trackers,
@@ -195,6 +195,7 @@ class FeatureExamplesTests(TempDirTestCase):
         assert "epoch 1:" in output
 
     def test_load_states_by_steps(self):
+        print(f"self.tmpdir: {self.tmpdir}")
         testargs = f"""
         examples/by_feature/checkpointing.py
         --resume_from_checkpoint {self.tmpdir / "step_2"}
@@ -204,6 +205,8 @@ class FeatureExamplesTests(TempDirTestCase):
             num_processes = torch.hpu.device_count()
         elif torch.cuda.is_available():
             num_processes = torch.cuda.device_count()
+        elif is_xpu_available():
+            num_processes = torch.xpu.device_count()
         else:
             num_processes = 1
 
@@ -291,14 +294,12 @@ class FeatureExamplesTests(TempDirTestCase):
         run_command(self.launch_args + testargs)
 
     @require_pippy
-    @require_non_xpu
     @require_multi_device
     def test_pippy_examples_bert(self):
         testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
     @require_pippy
-    @require_non_xpu
     @require_multi_device
     def test_pippy_examples_gpt2(self):
         testargs = ["examples/inference/pippy/gpt2.py"]

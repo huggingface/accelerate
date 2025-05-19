@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
-
+from accelerate.utils import is_xpu_available
 
 def main():
+    device_type = "GPU"
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
+        device_type = "GPU"
     else:
-        num_gpus = 0
-    print(f"Successfully ran on {num_gpus} GPUs")
+        num_gpus = torch.xpu.device_count()
+        device_type = "XPU"
+    print(f"Successfully ran on {num_gpus} {device_type}s")
 
 
 if __name__ == "__main__":
