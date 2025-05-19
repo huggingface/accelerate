@@ -29,7 +29,12 @@ from torch.distributed.fsdp.wrap import _recursive_wrap, transformer_auto_wrap_p
 from torch.nn.parallel import DistributedDataParallel
 
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
-from accelerate.test_utils import execute_subprocess_async, get_torch_dist_unique_port, require_multi_device, require_multi_gpu, torch_device
+from accelerate.test_utils import (
+    execute_subprocess_async,
+    get_torch_dist_unique_port,
+    require_multi_device,
+    torch_device,
+)
 from accelerate.test_utils.testing import require_torch_min_version, require_transformers
 from accelerate.utils.imports import is_transformers_available, is_xccl_available
 
@@ -44,7 +49,7 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
 
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
-        # FIXME currently, we still need specify "ccl" backend to use torch-ccl, 
+        # FIXME currently, we still need specify "ccl" backend to use torch-ccl,
         #       pytorch built-in xccl will be available from PyTorch 2.9, will remove thisafter we have xccl
         if torch_device == "xpu" and not is_xccl_available():
             dist.init_process_group(backend="ccl", world_size=torch_accelerator_module.device_count())
