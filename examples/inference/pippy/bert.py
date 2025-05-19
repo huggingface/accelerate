@@ -20,6 +20,7 @@ from accelerate import PartialState, prepare_pippy
 from accelerate.test_utils import torch_device
 from accelerate.utils import set_seed
 
+
 synchronize_func = getattr(torch, torch_device, torch.cuda).synchronize
 
 # Set the random seed to have reproducable outputs

@@ -14,12 +14,13 @@
 import torch
 from accelerate.utils import is_xpu_available
 
+
 def main():
     device_type = "GPU"
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
         device_type = "GPU"
-    else:
+    elif is_xpu_available():
         num_gpus = torch.xpu.device_count()
         device_type = "XPU"
     print(f"Successfully ran on {num_gpus} {device_type}s")
