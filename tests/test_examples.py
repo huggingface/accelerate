@@ -195,7 +195,6 @@ class FeatureExamplesTests(TempDirTestCase):
         assert "epoch 1:" in output
 
     def test_load_states_by_steps(self):
-        print(f"self.tmpdir: {self.tmpdir}")
         testargs = f"""
         examples/by_feature/checkpointing.py
         --resume_from_checkpoint {self.tmpdir / "step_2"}
