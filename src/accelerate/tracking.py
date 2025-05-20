@@ -1001,7 +1001,8 @@ class DVCLiveTracker(GeneralTracker):
         self.live = live
         self.init_kwargs = kwargs
 
-    def setup(self):
+    @on_main_process
+    def start(self):
         from dvclive import Live
 
         super().__init__()
