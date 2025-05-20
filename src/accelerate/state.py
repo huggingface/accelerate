@@ -32,7 +32,6 @@ from .utils import (
     check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
     deepspeed_required,
-    get_ccl_version,
     get_cpu_distributed_information,
     get_int_from_env,
     is_ccl_available,
@@ -797,10 +796,7 @@ class PartialState:
                 and is_ccl_available()
                 and (get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU)
             ):
-                if get_ccl_version() >= "1.12":
-                    import oneccl_bindings_for_pytorch  # noqa: F401
-                else:
-                    import torch_ccl  # noqa: F401
+                import oneccl_bindings_for_pytorch  # noqa: F401
 
                 backend = "ccl"
             elif backend in (None, "mpi") and torch.distributed.is_mpi_available():
