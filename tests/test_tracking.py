@@ -31,6 +31,7 @@ from packaging import version
 
 # We use TF to parse the logs
 from accelerate import Accelerator
+from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
     MockingTestCase,
     TempDirTestCase,
@@ -42,9 +43,19 @@ from accelerate.test_utils.testing import (
     require_pandas,
     require_tensorboard,
     require_wandb,
+    require_aim,
     skip,
 )
-from accelerate.tracking import CometMLTracker, GeneralTracker, MLflowTracker
+from accelerate.tracking import (
+    GeneralTracker,
+    TensorBoardTracker,
+    WandBTracker,
+    CometMLTracker,
+    AimTracker,
+    MLflowTracker,
+    ClearMLTracker,
+    DVCLiveTracker,
+)
 from accelerate.utils import (
     ProjectConfiguration,
     is_comet_ml_available,
@@ -597,36 +608,6 @@ class CustomTrackerTestCase(unittest.TestCase):
                 }
                 assert data == truth
 
-    def test_custom_tracker_lazy_initialization(self):
-        """
-        Tests tracker's deferred initialization via `start()` method, preventing
-        premature `PartialState` access (and `torch.distributed` init) before
-        `Accelerator` has configured the distributed environment, especially with
-        `InitProcessGroupKwargs`.
-        """
-        with tempfile.TemporaryDirectory() as d:
-            expected_log_file = os.path.join(d, "log.csv")
-
-            with mock.patch("torch.distributed.is_initialized") as mock_is_initialized:
-                mock_is_initialized.return_value = False
-
-                custom_tracker = MyCustomTracker(dir=d)
-                self.assertFalse(os.path.exists(expected_log_file), "Log file created during MyCustomTracker.__init__")
-
-                mock_is_initialized.reset_mock()
-                mock_is_initialized.return_value = False
-
-                accelerator = Accelerator(log_with=custom_tracker)
-                self.assertFalse(
-                    os.path.exists(expected_log_file), "Log file created during Accelerator instantiation with tracker"
-                )
-
-                accelerator.init_trackers("TestProject")
-                self.assertTrue(
-                    os.path.exists(expected_log_file), "Log file not created after init_trackers -> start()"
-                )
-
-                accelerator.end_training()
 
 
 @require_dvclive
@@ -672,3 +653,77 @@ class DVCLiveTrackingTest(unittest.TestCase):
                 val_path = os.path.join(scalars, f"{val}.tsv")
                 steps = [int(row["step"]) for row in logs[val_path]]
                 assert steps == [0, 1, 3]
+
+class TrackerDeferredInitializationTest(unittest.TestCase):
+    """
+    Tests tracker's deferred initialization via `start()` method, preventing
+    premature `PartialState` access (and `torch.distributed` init) before
+    `Accelerator` has configured the distributed environment, especially with
+    `InitProcessGroupKwargs`.
+    """
+    @require_tensorboard
+    def test_tensorboard_deferred_init(self):
+        """Test that TensorBoard tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = TensorBoardTracker(run_name="test_tb", logging_dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            accelerator = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_wandb
+    def test_wandb_deferred_init(self):
+        """Test that WandB tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = WandBTracker(run_name="test_wandb")
+        self.assertEqual(PartialState._shared_state, {})
+        accelerator = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_comet_ml
+    def test_comet_ml_deferred_init(self):
+        """Test that CometML tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = CometMLTracker(run_name="test_comet")
+        self.assertEqual(PartialState._shared_state, {})
+        accelerator = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_aim
+    def test_aim_deferred_init(self):
+        """Test that Aim tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = AimTracker(run_name="test_aim", repo=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            accelerator = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_mlflow
+    def test_mlflow_deferred_init(self):
+        """Test that MLflow tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = MLflowTracker(experiment_name="test_mlflow", logging_dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            accelerator = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_clearml
+    def test_clearml_deferred_init(self):
+        """Test that ClearML tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = ClearMLTracker(run_name="test_clearml")
+        self.assertEqual(PartialState._shared_state, {})
+        accelerator = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_dvclive
+    def test_dvclive_deferred_init(self):
+        """Test that DVCLive tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = DVCLiveTracker(dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            accelerator = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
