@@ -17,14 +17,15 @@ from accelerate.utils import is_xpu_available
 
 
 def main():
-    device_type = "GPU"
+    accelerator_type = "GPU"
+    num_accelerators = 0
     if torch.cuda.is_available():
-        num_gpus = torch.cuda.device_count()
-        device_type = "GPU"
+        num_accelerators = torch.cuda.device_count()
+        accelerator_type = "GPU"
     elif is_xpu_available():
-        num_gpus = torch.xpu.device_count()
-        device_type = "XPU"
-    print(f"Successfully ran on {num_gpus} {device_type}s")
+        num_accelerators = torch.xpu.device_count()
+        accelerator_type = "XPU"
+    print(f"Successfully ran on {num_accelerators} {accelerator_type}s")
 
 
 if __name__ == "__main__":
