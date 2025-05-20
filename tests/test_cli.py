@@ -72,6 +72,8 @@ class AccelerateLauncherTester(unittest.TestCase):
         args = ["--monitor_interval", "0.1", str(self.test_file_path)]
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
             args = ["--multi_gpu"] + args
+        elif torch.xpu.is_available() and (torch.xpu.device_count() > 1):
+            args = ["--multi_gpu"] + args
         args = self.parser.parse_args(["--monitor_interval", "0.1", str(self.test_file_path)])
         launch_command(args)
 
