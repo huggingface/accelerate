@@ -525,10 +525,17 @@ class MyCustomTracker(GeneralTracker):
     name = "my_custom_tracker"
     requires_logging_directory = False
 
-    def __init__(self, dir: str):
-        self.f = open(f"{dir}/log.csv", "w+")
-        self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
-        self.writer.writeheader()
+    def __init__(self, dir: str, **kwargs):
+        super().__init__(**kwargs)
+        self.log_dir = dir
+        self.f = None
+        self.writer = None
+
+    def start(self):
+        if self.f is None:
+            self.f = open(os.path.join(self.log_dir, "log.csv"), "w+")
+            self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
+            self.writer.writeheader()
 
     @property
     def tracker(self):
@@ -589,6 +596,37 @@ class CustomTrackerTestCase(unittest.TestCase):
                     "some_string": "",
                 }
                 assert data == truth
+
+    def test_custom_tracker_lazy_initialization(self):
+        """
+        Tests tracker's deferred initialization via `start()` method, preventing
+        premature `PartialState` access (and `torch.distributed` init) before
+        `Accelerator` has configured the distributed environment, especially with
+        `InitProcessGroupKwargs`.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            expected_log_file = os.path.join(d, "log.csv")
+
+            with mock.patch("torch.distributed.is_initialized") as mock_is_initialized:
+                mock_is_initialized.return_value = False
+
+                custom_tracker = MyCustomTracker(dir=d)
+                self.assertFalse(os.path.exists(expected_log_file), "Log file created during MyCustomTracker.__init__")
+
+                mock_is_initialized.reset_mock()
+                mock_is_initialized.return_value = False
+
+                accelerator = Accelerator(log_with=custom_tracker)
+                self.assertFalse(
+                    os.path.exists(expected_log_file), "Log file created during Accelerator instantiation with tracker"
+                )
+
+                accelerator.init_trackers("TestProject")
+                self.assertTrue(
+                    os.path.exists(expected_log_file), "Log file not created after init_trackers -> start()"
+                )
+
+                accelerator.end_training()
 
 
 @require_dvclive
