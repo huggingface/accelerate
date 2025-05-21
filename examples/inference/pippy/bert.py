@@ -21,10 +21,7 @@ from accelerate.test_utils import torch_device
 from accelerate.utils import set_seed
 
 
-if torch_device == "hpu":
-    synchronize_func = torch.hpu.synchronize
-else:
-    synchronize_func = torch.cuda.synchronize
+synchronize_func = getattr(torch, torch_device, torch.cuda).synchronize
 
 # Set the random seed to have reproducable outputs
 set_seed(42)

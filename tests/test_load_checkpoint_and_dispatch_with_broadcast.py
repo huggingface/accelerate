@@ -29,9 +29,14 @@ from torch.distributed.fsdp.wrap import _recursive_wrap, transformer_auto_wrap_p
 from torch.nn.parallel import DistributedDataParallel
 
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
-from accelerate.test_utils import execute_subprocess_async, get_torch_dist_unique_port, require_multi_gpu
+from accelerate.test_utils import (
+    execute_subprocess_async,
+    get_torch_dist_unique_port,
+    require_multi_device,
+    torch_device,
+)
 from accelerate.test_utils.testing import require_torch_min_version, require_transformers
-from accelerate.utils.imports import is_transformers_available
+from accelerate.utils.imports import is_transformers_available, is_xccl_available
 
 
 if is_transformers_available():
@@ -43,7 +48,13 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
     """Manage the creation and destruction of the distributed process group for the wrapped function."""
 
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-        dist.init_process_group(world_size=torch.cuda.device_count())
+        torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
+        # FIXME currently, we still need specify "ccl" backend to use torch-ccl,
+        #       pytorch built-in xccl will be available from PyTorch 2.9, will remove this after we have xccl
+        if torch_device == "xpu" and not is_xccl_available():
+            dist.init_process_group(backend="ccl", world_size=torch_accelerator_module.device_count())
+        else:
+            dist.init_process_group(world_size=torch_accelerator_module.device_count())
         try:
             return func(*args, **kwargs)
         finally:
@@ -54,7 +65,8 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
 
 @manage_process_group
 def load_checkpoint_and_dispatch_fsdp2():
-    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+    torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
+    torch_accelerator_module.set_device(device := torch.device(dist.get_rank()))
 
     pretrained_model_name_or_path = "bigscience/bloom-560m"
     model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
@@ -103,7 +115,8 @@ def load_checkpoint_and_dispatch_fsdp2():
 
 @manage_process_group
 def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
-    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+    torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
+    torch_accelerator_module.set_device(device := torch.device(dist.get_rank()))
 
     pretrained_model_name_or_path = "bigscience/bloom-560m"
     model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
@@ -142,7 +155,8 @@ def load_checkpoint_and_dispatch_no_broadcast_from_rank0():
 
 @manage_process_group
 def load_checkpoint_and_dispatch_ddp():
-    torch.cuda.set_device(device := torch.device(dist.get_rank()))
+    torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
+    torch_accelerator_module.set_device(device := torch.device(dist.get_rank()))
 
     pretrained_model_name_or_path = "bigscience/bloom-560m"
     model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
@@ -173,13 +187,16 @@ def load_checkpoint_and_dispatch_ddp():
 
 @require_torch_min_version(version="2.4.0")
 @require_transformers
-@require_multi_gpu
+@require_multi_device
 class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
+    def setUp(self):
+        self.torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
+
     def test_load_checkpoint_and_dispatch_fsdp2(self):
         execute_subprocess_async(
             cmd=[
                 "torchrun",
-                f"--nproc_per_node={torch.cuda.device_count()}",
+                f"--nproc_per_node={self.torch_accelerator_module.device_count()}",
                 f"--master_port={get_torch_dist_unique_port()}",
                 __file__,
                 "--fsdp2",
@@ -191,7 +208,7 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         execute_subprocess_async(
             cmd=[
                 "torchrun",
-                f"--nproc_per_node={torch.cuda.device_count()}",
+                f"--nproc_per_node={self.torch_accelerator_module.device_count()}",
                 f"--master_port={get_torch_dist_unique_port()}",
                 __file__,
                 "--no_broadcast_from_rank0",
@@ -203,7 +220,7 @@ class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
         execute_subprocess_async(
             cmd=[
                 "torchrun",
-                f"--nproc_per_node={torch.cuda.device_count()}",
+                f"--nproc_per_node={self.torch_accelerator_module.device_count()}",
                 f"--master_port={get_torch_dist_unique_port()}",
                 __file__,
                 "--ddp",
