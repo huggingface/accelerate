@@ -648,10 +648,11 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     if auto_wrap_policy is not None:
         # We skip the model itself, as that one is always wrapped
         for module in get_module_children_bottom_up(model)[:-1]:
-            if auto_wrap_policy(module):
+            if auto_wrap_policy(module) and not isinstance(module, FSDPModule):
                 fully_shard(module, **fsdp2_kwargs)
 
-    fully_shard(model, **fsdp2_kwargs)
+    if not isinstance(model, FSDPModule):
+        fully_shard(model, **fsdp2_kwargs)
 
     if fsdp2_plugin.cpu_ram_efficient_loading:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
