@@ -32,6 +32,7 @@ from typing import Any, Callable, Union
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
+from torchao.float8 import precompute_float8_dynamic_scale_for_fsdp
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -1396,7 +1397,6 @@ class Accelerator:
                     "When using FSDP2, a model and optimizer must be passed together to `Accelerator.prepare()`"
                     " as the optimizer needs to have its parameters modified after the model is converted."
                 )
-
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
         fsdp2_should_fix_optimizer = self.is_fsdp2
@@ -1419,7 +1419,7 @@ class Accelerator:
                             # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
                             # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
                             param_group["params"][i] = torch.empty_like(p)
-                            param_group["params"][i].data_ptr = p.data_ptr()
+                            param_group["params"][i].data_ptr = id(p)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if (self.device.type == "cpu" or self.device.type == "xpu") and self.state.use_ipex:
@@ -1744,8 +1744,12 @@ class Accelerator:
         # Now we can apply the FP8 autocast
         if self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
-        # torch.compile should be called last and only if the model isn't already compiled.
-        if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
+        # torch.compile should be called last and only if the model isn't already compiled
+        if (
+            self.state.dynamo_plugin.backend != DynamoBackend.NO
+            and not is_compiled_module(model)
+            and not self.is_fsdp2
+        ):
             if self.state.dynamo_plugin.use_regional_compilation:
                 model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
             else:
@@ -1757,6 +1761,9 @@ class Accelerator:
             raise ImportError(
                 "`torchao` was not found on your system or is too old of a version. Please ensure that `torchao >= 0.6.1` is installed"
             )
+        if self.is_fsdp2:
+            models = [x for x in args if isinstance(x, torch.nn.Module)]
+            optimizers = [x for x in args if isinstance(x, torch.optim.Optimizer)]
         for arg in args:
             if isinstance(arg, torch.nn.Module):
                 convert_model_to_fp8_ao(
@@ -1764,6 +1771,13 @@ class Accelerator:
                     config=self.ao_recipe_handler.config,
                     module_filter_func=self.ao_recipe_handler.module_filter_func,
                 )
+
+        # Invariant: with FSDP2, optimizer is always passed to `prepare()` together with model
+        if self.is_fsdp2 and len(optimizers) > 0:
+            optimizers[0].register_step_post_hook(
+                lambda *args, **kwargs: precompute_float8_dynamic_scale_for_fsdp(models[0])
+            )
+
         return args
 
     def _prepare_te(self, *args):
@@ -3550,7 +3564,7 @@ class Accelerator:
         for obj in args:
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
-                named_parameters.update({n: p.data_ptr() if drop_refs else p for n, p in obj.named_parameters()})
+                named_parameters.update({n: id(p) if drop_refs else p for n, p in obj.named_parameters()})
         return named_parameters
 
     def _get_devices(self, *args):
