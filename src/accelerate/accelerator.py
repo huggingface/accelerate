@@ -3358,7 +3358,7 @@ class Accelerator:
         self._load_model_state_pre_hook[handle.id] = hook
         return handle
 
-    def load_state(self, input_dir: str = None, **load_model_func_kwargs):
+    def load_state(self, input_dir: str = None, load_kwargs: dict | None = None, **load_model_func_kwargs):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
@@ -3373,6 +3373,9 @@ class Accelerator:
             input_dir (`str` or `os.PathLike`):
                 The name of the folder all relevant weights and states were saved in. Can be `None` if
                 `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint.
+            load_kwargs (`dict`, *optional*):
+                Additional keyword arguments for the underlying `load` function, such as optional arguments for
+                state_dict and optimizer on.
             load_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for loading model which can be passed to the underlying load function,
                 such as optional arguments for DeepSpeed's `load_checkpoint` function or a `map_location` to load the
@@ -3477,6 +3480,7 @@ class Accelerator:
             self.state.process_index,
             self.scaler,
             map_location,
+            load_kwargs,
             **load_model_func_kwargs,
         )
         if "step" in override_attributes:
