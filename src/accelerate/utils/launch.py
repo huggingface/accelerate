@@ -157,9 +157,10 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
         )
 
     ccl_worker_count = getattr(args, "mpirun_ccl", 0) if is_ccl_available() else 0
-    current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
-    current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
-    current_env["CCL_WORKER_COUNT"] = str(ccl_worker_count)
+    if getattr(args, "num_processes", 1) > 1:
+        current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
+        current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
+        current_env["CCL_WORKER_COUNT"] = str(ccl_worker_count)
     if current_env["ACCELERATE_USE_CPU"]:
         current_env["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
         current_env["KMP_BLOCKTIME"] = str(1)
