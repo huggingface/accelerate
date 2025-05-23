@@ -1005,7 +1005,6 @@ class DVCLiveTracker(GeneralTracker):
     def start(self):
         from dvclive import Live
 
-        super().__init__()
         self.live = self.live if self.live is not None else Live(**self.init_kwargs)
 
     @property
