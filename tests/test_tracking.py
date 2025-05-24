@@ -35,6 +35,7 @@ from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
     MockingTestCase,
     TempDirTestCase,
+    require_aim,
     require_clearml,
     require_comet_ml,
     require_dvclive,
@@ -43,18 +44,17 @@ from accelerate.test_utils.testing import (
     require_pandas,
     require_tensorboard,
     require_wandb,
-    require_aim,
     skip,
 )
 from accelerate.tracking import (
+    AimTracker,
+    ClearMLTracker,
+    CometMLTracker,
+    DVCLiveTracker,
     GeneralTracker,
+    MLflowTracker,
     TensorBoardTracker,
     WandBTracker,
-    CometMLTracker,
-    AimTracker,
-    MLflowTracker,
-    ClearMLTracker,
-    DVCLiveTracker,
 )
 from accelerate.utils import (
     ProjectConfiguration,
@@ -609,7 +609,6 @@ class CustomTrackerTestCase(unittest.TestCase):
                 assert data == truth
 
 
-
 @require_dvclive
 @mock.patch("dvclive.live.get_dvc_repo", return_value=None)
 class DVCLiveTrackingTest(unittest.TestCase):
@@ -654,6 +653,7 @@ class DVCLiveTrackingTest(unittest.TestCase):
                 steps = [int(row["step"]) for row in logs[val_path]]
                 assert steps == [0, 1, 3]
 
+
 class TrackerDeferredInitializationTest(unittest.TestCase):
     """
     Tests tracker's deferred initialization via `start()` method, preventing
@@ -661,6 +661,7 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
     `Accelerator` has configured the distributed environment, especially with
     `InitProcessGroupKwargs`.
     """
+
     @require_tensorboard
     def test_tensorboard_deferred_init(self):
         """Test that TensorBoard tracker initialization doesn't initialize distributed"""
@@ -668,7 +669,7 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
             PartialState._reset_state()
             tracker = TensorBoardTracker(run_name="test_tb", logging_dir=temp_dir)
             self.assertEqual(PartialState._shared_state, {})
-            accelerator = Accelerator(log_with=tracker)
+            _ = Accelerator(log_with=tracker)
             self.assertNotEqual(PartialState._shared_state, {})
 
     @require_wandb
@@ -677,7 +678,7 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
         PartialState._reset_state()
         tracker = WandBTracker(run_name="test_wandb")
         self.assertEqual(PartialState._shared_state, {})
-        accelerator = Accelerator(log_with=tracker)
+        _ = Accelerator(log_with=tracker)
         self.assertNotEqual(PartialState._shared_state, {})
 
     @require_comet_ml
@@ -686,7 +687,7 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
         PartialState._reset_state()
         tracker = CometMLTracker(run_name="test_comet")
         self.assertEqual(PartialState._shared_state, {})
-        accelerator = Accelerator(log_with=tracker)
+        _ = Accelerator(log_with=tracker)
         self.assertNotEqual(PartialState._shared_state, {})
 
     @require_aim
@@ -696,7 +697,7 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
             PartialState._reset_state()
             tracker = AimTracker(run_name="test_aim", repo=temp_dir)
             self.assertEqual(PartialState._shared_state, {})
-            accelerator = Accelerator(log_with=tracker)
+            _ = Accelerator(log_with=tracker)
             self.assertNotEqual(PartialState._shared_state, {})
 
     @require_mlflow
@@ -706,7 +707,7 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
             PartialState._reset_state()
             tracker = MLflowTracker(experiment_name="test_mlflow", logging_dir=temp_dir)
             self.assertEqual(PartialState._shared_state, {})
-            accelerator = Accelerator(log_with=tracker)
+            _ = Accelerator(log_with=tracker)
             self.assertNotEqual(PartialState._shared_state, {})
 
     @require_clearml
@@ -715,7 +716,7 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
         PartialState._reset_state()
         tracker = ClearMLTracker(run_name="test_clearml")
         self.assertEqual(PartialState._shared_state, {})
-        accelerator = Accelerator(log_with=tracker)
+        _ = Accelerator(log_with=tracker)
         self.assertNotEqual(PartialState._shared_state, {})
 
     @require_dvclive
@@ -725,5 +726,5 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
             PartialState._reset_state()
             tracker = DVCLiveTracker(dir=temp_dir)
             self.assertEqual(PartialState._shared_state, {})
-            accelerator = Accelerator(log_with=tracker)
+            _ = Accelerator(log_with=tracker)
             self.assertNotEqual(PartialState._shared_state, {})
