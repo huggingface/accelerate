@@ -31,9 +31,11 @@ from packaging import version
 
 # We use TF to parse the logs
 from accelerate import Accelerator
+from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
     MockingTestCase,
     TempDirTestCase,
+    require_aim,
     require_clearml,
     require_comet_ml,
     require_dvclive,
@@ -44,7 +46,16 @@ from accelerate.test_utils.testing import (
     require_wandb,
     skip,
 )
-from accelerate.tracking import CometMLTracker, GeneralTracker, MLflowTracker
+from accelerate.tracking import (
+    AimTracker,
+    ClearMLTracker,
+    CometMLTracker,
+    DVCLiveTracker,
+    GeneralTracker,
+    MLflowTracker,
+    TensorBoardTracker,
+    WandBTracker,
+)
 from accelerate.utils import (
     ProjectConfiguration,
     is_comet_ml_available,
@@ -525,10 +536,17 @@ class MyCustomTracker(GeneralTracker):
     name = "my_custom_tracker"
     requires_logging_directory = False
 
-    def __init__(self, dir: str):
-        self.f = open(f"{dir}/log.csv", "w+")
-        self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
-        self.writer.writeheader()
+    def __init__(self, dir: str, **kwargs):
+        super().__init__(**kwargs)
+        self.log_dir = dir
+        self.f = None
+        self.writer = None
+
+    def start(self):
+        if self.f is None:
+            self.f = open(os.path.join(self.log_dir, "log.csv"), "w+")
+            self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
+            self.writer.writeheader()
 
     @property
     def tracker(self):
@@ -634,3 +652,79 @@ class DVCLiveTrackingTest(unittest.TestCase):
                 val_path = os.path.join(scalars, f"{val}.tsv")
                 steps = [int(row["step"]) for row in logs[val_path]]
                 assert steps == [0, 1, 3]
+
+
+class TrackerDeferredInitializationTest(unittest.TestCase):
+    """
+    Tests tracker's deferred initialization via `start()` method, preventing
+    premature `PartialState` access (and `torch.distributed` init) before
+    `Accelerator` has configured the distributed environment, especially with
+    `InitProcessGroupKwargs`.
+    """
+
+    @require_tensorboard
+    def test_tensorboard_deferred_init(self):
+        """Test that TensorBoard tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = TensorBoardTracker(run_name="test_tb", logging_dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            _ = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_wandb
+    def test_wandb_deferred_init(self):
+        """Test that WandB tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = WandBTracker(run_name="test_wandb")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_comet_ml
+    def test_comet_ml_deferred_init(self):
+        """Test that CometML tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = CometMLTracker(run_name="test_comet")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_aim
+    def test_aim_deferred_init(self):
+        """Test that Aim tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = AimTracker(run_name="test_aim", repo=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            _ = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_mlflow
+    def test_mlflow_deferred_init(self):
+        """Test that MLflow tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = MLflowTracker(experiment_name="test_mlflow", logging_dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            _ = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_clearml
+    def test_clearml_deferred_init(self):
+        """Test that ClearML tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = ClearMLTracker(run_name="test_clearml")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_dvclive
+    def test_dvclive_deferred_init(self):
+        """Test that DVCLive tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = DVCLiveTracker(dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            _ = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})

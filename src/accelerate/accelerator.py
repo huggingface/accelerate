@@ -2932,6 +2932,10 @@ class Accelerator:
                     )
                 else:
                     self.trackers.append(tracker_init(project_name, **init_kwargs.get(str(tracker), {})))
+
+        for tracker in self.trackers:
+            tracker.start()
+
         if config is not None:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)

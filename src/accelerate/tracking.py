@@ -131,6 +131,13 @@ class GeneralTracker:
                     f"{err}"
                 )
 
+    def start(self):
+        """
+        Lazy initialization of the tracker inside Accelerator to avoid initalizing PartialState before
+        InitProcessGroupKwargs.
+        """
+        pass
+
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Implementations should use the experiment configuration
@@ -180,16 +187,20 @@ class TensorBoardTracker(GeneralTracker):
     name = "tensorboard"
     requires_logging_directory = True
 
-    @on_main_process
     def __init__(self, run_name: str, logging_dir: Union[str, os.PathLike], **kwargs):
+        super().__init__()
+        self.run_name = run_name
+        self.logging_dir_param = logging_dir
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
         try:
             from torch.utils import tensorboard
         except ModuleNotFoundError:
             import tensorboardX as tensorboard
-        super().__init__()
-        self.run_name = run_name
-        self.logging_dir = os.path.join(logging_dir, run_name)
-        self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
+        self.logging_dir = os.path.join(self.logging_dir_param, self.run_name)
+        self.writer = tensorboard.SummaryWriter(self.logging_dir, **self.init_kwargs)
         logger.debug(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -290,14 +301,16 @@ class WandBTracker(GeneralTracker):
     requires_logging_directory = False
     main_process_only = False
 
-    @on_main_process
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
         self.run_name = run_name
+        self.init_kwargs = kwargs
 
+    @on_main_process
+    def start(self):
         import wandb
 
-        self.run = wandb.init(project=self.run_name, **kwargs)
+        self.run = wandb.init(project=self.run_name, **self.init_kwargs)
         logger.debug(f"Initialized WandB project {self.run_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -419,19 +432,21 @@ class CometMLTracker(GeneralTracker):
     name = "comet_ml"
     requires_logging_directory = False
 
-    @on_main_process
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
         self.run_name = run_name
+        self.init_kwargs = kwargs
 
+    @on_main_process
+    def start(self):
         import comet_ml
 
         comet_version = version.parse(comet_ml.__version__)
         if compare_versions(comet_version, ">=", "3.41.0"):
-            self.writer = comet_ml.start(project_name=run_name, **kwargs)
+            self.writer = comet_ml.start(project_name=self.run_name, **self.init_kwargs)
         else:
             logger.info("Update `comet_ml` (>=3.41.0) for experiment reuse and offline support.")
-            self.writer = comet_ml.Experiment(project_name=run_name, **kwargs)
+            self.writer = comet_ml.Experiment(project_name=self.run_name, **self.init_kwargs)
 
         logger.debug(f"Initialized CometML project {self.run_name}")
         logger.debug(
@@ -504,13 +519,17 @@ class AimTracker(GeneralTracker):
     name = "aim"
     requires_logging_directory = True
 
-    @on_main_process
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
+        super().__init__()
         self.run_name = run_name
+        self.aim_repo_path = logging_dir
+        self.init_kwargs = kwargs
 
+    @on_main_process
+    def start(self):
         from aim import Run
 
-        self.writer = Run(repo=logging_dir, **kwargs)
+        self.writer = Run(repo=self.aim_repo_path, **self.init_kwargs)
         self.writer.name = self.run_name
         logger.debug(f"Initialized Aim project {self.run_name}")
         logger.debug(
@@ -620,7 +639,6 @@ class MLflowTracker(GeneralTracker):
     name = "mlflow"
     requires_logging_directory = False
 
-    @on_main_process
     def __init__(
         self,
         experiment_name: str = None,
@@ -639,30 +657,40 @@ class MLflowTracker(GeneralTracker):
 
         nested_run = os.environ.get("MLFLOW_NESTED_RUN", nested_run)
 
+        self.experiment_name = experiment_name
+        self.logging_dir = logging_dir
+        self.run_id = run_id
+        self.tags = tags
+        self.nested_run = nested_run
+        self.run_name = run_name
+        self.description = description
+
+    @on_main_process
+    def start(self):
         import mlflow
 
-        exps = mlflow.search_experiments(filter_string=f"name = '{experiment_name}'")
+        exps = mlflow.search_experiments(filter_string=f"name = '{self.experiment_name}'")
         if len(exps) > 0:
             if len(exps) > 1:
                 logger.warning("Multiple experiments with the same name found. Using first one.")
             experiment_id = exps[0].experiment_id
         else:
             experiment_id = mlflow.create_experiment(
-                name=experiment_name,
-                artifact_location=logging_dir,
-                tags=tags,
+                name=self.experiment_name,
+                artifact_location=self.logging_dir,
+                tags=self.tags,
             )
 
         self.active_run = mlflow.start_run(
-            run_id=run_id,
+            run_id=self.run_id,
             experiment_id=experiment_id,
-            run_name=run_name,
-            nested=nested_run,
-            tags=tags,
-            description=description,
+            run_name=self.run_name,
+            nested=self.nested_run,
+            tags=self.tags,
+            description=self.description,
         )
 
-        logger.debug(f"Initialized mlflow experiment {experiment_name}")
+        logger.debug(f"Initialized mlflow experiment {self.experiment_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
@@ -802,20 +830,26 @@ class ClearMLTracker(GeneralTracker):
     name = "clearml"
     requires_logging_directory = False
 
-    @on_main_process
     def __init__(self, run_name: str = None, **kwargs):
+        super().__init__()
+        self.user_provided_run_name = run_name
+        self._initialized_externally = False
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
         from clearml import Task
 
         current_task = Task.current_task()
-        self._initialized_externally = False
         if current_task:
             self._initialized_externally = True
             self.task = current_task
             return
 
-        kwargs.setdefault("project_name", os.environ.get("CLEARML_PROJECT", run_name))
-        kwargs.setdefault("task_name", os.environ.get("CLEARML_TASK", run_name))
-        self.task = Task.init(**kwargs)
+        task_init_args = {**self.init_kwargs}
+        task_init_args.setdefault("project_name", os.environ.get("CLEARML_PROJECT", self.user_provided_run_name))
+        task_init_args.setdefault("task_name", os.environ.get("CLEARML_TASK", self.user_provided_run_name))
+        self.task = Task.init(**task_init_args)
 
     @property
     def tracker(self):
@@ -962,12 +996,16 @@ class DVCLiveTracker(GeneralTracker):
     name = "dvclive"
     requires_logging_directory = False
 
-    @on_main_process
     def __init__(self, run_name: Optional[str] = None, live: Optional[Any] = None, **kwargs):
+        super().__init__()
+        self.live = live
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
         from dvclive import Live
 
-        super().__init__()
-        self.live = live if live is not None else Live(**kwargs)
+        self.live = self.live if self.live is not None else Live(**self.init_kwargs)
 
     @property
     def tracker(self):
