@@ -1,23 +1,26 @@
-name: Gaudi1 tests (scheduled)
+name: Gaudi3 tests (scheduled)
 
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 2 * * *"
+  push:
+    paths:
+      - ".github/workflows/gaudi3_scheduled.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  run_gaudi1_tests:
+  run_gaudi3_scheduled_tests:
     name: Test on Gaudi1
     runs-on:
       group: itac-bm-emr-gaudi3-dell-2gaudi
 
     container:
       image: docker://vault.habana.ai/gaudi-docker/1.20.0/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
-      options: --runtime=habana --shm-size=64G --cap-add=sys_nice --env HABANA_VISIBLE_DEVICES=0,1
+      options: --runtime=habana --shm-size=64G --cap-add=sys_nice --env HABANA_VISIBLE_DEVICES
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
         PT_ENABLE_INT64_SUPPORT: 1
@@ -25,19 +28,7 @@ jobs:
         RUN_SLOW: 1
 
     steps:
-      - name: HL-SMI (1)
-        run: |
-          hl-smi
-          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
-          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
-
-      - name: Extract HPU visible modules
-        id: add-modules
-        run: |
-          export HABANA_VISIBLE_MODULES=$(hl-smi -Q module_id -f csv,noheader | tr '\n' ',' | sed 's/,$//')
-          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}" >> $GITHUB_ENV
-
-      - name: HL-SMI (2)
+      - name: HL-SMI
         run: |
           hl-smi
           echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
@@ -53,25 +44,31 @@ jobs:
             git+https://github.com/huggingface/transformers.git
 
       - name: Run CLI tests
+        if: ${{ !cancelled() && (success() || failure()) }}
         run: |
           make test_cli
 
       - name: Run Core tests
+        if: ${{ !cancelled() && (success() || failure()) }}
         run: |
           make test_core
 
       - name: Run Big Modeling tests
+        if: ${{ !cancelled() && (success() || failure()) }}
         run: |
           make test_big_modeling
 
       - name: Run FSDP integration tests
+        if: ${{ !cancelled() && (success() || failure()) }}
         run: |
           make test_fsdp
 
       - name: Run DeepSpeed integration tests
+        if: ${{ !cancelled() && (success() || failure()) }}
         run: |
           make test_deepspeed
 
       - name: Run Examples tests
+        if: ${{ !cancelled() && (success() || failure()) }}
         run: |
           make test_examples
