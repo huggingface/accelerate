@@ -13,8 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  run_gaudi3_scheduled_tests:
-    name: Test on Gaudi1
+  run-gaudi3-tests:
     runs-on:
       group: itac-bm-emr-gaudi3-dell-2gaudi
 

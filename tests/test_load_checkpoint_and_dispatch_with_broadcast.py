@@ -36,7 +36,7 @@ from accelerate.test_utils import (
     torch_device,
 )
 from accelerate.test_utils.testing import require_torch_min_version, require_transformers
-from accelerate.utils.imports import is_transformers_available, is_xccl_available
+from accelerate.utils.imports import is_hpu_available, is_transformers_available, is_xccl_available
 
 
 if is_transformers_available():
@@ -53,6 +53,8 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
         #       pytorch built-in xccl will be available from PyTorch 2.9, will remove this after we have xccl
         if torch_device == "xpu" and not is_xccl_available():
             dist.init_process_group(backend="ccl", world_size=torch_accelerator_module.device_count())
+        elif torch_device == "hpu" and is_hpu_available(init_hccl=True):
+            dist.init_process_group(backend="hccl", world_size=torch_accelerator_module.device_count())
         else:
             dist.init_process_group(world_size=torch_accelerator_module.device_count())
         try:
