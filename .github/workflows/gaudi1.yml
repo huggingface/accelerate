@@ -13,7 +13,7 @@ jobs:
   run_gaudi1_tests:
     name: Test on Gaudi1
     runs-on:
-      group: aws-dl1-24xlarge
+      group: itac-bm-emr-gaudi3-dell-2gaudi
 
     container:
       image: docker://vault.habana.ai/gaudi-docker/1.20.0/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
