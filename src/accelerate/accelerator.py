@@ -1382,12 +1382,14 @@ class Accelerator:
                     "part for you."
                 )
 
+        model_index = None
         if self.is_fsdp2:
             model_count = 0
             optimizer_count = 0
-            for obj in args:
+            for i, obj in enumerate(args):
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
+                    model_index = i
                 elif isinstance(obj, torch.optim.Optimizer):
                     optimizer_count += 1
 
@@ -1401,6 +1403,17 @@ class Accelerator:
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
         fsdp2_should_fix_optimizer = self.is_fsdp2
         should_fix_optimizer = tpu_should_fix_optimizer or fsdp2_should_fix_optimizer
+
+        # We need to specifically prepare AO (possibly other FP8 backends, haven't tested yet) here, as fsdp2 is very picky about the order of preparation
+
+        if self.is_fsdp2 and model_index is not None:
+            new_args = list(args)
+
+            new_args[model_index] = compile_regions(new_args[model_index])
+            args = tuple(new_args)
+
+        if self.is_fsdp2 and self.fp8_backend == "AO":
+            args = self._prepare_ao(*args)
 
         if should_fix_optimizer:
             # 1. grabbing old model parameters
@@ -1419,14 +1432,14 @@ class Accelerator:
                             # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
                             # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
                             param_group["params"][i] = torch.empty_like(p)
-                            param_group["params"][i].data_ptr = id(p)
+                            param_group["params"][i].data_ptr = p.data_ptr()
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if (self.device.type == "cpu" or self.device.type == "xpu") and self.state.use_ipex:
                 args = self._prepare_ipex(*args)
         if self.fp8_backend == "TE":
             args = self._prepare_te(*args)
-        elif self.fp8_backend == "AO":
+        elif self.fp8_backend == "AO" and not self.is_fsdp2:
             args = self._prepare_ao(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
@@ -3564,7 +3577,24 @@ class Accelerator:
         for obj in args:
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
-                named_parameters.update({n: id(p) if drop_refs else p for n, p in obj.named_parameters()})
+                if not drop_refs:
+                    named_parameters.update({n: p for n, p in obj.named_parameters()})
+                    continue
+                if self.fp8_backend == "AO":
+                    from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
+
+                    accessor_mapping = {
+                        WeightWithDynamicFloat8CastTensor: "_tensor",
+                    }
+
+                named_parameters.update(
+                    {
+                        n: getattr(p, accessor_mapping[type(p)]).data_ptr()
+                        if type(p) in accessor_mapping
+                        else p.data_ptr()
+                        for n, p in obj.named_parameters()
+                    }
+                )
         return named_parameters
 
     def _get_devices(self, *args):
