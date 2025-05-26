@@ -35,12 +35,12 @@ from .utils import (
     is_mlu_available,
     is_musa_available,
     is_sdaa_available,
+    is_torch_version,
     is_torch_xla_available,
     is_xpu_available,
     load,
     save,
 )
-from .versions import is_torch_version
 
 
 if is_torch_version(">=", "2.4.0"):
