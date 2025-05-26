@@ -37,6 +37,7 @@ from ..utils import (
     check_cuda_fp8_capability,
     compare_versions,
     gather,
+    is_aim_available,
     is_bnb_available,
     is_clearml_available,
     is_comet_ml_available,
@@ -458,6 +459,13 @@ def require_comet_ml(test_case):
     Decorator marking a test that requires comet_ml installed. These tests are skipped when comet_ml isn't installed
     """
     return unittest.skipUnless(is_comet_ml_available(), "test requires comet_ml")(test_case)
+
+
+def require_aim(test_case):
+    """
+    Decorator marking a test that requires aim installed. These tests are skipped when aim isn't installed
+    """
+    return unittest.skipUnless(is_aim_available(), "test requires aim")(test_case)
 
 
 def require_clearml(test_case):
