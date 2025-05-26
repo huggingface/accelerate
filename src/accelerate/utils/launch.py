@@ -27,6 +27,7 @@ from ..commands.config.config_args import SageMakerConfig
 from ..utils import (
     DynamoBackend,
     PrecisionType,
+    is_ccl_available,
     is_fp8_available,
     is_hpu_available,
     is_ipex_available,
@@ -104,12 +105,11 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     if args.no_python and args.module:
         raise ValueError("--module and --no_python cannot be used together")
 
+    num_processes = getattr(args, "num_processes", None)
+    num_machines = args.num_machines
     if args.mpirun_hostfile is not None:
         mpi_app_name, hostfile_arg, num_proc_arg, proc_per_node_arg, bind_to_arg = _get_mpirun_args()
-        mpirun_ccl = getattr(args, "mpirun_ccl", None)
         bind_to = getattr(args, "bind-to", "socket")
-        num_machines = args.num_machines
-        num_processes = getattr(args, "num_processes", None)
         nproc_per_node = str(num_processes // num_machines) if num_processes and num_machines else "1"
         cmd += [
             mpi_app_name,
@@ -148,15 +148,22 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
             current_env["HABANA_VISIBLE_MODULES"] = args.gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
-    if args.num_machines > 1:
-        current_env["MASTER_ADDR"] = args.main_process_ip
-        current_env["MASTER_PORT"] = str(args.main_process_port)
+    if num_machines > 1:
+        assert args.main_process_ip is not None, (
+            "When using multiple machines, you need to specify the main process IP."
+        )
+        assert args.main_process_port is not None, (
+            "When using multiple machines, you need to specify the main process port."
+        )
 
-        if args.mpirun_hostfile is not None:
-            current_env["CCL_WORKER_COUNT"] = str(mpirun_ccl)
-    elif args.num_processes > 1:
+    ccl_worker_count = getattr(args, "mpirun_ccl", 0) if is_ccl_available() else 0
+    if (num_processes is not None and num_processes > 1) or num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
         current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
+        current_env["CCL_WORKER_COUNT"] = str(ccl_worker_count)
+    if current_env["ACCELERATE_USE_CPU"]:
+        current_env["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
+        current_env["KMP_BLOCKTIME"] = str(1)
 
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
