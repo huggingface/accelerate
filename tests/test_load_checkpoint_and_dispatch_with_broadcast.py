@@ -33,6 +33,7 @@ from accelerate.test_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_multi_device,
+    run_first,
     torch_device,
 )
 from accelerate.test_utils.testing import require_torch_min_version, require_transformers
@@ -190,6 +191,7 @@ def load_checkpoint_and_dispatch_ddp():
 @require_torch_min_version(version="2.4.0")
 @require_transformers
 @require_multi_device
+@run_first
 class TestLoadCheckpointAndDispatchWithBroadcast(unittest.TestCase):
     def setUp(self):
         self.torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
