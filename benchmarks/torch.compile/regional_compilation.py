@@ -16,8 +16,9 @@ import torch
 from torch.utils.benchmark import Compare, Timer
 from transformers import AutoConfig, AutoModelForCausalLM
 
-from accelerate.utils import compile_regions
 from accelerate.test_utils.testing import get_backend
+from accelerate.utils import compile_regions
+
 
 torch.set_float32_matmul_precision("high")
 
