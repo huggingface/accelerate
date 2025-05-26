@@ -34,6 +34,9 @@ In this tutorial, you will see how to quickly set up DDP communication hooks and
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.algorithms.ddp_comm_hooks import default_hooks
+from accelerate.test_utils.testing import get_backend
+
+device_type, _, _ = get_backend()
 
 class MyModel(torch.nn.Module):
     def __init__(self):
@@ -44,7 +47,7 @@ class MyModel(torch.nn.Module):
         return self.layer(x)
 
 model = MyModel()
-model = DDP(model, device_ids=[torch.cuda.current_device()])
+model = DDP(model, device_ids=[getattr(torch, device_type, torch.cuda).current_device()])
 model.register_comm_hook(state=None, hook=default_hooks.fp16_compress_hook)
 
 # Training loop
@@ -108,6 +111,9 @@ BF16 Compression Hook API is experimental, and it requires NCCL version later th
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.algorithms.ddp_comm_hooks import default_hooks
+from accelerate.test_utils.testing import get_backend
+
+device_type, _, _ = get_backend()
 
 class MyModel(torch.nn.Module):
     def __init__(self):
@@ -118,7 +124,7 @@ class MyModel(torch.nn.Module):
         return self.layer(x)
 
 model = MyModel()
-model = DDP(model, device_ids=[torch.cuda.current_device()])
+model = DDP(model, device_ids=[getattr(torch, device_type, torch.cuda).current_device()])
 model.register_comm_hook(state=None, hook=default_hooks.bf16_compress_hook)
 
 # Training loop
@@ -182,6 +188,9 @@ PowerSGD typically requires extra memory of the same size as the model’s gradi
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.algorithms.ddp_comm_hooks import powerSGD_hook
+from accelerate.test_utils.testing import get_backend
+
+device_type, _, _ = get_backend()
 
 class MyModel(torch.nn.Module):
     def __init__(self):
@@ -192,7 +201,7 @@ class MyModel(torch.nn.Module):
         return self.layer(x)
 
 model = MyModel()
-model = DDP(model, device_ids=[torch.cuda.current_device()])
+model = DDP(model, device_ids=[getattr(torch, device_type, torch.cuda).current_device()])
 state = powerSGD_hook.PowerSGDState(process_group=None)
 model.register_comm_hook(state=state, hook=powerSGD_hook.powerSGD_hook)
 
