@@ -19,8 +19,9 @@ import numpy as np
 import torch
 from safetensors.torch import load_model
 
+
 # From 2.4, PyTorch supports device-agnostic `GradScaler`
-if hasattr(torch.amp, "GradScaler")
+if hasattr(torch.amp, "GradScaler"):
     from torch.amp import GradScaler
 else:
     from torch.cuda.amp import GradScaler
