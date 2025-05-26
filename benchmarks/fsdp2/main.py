@@ -92,6 +92,7 @@ def main():
     ]
 
     results = {}
+    torch.use_deterministic_algorithms(True)
 
     for evaluation, label in zip(evaluations, labels):
         results[label] = evaluation(args, CONFIG)
