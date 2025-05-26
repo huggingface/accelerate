@@ -19,13 +19,6 @@ import numpy as np
 import torch
 from safetensors.torch import load_model
 
-
-# From 2.4, PyTorch supports device-agnostic `GradScaler`
-if hasattr(torch.amp, "GradScaler"):
-    from torch.amp import GradScaler
-else:
-    from torch.cuda.amp import GradScaler
-
 from .utils import (
     MODEL_NAME,
     OPTIMIZER_NAME,
@@ -47,7 +40,13 @@ from .utils import (
     load,
     save,
 )
+from .versions import is_torch_version
 
+
+if is_torch_version(">=", "2.4.0"):
+    from torch.amp import GradScaler
+else:
+    from torch.cuda.amp import GradScaler
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
