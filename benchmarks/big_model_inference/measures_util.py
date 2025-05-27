@@ -18,8 +18,8 @@ import time
 import psutil
 import torch
 
-
 from accelerate.test_utils.testing import get_backend
+
 
 torch_device_type, _, _ = get_backend()
 torch_accelerator_module = getattr(torch, torch_device_type, torch.cuda)
