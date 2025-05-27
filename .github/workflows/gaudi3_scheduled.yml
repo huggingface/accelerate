@@ -7,10 +7,7 @@ on:
   push:
     paths:
       - ".github/workflows/gaudi3_scheduled.yml"
-  pull_request:
-    branches:
-      - new-gaudi-runners
-
+  
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
