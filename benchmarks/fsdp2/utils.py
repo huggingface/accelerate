@@ -219,7 +219,7 @@ def prepare_torch(
     tokenizer = get_tokenizer(config["model_name"])
     train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
 
-    memory_tracker = MemoryTracker(accelerator, args.output_dir, run_name, args.save_memory_snapshot)
+    memory_tracker = MemoryTracker(accelerator.device, args.output_dir, run_name, args.save_memory_snapshot)
     memory_tracker.start()
 
     model = get_model(config["model_name"])
@@ -279,7 +279,7 @@ def prepare_accelerate(
     tokenizer = get_tokenizer(config["model_name"])
     train_dataloader = prepare_dataloader(tokenizer, args, accelerator)
 
-    memory_tracker = MemoryTracker(accelerator, args.output_dir, "accelerate", args.save_memory_snapshot)
+    memory_tracker = MemoryTracker(accelerator.device, args.output_dir, "accelerate", args.save_memory_snapshot)
     memory_tracker.start()
 
     model = get_model(config["model_name"])
