@@ -37,6 +37,7 @@ from torch.distributed.algorithms.ddp_comm_hooks import default_hooks
 from accelerate.test_utils.testing import get_backend
 
 device_type, _, _ = get_backend()
+device_id = getattr(torch, device_type, torch.cuda).current_device()
 
 class MyModel(torch.nn.Module):
     def __init__(self):
@@ -47,7 +48,7 @@ class MyModel(torch.nn.Module):
         return self.layer(x)
 
 model = MyModel()
-model = DDP(model, device_ids=[getattr(torch, device_type, torch.cuda).current_device()])
+model = DDP(model, device_ids=[device_id])
 model.register_comm_hook(state=None, hook=default_hooks.fp16_compress_hook)
 
 # Training loop
@@ -114,6 +115,7 @@ from torch.distributed.algorithms.ddp_comm_hooks import default_hooks
 from accelerate.test_utils.testing import get_backend
 
 device_type, _, _ = get_backend()
+device_id = getattr(torch, device_type, torch.cuda).current_device()
 
 class MyModel(torch.nn.Module):
     def __init__(self):
@@ -124,7 +126,7 @@ class MyModel(torch.nn.Module):
         return self.layer(x)
 
 model = MyModel()
-model = DDP(model, device_ids=[getattr(torch, device_type, torch.cuda).current_device()])
+model = DDP(model, device_ids=[device_id])
 model.register_comm_hook(state=None, hook=default_hooks.bf16_compress_hook)
 
 # Training loop
@@ -191,6 +193,7 @@ from torch.distributed.algorithms.ddp_comm_hooks import powerSGD_hook
 from accelerate.test_utils.testing import get_backend
 
 device_type, _, _ = get_backend()
+device_id = getattr(torch, device_type, torch.cuda).current_device()
 
 class MyModel(torch.nn.Module):
     def __init__(self):
@@ -201,7 +204,7 @@ class MyModel(torch.nn.Module):
         return self.layer(x)
 
 model = MyModel()
-model = DDP(model, device_ids=[getattr(torch, device_type, torch.cuda).current_device()])
+model = DDP(model, device_ids=[device_id])
 state = powerSGD_hook.PowerSGDState(process_group=None)
 model.register_comm_hook(state=state, hook=powerSGD_hook.powerSGD_hook)
 
