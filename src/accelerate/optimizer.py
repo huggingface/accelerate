@@ -48,7 +48,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         device_placement (`bool`, *optional*, defaults to `True`):
             Whether or not the optimizer should handle device placement. If so, it will place the state dictionary of
             `optimizer` on the right device.
-        scaler (`torch.cuda.amp.grad_scaler.GradScaler`, *optional*):
+        scaler (`torch.amp.GradScaler` or `torch.cuda.amp.GradScaler`, *optional*):
             The scaler to use in the step function if training with mixed precision.
     """
 

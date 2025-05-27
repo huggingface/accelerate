@@ -18,7 +18,6 @@ from pathlib import Path
 import numpy as np
 import torch
 from safetensors.torch import load_model
-from torch.cuda.amp import GradScaler
 
 from .utils import (
     MODEL_NAME,
@@ -36,12 +35,18 @@ from .utils import (
     is_mlu_available,
     is_musa_available,
     is_sdaa_available,
+    is_torch_version,
     is_torch_xla_available,
     is_xpu_available,
     load,
     save,
 )
 
+
+if is_torch_version(">=", "2.4.0"):
+    from torch.amp import GradScaler
+else:
+    from torch.cuda.amp import GradScaler
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
