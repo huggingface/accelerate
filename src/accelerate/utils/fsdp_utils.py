@@ -406,7 +406,7 @@ def merge_fsdp_weights(
     state.wait_for_everyone()
 
 
-def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.cuda.device):
+def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.device):
     _tied_names = getattr(model, "_tied_weights_keys", None)
     if not _tied_names:
         # if no tied names just passthrough
