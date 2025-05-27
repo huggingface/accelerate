@@ -42,6 +42,7 @@ from .utils import (
     save,
 )
 
+
 if is_torch_version(">=", "2.4.0"):
     from torch.amp import GradScaler
 else:
