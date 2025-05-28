@@ -72,6 +72,10 @@ def compile_regions(module: torch.nn.Module, inplace: bool = False, **compile_kw
     Args:
         module (`torch.nn.Module`):
             The model to compile.
+        inplace (`bool`, *optional*, defaults to `False`):
+            Whether to compile the model's regions in-place or return a new instance of the model with compiled
+            regions. Setting this to `True` is necessary when compiling DeepSpeedEngine.module to avoid issues with the
+            `DeepSpeedEngine`'s internal `__getattr__` method.
         **compile_kwargs:
             Additional keyword arguments to pass to `torch.compile()`.
 
@@ -111,7 +115,8 @@ def compile_regions(module: torch.nn.Module, inplace: bool = False, **compile_kw
         if isinstance(module, torch.nn.ModuleList):
             new_module = torch.nn.ModuleList()
             for submodule in module:
-                new_module.append(torch.compile(submodule, **compile_kwargs))
+                compiled_submodule = torch.compile(submodule, **compile_kwargs)
+                new_module.append(compiled_submodule)
         elif module._modules:  # Recurse and reassign
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
@@ -130,7 +135,6 @@ def compile_regions(module: torch.nn.Module, inplace: bool = False, **compile_kw
         if isinstance(module, torch.nn.ModuleList):
             for name, submodule in module.named_children():
                 compiled_submodule = torch.compile(submodule, **compile_kwargs)
-                compiled_submodule.__dict__.pop("_parameters", None)
                 setattr(module, name, compiled_submodule)
         elif module._modules:  # Recurse and reassign
             for name, submodule in module.named_children():
@@ -138,7 +142,6 @@ def compile_regions(module: torch.nn.Module, inplace: bool = False, **compile_kw
                 setattr(module, name, compiled_submodule)
         else:  # Leaf node
             module = torch.compile(module, **compile_kwargs)
-            module.__dict__.pop("_parameters", None)
 
         return module
 
