@@ -1404,16 +1404,16 @@ class Accelerator:
         fsdp2_should_fix_optimizer = self.is_fsdp2
         should_fix_optimizer = tpu_should_fix_optimizer or fsdp2_should_fix_optimizer
 
-        # We need to specifically prepare AO (possibly other FP8 backends, haven't tested yet) here, as fsdp2 is very picky about the order of preparation
+        # We need to specifically prepare AO (possibly oter FP8 backends, haven't tested yet) here, as fsdp2 is very picky about the order of preparation
+        if self.is_fsdp2 and self.fp8_backend == "AO":
+            args = self._prepare_ao(*args)
 
+        # Compile needs to be done before gathering old params: investigate why?
         if self.is_fsdp2 and model_index is not None:
             new_args = list(args)
 
             new_args[model_index] = compile_regions(new_args[model_index])
             args = tuple(new_args)
-
-        if self.is_fsdp2 and self.fp8_backend == "AO":
-            args = self._prepare_ao(*args)
 
         if should_fix_optimizer:
             # 1. grabbing old model parameters
@@ -1425,6 +1425,7 @@ class Accelerator:
         # however that goes against `Accelerate's` design of `bring your own`
         # this is a workaround to make memory footprint match if `Optimizer` is created before preparing the model
         if fsdp2_should_fix_optimizer:
+            old_named_params = fsdp2_canonicalize_names(old_named_params)
             for obj in args:
                 if isinstance(obj, torch.optim.Optimizer):
                     for param_group in obj.param_groups:
@@ -1758,11 +1759,7 @@ class Accelerator:
         if self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled
-        if (
-            self.state.dynamo_plugin.backend != DynamoBackend.NO
-            and not is_compiled_module(model)
-            and not self.is_fsdp2
-        ):
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if self.state.dynamo_plugin.use_regional_compilation:
                 model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
             else:
@@ -3574,6 +3571,7 @@ class Accelerator:
 
     def _get_named_parameters(self, *args, drop_refs=False):
         named_parameters = {}
+        accessor_mapping = {}
         for obj in args:
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
@@ -3583,9 +3581,7 @@ class Accelerator:
                 if self.fp8_backend == "AO":
                     from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
-                    accessor_mapping = {
-                        WeightWithDynamicFloat8CastTensor: "_tensor",
-                    }
+                    accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
 
                 named_parameters.update(
                     {

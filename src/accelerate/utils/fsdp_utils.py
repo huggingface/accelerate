@@ -27,7 +27,7 @@ from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, OPTIMIZER_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import get_module_class_from_name
 from .modeling import get_non_persistent_buffers, is_peft_model
-from .other import get_module_children_bottom_up, is_compiled_module, save
+from .other import compile_regions, get_module_children_bottom_up, is_compiled_module, save
 from .versions import is_torch_version
 
 
@@ -615,6 +615,10 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
     }
 
+    # This is slow and high mem usage???
+    # model = torch.compile(model)
+    # model = compile_regions(model)
+
     model_has_params4bit = False
     for name, param in model.named_parameters():
         # this is a temporary fix whereby loading models with bnb params cannot be moved from
@@ -769,4 +773,5 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
     named_params = {
         k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k: v for k, v in named_params.items()
     }
+    named_params = {k.replace("._orig_mod", ""): v for k, v in named_params.items()}
     return named_params
