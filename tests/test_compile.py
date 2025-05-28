@@ -69,7 +69,7 @@ class RegionalCompilationTester(unittest.TestCase):
     def test_regional_compilation_cold_start(self):
         model, input_ids = self._get_model_and_inputs()
 
-        regional_compilation_model = compile_regions(model)
+        regional_compilation_model = compile_regions(model, inplace=False)
         regional_compilation_cold_start = (
             Timer(stmt=COMPILE_STMT, globals={"model": regional_compilation_model, "input_ids": input_ids})
             .timeit(COMPILE_ITERS)
@@ -100,7 +100,7 @@ class RegionalCompilationTester(unittest.TestCase):
             Timer(stmt=INFRENCE_STMT, globals={"model": model, "input_ids": input_ids}).timeit(INFERENCE_ITERS).median
         )
 
-        regional_compilation_model = compile_regions(model)
+        regional_compilation_model = compile_regions(model, inplace=False)
         regional_compilation_inference_latency = (
             Timer(stmt=INFRENCE_STMT, globals={"model": regional_compilation_model, "input_ids": input_ids})
             .timeit(INFERENCE_ITERS)

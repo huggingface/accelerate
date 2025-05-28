@@ -60,7 +60,7 @@ def is_compiled_module(module: torch.nn.Module) -> bool:
     return isinstance(module, torch._dynamo.eval_frame.OptimizedModule)
 
 
-def compile_regions(module: torch.nn.Module, inplace: bool = False, **compile_kwargs) -> torch.nn.Module:
+def compile_regions(module: torch.nn.Module, inplace: bool = True, **compile_kwargs) -> torch.nn.Module:
     """
     Performs regional compilation where we target repeated blocks of the same class and compile them sequentially to
     hit the compiler's cache. For example, in `GPT2LMHeadModel`, the repeated block/class is `GPT2Block`, and can be
@@ -72,10 +72,10 @@ def compile_regions(module: torch.nn.Module, inplace: bool = False, **compile_kw
     Args:
         module (`torch.nn.Module`):
             The model to compile.
-        inplace (`bool`, *optional*, defaults to `False`):
+        inplace (`bool`, *optional*, defaults to `True`):
             Whether to compile the model's regions in-place or return a new instance of the model with compiled
-            regions. Setting this to `True` is necessary when compiling DeepSpeedEngine.module to avoid issues with the
-            `DeepSpeedEngine`'s internal `__getattr__` method.
+            regions. Setting this to `False` is useful when performing performance benchmarks to avoid modifying the
+            original/baseline model.
         **compile_kwargs:
             Additional keyword arguments to pass to `torch.compile()`.
 
@@ -88,7 +88,7 @@ def compile_regions(module: torch.nn.Module, inplace: bool = False, **compile_kw
     >>> from transformers import AutoModelForCausalLM
 
     >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> compiled_model = compile_regions(model, mode="reduce-overhead")
+    >>> compiled_model = compile_regions(model, inplace=False, mode="reduce-overhead")
     >>> compiled_model.transformer.h[0]
     OptimizedModule(
         (_orig_mod): GPT2Block(
