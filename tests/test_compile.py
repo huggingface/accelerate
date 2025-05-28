@@ -14,10 +14,11 @@
 import unittest
 
 import torch
+from parameterized import parameterized
 from torch.utils.benchmark import Timer
 
 from accelerate.test_utils import require_huggingface_suite, require_non_cpu, torch_device
-from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
+from accelerate.utils import compile_regions, decompile_regions, release_memory
 
 
 MODEL_ID = "gpt2"
@@ -41,37 +42,27 @@ class RegionalCompilationTester(unittest.TestCase):
 
         return model, input_ids
 
-    def test_regions_are_compiled(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_regions_are_compiled_and_decompiled(self, inplace):
         model, _ = self._get_model_and_inputs()
-        compiled_model = compile_regions(model, mode="reduce-overhead")
+        compiled_model = compile_regions(model, inplace=inplace, mode="reduce-overhead")
 
-        # Check that the compiled model keeps a reference to the original model
-        assert hasattr(compiled_model, "_orig_mod")
-        assert compiled_model._orig_mod is model
+        if inplace:
+            # If inplace is True, the original model should be modified
+            assert model is compiled_model
+        else:
+            # If inplace is False, the original model should not be modified
+            assert model is not compiled_model
 
         # Check that the compiled_model.transformer.h[i] and compiled_model.lm_head are compiled separately
         assert isinstance(compiled_model.transformer.h[0], torch._dynamo.eval_frame.OptimizedModule)
         assert isinstance(compiled_model.lm_head, torch._dynamo.eval_frame.OptimizedModule)
 
-    def test_extract_model_keep_torch_compile(self):
-        model, _ = self._get_model_and_inputs()
-        compiled_model = compile_regions(model)
+        decompiled_model = decompile_regions(compiled_model)
 
-        distributed_model = torch.nn.parallel.DataParallel(model)
-        distributed_compiled_model = compile_regions(distributed_model)
-        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=True)
-
-        assert compiled_model._orig_mod is compiled_model_unwrapped._orig_mod
-
-    def test_extract_model_remove_torch_compile(self):
-        model, _ = self._get_model_and_inputs()
-        compiled_model = compile_regions(model)
-
-        distributed_model = torch.nn.parallel.DataParallel(model)
-        distributed_compiled_model = compile_regions(distributed_model)
-        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=False)
-
-        assert compiled_model._orig_mod is compiled_model_unwrapped
+        # Check that the decompiled_model.transformer.h[i] and decompiled_model.lm_head are the original model
+        assert isinstance(decompiled_model.transformer.h[0], torch.nn.Module)
+        assert isinstance(decompiled_model.lm_head, torch.nn.Module)
 
     @require_non_cpu
     @require_huggingface_suite

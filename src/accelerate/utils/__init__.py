@@ -276,6 +276,7 @@ from .other import (
     get_pretty_name,
     has_compiled_regions,
     is_compiled_module,
+    decompile_regions,
     is_port_in_use,
     load,
     merge_dicts,
