@@ -102,7 +102,7 @@ if __name__ == "__main__":
     state = PartialState()
     state.print("Testing pippy integration...")
     try:
-        if state.distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_HPU]:
+        if state.distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_XPU, DistributedType.MULTI_HPU]:
             state.print("Testing GPT2...")
             test_gpt2()
             # Issue: When modifying the tokenizer for batch GPT2 inference, there's an issue
