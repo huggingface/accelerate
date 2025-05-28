@@ -191,12 +191,12 @@ def decompile_regions(module: torch.nn.Module) -> torch.nn.Module:
         return module._orig_mod
 
     if module._modules:
-        for name, submodule in module.named_modules():
+        for name, submodule in list(module.named_modules()):
             if name == "":
                 continue
 
             if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
-                module.set_submodule(name, submodule._orig_mod)
+                setattr(module, name, submodule._orig_mod)
 
     return module
 
