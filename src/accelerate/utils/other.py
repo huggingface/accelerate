@@ -177,7 +177,7 @@ def extract_model_from_parallel(
 
     if is_compiled or has_compiled:
         compiled_model = model
-        model = model._orig_mod
+        model = getattr(model, "_orig_mod", model)
 
     if is_deepspeed_available():
         from deepspeed import DeepSpeedEngine
