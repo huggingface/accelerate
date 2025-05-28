@@ -158,8 +158,14 @@ def has_compiled_regions(module: torch.nn.Module) -> bool:
     if not hasattr(torch, "_dynamo"):
         return False
 
+    if isinstance(module, torch._dynamo.eval_frame.OptimizedModule):
+        return True
+
     if module._modules:
-        for submodule in module.modules():
+        for name, submodule in module.named_modules():
+            if name == "":
+                continue
+
             if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
                 return True
 
@@ -181,9 +187,16 @@ def decompile_regions(module: torch.nn.Module) -> torch.nn.Module:
     if not hasattr(torch, "_dynamo"):
         return module
 
-    for name, submodule in module.named_modules():
-        if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
-            setattr(module, name, submodule._orig_mod)
+    if isinstance(module, torch._dynamo.eval_frame.OptimizedModule):
+        return module._orig_mod
+
+    if module._modules:
+        for name, submodule in module.named_modules():
+            if name == "":
+                continue
+
+            if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
+                module.set_submodule(name, submodule._orig_mod)
 
     return module
 
