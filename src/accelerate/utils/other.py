@@ -221,7 +221,7 @@ def extract_model_from_parallel(
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
-    if keep_torch_compile:
+    if keep_torch_compile and (is_compiled or has_compiled):
         if is_compiled:
             compiled_model._orig_mod = model
         elif has_compiled:
