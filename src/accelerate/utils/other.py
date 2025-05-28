@@ -113,10 +113,13 @@ def compile_regions(module: torch.nn.Module, inplace: bool = False, **compile_kw
 
     def _compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
         if isinstance(module, torch.nn.ModuleList):
-            new_module = torch.nn.ModuleList()
-            for submodule in module:
-                compiled_submodule = torch.compile(submodule, **compile_kwargs)
-                new_module.append(compiled_submodule)
+            if all(isinstance(submodule, module[0].__class__) for submodule in module):
+                new_module = torch.nn.ModuleList()
+                for submodule in module:
+                    compiled_submodule = torch.compile(submodule, **compile_kwargs)
+                    new_module.append(compiled_submodule)
+            else:
+                new_module = torch.compile(module, **compile_kwargs)
         elif module._modules:  # Recurse and reassign
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
