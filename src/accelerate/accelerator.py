@@ -1746,10 +1746,11 @@ class Accelerator:
             model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
+            compiled_kwargs = self.state.dynamo_plugin.to_kwargs()
             if self.state.dynamo_plugin.use_regional_compilation:
-                model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
+                model = compile_regions(model, **compiled_kwargs)
             else:
-                model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+                model = torch.compile(model, **compiled_kwargs)
         return model
 
     def _prepare_ao(self, *args):
@@ -2030,7 +2031,7 @@ class Accelerator:
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
                 if self.state.dynamo_plugin.use_regional_compilation:
-                    compile_regions(engine.module, inplace=True, **compile_kwargs)
+                    compile_regions(engine.module, **compile_kwargs)
                 else:
                     engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
             if optimizer is not None:
