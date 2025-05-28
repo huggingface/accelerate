@@ -51,7 +51,7 @@ class RegionalCompilationTester(unittest.TestCase):
             # If inplace is True, the original model should be modified
             assert model is compiled_model
         else:
-            # If inplace is False, the original model should not be modified
+            # If inplace is False, a new model should be returned
             assert model is not compiled_model
 
         # Check that the compiled_model.transformer.h[i] and compiled_model.lm_head are compiled separately
