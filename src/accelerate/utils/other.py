@@ -168,14 +168,15 @@ def has_compiled_regions(module: torch.nn.Module) -> bool:
 
 def decompile_regions(module: torch.nn.Module) -> torch.nn.Module:
     """
-    Decompiles a module that was compiled with `compile_regions`.
+    Decompiles a module that was compiled with `compile_regions` by replacing all compiled submodules with the
+    originals (`_orig_mod`).
 
     Args:
         module (`torch.nn.Module`):
             The model to decompile.
 
     Returns:
-        `torch.nn.Module`: A new instance of the model with all compiled regions decompiled.
+        `torch.nn.Module`: The decompiled model with all compiled regions replaced by their original submodules.
     """
     if not hasattr(torch, "_dynamo"):
         return module
