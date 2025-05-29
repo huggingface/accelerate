@@ -1382,14 +1382,12 @@ class Accelerator:
                     "part for you."
                 )
 
-        model_index = None
         if self.is_fsdp2:
             model_count = 0
             optimizer_count = 0
             for i, obj in enumerate(args):
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
-                    model_index = i
                 elif isinstance(obj, torch.optim.Optimizer):
                     optimizer_count += 1
 
@@ -1399,6 +1397,9 @@ class Accelerator:
                     "When using FSDP2, a model and optimizer must be passed together to `Accelerator.prepare()`"
                     " as the optimizer needs to have its parameters modified after the model is converted."
                 )
+            if model_count > 1:
+                raise ValueError("Only one model is supported when using FSDP2")
+
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
         fsdp2_should_fix_optimizer = self.is_fsdp2
@@ -1480,48 +1481,33 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def _prepare_fsdp2(self, *args):
-        _custom_prepare_classes = (
-            torch.nn.Module,
-            torch.optim.Optimizer,
-        )
-        device_placement = [None for _ in args]
-
+        # First pass: prepare everything except schedulers (and model)
         result = [
-            self._prepare_one(obj, first_pass=True, device_placement=d)
-            if not isinstance(obj, _custom_prepare_classes)
-            else obj
-            for obj, d in zip(args, device_placement)
+            self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj for obj in args
         ]
 
-        result = tuple(
-            self._prepare_one(obj, device_placement=d) if not isinstance(obj, _custom_prepare_classes) else obj
-            for obj, d in zip(result, device_placement)
-        )
+        # Second pass: prepare schedulers
+        result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
 
-        models = []
-        optimizers = []
-
+        model_index, model = None, None
         for i, obj in enumerate(result):
             if isinstance(obj, torch.nn.Module):
-                models.append((i, obj))
-            elif isinstance(obj, torch.optim.Optimizer):
-                optimizers.append((i, obj))
+                model_index, model = i, obj
 
-        if len(optimizers) <= 0 and len(models) <= 0:
-            return result
+        # Invariant: if we have a model, we also have an optimizer (checked in `prepare`)
+        if model_index is None:
+            return tuple(result)
 
-        model_index, model = models[0]
-        optimizer_index, optimizer = optimizers[0]
+        # Apply compile if needed, has to be *after* applying AC
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
+            if self.state.dynamo_plugin.use_regional_compilation:
+                model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
+            else:
+                model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
 
-        new_result = list(result)
+        # Get old params and canonicalize - we cannonicalize to have the mapping easy
+        old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
 
-        new_result[model_index] = compile_regions(result[model_index])
-        result = new_result
-        # result = tuple(new_result)
-
-        old_named_params = self._get_named_parameters(*tuple(result), drop_refs=True)
-
-        old_named_params = fsdp2_canonicalize_names(old_named_params)
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
@@ -1533,19 +1519,21 @@ class Accelerator:
 
         self._models.append(model)
 
+        # Prepare everything FSDP2 related for the model (except AC)
         model = fsdp2_prepare_model(self, model)
 
+        # Remove the old model from the list
         if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
             del self._models[-2]
 
-        optimizer = self._prepare_one(optimizer, device_placement=device_placement[optimizer_index])
-        result[optimizer_index] = optimizer
+        # Replace the old model with the new one (shouldn't be needed as everything should be in place)
+        result[model_index] = model
 
-        new_named_params = self._get_named_parameters(*result)
-        new_named_params = fsdp2_canonicalize_names(new_named_params)
-        # 3. building a map from the first to the second
+        # Get new params and canonicalize
+        new_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*result))
+        # Build a map from old to new params
         mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
-        # 4. using that map to update the parameters of the optimizer
+        # Update the optimizer parameters
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 fsdp2_switch_optimizer_parameters(obj, mapping)
