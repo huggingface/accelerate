@@ -468,12 +468,22 @@ def get_module_children_bottom_up(model: torch.nn.Module, return_fqns: bool = Fa
         `list[torch.nn.Module]`: a list of children modules of `model` in bottom-up order. The last element is the
         `model` itself.
     """
-    stack = [model]
+    top = model if not return_fqns else ("", model)
+    stack = [top]
     ordered_modules = []
     while stack:
         current_module = stack.pop()
-        for _, attr in current_module.named_children():
+        if return_fqns:
+            current_module_name, current_module = current_module
+        for name, attr in current_module.named_children():
             if isinstance(attr, torch.nn.Module):
-                stack.append(attr)
-        ordered_modules.append(current_module)
+                if return_fqns:
+                    child_name = current_module_name + "." + name if current_module_name else name
+                    stack.append((child_name, attr))
+                else:
+                    stack.append(attr)
+        if return_fqns:
+            ordered_modules.append((current_module_name, current_module))
+        else:
+            ordered_modules.append(current_module)
     return ordered_modules[::-1]

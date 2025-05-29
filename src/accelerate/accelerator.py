@@ -29,6 +29,7 @@ from functools import partial
 from types import MethodType
 from typing import Any, Callable, Union
 
+from accelerate.utils.fsdp_utils import fsdp2_prepare_auto_wrap_policy
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -1470,6 +1471,9 @@ class Accelerator:
         # Invariant: if we have a model, we also have an optimizer (checked in `prepare`)
         if model_index is None:
             return tuple(result)
+
+        # Needs to be done first, to make sure AC + fully_shard will work as expected
+        self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
         # Apply AC if needed
         if self.state.fsdp_plugin.activation_checkpointing:
