@@ -1402,46 +1402,17 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
-        fsdp2_should_fix_optimizer = self.is_fsdp2
-        should_fix_optimizer = tpu_should_fix_optimizer or fsdp2_should_fix_optimizer
 
-        # We need to specifically prepare AO (possibly oter FP8 backends, haven't tested yet) here, as fsdp2 is very picky about the order of preparation
-        if self.is_fsdp2 and self.fp8_backend == "AO":
-            args = self._prepare_ao(*args)
-
-        # Compile needs to be done before gathering old params: investigate why?
-        # if self.is_fsdp2 and model_index is not None:
-        #     new_args = list(args)
-
-        #     new_args[model_index] = compile_regions(new_args[model_index])
-        #     args = tuple(new_args)
-
-        # if should_fix_optimizer:
-        #     # 1. grabbing old model parameters
-        #     old_named_params = self._get_named_parameters(
-        #         *args, drop_refs=fsdp2_should_fix_optimizer
-        #     )  # Drop refs for FSDP2, to enable reallocation of parameters further in `fully_shard`
-
-        # `FSDP2` by default expects `Optimizer` to be created after the model is prepared,
-        # however that goes against `Accelerate's` design of `bring your own`
-        # this is a workaround to make memory footprint match if `Optimizer` is created before preparing the model
-        # if fsdp2_should_fix_optimizer:
-        #     old_named_params = fsdp2_canonicalize_names(old_named_params)
-        #     for obj in args:
-        #         if isinstance(obj, torch.optim.Optimizer):
-        #             for param_group in obj.param_groups:
-        #                 for i, p in enumerate(param_group["params"]):
-        #                     # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
-        #                     # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
-        #                     param_group["params"][i] = torch.empty_like(p)
-        #                     param_group["params"][i].data_ptr = p.data_ptr()
+        if tpu_should_fix_optimizer:
+            # 1. grabbing old model parameters
+            old_named_params = self._get_named_parameters(*args, drop_refs=False)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if (self.device.type == "cpu" or self.device.type == "xpu") and self.state.use_ipex:
                 args = self._prepare_ipex(*args)
         if self.fp8_backend == "TE":
             args = self._prepare_te(*args)
-        elif self.fp8_backend == "AO" and not self.is_fsdp2:
+        elif self.fp8_backend == "AO":
             args = self._prepare_ao(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
@@ -1456,20 +1427,15 @@ class Accelerator:
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
-        # if should_fix_optimizer:
-        #     # 2. grabbing new model parameters
-        #     new_named_params = self._get_named_parameters(*result)
-        #     if fsdp2_should_fix_optimizer:
-        #         new_named_params = fsdp2_canonicalize_names(new_named_params)
-        #     # 3. building a map from the first to the second
-        #     mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
-        #     # 4. using that map to update the parameters of the optimizer
-        #     for obj in result:
-        #         if isinstance(obj, torch.optim.Optimizer):
-        #             if not fsdp2_should_fix_optimizer:
-        #                 obj._switch_parameters(mapping)
-        #             else:
-        #                 fsdp2_switch_optimizer_parameters(obj, mapping)
+        if tpu_should_fix_optimizer:
+            # 2. grabbing new model parameters
+            new_named_params = self._get_named_parameters(*result)
+            # 3. building a map from the first to the second
+            mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+            # 4. using that map to update the parameters of the optimizer
+            for obj in result:
+                if isinstance(obj, torch.optim.Optimizer):
+                    obj._switch_parameters(mapping)
 
         for item in result:
             if any(
