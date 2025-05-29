@@ -27,7 +27,7 @@ from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, OPTIMIZER_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import get_module_class_from_name
 from .modeling import get_non_persistent_buffers, is_peft_model
-from .other import compile_regions, get_module_children_bottom_up, is_compiled_module, save
+from .other import get_module_children_bottom_up, is_compiled_module, save
 from .versions import is_torch_version
 
 
@@ -555,6 +555,31 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
         )
 
 
+def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
+    """
+    Applies the activation checkpointing to the model.
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance
+        model (`torch.nn.Module`): The model to apply the activation checkpointing to
+
+    Returns:
+        `torch.nn.Module`: The model with the activation checkpointing applied
+    """
+
+    from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+        checkpoint_wrapper,
+    )
+
+    for layer_id, layer_name in get_module_children_bottom_up(model)[:-1]:
+
+    for layer_id, transformer_block in model.model.layers.named_children():
+        transformer_block = checkpoint_wrapper(transformer_block, preserve_rng_state=False)
+        model.model.layers.register_module(layer_id, transformer_block)
+
+    return model
+
+
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
 
@@ -587,37 +612,12 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     elif fsdp2_plugin.auto_wrap_policy is size_based_auto_wrap_policy:
         auto_wrap_policy_type = "size"
 
-    # We set `auto_wrap_policy` to `functools.partial` to avoid creating it again
-    # This is because of `apply_activation_checkpointing` which will can reuse this function
-    fsdp2_plugin.set_auto_wrap_policy(model)
-
-    if fsdp2_plugin.activation_checkpointing:
-        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-            CheckpointImpl,
-            apply_activation_checkpointing,
-            checkpoint_wrapper,
-        )
-
-        # Apply activation checkpointing before applying `fully_shard`
-        apply_activation_checkpointing(
-            model,
-            checkpoint_wrapper_fn=functools.partial(
-                checkpoint_wrapper,
-                checkpoint_impl=CheckpointImpl.NO_REENTRANT,
-            ),
-            auto_wrap_policy=fsdp2_plugin.auto_wrap_policy,
-        )
-
     fsdp2_kwargs = {
         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
         "offload_policy": fsdp2_plugin.cpu_offload,
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
     }
-
-    # This is slow and high mem usage???
-    # model = torch.compile(model)
-    # model = compile_regions(model)
 
     model_has_params4bit = False
     for name, param in model.named_parameters():

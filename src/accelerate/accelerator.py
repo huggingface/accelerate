@@ -81,6 +81,7 @@ from .utils import (
     convert_outputs_to_fp32,
     ensure_weights_retied,
     extract_model_from_parallel,
+    fsdp2_apply_ac,
     fsdp2_canonicalize_names,
     fsdp2_prepare_model,
     fsdp2_switch_optimizer_parameters,
@@ -1400,6 +1401,12 @@ class Accelerator:
             if model_count > 1:
                 raise ValueError("Only one model is supported when using FSDP2")
 
+            # TODO: S1ro - this is probably gonna be a problem with other fp8 backends too
+            if self.fp8_backend == "AO" and self.state.fsdp_plugin.cpu_ram_efficient_loading:
+                raise ValueError(
+                    "torchao with FSDP2 and cpu_ram_efficient_loading is not supported, setting `cpu_ram_efficient_loading` to False will fix the issue and work as intended."
+                )
+
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
 
@@ -1463,6 +1470,10 @@ class Accelerator:
         # Invariant: if we have a model, we also have an optimizer (checked in `prepare`)
         if model_index is None:
             return tuple(result)
+
+        # Apply AC if needed
+        if self.state.fsdp_plugin.activation_checkpointing:
+            model = fsdp2_apply_ac(self, model)
 
         # Apply compile if needed, has to be *after* applying AC
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):

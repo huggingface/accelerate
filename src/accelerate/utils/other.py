@@ -458,7 +458,7 @@ def recursive_getattr(obj, attr: str):
     return reduce(_getattr, [obj] + attr.split("."))
 
 
-def get_module_children_bottom_up(model: torch.nn.Module) -> list[torch.nn.Module]:
+def get_module_children_bottom_up(model: torch.nn.Module, return_fqns: bool = False) -> list[torch.nn.Module]:
     """Traverse the model in bottom-up order and return the children modules in that order.
 
     Args:
