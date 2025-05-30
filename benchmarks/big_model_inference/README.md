@@ -13,7 +13,7 @@ pip install transformers
 To reproduce or test a new setup, run
 
 ```py
-python inference_acc.py model_name
+python big_model_inference.py model_name
 ```
 
 This script supports `gpt-j-6b`, `gpt-neox`, `opt` (30B version) and `T0pp` out of the box, but you can specify any valid checkpoint for `model_name`.
