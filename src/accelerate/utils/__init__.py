@@ -271,6 +271,7 @@ from .other import (
     clean_state_dict_for_safetensors,
     compile_regions,
     convert_bytes,
+    decompile_regions,
     extract_model_from_parallel,
     get_module_children_bottom_up,
     get_pretty_name,

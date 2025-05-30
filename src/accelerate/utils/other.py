@@ -60,22 +60,7 @@ def is_compiled_module(module: torch.nn.Module) -> bool:
     return isinstance(module, torch._dynamo.eval_frame.OptimizedModule)
 
 
-def has_compiled_regions(module: torch.nn.Module) -> bool:
-    """
-    Check whether the module has submodules that were compiled with torch.compile()
-    """
-    if not hasattr(torch, "_dynamo"):
-        return False
-
-    if module._modules:
-        for submodule in module.modules():
-            if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
-                return True
-
-    return False
-
-
-def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
+def compile_regions(module: torch.nn.Module, inplace: bool = True, **compile_kwargs) -> torch.nn.Module:
     """
     Performs regional compilation where we target repeated blocks of the same class and compile them sequentially to
     hit the compiler's cache. For example, in `GPT2LMHeadModel`, the repeated block/class is `GPT2Block`, and can be
@@ -87,6 +72,10 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
     Args:
         module (`torch.nn.Module`):
             The model to compile.
+        inplace (`bool`, *optional*, defaults to `True`):
+            Whether to compile the model's regions in-place or return a new instance of the model with compiled
+            regions. Setting this to `False` is useful when performing performance benchmarks to avoid modifying the
+            original/baseline model.
         **compile_kwargs:
             Additional keyword arguments to pass to `torch.compile()`.
 
@@ -99,7 +88,7 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
     >>> from transformers import AutoModelForCausalLM
 
     >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> compiled_model = compile_regions(model, mode="reduce-overhead")
+    >>> compiled_model = compile_regions(model, inplace=False, mode="reduce-overhead")
     >>> compiled_model.transformer.h[0]
     OptimizedModule(
         (_orig_mod): GPT2Block(
@@ -127,10 +116,11 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
             if all(isinstance(submodule, module[0].__class__) for submodule in module):
                 new_module = torch.nn.ModuleList()
                 for submodule in module:
-                    new_module.append(torch.compile(submodule, **compile_kwargs))
+                    compiled_submodule = torch.compile(submodule, **compile_kwargs)
+                    new_module.append(compiled_submodule)
             else:
                 new_module = torch.compile(module, **compile_kwargs)
-        elif module._modules:  # Non-leaf node
+        elif module._modules:  # Recurse and reassign
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
             new_module._modules = {}
@@ -141,13 +131,77 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
 
         return new_module
 
-    new_module = _compile_regions(module, **compile_kwargs)
+    def _compile_regions_inplace(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
+        """
+        Compiles the module in-place, modifying the original module.
+        """
+        if isinstance(module, torch.nn.ModuleList):
+            for name, submodule in module.named_children():
+                compiled_submodule = torch.compile(submodule, **compile_kwargs)
+                setattr(module, name, compiled_submodule)
+        elif module._modules:  # Recurse and reassign
+            for name, submodule in module.named_children():
+                compiled_submodule = _compile_regions_inplace(submodule, **compile_kwargs)
+                setattr(module, name, compiled_submodule)
+        else:  # Leaf node
+            module = torch.compile(module, **compile_kwargs)
 
-    if not hasattr(new_module, "_orig_mod"):
-        # Keeps a reference to the original module to decompile/unwrap it later
-        new_module.__dict__["_orig_mod"] = module
+        return module
 
-    return new_module
+    if inplace:
+        return _compile_regions_inplace(module, **compile_kwargs)
+    else:
+        return _compile_regions(module, **compile_kwargs)
+
+
+def has_compiled_regions(module: torch.nn.Module) -> bool:
+    """
+    Check whether the module has submodules that were compiled with torch.compile()
+    """
+    if not hasattr(torch, "_dynamo"):
+        return False
+
+    if isinstance(module, torch._dynamo.eval_frame.OptimizedModule):
+        return True
+
+    if module._modules:
+        for name, submodule in module.named_modules():
+            if name == "":
+                continue
+
+            if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
+                return True
+
+    return False
+
+
+def decompile_regions(module: torch.nn.Module) -> torch.nn.Module:
+    """
+    Decompiles a module that was compiled with `compile_regions` by replacing all compiled submodules with the
+    originals (`_orig_mod`).
+
+    Args:
+        module (`torch.nn.Module`):
+            The model to decompile.
+
+    Returns:
+        `torch.nn.Module`: The decompiled model with all compiled regions replaced by their original submodules.
+    """
+    if not hasattr(torch, "_dynamo"):
+        return module
+
+    if isinstance(module, torch._dynamo.eval_frame.OptimizedModule):
+        return module._orig_mod
+
+    if module._modules:
+        for name, submodule in list(module.named_modules()):
+            if name == "":
+                continue
+
+            if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
+                setattr(module, name, submodule._orig_mod)
+
+    return module
 
 
 def extract_model_from_parallel(
@@ -173,9 +227,8 @@ def extract_model_from_parallel(
     options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
 
     is_compiled = is_compiled_module(model)
-    has_compiled = has_compiled_regions(model)
 
-    if is_compiled or has_compiled:
+    if is_compiled:
         compiled_model = model
         model = model._orig_mod
 
@@ -221,7 +274,7 @@ def extract_model_from_parallel(
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
-    if keep_torch_compile and (is_compiled or has_compiled):
+    if keep_torch_compile and is_compiled:
         compiled_model._orig_mod = model
         model = compiled_model
 

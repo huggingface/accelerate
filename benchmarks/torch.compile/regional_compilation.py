@@ -49,7 +49,7 @@ for model_id in [
         model = AutoModelForCausalLM.from_config(config).to(dtype=torch.float16).eval()
 
     full_compilation_model = torch.compile(model)
-    regional_compilation_model = compile_regions(model)
+    regional_compilation_model = compile_regions(model, inplace=False)  # returns a new instance of the model
 
     for model, sub_label, description, stmt, iters in [
         (model, BASELINE, INFRENCE_TIME, INFRENCE_STMT, INFERENCE_ITERS),
