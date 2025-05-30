@@ -30,7 +30,6 @@ from accelerate.test_utils import (
     require_multi_device,
     require_non_hpu,
     require_non_torch_xla,
-    require_non_xpu,
     require_pippy,
     require_torchvision,
     run_first,
@@ -49,7 +48,7 @@ class MultiDeviceTester(unittest.TestCase):
     @run_first
     @require_multi_device
     def test_multi_device(self):
-        print(f"Found {device_count} devices.")
+        print(f"Found {device_count} {torch_device} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
@@ -57,7 +56,7 @@ class MultiDeviceTester(unittest.TestCase):
     @run_first
     @require_multi_device
     def test_multi_device_ops(self):
-        print(f"Found {device_count} devices.")
+        print(f"Found {device_count} {torch_device} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [self.operation_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
@@ -65,7 +64,7 @@ class MultiDeviceTester(unittest.TestCase):
     @run_first
     @require_multi_device
     def test_pad_across_processes(self):
-        print(f"Found {device_count} devices.")
+        print(f"Found {device_count} {torch_device} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
@@ -74,7 +73,7 @@ class MultiDeviceTester(unittest.TestCase):
     @require_non_hpu  # Synapse detected a device critical error that requires a restart
     @require_multi_device
     def test_multi_device_merge_fsdp_weights(self):
-        print(f"Found {device_count} devices.")
+        print(f"Found {device_count} {torch_device} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [self.merge_weights_file_path]
 
         env_kwargs = dict(omp_num_threads=1)
@@ -109,7 +108,6 @@ class MultiDeviceTester(unittest.TestCase):
 
     @run_first
     @require_pippy
-    @require_non_xpu
     @require_torchvision
     @require_multi_device
     @require_huggingface_suite
@@ -117,7 +115,7 @@ class MultiDeviceTester(unittest.TestCase):
         """
         Checks the integration with the pippy framework
         """
-        print(f"Found {device_count} devices")
+        print(f"Found {device_count} {torch_device} devices")
         cmd = get_launch_command(multi_gpu=True, num_processes=device_count) + [self.pippy_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)

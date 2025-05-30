@@ -22,11 +22,9 @@ from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     get_launch_command,
-    require_cuda,
     require_cuda_or_hpu,
     require_huggingface_suite,
     require_multi_device,
-    require_multi_gpu,
     require_torchao,
     require_transformer_engine,
     run_first,
@@ -75,8 +73,8 @@ def can_convert_ao_model():
 
 
 @run_first
-@require_cuda_or_hpu
 @require_transformer_engine
+@require_cuda_or_hpu
 class TestTransformerEngine(unittest.TestCase):
     def test_can_prepare_model_single_gpu(self):
         command = get_launch_command(num_processes=1, monitor_interval=0.1)
@@ -125,21 +123,20 @@ class TestTransformerEngine(unittest.TestCase):
 @require_torchao
 @require_huggingface_suite
 class TestTorchAO(unittest.TestCase):
-    @require_cuda
-    def test_can_prepare_model_single_gpu(self):
+    def test_can_prepare_model_single_accelerator(self):
         command = get_launch_command(num_processes=1, monitor_interval=0.1)
         command += ["-m", "tests.test_fp8"]
         run_command(command)
 
-    @require_multi_gpu
-    def test_can_prepare_model_multi_gpu(self):
+    @require_multi_device
+    def test_can_prepare_model_multi_accelerator(self):
         command = get_launch_command(num_processes=2, monitor_interval=0.1)
         command += ["-m", "tests.test_fp8"]
         run_command(command)
 
     @require_deepspeed
-    @require_multi_gpu
-    def test_can_prepare_model_multigpu_deepspeed(self):
+    @require_multi_device
+    def test_can_prepare_model_multi_accelerator_deepspeed(self):
         for zero_stage in [1, 2, 3]:
             os.environ["ZERO_STAGE"] = str(zero_stage)
             ds_config = {
