@@ -301,7 +301,7 @@ class Accelerator:
             mixed_precision = str(mixed_precision)
         else:
             mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", None)
-        if mixed_precision not in PrecisionType:
+        if mixed_precision is not None and mixed_precision not in PrecisionType:
             raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}")
 
         if dynamo_plugin is not None and dynamo_backend is not None:
