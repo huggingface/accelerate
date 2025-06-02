@@ -1,3 +1,17 @@
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Minimal example of training with FP8 precision using FSDP2 via Accelerate.
 This example demonstrates how to use torchao's Float8LinearConfig with Accelerate's AORecipeKwargs.
@@ -7,7 +21,7 @@ import argparse
 import time
 
 import torch
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from torch.utils.data import DataLoader
 from torchao.float8 import Float8LinearConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -17,9 +31,6 @@ from accelerate.utils import AORecipeKwargs, FullyShardedDataParallelPlugin, Tor
 
 
 WARMUP_STEPS = 10
-
-# Set high precision for matmul operations
-torch.set_float32_matmul_precision("high")
 
 MODEL_ID = "NousResearch/Hermes-3-Llama-3.1-8B"
 
@@ -34,8 +45,43 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_dataset(accelerator, tokenizer, seq_len):
-    """Load and prepare TinyStories dataset with packing."""
+def get_model_flops_per_token(model: AutoModelForCausalLM, args: argparse.Namespace) -> float:
+    """
+    Get the number of flops per token for the model.
+
+    Args:
+        model (AutoModelForCausalLM): Model to get the flops for
+    """
+    cfg = model.config
+
+    head_dim = cfg.hidden_size // cfg.num_attention_heads
+
+    # MLP: 3 matmuls
+    mlp_flops = 18 * cfg.hidden_size * cfg.intermediate_size
+
+    # Attn (w/o dotproduct)
+    attn_flops = 12 * head_dim * (cfg.num_attention_heads + cfg.num_key_value_heads)
+
+    # attn (dotproduct) - this scales quadratically with sequence length, therefore we have to account for it here too
+    attn_dotproduct_flops = 12 * cfg.num_attention_heads * head_dim * args.sequence_length
+
+    # we also ignore embeddings and layernorms, etc
+    return (mlp_flops + attn_flops + attn_dotproduct_flops) * cfg.num_hidden_layers
+
+
+def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int) -> Dataset:
+    """
+    Load and prepare TinyStories dataset.
+
+    Args:
+        accelerator (Accelerate): Accelerate accelerator instance
+        tokenizer (AutoTokenizer): Hugging Face tokenizer
+        seq_len (int): Sequence length for the dataset
+
+    Returns:
+        Dataset: Packed dataset
+    """
+
     raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:5%]")
 
     def tokenize_function(examples):
@@ -81,26 +127,17 @@ def get_dataset(accelerator, tokenizer, seq_len):
     return packed_dataset.shuffle(seed=42)
 
 
-def warmup(model, dataloader, accelerator):
-    accelerator.print("Warming up...")
-
-    num_steps = 10
-    for i, batch in enumerate(dataloader):
-        model(**batch)
-        if i >= num_steps:
-            break
-
-    accelerator.print("Warm up completed!")
-
-
 def main():
+    """
+    Main function to train the model.
+    """
     set_seed(42)
 
     args = parse_args()
 
     fsdp2_plugin = FullyShardedDataParallelPlugin(
         fsdp_version=2,
-        cpu_ram_efficient_loading=False,
+        cpu_ram_efficient_loading=False,  # CPU RAM efficient loading CANNOT work with fp8 torchao
         auto_wrap_policy="transformer_based_wrap",
         transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
     )
@@ -121,7 +158,11 @@ def main():
         fsdp_plugin=fsdp2_plugin,
         dynamo_plugin=dynamo_plugin,
         kwargs_handlers=kwargs,
-        log_with=[args.log_with],
+        log_with=args.log_with,
+    )
+    accelerator.init_trackers(
+        project_name="FSDP2_torchao_fp8",
+        config={"sequence_length": args.sequence_length, "num_steps": args.num_steps},
     )
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -145,18 +186,18 @@ def main():
         labels = torch.tensor([item["labels"] for item in batch], dtype=torch.long)
         return {"input_ids": input_ids, "labels": labels}
 
+    # We keep batch size at 1, as it is basically the same as sequence length, which we use instead
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=collate_fn)
     dataloader = accelerator.prepare(dataloader)
 
     model.train()
-    total_num_steps = max(args.num_steps, len(dataloader))
 
-    accelerator.wait_for_everyone()
+    total_num_steps = max(args.num_steps, len(dataloader))
+    num_tokens = 0
+    is_in_warmup = True
+    model_flops_per_token = get_model_flops_per_token(model, args)
 
     accelerator.print(f"Warming up for {WARMUP_STEPS} steps...")
-    num_tokens = 0
-
-    is_in_warmup = True
 
     for step, batch in enumerate(dataloader):
         if step == WARMUP_STEPS:
@@ -175,17 +216,30 @@ def main():
         optimizer.step()
         optimizer.zero_grad()
 
-        print_msg = f"Step {step + 1}/{total_num_steps}, Loss: {loss.item():.4f}"
+        steps_from_warmup = step - WARMUP_STEPS
+        print_msg = f"Step {step}/{total_num_steps}, Loss: {loss.item():.4f}"
+        metrics = {"loss": loss.item()}
 
-        if not is_in_warmup:
-            steps_from_warmup = step - WARMUP_STEPS
+        if not is_in_warmup and steps_from_warmup > 0:
             num_tokens += batch["input_ids"].shape[1]
             total_time = time.perf_counter() - start_time
-            print_msg += f", Average steps/s: {steps_from_warmup / total_time:.2f}, TPS per device: {num_tokens / total_time:.2f}"
+            tps = num_tokens / total_time
+            tflops = num_tokens * model_flops_per_token / (total_time * 1e12)
+            # it's rather hard to get a good estimate of MFU as we train with FP8, so both FP8 and BF16 tensor cores are used, therefore we just report TFLOPS (Tera floating point operations per second)
+            # Given H100 SXM, the theoretical peak flops are ~990 TFLOPS for bf16 and ~1980 TFLOPS for fp8 [https://resources.nvidia.com/en-us-gpu-resources/h100-datasheet-24306] - we divide by 2 to get the answer w/o sparsity
+            print_msg += f", Average steps/s: {steps_from_warmup / total_time:.2f}, TPS per device: {tps:.2f}, TFLOPS per device: {tflops:.2f}"
+            metrics.update(
+                {
+                    "steps_per_second": steps_from_warmup / total_time,
+                    "tps_per_device": tps,
+                    "tflops_per_device": tflops,
+                }
+            )
 
-        if step % 10 == 0 or step == total_num_steps - 1:
+        if steps_from_warmup % 10 == 0 or step == total_num_steps:
             accelerator.print(print_msg)
-        accelerator.log({"loss": loss.item()})
+
+        accelerator.log(metrics)
 
     accelerator.wait_for_everyone()
     accelerator.end_training()
