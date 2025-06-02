@@ -302,9 +302,7 @@ class Accelerator:
         else:
             mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
         if mixed_precision not in PrecisionType:
-            raise ValueError(
-                f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
-            )
+            raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}")
 
         if dynamo_plugin is not None and dynamo_backend is not None:
             raise ValueError("You cannot pass in both `dynamo_plugin` and `dynamo_backend`, please only pass in one.")
