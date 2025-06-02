@@ -24,7 +24,7 @@ import torch
 from datasets import load_dataset, Dataset
 from torch.utils.data import DataLoader
 from torchao.float8 import Float8LinearConfig
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 from accelerate import Accelerator
 from accelerate.utils import AORecipeKwargs, FullyShardedDataParallelPlugin, TorchDynamoPlugin, set_seed
@@ -40,6 +40,7 @@ def parse_args():
 
     parser.add_argument("--sequence-length", type=int, default=8192, help="Sequence length for the dataset")
     parser.add_argument("--num-steps", type=int, default=1000, help="Number of steps to train for")
+    parser.add_argument("--bf16", action="store_true", help="Train in bf16 precision")
     parser.add_argument("--log-with", type=str, default="wandb", help="Log with wandb or tensorboard")
 
     return parser.parse_args()
@@ -82,7 +83,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
         Dataset: Packed dataset
     """
 
-    raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:5%]")
+    raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:50%]")
 
     def tokenize_function(examples):
         tokenized_batch = tokenizer(
@@ -152,7 +153,10 @@ def main():
         enable_fsdp_float8_all_gather=True,  # extra saving by gathering parameters in fp8 and upcasting after
         force_recompute_fp8_weight_in_bwd=True,
     )
-    kwargs = [AORecipeKwargs(config=fp8_config)]
+
+    kwargs = []
+    if not args.bf16:
+        kwargs = [AORecipeKwargs(config=fp8_config)]
 
     accelerator = Accelerator(
         fsdp_plugin=fsdp2_plugin,
@@ -165,10 +169,10 @@ def main():
         config={"sequence_length": args.sequence_length, "num_steps": args.num_steps},
     )
 
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
+    model = AutoModelForCausalLM.from_config(
+        config=AutoConfig.from_pretrained(MODEL_ID, use_cache=False),
         torch_dtype=torch.bfloat16,
-        use_cache=False,  # Important to set `use_cache=False`
+        # use_cache=False,  # Important to set `use_cache=False`
     )
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -192,7 +196,7 @@ def main():
 
     model.train()
 
-    total_num_steps = max(args.num_steps, len(dataloader))
+    total_num_steps = min(args.num_steps, len(dataloader))
     num_tokens = 0
     is_in_warmup = True
     model_flops_per_token = get_model_flops_per_token(model, args)
@@ -225,8 +229,10 @@ def main():
             total_time = time.perf_counter() - start_time
             tps = num_tokens / total_time
             tflops = num_tokens * model_flops_per_token / (total_time * 1e12)
+
             # it's rather hard to get a good estimate of MFU as we train with FP8, so both FP8 and BF16 tensor cores are used, therefore we just report TFLOPS (Tera floating point operations per second)
-            # Given H100 SXM, the theoretical peak flops are ~990 TFLOPS for bf16 and ~1980 TFLOPS for fp8 [https://resources.nvidia.com/en-us-gpu-resources/h100-datasheet-24306] - we divide by 2 to get the answer w/o sparsity
+            # Given H100 SXM, the theoretical peak flops are ~990 TFLOPS for bf16 and ~1980 TFLOPS for fp8 [https://resources.nvidia.com/en-us-gpu-resources/h100-datasheet-24306]
+            # This is WITH sparsity, so we divide by 2 to get the answer w/o sparsity
             print_msg += f", Average steps/s: {steps_from_warmup / total_time:.2f}, TPS per device: {tps:.2f}, TFLOPS per device: {tflops:.2f}"
             metrics.update(
                 {
