@@ -1454,7 +1454,7 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def _prepare_fsdp2(self, *args):
-        # First pass: prepare everything except schedulers (and model)
+        # First pass: prepare everything except schedulers (and model, which is prepared separately below)
         result = [
             self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj for obj in args
         ]
@@ -1462,6 +1462,7 @@ class Accelerator:
         # Second pass: prepare schedulers
         result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
 
+        # Prepare the model
         model_index, model = None, None
         for i, obj in enumerate(result):
             if isinstance(obj, torch.nn.Module):
@@ -1488,6 +1489,7 @@ class Accelerator:
         # Get old params and canonicalize - we cannonicalize to have the mapping easy
         old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
 
+        # Swap the optimizer parameters with empty, so `fully_shard` after will not allocate too much memory
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
@@ -1657,11 +1659,9 @@ class Accelerator:
                         f"tp_size in the plugin {self.state.torch_tp_plugin.tp_size} should be same as model's tp size {model.tp_size}"
                     )
             elif self.is_fsdp2:
-                model = fsdp2_prepare_model(self, model)
-
-                if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
-                    del self._models[-2]
-                self._models[-1] = model
+                raise ValueError(
+                    "FSDP2 preparation should be done via `accelerate.prepare()`, as it requires a model and an optimizer."
+                )
 
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
@@ -1826,7 +1826,8 @@ class Accelerator:
                 )
 
         # Invariant: with FSDP2, optimizer is always passed to `prepare()` together with model
-        if self.is_fsdp2 and len(optimizers) > 0:
+        # We only precompute scales if float8 all gather is enabled, possibly can add a flag for this later
+        if self.is_fsdp2 and len(optimizers) > 0 and self.ao_recipe_handler.config.enable_fsdp_float8_all_gather:
             optimizers[0].register_step_post_hook(
                 lambda *args, **kwargs: precompute_float8_dynamic_scale_for_fsdp(models[0])
             )

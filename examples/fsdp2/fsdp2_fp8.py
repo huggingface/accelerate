@@ -21,10 +21,10 @@ import argparse
 import time
 
 import torch
-from datasets import load_dataset, Dataset
+from datasets import Dataset, load_dataset
 from torch.utils.data import DataLoader
 from torchao.float8 import Float8LinearConfig
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from accelerate import Accelerator
 from accelerate.utils import AORecipeKwargs, FullyShardedDataParallelPlugin, TorchDynamoPlugin, set_seed
@@ -170,9 +170,8 @@ def main():
     )
 
     model = AutoModelForCausalLM.from_config(
-        config=AutoConfig.from_pretrained(MODEL_ID, use_cache=False),
+        AutoConfig.from_pretrained(MODEL_ID, use_cache=False),
         torch_dtype=torch.bfloat16,
-        # use_cache=False,  # Important to set `use_cache=False`
     )
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
