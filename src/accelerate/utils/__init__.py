@@ -46,6 +46,7 @@ from .dataclasses import (
     DynamoBackend,
     FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    GaudiTERecipeKwargs,
     GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,

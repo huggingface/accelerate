@@ -57,6 +57,7 @@ from .utils import (
     DynamoBackend,
     FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    GaudiTERecipeKwargs,
     GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -93,6 +94,7 @@ from .utils import (
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
+    is_hpu_available,
     is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
@@ -433,6 +435,7 @@ class Accelerator:
             AORecipeKwargs: "ao_recipe_handler",
             TERecipeKwargs: "te_recipe_handler",
             MSAMPRecipeKwargs: "msamp_recipe_handler",
+            GaudiTERecipeKwargs: "te_recipe_handler",
         }
         self.has_fp8_handler = False
         if kwargs_handlers is not None:
@@ -471,7 +474,7 @@ class Accelerator:
                 self.ao_recipe_handler = AORecipeKwargs()
             elif is_transformer_engine_available():
                 logger.info("Found `transformer-engine` installed, using it for FP8 training.")
-                self.te_recipe_handler = TERecipeKwargs()
+                self.te_recipe_handler = GaudiTERecipeKwargs() if is_hpu_available() else TERecipeKwargs()
             elif is_msamp_available():
                 logger.info("Found `msamp` installed, using it for FP8 training.")
                 self.msamp_recipe_handler = MSAMPRecipeKwargs()
