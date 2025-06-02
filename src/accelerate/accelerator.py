@@ -32,7 +32,6 @@ from typing import Any, Callable, Union
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
-from torchao.float8 import precompute_float8_dynamic_scale_for_fsdp
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -1814,6 +1813,7 @@ class Accelerator:
             raise ImportError(
                 "`torchao` was not found on your system or is too old of a version. Please ensure that `torchao >= 0.6.1` is installed"
             )
+
         if self.is_fsdp2:
             models = [x for x in args if isinstance(x, torch.nn.Module)]
             optimizers = [x for x in args if isinstance(x, torch.optim.Optimizer)]
@@ -1828,6 +1828,8 @@ class Accelerator:
         # Invariant: with FSDP2, optimizer is always passed to `prepare()` together with model
         # We only precompute scales if float8 all gather is enabled, possibly can add a flag for this later
         if self.is_fsdp2 and len(optimizers) > 0 and self.ao_recipe_handler.config.enable_fsdp_float8_all_gather:
+            from torchao.float8 import precompute_float8_dynamic_scale_for_fsdp
+
             optimizers[0].register_step_post_hook(
                 lambda *args, **kwargs: precompute_float8_dynamic_scale_for_fsdp(models[0])
             )
