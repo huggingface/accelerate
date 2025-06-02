@@ -471,7 +471,8 @@ class GaudiTERecipeKwargs(KwargsHandler):
             raise ValueError(f"Only 'E5M2' and 'HYBRID' fp8 formats are currently supported, got {self.fp8_format}.")
         if self.amax_compute_algo not in ("max", "most_recent"):
             raise ValueError(
-                f"Only 'max' and 'most_recent' `amax_compute_algo` modes are currently supported, got{self.amax_compute_algo}."
+                "Only 'max' and 'most_recent' `amax_compute_algo` modes are currently supported,",
+                f" got{self.amax_compute_algo}.",
             )
 
 
