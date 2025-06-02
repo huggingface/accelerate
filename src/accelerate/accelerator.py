@@ -299,10 +299,12 @@ class Accelerator:
             self.project_configuration.set_directories(project_dir)
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
-            if mixed_precision not in PrecisionType:
-                raise ValueError(
-                    f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
-                )
+        else:
+            mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+        if mixed_precision not in PrecisionType:
+            raise ValueError(
+                f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
+            )
 
         if dynamo_plugin is not None and dynamo_backend is not None:
             raise ValueError("You cannot pass in both `dynamo_plugin` and `dynamo_backend`, please only pass in one.")
@@ -354,9 +356,6 @@ class Accelerator:
             elif compare_versions("deepspeed", "<", "0.9.3"):
                 raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
 
-            mixed_precision = (
-                os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-            )
             if not isinstance(deepspeed_plugins, dict):
                 deepspeed_plugins.set_mixed_precision(mixed_precision)
                 deepspeed_plugins.select(_from_accelerator_state=True)
