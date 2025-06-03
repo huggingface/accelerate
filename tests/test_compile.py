@@ -18,7 +18,13 @@ from parameterized import parameterized
 from torch.utils.benchmark import Timer
 
 from accelerate.test_utils import require_huggingface_suite, require_non_cpu, torch_device
-from accelerate.utils import compile_regions, decompile_regions, release_memory
+from accelerate.utils import (
+    compile_regions,
+    decompile_regions,
+    extract_model_from_parallel,
+    has_compiled_regions,
+    release_memory,
+)
 
 
 MODEL_ID = "gpt2"
@@ -48,10 +54,10 @@ class RegionalCompilationTester(unittest.TestCase):
         compiled_model = compile_regions(model, inplace=inplace, mode="reduce-overhead")
 
         if inplace:
-            # If inplace is True, the original model should be modified
+            # If inplace is True, the original is the compiled model
             assert model is compiled_model
         else:
-            # If inplace is False, a new model should be returned
+            # If inplace is False, the original model should not be modified
             assert model is not compiled_model
 
         # Check that the compiled_model.transformer.h[i] and compiled_model.lm_head are compiled separately
@@ -63,6 +69,18 @@ class RegionalCompilationTester(unittest.TestCase):
         # Check that the decompiled_model.transformer.h[i] and decompiled_model.lm_head are the original model
         assert isinstance(decompiled_model.transformer.h[0], torch.nn.Module)
         assert isinstance(decompiled_model.lm_head, torch.nn.Module)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_extract_model_from_parallel(self, inplace):
+        model, _ = self._get_model_and_inputs()
+
+        distributed_model = torch.nn.parallel.DataParallel(model)
+        distributed_compiled_model = compile_regions(distributed_model, inplace=inplace)
+        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model)
+
+        # regional compilation is unaffected by parallel wrappers as it is applied to some underlying submodules
+        # and not the top-level module
+        assert has_compiled_regions(compiled_model_unwrapped)
 
     @require_non_cpu
     @require_huggingface_suite
