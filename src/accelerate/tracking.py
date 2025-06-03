@@ -1090,7 +1090,7 @@ class SwanLabTracker(GeneralTracker):
         import swanlab
 
         self.run = swanlab.init(project=self.run_name, **self.init_kwargs)
-        swanlab.config["FRAMEWORK"] = "accelerate"  # add accelerate logo in config
+        swanlab.config["FRAMEWORK"] = "🤗Accelerate"  # add accelerate logo in config
         logger.debug(f"Initialized SwanLab project {self.run_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
