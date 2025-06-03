@@ -1122,9 +1122,8 @@ class SwanLabTracker(GeneralTracker):
 
         Args:
         data : Dict[str, DataType]
-            Data must be a dict.
-            The key must be a string with 0-9, a-z, A-Z, " ", "_", "-", "/".
-            The value must be a `float`, `float convertible object`, `int` or `swanlab.data.BaseType`.
+            Data must be a dict. The key must be a string with 0-9, a-z, A-Z, " ", "_", "-", "/". The value must be a
+            `float`, `float convertible object`, `int` or `swanlab.data.BaseType`.
         step : int, optional
             The step number of the current data, if not provided, it will be automatically incremented.
         If step is duplicated, the data will be ignored.
