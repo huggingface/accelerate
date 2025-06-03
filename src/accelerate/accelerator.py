@@ -229,6 +229,7 @@ class Accelerator:
             - `"tensorboard"`
             - `"wandb"`
             - `"comet_ml"`
+            - `"swanlab"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         project_config ([`~utils.ProjectConfiguration`], *optional*):

@@ -61,6 +61,7 @@ from ..utils import (
     is_pytest_available,
     is_schedulefree_available,
     is_sdaa_available,
+    is_swanlab_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
@@ -482,6 +483,15 @@ def require_dvclive(test_case):
     return unittest.skipUnless(is_dvclive_available(), "test requires dvclive")(test_case)
 
 
+def require_swanlab(test_case):
+    """
+    Decorator marking a test that requires swanlab installed. These tests are skipped when swanlab isn't installed
+    """
+    return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(
+        test_case
+    )
+
+
 def require_pandas(test_case):
     """
     Decorator marking a test that requires pandas installed. These tests are skipped when pandas isn't installed
@@ -536,7 +546,8 @@ def require_matplotlib(test_case):
 
 
 _atleast_one_tracker_available = (
-    any([is_wandb_available(), is_tensorboard_available()]) and not is_comet_ml_available()
+    any([is_wandb_available(), is_tensorboard_available(), is_swanlab_available()])
+    and not is_comet_ml_available()
 )
 
 
