@@ -143,7 +143,7 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
 
     new_module = _compile_regions(module, **compile_kwargs)
 
-    if not hasattr(new_module, "_orig_mod"):
+    if "_orig_mod" not in new_module.__dict__:
         # Keeps a reference to the original module to decompile/unwrap it later
         new_module.__dict__["_orig_mod"] = module
 
@@ -221,9 +221,13 @@ def extract_model_from_parallel(
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
-    if keep_torch_compile and (is_compiled or has_compiled):
-        compiled_model._orig_mod = model
-        model = compiled_model
+    if keep_torch_compile:
+        if is_compiled:
+            compiled_model._orig_mod = model
+            model = compiled_model
+        elif has_compiled:
+            compiled_model.__dict__["_orig_mod"] = model
+            model = compiled_model
 
     return model
 

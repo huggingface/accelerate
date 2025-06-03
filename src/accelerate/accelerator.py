@@ -2030,7 +2030,7 @@ class Accelerator:
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
                 if self.state.dynamo_plugin.use_regional_compilation:
-                    engine.module = compile_regions(engine.module, **compile_kwargs)
+                    engine.__dict__["module"] = compile_regions(engine.__dict__["module"], **compile_kwargs)
                 else:
                     engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
             if optimizer is not None:
