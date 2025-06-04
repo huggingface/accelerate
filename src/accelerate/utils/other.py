@@ -62,7 +62,7 @@ def is_compiled_module(module: torch.nn.Module) -> bool:
 
 def has_compiled_regions(module: torch.nn.Module) -> bool:
     """
-    Check whether the module has submodules that were compiled with torch.compile()
+    Check whether the module has submodules that were compiled with `torch.compile()`, like with `compile_regions()`.
     """
     if not hasattr(torch, "_dynamo"):
         return False
@@ -70,6 +70,28 @@ def has_compiled_regions(module: torch.nn.Module) -> bool:
     if module._modules:
         for submodule in module.modules():
             if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
+                return True
+
+    return False
+
+
+def is_repeated_blocks(module: torch.nn.Module) -> bool:
+    """
+    Check whether the module is a repeated block, i.e. `torch.nn.ModuleList` of the same class. This is useful to
+    determine whether we should compile the module as a whole or keep looking for repeated blocks in its submodules.
+    """
+
+    return isinstance(module, torch.nn.ModuleList) and all(isinstance(m, module[0].__class__) for m in module)
+
+
+def has_repeated_blocks(module: torch.nn.Module) -> bool:
+    """
+    Check whether the module has repeated blocks, i.e. `torch.nn.ModuleList` of the same class. This is useful to
+    determine whether we should compile the module as a whole or keep looking for repeated blocks in its submodules.
+    """
+    if module._modules:
+        for submodule in module.modules():
+            if is_repeated_blocks(submodule):
                 return True
 
     return False
@@ -123,20 +145,19 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
     """
 
     def _compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
-        if isinstance(module, torch.nn.ModuleList):
-            if all(isinstance(submodule, module[0].__class__) for submodule in module):
-                new_module = torch.nn.ModuleList()
-                for submodule in module:
-                    new_module.append(torch.compile(submodule, **compile_kwargs))
-            else:
-                new_module = torch.compile(module, **compile_kwargs)
-        elif module._modules:  # Non-leaf node
+        if is_repeated_blocks(module):
+            new_module = torch.nn.ModuleList()
+            for submodule in module:
+                compiled_submodule = torch.compile(submodule, **compile_kwargs)
+                new_module.append(compiled_submodule)
+        elif has_repeated_blocks(module):
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
             new_module._modules = {}
             for name, submodule in module.named_children():
-                new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
-        else:  # Leaf node
+                compiled_submodule = _compile_regions(submodule, **compile_kwargs)
+                new_module.add_module(name, compiled_submodule)
+        else:  # leaf node
             new_module = torch.compile(module, **compile_kwargs)
 
         return new_module

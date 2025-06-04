@@ -2025,14 +2025,25 @@ class Accelerator:
                 # It should be done by the launcher but it does not work for multi-node runs
                 os.environ["DEEPSPEED_USE_HPU"] = "true"
 
+            if (
+                model is not None
+                and self.state.dynamo_plugin.backend != DynamoBackend.NO
+                and self.state.dynamo_plugin.use_regional_compilation
+            ):
+                # regional compilation should be applied before deepspeed.initialize
+                compile_kwargs = self.state.dynamo_plugin.to_kwargs()
+                model = compile_regions(model, **compile_kwargs)
+
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
 
-            if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
+            if (
+                compare_versions("deepspeed", ">=", "0.14.4")
+                and self.state.dynamo_plugin.backend != DynamoBackend.NO
+                and not self.state.dynamo_plugin.use_regional_compilation
+            ):
+                # deepspeed native compilation should be applied after deepspeed.initialize
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
-                if self.state.dynamo_plugin.use_regional_compilation:
-                    engine.__dict__["module"] = compile_regions(engine.__dict__["module"], **compile_kwargs)
-                else:
-                    engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
+                engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
             if optimizer is not None:
                 optimizer = DeepSpeedOptimizerWrapper(optimizer)
             if scheduler is not None:

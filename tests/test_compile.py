@@ -16,7 +16,7 @@ import unittest
 import torch
 from torch.utils.benchmark import Timer
 
-from accelerate.test_utils import require_huggingface_suite, require_non_cpu, require_non_hpu, torch_device
+from accelerate.test_utils import require_huggingface_suite, require_non_cpu, require_non_hpu, slow, torch_device
 from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
 
 
@@ -84,14 +84,14 @@ class RegionalCompilationTester(unittest.TestCase):
     def test_regional_compilation_cold_start(self):
         model, input_ids = self._get_model_and_inputs()
 
-        regional_compilation_model = compile_regions(model, mode="reduce-overhead", backend=backend)
+        regional_compilation_model = compile_regions(model, backend=backend)
         regional_compilation_cold_start = (
             Timer(stmt=COMPILE_STMT, globals={"model": regional_compilation_model, "input_ids": input_ids})
             .timeit(COMPILE_ITERS)
             .median
         )
 
-        full_compilation_model = torch.compile(model, mode="reduce-overhead", backend=backend)
+        full_compilation_model = torch.compile(model, backend=backend)
         full_compilation_cold_start = (
             Timer(stmt=COMPILE_STMT, globals={"model": full_compilation_model, "input_ids": input_ids})
             .timeit(COMPILE_ITERS)
@@ -106,6 +106,7 @@ class RegionalCompilationTester(unittest.TestCase):
 
         release_memory(model, full_compilation_model, regional_compilation_model)
 
+    @slow
     @require_non_cpu
     @require_huggingface_suite
     def test_regional_compilation_inference_speedup(self):
@@ -115,14 +116,14 @@ class RegionalCompilationTester(unittest.TestCase):
             Timer(stmt=INFRENCE_STMT, globals={"model": model, "input_ids": input_ids}).timeit(INFERENCE_ITERS).median
         )
 
-        regional_compilation_model = compile_regions(model, mode="reduce-overhead", backend=backend)
+        regional_compilation_model = compile_regions(model, backend=backend)
         regional_compilation_inference_latency = (
             Timer(stmt=INFRENCE_STMT, globals={"model": regional_compilation_model, "input_ids": input_ids})
             .timeit(INFERENCE_ITERS)
             .median
         )
 
-        full_compilation_model = torch.compile(model, mode="reduce-overhead", backend=backend)
+        full_compilation_model = torch.compile(model, backend=backend)
         full_compilation_inference_latency = (
             Timer(stmt=INFRENCE_STMT, globals={"model": full_compilation_model, "input_ids": input_ids})
             .timeit(INFERENCE_ITERS)
