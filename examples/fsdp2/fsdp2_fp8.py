@@ -40,7 +40,7 @@ def parse_args():
 
     parser.add_argument("--sequence-length", type=int, default=8192, help="Sequence length for the dataset")
     parser.add_argument("--num-steps", type=int, default=1000, help="Number of steps to train for")
-    parser.add_argument("--bf16", action="store_true", help="Train in bf16 precision")
+    parser.add_argument("--precision", type=str, default="fp8", choices=["fp8", "bf16"], help="Precision to train in")
     parser.add_argument("--log-with", type=str, default="wandb", help="Log with wandb or tensorboard")
 
     return parser.parse_args()
@@ -142,7 +142,7 @@ def main():
         auto_wrap_policy="transformer_based_wrap",
         transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
     )
-    fsdp2_plugin.set_mixed_precision("bf16")
+    fsdp2_plugin.set_mixed_precision(args.precision)
 
     dynamo_plugin = TorchDynamoPlugin(
         backend="inductor",
@@ -155,7 +155,7 @@ def main():
     )
 
     kwargs = []
-    if not args.bf16:
+    if args.precision == "fp8":
         kwargs = [AORecipeKwargs(config=fp8_config)]
 
     accelerator = Accelerator(

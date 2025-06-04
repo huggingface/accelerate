@@ -494,6 +494,12 @@ class Accelerator:
                 DistributedType.FSDP,
             )
 
+        # TODO: S1ro - this is probably gonna be a problem with other fp8 backends too
+        if self.fp8_backend == "AO" and self.state.fsdp_plugin.cpu_ram_efficient_loading:
+            raise ValueError(
+                "torchao with FSDP2 and cpu_ram_efficient_loading is not supported, setting `cpu_ram_efficient_loading` to False will fix the issue and work as intended."
+            )
+
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
             warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
@@ -1400,12 +1406,6 @@ class Accelerator:
             if model_count > 1:
                 raise ValueError("Only one model is supported when using FSDP2")
 
-            # TODO: S1ro - this is probably gonna be a problem with other fp8 backends too
-            if self.fp8_backend == "AO" and self.state.fsdp_plugin.cpu_ram_efficient_loading:
-                raise ValueError(
-                    "torchao with FSDP2 and cpu_ram_efficient_loading is not supported, setting `cpu_ram_efficient_loading` to False will fix the issue and work as intended."
-                )
-
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
 
@@ -1479,6 +1479,7 @@ class Accelerator:
             model = fsdp2_apply_ac(self, model)
 
         # Apply compile if needed, has to be *after* applying AC
+        # Copied from: `accelerator.prepare_model` ~ L1804
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if self.state.dynamo_plugin.use_regional_compilation:
                 model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
@@ -3624,6 +3625,9 @@ class Accelerator:
                 if not drop_refs:
                     named_parameters.update({n: p for n, p in obj.named_parameters()})
                     continue
+
+                # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
+                # the underlying pointer is actually hidden in `_tensor` attribute
                 if self.fp8_backend == "AO":
                     from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
