@@ -555,6 +555,39 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
         )
 
 
+def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
+    """
+    Applies the activation checkpointing to the model.
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance
+        model (`torch.nn.Module`): The model to apply the activation checkpointing to
+
+    Returns:
+        `torch.nn.Module`: The model with the activation checkpointing applied
+    """
+
+    from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+        checkpoint_wrapper,
+    )
+
+    auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(accelerator.state.fsdp_plugin, model)
+
+    for layer_name, layer in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
+        if len(layer_name.split(".")) > 1:
+            parent_name, child_name = layer_name.rsplit(".", 1)
+        else:
+            parent_name = None
+            child_name = layer_name
+
+        parent_module = model.get_submodule(parent_name) if parent_name else model
+        if auto_wrap_policy_func(parent_module):
+            layer = checkpoint_wrapper(layer, preserve_rng_state=False)
+            parent_module.register_module(child_name, layer)
+
+    return model
+
+
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
 
@@ -575,38 +608,9 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     fsdp2_plugin = accelerator.state.fsdp_plugin
 
-    original_sd = model.state_dict()
-
-    from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
-
-    # We need the `auto_wrap_policy` original type to create a custom poilicy function for sharding
-    # This is because `fully_shard` doesn't support old auto wrap policies, rather we have to imitate the behaviour
-    auto_wrap_policy_type = None
-    if fsdp2_plugin.auto_wrap_policy is transformer_auto_wrap_policy:
-        auto_wrap_policy_type = "transformer"
-    elif fsdp2_plugin.auto_wrap_policy is size_based_auto_wrap_policy:
-        auto_wrap_policy_type = "size"
-
-    # We set `auto_wrap_policy` to `functools.partial` to avoid creating it again
-    # This is because of `apply_activation_checkpointing` which will can reuse this function
     fsdp2_plugin.set_auto_wrap_policy(model)
 
-    if fsdp2_plugin.activation_checkpointing:
-        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-            CheckpointImpl,
-            apply_activation_checkpointing,
-            checkpoint_wrapper,
-        )
-
-        # Apply activation checkpointing before applying `fully_shard`
-        apply_activation_checkpointing(
-            model,
-            checkpoint_wrapper_fn=functools.partial(
-                checkpoint_wrapper,
-                checkpoint_impl=CheckpointImpl.NO_REENTRANT,
-            ),
-            auto_wrap_policy=fsdp2_plugin.auto_wrap_policy,
-        )
+    original_sd = model.state_dict()
 
     fsdp2_kwargs = {
         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
@@ -644,14 +648,15 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    auto_wrap_policy = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, auto_wrap_policy_type, model)
-    if auto_wrap_policy is not None:
+    auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
+    if auto_wrap_policy_func is not None:
         # We skip the model itself, as that one is always wrapped
         for module in get_module_children_bottom_up(model)[:-1]:
-            if auto_wrap_policy(module):
+            if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
                 fully_shard(module, **fsdp2_kwargs)
 
-    fully_shard(model, **fsdp2_kwargs)
+    if not isinstance(model, FSDPModule):
+        fully_shard(model, **fsdp2_kwargs)
 
     if fsdp2_plugin.cpu_ram_efficient_loading:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
@@ -694,9 +699,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     return model
 
 
-def fsdp2_prepare_auto_wrap_policy(
-    fsdp2_plugin, auto_wrap_policy_type: str, model: torch.nn.Module
-) -> Callable[[torch.nn.Module], bool]:
+def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool]:
     """Prepares the auto wrap policy based on its type, done to mimic the behaviour of FSDP1 auto wrap policy.
 
     Args:
@@ -711,7 +714,14 @@ def fsdp2_prepare_auto_wrap_policy(
         `Callable[[torch.nn.Module], bool]`:
             The auto wrap policy function to be applied to the model
     """
-    if auto_wrap_policy_type == "transformer":
+    from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+
+    fn = fsdp2_plugin.auto_wrap_policy
+
+    if isinstance(fn, functools.partial):
+        fn = fn.func
+
+    if fn is transformer_auto_wrap_policy:
         no_split_modules = getattr(model, "_no_split_modules", None)
         if no_split_modules is None:
             no_split_modules = []
@@ -731,7 +741,7 @@ def fsdp2_prepare_auto_wrap_policy(
                 return False
             return isinstance(module, tuple(transformer_cls_to_wrap))
 
-    elif auto_wrap_policy_type == "size":
+    elif fn is size_based_auto_wrap_policy:
 
         def policy(module: torch.nn.Module) -> bool:
             module_num_params = sum(p.numel() for p in module.parameters())
@@ -768,4 +778,5 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
     named_params = {
         k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k: v for k, v in named_params.items()
     }
+    named_params = {k.replace("._orig_mod", ""): v for k, v in named_params.items()}
     return named_params
