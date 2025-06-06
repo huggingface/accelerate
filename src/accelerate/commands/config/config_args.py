@@ -196,8 +196,6 @@ class ClusterConfig(BaseConfig):
     fsdp_config: dict = None
     # args for megatron_lm
     megatron_lm_config: dict = None
-    # args for ipex
-    ipex_config: dict = None
     # args for mpirun
     mpirun_config: dict = None
     # args for TPU
@@ -223,8 +221,6 @@ class ClusterConfig(BaseConfig):
             self.fsdp_config = {}
         if self.megatron_lm_config is None:
             self.megatron_lm_config = {}
-        if self.ipex_config is None:
-            self.ipex_config = {}
         if self.mpirun_config is None:
             self.mpirun_config = {}
         if self.fp8_config is None:

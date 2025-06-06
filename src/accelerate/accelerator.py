@@ -93,7 +93,6 @@ from .utils import (
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
-    is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
     is_mlu_available,
@@ -1421,9 +1420,6 @@ class Accelerator:
                             param_group["params"][i] = torch.empty_like(p)
                             param_group["params"][i].data_ptr = p.data_ptr()
 
-        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if (self.device.type == "cpu" or self.device.type == "xpu") and self.state.use_ipex:
-                args = self._prepare_ipex(*args)
         if self.fp8_backend == "TE":
             args = self._prepare_te(*args)
         elif self.fp8_backend == "AO":
@@ -2171,66 +2167,6 @@ class Accelerator:
             self._optimizers.append(optimizer)
         if scheduler is not None:
             self._schedulers.append(scheduler)
-
-        return tuple(result)
-
-    def _prepare_ipex(self, *args):
-        """
-        Prepares model and optimizer for training with IPEX on CPU/XPU. This covers 3 cases, IPEX compiled with CPU
-        only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock pytorch
-        starting from version 2.4.
-        """
-
-        # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
-        if is_ipex_available():
-            import intel_extension_for_pytorch as ipex
-        else:
-            raise ImportError(
-                "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-
-        models = []
-        optimizers = []
-        result = [obj for obj in args]
-        for i, obj in enumerate(result):
-            if isinstance(obj, torch.nn.Module):
-                model = obj
-                model.train()
-                models.append((i, model))
-            elif isinstance(obj, (torch.optim.Optimizer)):
-                optimizers.append((i, obj))
-
-        # Impossible to determine what to do if multiple models and/or optimizers are provided
-        if len(optimizers) > 1 or (len(models) > 1 and len(optimizers) == 1):
-            raise ValueError(
-                "Prepare with IPEX expects either 1+ models and no optimizer OR a single model-optimizer pair."
-            )
-
-        # Nothing to do
-        if len(models) == 0 and len(optimizers) == 0:
-            return result
-
-        dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
-        # Multiple models and no optimizer (inference) are provided
-        if len(models) > 0 and len(optimizers) == 0:
-            for i, model in models:
-                if self.device.type == "xpu" and next(model.parameters()).device.type == "cpu":
-                    model = model.to(self.device)
-                    model, _ = ipex.optimize(model, optimizer=None, dtype=dtype, inplace=True, level="O1")
-                    # Replace in result
-                    result[i] = model
-
-        # A single model-optimizer pair (training) is provided
-        if len(models) == 1 and len(optimizers) == 1:
-            i_model, model = models[0]
-            i_optimizer, optimizer = optimizers[0]
-            if self.device.type == "xpu" and next(model.parameters()).device.type == "cpu":
-                model = model.to(self.device)
-            model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
-            # Replace in result
-            result[i_model] = model
-            result[i_optimizer] = optimizer
 
         return tuple(result)
 

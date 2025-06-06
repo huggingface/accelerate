@@ -139,7 +139,7 @@ values. They can also be passed in manually.
 * `--cpu` (`bool`) -- Whether or not to force the training on the CPU.
 * `--multi_gpu` (`bool`) -- Whether or not this should launch a distributed GPU training.
 * `--tpu` (`bool`) -- Whether or not this should launch a TPU training.
-* `--ipex` (`bool`) -- Whether or not this should launch an Intel Pytorch Extension (IPEX) training.
+* `--ipex` (`bool`) -- Whether or not this should launch an Intel Pytorch Extension (IPEX) training. **This argument is deprecated and ignored, will be removed in Accelerate v1.20**
 
 **Resource Selection Arguments**:
 
