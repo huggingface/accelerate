@@ -40,7 +40,6 @@ from .utils import (
     is_fp8_available,
     is_habana_gaudi1,
     is_hpu_available,
-    is_ipex_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
@@ -881,7 +880,6 @@ class AcceleratorState:
     _shared_state = SharedDict()
     _known_attrs = PartialState._known_attrs + [
         "deepspeed_plugin",
-        "use_ipex",
         "fsdp_plugin",
         "megatron_lm_plugin",
         "dynamo_plugin",
@@ -908,7 +906,6 @@ class AcceleratorState:
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
             self.deepspeed_plugins = None
-            self.use_ipex = None
             self.torch_tp_plugin = torch_tp_plugin
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
@@ -978,12 +975,6 @@ class AcceleratorState:
                     self.megatron_lm_plugin = megatron_lm_plugin
                 if self.torch_tp_plugin is not None:
                     self.distributed_type = DistributedType.TP
-            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-                if is_ipex_available():
-                    # check if user disables it explicitly
-                    self.use_ipex = parse_flag_from_env("ACCELERATE_USE_IPEX", default=True)
-                else:
-                    self.use_ipex = False
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"

@@ -38,7 +38,6 @@ from accelerate.utils import (
     is_datasets_available,
     is_fp16_available,
     is_hpu_available,
-    is_ipex_available,
     is_pytest_available,
     is_xpu_available,
     set_seed,
@@ -594,43 +593,6 @@ def training_check(use_seedable_sampler=False):
         AcceleratorState._reset_state()
         dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
         accelerator = Accelerator(mixed_precision="fp16", dataloader_config=dataloader_config)
-        train_dl = generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler)
-        model = RegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-
-        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
-        set_seed(42)
-        generator.manual_seed(42)
-        for _ in range(3):
-            for batch in train_dl:
-                model.zero_grad()
-                output = model(batch["x"])
-                loss = torch.nn.functional.mse_loss(output, batch["y"])
-                accelerator.backward(loss)
-                optimizer.step()
-
-        model = accelerator.unwrap_model(model).cpu()
-        torch.testing.assert_close(
-            old_model.a,
-            model.a,
-            atol=ATOL,
-            rtol=RTOL,
-            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
-        )
-        torch.testing.assert_close(
-            old_model.b,
-            model.b,
-            atol=ATOL,
-            rtol=RTOL,
-            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
-        )
-
-    # IPEX support is only for CPU
-    if is_ipex_available():
-        print("ipex BF16 training check.")
-        AcceleratorState._reset_state()
-        dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
-        accelerator = Accelerator(mixed_precision="bf16", cpu=True, dataloader_config=dataloader_config)
         train_dl = generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)

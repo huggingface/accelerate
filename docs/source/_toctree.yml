@@ -62,8 +62,8 @@
       title: Amazon SageMaker
     - local: usage_guides/mps
       title: Apple M1 GPUs
-    - local: usage_guides/ipex
-      title: IPEX training with CPU
+    - local: usage_guides/intel_cpu
+      title: Intel CPU
     - local: usage_guides/gaudi
       title: Intel Gaudi
     - local: usage_guides/compilation
