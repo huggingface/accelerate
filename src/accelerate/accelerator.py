@@ -300,7 +300,7 @@ class Accelerator:
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
         else:
-            mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", None)
+            mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
         if mixed_precision is not None and mixed_precision not in PrecisionType:
             raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}")
 
