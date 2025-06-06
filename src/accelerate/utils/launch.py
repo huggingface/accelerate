@@ -329,6 +329,14 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
 
+        if (fsdp_context_parallel_size := getattr(args, "fsdp_context_parallel_size", 1)) != 1:
+            current_env["FSDP_CONTEXT_PARALLEL_SIZE"] = str(fsdp_context_parallel_size)
+
+        if (
+            fsdp_context_parallel_shard_rotation := getattr(args, "fsdp_context_parallel_shard_rotation", None)
+        ) is not None:
+            current_env["FSDP_CONTEXT_PARALLEL_SHARD_ROTATION"] = str(fsdp_context_parallel_shard_rotation).lower()
+
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"
         current_env["ACCELERATE_USE_MEGATRON_LM"] = "true"
