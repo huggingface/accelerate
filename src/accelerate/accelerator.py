@@ -125,7 +125,7 @@ from .utils.constants import (
     PROFILE_PATTERN_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
-from .utils.other import compile_regions, is_compiled_module
+from .utils.other import compile_regions, compile_regions_deepspeed, is_compiled_module
 
 
 if is_deepspeed_available():
@@ -2030,7 +2030,7 @@ class Accelerator:
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
                 if self.state.dynamo_plugin.use_regional_compilation:
-                    engine.module = compile_regions(engine.module, **compile_kwargs)
+                    compile_regions_deepspeed(engine.module, **compile_kwargs)
                 else:
                     engine.compile(backend=compile_kwargs.pop("backend"), compile_kwargs=compile_kwargs)
             if optimizer is not None:
