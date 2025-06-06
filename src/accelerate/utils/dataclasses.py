@@ -701,6 +701,7 @@ class LoggerType(BaseEnum):
         - **WANDB** -- wandb as an experiment tracker
         - **COMETML** -- comet_ml as an experiment tracker
         - **DVCLIVE** -- dvclive as an experiment tracker
+        - **SWANLAB** -- swanlab as an experiment tracker
     """
 
     ALL = "all"
@@ -711,6 +712,7 @@ class LoggerType(BaseEnum):
     MLFLOW = "mlflow"
     CLEARML = "clearml"
     DVCLIVE = "dvclive"
+    SWANLAB = "swanlab"
 
 
 class PrecisionType(str, BaseEnum):
