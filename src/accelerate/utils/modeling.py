@@ -1594,6 +1594,12 @@ def check_device_map(model: nn.Module, device_map: dict[str, Union[int, str, tor
         model (`torch.nn.Module`): The model to check the device map against.
         device_map (`Dict[str, Union[int, str, torch.device]]`): The device map to check.
     """
+    all_module_names = dict(model.named_modules())
+    invalid_keys = [k for k in device_map if k != "" and k not in all_module_names]
+
+    if invalid_keys:
+        print(f"Warning: The following device_map keys do not match any submodules in the model: {invalid_keys}")
+
     all_model_tensors = [name for name, _ in model.state_dict().items()]
     for module_name in device_map.keys():
         if module_name == "":
