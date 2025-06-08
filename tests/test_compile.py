@@ -16,7 +16,7 @@ import unittest
 import torch
 from torch.utils.benchmark import Timer
 
-from accelerate.test_utils import require_huggingface_suite, require_non_cpu, torch_device
+from accelerate.test_utils import require_huggingface_suite, require_non_cpu, require_non_hpu, slow, torch_device
 from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
 
 
@@ -28,7 +28,13 @@ INFERENCE_ITERS = 100
 INFRENCE_STMT = "model(input_ids, use_cache=False)"
 COMPILE_STMT = f"torch._dynamo.reset(); torch._inductor.utils.clear_inductor_caches(); {INFRENCE_STMT}"
 
+if torch_device == "hpu":
+    backend = "hpu_backend"
+else:
+    backend = "inductor"
 
+
+@require_non_hpu
 @require_huggingface_suite
 class RegionalCompilationTester(unittest.TestCase):
     def _get_model_and_inputs(self):
@@ -43,7 +49,7 @@ class RegionalCompilationTester(unittest.TestCase):
 
     def test_regions_are_compiled(self):
         model, _ = self._get_model_and_inputs()
-        compiled_model = compile_regions(model, mode="reduce-overhead")
+        compiled_model = compile_regions(model, mode="reduce-overhead", backend=backend)
 
         # Check that the compiled model keeps a reference to the original model
         assert hasattr(compiled_model, "_orig_mod")
@@ -52,23 +58,25 @@ class RegionalCompilationTester(unittest.TestCase):
         # Check that the compiled_model.transformer.h[i] and compiled_model.lm_head are compiled separately
         assert isinstance(compiled_model.transformer.h[0], torch._dynamo.eval_frame.OptimizedModule)
         assert isinstance(compiled_model.lm_head, torch._dynamo.eval_frame.OptimizedModule)
+        assert compiled_model.transformer.h[0]._orig_mod is model.transformer.h[0]
+        assert compiled_model.lm_head._orig_mod is model.lm_head
 
     def test_extract_model_keep_torch_compile(self):
         model, _ = self._get_model_and_inputs()
-        compiled_model = compile_regions(model)
+        compiled_model = compile_regions(model, mode="reduce-overhead", backend=backend)
 
         distributed_model = torch.nn.parallel.DataParallel(model)
-        distributed_compiled_model = compile_regions(distributed_model)
+        distributed_compiled_model = compile_regions(distributed_model, mode="reduce-overhead", backend=backend)
         compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=True)
 
         assert compiled_model._orig_mod is compiled_model_unwrapped._orig_mod
 
     def test_extract_model_remove_torch_compile(self):
         model, _ = self._get_model_and_inputs()
-        compiled_model = compile_regions(model)
+        compiled_model = compile_regions(model, mode="reduce-overhead", backend=backend)
 
         distributed_model = torch.nn.parallel.DataParallel(model)
-        distributed_compiled_model = compile_regions(distributed_model)
+        distributed_compiled_model = compile_regions(distributed_model, mode="reduce-overhead", backend=backend)
         compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model, keep_torch_compile=False)
 
         assert compiled_model._orig_mod is compiled_model_unwrapped
@@ -78,14 +86,14 @@ class RegionalCompilationTester(unittest.TestCase):
     def test_regional_compilation_cold_start(self):
         model, input_ids = self._get_model_and_inputs()
 
-        regional_compilation_model = compile_regions(model)
+        regional_compilation_model = compile_regions(model, backend=backend)
         regional_compilation_cold_start = (
             Timer(stmt=COMPILE_STMT, globals={"model": regional_compilation_model, "input_ids": input_ids})
             .timeit(COMPILE_ITERS)
             .median
         )
 
-        full_compilation_model = torch.compile(model)
+        full_compilation_model = torch.compile(model, backend=backend)
         full_compilation_cold_start = (
             Timer(stmt=COMPILE_STMT, globals={"model": full_compilation_model, "input_ids": input_ids})
             .timeit(COMPILE_ITERS)
@@ -100,6 +108,7 @@ class RegionalCompilationTester(unittest.TestCase):
 
         release_memory(model, full_compilation_model, regional_compilation_model)
 
+    @slow
     @require_non_cpu
     @require_huggingface_suite
     def test_regional_compilation_inference_speedup(self):
@@ -109,14 +118,14 @@ class RegionalCompilationTester(unittest.TestCase):
             Timer(stmt=INFRENCE_STMT, globals={"model": model, "input_ids": input_ids}).timeit(INFERENCE_ITERS).median
         )
 
-        regional_compilation_model = compile_regions(model)
+        regional_compilation_model = compile_regions(model, backend=backend)
         regional_compilation_inference_latency = (
             Timer(stmt=INFRENCE_STMT, globals={"model": regional_compilation_model, "input_ids": input_ids})
             .timeit(INFERENCE_ITERS)
             .median
         )
 
-        full_compilation_model = torch.compile(model)
+        full_compilation_model = torch.compile(model, backend=backend)
         full_compilation_inference_latency = (
             Timer(stmt=INFRENCE_STMT, globals={"model": full_compilation_model, "input_ids": input_ids})
             .timeit(INFERENCE_ITERS)

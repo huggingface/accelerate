@@ -1787,7 +1787,7 @@ class FullyShardedDataParallelPlugin:
         if isinstance(self.auto_wrap_policy, str):
             if self.auto_wrap_policy.upper() not in FSDP_AUTO_WRAP_POLICY:
                 raise ValueError(
-                    f"Invalid auto wrap policy: {self.auto_wrap_policy}. Must be one of {list(FSDP_AUTO_WRAP_POLICY.keys())}"
+                    f"Invalid auto wrap policy: {self.auto_wrap_policy}. Must be one of {FSDP_AUTO_WRAP_POLICY}"
                 )
             from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
