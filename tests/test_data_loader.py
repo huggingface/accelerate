@@ -98,7 +98,7 @@ class SimpleBatchSampler(BatchSampler):
 class DataLoaderTester(AccelerateTestCase):
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False, even_batches=True):
         batch_sampler_shards = [
-            BatchSamplerShard(batch_sampler, 2, i, split_batches=split_batches, even_batches=even_batches)
+            BatchSamplerShard(batch_sampler, 2, i, split_batches=split_batches, even_batches=even_batches, truncate_dataset=False, gradient_steps=None)
             for i in range(2)
         ]
         batch_sampler_lists = [list(batch_sampler_shard) for batch_sampler_shard in batch_sampler_shards]
@@ -556,6 +556,62 @@ class DataLoaderTester(AccelerateTestCase):
         assert accelerator_ref() is None
         assert dataloader_ref() is None
         assert gradient_state_ref() is None
+
+    def test_batch_sampler_shards_with_truncation(self):
+        # Test with truncation enabled
+        batch_sampler = BatchSampler(range(100), batch_size=4, drop_last=False)
+        gradient_steps = 10
+        num_processes = 2
+
+        # Calculate expected size
+        samples_per_step = batch_sampler.batch_size * num_processes
+        optimal_size = (gradient_steps * samples_per_step)
+
+        batch_sampler_shards = [
+            BatchSamplerShard(
+                batch_sampler,
+                num_processes,
+                i,
+                split_batches=False,
+                even_batches=True,
+                truncate_dataset=True,
+                gradient_steps=gradient_steps
+            )
+            for i in range(num_processes)
+        ]
+
+        # Check that each shard has the optimal size
+        for shard in batch_sampler_shards:
+            assert len(shard) == optimal_size // (batch_sampler.batch_size * num_processes)
+
+        # Test that truncation is disabled by default
+        batch_sampler_shards_no_truncate = [
+            BatchSamplerShard(
+                batch_sampler,
+                num_processes,
+                i,
+                split_batches=False,
+                even_batches=True
+            )
+            for i in range(num_processes)
+        ]
+
+        # Check that without truncation, we get the full dataset
+        for shard in batch_sampler_shards_no_truncate:
+            if shard.even_batches:
+                expected = (len(batch_sampler) // num_processes) + 1
+            else:
+                expected = len(batch_sampler) // num_processes
+            assert len(shard) == expected
+
+        # Test that gradient_steps is required when truncate_dataset is True
+        with pytest.raises(ValueError):
+            BatchSamplerShard(
+                batch_sampler,
+                num_processes,
+                0,
+                truncate_dataset=True
+            )
 
 
 class StatefulDataLoaderTester(AccelerateTestCase):
