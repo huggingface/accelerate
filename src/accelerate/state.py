@@ -954,8 +954,17 @@ class AcceleratorState:
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
-                self.deepspeed_plugins = deepspeed_plugin
                 self.distributed_type = DistributedType.DEEPSPEED
+                if not isinstance(deepspeed_plugin, dict):
+                    deepspeed_plugin.set_mixed_precision(mixed_precision)
+                    deepspeed_plugin.select(_from_accelerator_state=True)
+                else:
+                    for plugin in deepspeed_plugin.values():
+                        plugin.set_mixed_precision(mixed_precision)
+                    # The first plugin passed in is always the active one
+                    first_plugin = next(iter(deepspeed_plugin.values()))
+                    first_plugin.select(_from_accelerator_state=True)
+                self.deepspeed_plugin = deepspeed_plugin
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
