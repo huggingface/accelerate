@@ -1508,7 +1508,7 @@ class Accelerator:
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
 
         # We prepare TE after, allowing for bf16 autocast to happen first
-        if self.fp8_backend == "TE" and not self.delayed_fp8_autocast:
+        if not self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(

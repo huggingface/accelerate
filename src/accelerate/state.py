@@ -964,7 +964,7 @@ class AcceleratorState:
                     # The first plugin passed in is always the active one
                     first_plugin = next(iter(deepspeed_plugin.values()))
                     first_plugin.select(_from_accelerator_state=True)
-                self.deepspeed_plugin = deepspeed_plugin
+                self.deepspeed_plugins = deepspeed_plugin
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
