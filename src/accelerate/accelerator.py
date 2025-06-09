@@ -463,7 +463,7 @@ class Accelerator:
         )
 
         # Check for automatic FP8 recipe creation
-        if self.state.mixed_precision == "fp8" and not self.has_fp8_handler:
+        if (self.state.mixed_precision == "fp8" or mixed_precision== "fp8) and not self.has_fp8_handler:
             # Prioritize AO -> TE -> MSAMP
             if is_torchao_available():
                 logger.info("Found `torchao` installed, using it for FP8 training.")
