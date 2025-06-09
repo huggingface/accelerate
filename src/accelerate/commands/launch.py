@@ -1159,7 +1159,7 @@ def _validate_launch_command(args):
     if args.ipex is not None:
         logger.warning(
             "ipex flag is deprecated and ignored, will be removed in Accelerate v1.20. "
-            "PyTorch has all needed optimizations for Intel CPU and XPU."
+            "From 2.7, PyTorch has all needed optimizations for Intel CPU and XPU."
         )
 
     if args.use_xpu is not None:
