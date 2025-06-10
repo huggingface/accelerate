@@ -1,8 +1,8 @@
-## FSDP2 Examples
+# FSDP2 Examples
 
 This folder contains examples of using FSDP2 with Accelerate, utilizing extra methods to improve training speed, performance or accuracy.
 
-### FSDP2 + ao Float8Linear (`fsdp2_fp8.py`)
+## FSDP2 + ao Float8Linear (`fsdp2_fp8.py`)
 
 In file `fsdp2_fp8.py` we use `Float8Linear` from `ao` to train a model partially in FP8 precision. We utilize `AORecipeKwargs` to pass the `Float8LinearConfig` to the accelerator, 
 which replaces the default `torch.nn.Linear` with `Float8Linear`. We also utilize `TorchDynamoPlugin` together with regional compilation to compile the model,
@@ -34,3 +34,9 @@ The figures above were generated on 8x H100 SXM GPUs, with 8192 sequence length 
 ```bash
 accelerate launch --fsdp2_fp8.py --sequence_length 8192 --num_steps 1000 --log_with wandb --precision [fp8 | bf16]
 ```
+
+## FSDP2 + context parallelism (`fsdp2_context_parallel.py`)
+
+In this file, we showcase integration of context parallelism with FSDP2. Context parallelism is a technique that allows us to scale the training to sequence length of up to a million tokens. With `accelerator.context_parallel` context manager, we replace the attention implementation with a context parallel version, which enables us to train on a sequence length of up to 128k tokens on 8x H100 GPUs.
+
+For a detailed explanation and more details, please refer to [this guide](https://huggingface.co/docs/accelerate/concept_guides/context_parallel).
