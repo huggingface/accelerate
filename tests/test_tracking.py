@@ -583,7 +583,7 @@ class SwanLabTrackingTest(TempDirTestCase, MockingTestCase):
         accelerator.end_training()
 
         # Load latest offline log
-        run_dir = os.path.join("./swanlog", swanlab.get_run().public.run_dir)
+        run_dir = swanlab.get_run().public.run_dir
         assert os.path.exists(run_dir) is True
         ds = DataStore()
         ds.open_for_scan(os.path.join(run_dir.__str__(), BackupHandler.BACKUP_FILE).__str__())
