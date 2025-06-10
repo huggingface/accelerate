@@ -354,18 +354,6 @@ class Accelerator:
             elif compare_versions("deepspeed", "<", "0.9.3"):
                 raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
 
-            mixed_precision = (
-                os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-            )
-            if not isinstance(deepspeed_plugins, dict):
-                deepspeed_plugins.set_mixed_precision(mixed_precision)
-                deepspeed_plugins.select(_from_accelerator_state=True)
-            else:
-                for plugin in deepspeed_plugins.values():
-                    plugin.set_mixed_precision(mixed_precision)
-                # The first plugin passed in is always the active one
-                first_plugin = next(iter(deepspeed_plugins.values()))
-                first_plugin.select(_from_accelerator_state=True)
             self.deepspeed_engine_wrapped = None
 
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
@@ -462,10 +450,11 @@ class Accelerator:
             **kwargs,
         )
 
-        self._mixed_precision = mixed_precision
+        self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
+
         # Check for automatic FP8 recipe creation
-        if self._mixed_precision == "fp8" and not self.has_fp8_handler:
-            # Prioritize TE -> AO -> MSAMP
+        if self.fp8_enabled and not self.has_fp8_handler:
+            # Prioritize AO -> TE -> MSAMP
             if is_torchao_available():
                 logger.info("Found `torchao` installed, using it for FP8 training.")
                 self.ao_recipe_handler = AORecipeKwargs()
@@ -480,6 +469,7 @@ class Accelerator:
                     "Tried to train with `fp8` and auto-detect backend, but no FP8-compatible backend was installed. "
                     "Valid backends are: `torchao`, `transformer-engine`, and `msamp`."
                 )
+            self.has_fp8_handler = True
 
         self.delayed_fp8_autocast = False
         if self.has_fp8_handler:
@@ -567,7 +557,7 @@ class Accelerator:
         # for DeepSpeed,  self.state.mixed_precision is always "bf16",
         # see https://github.com/huggingface/accelerate/blob/main/src/accelerate/state.py#L968 and
         # https://github.com/huggingface/accelerate/blob/main/src/accelerate/utils/dataclasses.py#L1263.
-        elif mixed_precision == "fp8" or self.state.mixed_precision == "fp8":
+        elif self.fp8_enabled:
             # We always enable `native_amp` for FP8
             self.native_amp = True
             if self.fp8_backend == "MSAMP":
@@ -1742,7 +1732,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
-        if self.delayed_fp8_autocast:
+        if self.fp8_backend == "TE" and self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
