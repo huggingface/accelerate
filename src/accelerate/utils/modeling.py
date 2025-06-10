@@ -464,24 +464,6 @@ def get_non_persistent_buffers(module: nn.Module, recurse: bool = False, fqns: b
 
     return non_persistent_buffers_set
 
-
-class FindTiedParametersResult(list):
-    """
-    This is a subclass of a list to handle backward compatibility for Transformers. Do not rely on the fact this is not
-    a list or on the `values` method as in the future this will be removed.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def values(self):
-        warnings.warn(
-            "The 'values' method of FindTiedParametersResult is deprecated and will be removed in Accelerate v1.3.0. ",
-            FutureWarning,
-        )
-        return sum([x[1:] for x in self], [])
-
-
 def check_tied_parameters_in_config(model: nn.Module):
     """
     Check if there is any indication in the given model that some weights should be tied.
@@ -584,30 +566,13 @@ def find_tied_parameters(model: torch.nn.Module, **kwargs):
     [['linear1.weight', 'linear2.weight']]
     ```
     """
-
-    # get ALL model parameters and their names
-    all_named_parameters = {name: param for name, param in model.named_parameters(remove_duplicate=False)}
-
-    # get ONLY unique named parameters,
-    # if parameter is tied and have multiple names, it will be included only once
-    no_duplicate_named_parameters = {name: param for name, param in model.named_parameters(remove_duplicate=True)}
-
-    # the difference of the two sets will give us the tied parameters
-    tied_param_names = set(all_named_parameters.keys()) - set(no_duplicate_named_parameters.keys())
-
-    # 'tied_param_names' contains the names of parameters that are tied in the model, but we do not know
-    # which names refer to the same parameter. To identify this, we need to group them together.
-    tied_param_groups = {}
-    for tied_param_name in tied_param_names:
-        tied_param = all_named_parameters[tied_param_name]
-        for param_name, param in no_duplicate_named_parameters.items():
-            # compare if parameters are the same, if so, group their names together
-            if param is tied_param:
-                if param_name not in tied_param_groups:
-                    tied_param_groups[param_name] = []
-                tied_param_groups[param_name].append(tied_param_name)
-
-    return FindTiedParametersResult([sorted([weight] + list(set(tied))) for weight, tied in tied_param_groups.items()])
+    # Group parameter names by their actual parameter object (memory address)
+    param_groups = defaultdict(list)
+    for name, param in model.named_parameters(remove_duplicate=False):
+        param_groups[id(param)].append(name)
+    # Return only groups with more than one name (tied parameters)
+    tied_groups = [sorted(names) for names in param_groups.values() if len(names) > 1]
+    return tied_groups
 
 
 def retie_parameters(model, tied_params):
