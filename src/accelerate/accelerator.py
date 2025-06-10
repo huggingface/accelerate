@@ -80,6 +80,7 @@ from .utils import (
     convert_outputs_to_fp32,
     ensure_weights_retied,
     extract_model_from_parallel,
+    fsdp2_apply_ac,
     fsdp2_canonicalize_names,
     fsdp2_prepare_model,
     fsdp2_switch_optimizer_parameters,
@@ -481,6 +482,12 @@ class Accelerator:
             self.delayed_fp8_autocast = self.fp8_backend == "TE" and self.distributed_type in (
                 DistributedType.MULTI_GPU,
                 DistributedType.FSDP,
+            )
+
+        # TODO: S1ro - this is probably gonna be a problem with other fp8 backends too
+        if self.fp8_backend == "AO" and self.state.fsdp_plugin.cpu_ram_efficient_loading:
+            raise ValueError(
+                "torchao with FSDP2 and cpu_ram_efficient_loading is not supported, setting `cpu_ram_efficient_loading` to False will fix the issue and work as intended."
             )
 
         trackers = filter_trackers(log_with, self.logging_dir)
@@ -1374,7 +1381,7 @@ class Accelerator:
         if self.is_fsdp2:
             model_count = 0
             optimizer_count = 0
-            for obj in args:
+            for i, obj in enumerate(args):
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
                 elif isinstance(obj, torch.optim.Optimizer):
@@ -1386,30 +1393,15 @@ class Accelerator:
                     "When using FSDP2, a model and optimizer must be passed together to `Accelerator.prepare()`"
                     " as the optimizer needs to have its parameters modified after the model is converted."
                 )
+            if model_count > 1:
+                raise ValueError("Only one model is supported when using FSDP2")
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
-        fsdp2_should_fix_optimizer = self.is_fsdp2
-        should_fix_optimizer = tpu_should_fix_optimizer or fsdp2_should_fix_optimizer
 
-        if should_fix_optimizer:
+        if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
-            old_named_params = self._get_named_parameters(
-                *args, drop_refs=fsdp2_should_fix_optimizer
-            )  # Drop refs for FSDP2, to enable reallocation of parameters further in `fully_shard`
-
-        # `FSDP2` by default expects `Optimizer` to be created after the model is prepared,
-        # however that goes against `Accelerate's` design of `bring your own`
-        # this is a workaround to make memory footprint match if `Optimizer` is created before preparing the model
-        if fsdp2_should_fix_optimizer:
-            for obj in args:
-                if isinstance(obj, torch.optim.Optimizer):
-                    for param_group in obj.param_groups:
-                        for i, p in enumerate(param_group["params"]):
-                            # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
-                            # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
-                            param_group["params"][i] = torch.empty_like(p)
-                            param_group["params"][i].data_ptr = p.data_ptr()
+            old_named_params = self._get_named_parameters(*args, drop_refs=False)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if (self.device.type == "cpu" or self.device.type == "xpu") and self.state.use_ipex:
@@ -1422,6 +1414,8 @@ class Accelerator:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
+        elif self.is_fsdp2:
+            result = self._prepare_fsdp2(*args)
         else:
             if self.fp8_backend == "MSAMP":
                 args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
@@ -1429,20 +1423,15 @@ class Accelerator:
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
-        if should_fix_optimizer:
+        if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
-            if fsdp2_should_fix_optimizer:
-                new_named_params = fsdp2_canonicalize_names(new_named_params)
             # 3. building a map from the first to the second
             mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
             # 4. using that map to update the parameters of the optimizer
             for obj in result:
                 if isinstance(obj, torch.optim.Optimizer):
-                    if not fsdp2_should_fix_optimizer:
-                        obj._switch_parameters(mapping)
-                    else:
-                        fsdp2_switch_optimizer_parameters(obj, mapping)
+                    obj._switch_parameters(mapping)
 
         for item in result:
             if any(
@@ -1452,6 +1441,76 @@ class Accelerator:
                 item._is_accelerate_prepared = True
 
         return result if len(result) > 1 else result[0]
+
+    def _prepare_fsdp2(self, *args):
+        # First pass: prepare everything except schedulers (and model, which is prepared separately below)
+        result = [
+            self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj for obj in args
+        ]
+
+        # Second pass: prepare schedulers
+        result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
+
+        # Prepare the model
+        model_index, model = None, None
+        for i, obj in enumerate(result):
+            if isinstance(obj, torch.nn.Module):
+                model_index, model = i, obj
+
+        # Invariant: if we have a model, we also have an optimizer (checked in `prepare`)
+        if model_index is None:
+            return tuple(result)
+
+        # Needs to be done first, to make sure AC + fully_shard will work as expected
+        self.state.fsdp_plugin.set_auto_wrap_policy(model)
+
+        # Apply AC if needed
+        if self.state.fsdp_plugin.activation_checkpointing:
+            model = fsdp2_apply_ac(self, model)
+
+        # Apply compile if needed, has to be *after* applying AC
+        # Copied from: `accelerator.prepare_model` ~ L1804
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
+            if self.state.dynamo_plugin.use_regional_compilation:
+                model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
+            else:
+                model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+
+        # Get old params and canonicalize - we cannonicalize to have the mapping easy
+        old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
+
+        # Swap the optimizer parameters with empty, so `fully_shard` after will not allocate too much memory
+        for obj in result:
+            if isinstance(obj, torch.optim.Optimizer):
+                for param_group in obj.param_groups:
+                    for i, p in enumerate(param_group["params"]):
+                        # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
+                        # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
+                        param_group["params"][i] = torch.empty_like(p)
+                        param_group["params"][i].data_ptr = p.data_ptr()
+
+        self._models.append(model)
+
+        # Prepare everything FSDP2 related for the model (except AC)
+        model = fsdp2_prepare_model(self, model)
+
+        # Remove the old model from the list
+        if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
+            del self._models[-2]
+
+        # Replace the old model with the new one (shouldn't be needed as everything should be in place)
+        result[model_index] = model
+
+        # Get new params and canonicalize
+        new_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*result))
+        # Build a map from old to new params
+        mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+        # Update the optimizer parameters
+        for obj in result:
+            if isinstance(obj, torch.optim.Optimizer):
+                fsdp2_switch_optimizer_parameters(obj, mapping)
+
+        return result
 
     def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, evaluation_mode: bool = False):
         """
@@ -1590,11 +1649,9 @@ class Accelerator:
                         f"tp_size in the plugin {self.state.torch_tp_plugin.tp_size} should be same as model's tp size {model.tp_size}"
                     )
             elif self.is_fsdp2:
-                model = fsdp2_prepare_model(self, model)
-
-                if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
-                    del self._models[-2]
-                self._models[-1] = model
+                raise ValueError(
+                    "FSDP2 preparation should be done via `accelerate.prepare()`, as it requires a model and an optimizer."
+                )
 
             elif self.distributed_type == DistributedType.FSDP:
                 # We need to fix the optimizer *before* sharding the model
@@ -1734,7 +1791,7 @@ class Accelerator:
         # Now we can apply the FP8 autocast
         if self.fp8_backend == "TE" and self.delayed_fp8_autocast:
             model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
-        # torch.compile should be called last and only if the model isn't already compiled.
+        # torch.compile should be called last and only if the model isn't already compiled
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if self.state.dynamo_plugin.use_regional_compilation:
                 model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
@@ -1747,6 +1804,10 @@ class Accelerator:
             raise ImportError(
                 "`torchao` was not found on your system or is too old of a version. Please ensure that `torchao >= 0.6.1` is installed"
             )
+
+        if self.is_fsdp2:
+            models = [x for x in args if isinstance(x, torch.nn.Module)]
+            optimizers = [x for x in args if isinstance(x, torch.optim.Optimizer)]
         for arg in args:
             if isinstance(arg, torch.nn.Module):
                 convert_model_to_fp8_ao(
@@ -1754,6 +1815,16 @@ class Accelerator:
                     config=self.ao_recipe_handler.config,
                     module_filter_func=self.ao_recipe_handler.module_filter_func,
                 )
+
+        # Invariant: with FSDP2, optimizer is always passed to `prepare()` together with model
+        # We only precompute scales if float8 all gather is enabled, possibly can add a flag for this later
+        if self.is_fsdp2 and len(optimizers) > 0 and self.ao_recipe_handler.config.enable_fsdp_float8_all_gather:
+            from torchao.float8 import precompute_float8_dynamic_scale_for_fsdp
+
+            optimizers[0].register_step_post_hook(
+                lambda *args, **kwargs: precompute_float8_dynamic_scale_for_fsdp(models[0])
+            )
+
         return args
 
     def _prepare_te(self, *args):
@@ -3545,10 +3616,29 @@ class Accelerator:
 
     def _get_named_parameters(self, *args, drop_refs=False):
         named_parameters = {}
+        accessor_mapping = {}
         for obj in args:
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
-                named_parameters.update({n: p.data_ptr() if drop_refs else p for n, p in obj.named_parameters()})
+                if not drop_refs:
+                    named_parameters.update({n: p for n, p in obj.named_parameters()})
+                    continue
+
+                # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
+                # the underlying pointer is actually hidden in `_tensor` attribute
+                if self.fp8_backend == "AO":
+                    from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
+
+                    accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
+
+                named_parameters.update(
+                    {
+                        n: getattr(p, accessor_mapping[type(p)]).data_ptr()
+                        if type(p) in accessor_mapping
+                        else p.data_ptr()
+                        for n, p in obj.named_parameters()
+                    }
+                )
         return named_parameters
 
     def _get_devices(self, *args):
