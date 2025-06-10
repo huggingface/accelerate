@@ -126,14 +126,14 @@ You can directly see this issue in the profiler output in the image below:
 <p align="center">
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/examples/fsdp2/cp_all_to_all.png" alt="all-to-all profiler output" />
   <br>
-  <em>Figure 1: In red you can see the idle time, while we wait for the all-to-all kernel to finish. It's also highlighted in the first blue bar, where we can see it takes ~250us to finish, which is repeated N-1 times for each attention call, where N is the context parallel size.</em>
+  <em>Figure 1: In red you can see the idle time, while we wait for the all-to-all kernel to finish. Highlighted in the first blue bar, you can see that it takes ~250us to finish, which is repeated N-1 times for each attention call, where N is the context parallel size.</em>
 </p>
 
 
 ## Why only FSDP2?
 
 We only support context parallelism with `FSDP2` for now, as we create a joint mesh of `context_parallel_size` and `dp_shard_size` to 
-utilize its full potential. In the profiler output in the image below, you can see that the computation of `attn_i`
+utilize its full potential. In the profiler output in the image below, you can see why this is the case.
 
 <p align="center">
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/examples/fsdp2/cp_why_fsdp2.png" alt="why FSDP2+CP" />
