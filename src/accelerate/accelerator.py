@@ -81,6 +81,7 @@ from .utils import (
     ensure_weights_retied,
     extract_model_from_parallel,
     fsdp2_apply_ac,
+    fsdp2_apply_ac,
     fsdp2_canonicalize_names,
     fsdp2_prepare_model,
     fsdp2_switch_optimizer_parameters,
