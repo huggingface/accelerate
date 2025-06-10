@@ -398,6 +398,24 @@ class FSDPPluginIntegration(AccelerateTestCase):
             assert fsdp_plugin.cpu_ram_efficient_loading is False
             assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
+    def test_fsdp2_context_parallel(self):
+        if (fsdp_version := self.current_fsdp_version) != 2:
+            return
+
+        env = self.fsdp_envs[fsdp_version].copy()
+        for context_parallel_shard_rotation in ["allgather", "alltoall"]:
+            env["ACCELERATE_CONTEXT_PARALLEL_SHARD_ROTATION"] = context_parallel_shard_rotation
+            with patch_environment(**env):
+                fsdp_plugin = FullyShardedDataParallelPlugin()
+                assert fsdp_plugin.context_parallel_shard_rotation == context_parallel_shard_rotation
+
+            env = self.fsdp_envs[fsdp_version].copy()
+            with patch_environment(**env):
+                fsdp_plugin = FullyShardedDataParallelPlugin(
+                    context_parallel_shard_rotation=context_parallel_shard_rotation
+                )
+                assert fsdp_plugin.context_parallel_shard_rotation == context_parallel_shard_rotation
+
 
 @require_fsdp2
 @require_non_cpu
