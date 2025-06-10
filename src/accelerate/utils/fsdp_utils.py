@@ -588,12 +588,14 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     return model
 
 
-def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
+def fsdp2_prepare_model(accelerator, model: torch.nn.Module, fully_shard_kwargs: dict = None) -> torch.nn.Module:
     """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
         model (`torch.nn.Module`): The model to prepare
+        fully_shard_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to `fully_shard`
 
     Returns:
         `torch.nn.Module`: Prepared model
@@ -606,11 +608,12 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     if is_type_fsdp:
         return model
 
+    fully_shard_kwargs = fully_shard_kwargs or {}
+
     fsdp2_plugin = accelerator.state.fsdp_plugin
 
     fsdp2_plugin.set_auto_wrap_policy(model)
 
-    original_sd = model.state_dict()
     original_sd = model.state_dict()
 
     fsdp2_kwargs = {
@@ -619,6 +622,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
     }
+    fsdp2_kwargs.update(fully_shard_kwargs)
 
     model_has_params4bit = False
     for name, param in model.named_parameters():
@@ -651,16 +655,11 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
     if auto_wrap_policy_func is not None:
-    auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
-    if auto_wrap_policy_func is not None:
         # We skip the model itself, as that one is always wrapped
         for module in get_module_children_bottom_up(model)[:-1]:
             if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
-            if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
                 fully_shard(module, **fsdp2_kwargs)
 
-    if not isinstance(model, FSDPModule):
-        fully_shard(model, **fsdp2_kwargs)
     if not isinstance(model, FSDPModule):
         fully_shard(model, **fsdp2_kwargs)
 
@@ -706,7 +705,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
 
 def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool]:
-def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool]:
     """Prepares the auto wrap policy based on its type, done to mimic the behaviour of FSDP1 auto wrap policy.
 
     Args:
@@ -721,14 +719,6 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
         `Callable[[torch.nn.Module], bool]`:
             The auto wrap policy function to be applied to the model
     """
-    from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
-
-    fn = fsdp2_plugin.auto_wrap_policy
-
-    if isinstance(fn, functools.partial):
-        fn = fn.func
-
-    if fn is transformer_auto_wrap_policy:
     from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
     fn = fsdp2_plugin.auto_wrap_policy
@@ -756,7 +746,6 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
                 return False
             return isinstance(module, tuple(transformer_cls_to_wrap))
 
-    elif fn is size_based_auto_wrap_policy:
     elif fn is size_based_auto_wrap_policy:
 
         def policy(module: torch.nn.Module) -> bool:
@@ -794,6 +783,5 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
     named_params = {
         k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k: v for k, v in named_params.items()
     }
-    named_params = {k.replace("._orig_mod", ""): v for k, v in named_params.items()}
     named_params = {k.replace("._orig_mod", ""): v for k, v in named_params.items()}
     return named_params
