@@ -93,8 +93,8 @@ from .utils import (
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
-    is_lomo_available,
     is_ipex_available,
+    is_lomo_available,
     is_megatron_lm_available,
     is_mlu_available,
     is_msamp_available,
@@ -1422,7 +1422,11 @@ class Accelerator:
                             param_group["params"][i].data_ptr = p.data_ptr()
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if is_torch_version("<", "2.7.0") and (self.device.type == "cpu" or self.device.type == "xpu") and self.state.use_ipex:
+            if (
+                is_torch_version("<", "2.7.0")
+                and (self.device.type == "cpu" or self.device.type == "xpu")
+                and self.state.use_ipex
+            ):
                 args = self._prepare_ipex(*args)
         if self.fp8_backend == "TE":
             args = self._prepare_te(*args)
