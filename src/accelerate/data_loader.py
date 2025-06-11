@@ -133,6 +133,11 @@ class BatchSamplerShard(BatchSampler):
         even_batches (`bool`, *optional*, defaults to `True`):
             Whether or not to loop back at the beginning of the sampler when the number of samples is not a round
             multiple of (original batch size / number of processes).
+        truncate_dataset (`bool`, *optional*, defaults to `False`):
+            Whether to truncate the dataset to ensure optimal distribution across processes based on gradient steps.
+            When enabled, prevents deadlocks in multi-GPU training with sample tracking mechanisms.
+        gradient_steps (`int`, *optional*, defaults to `None`):
+            Number of gradient accumulation steps. Required when `truncate_dataset` is True.
 
     <Tip warning={true}>
 
@@ -148,6 +153,8 @@ class BatchSamplerShard(BatchSampler):
         process_index: int = 0,
         split_batches: bool = False,
         even_batches: bool = True,
+        truncate_dataset: bool = False,
+        gradient_steps: Optional[int] = None,
     ):
         if split_batches and batch_sampler.batch_size % num_processes != 0:
             raise ValueError(
@@ -166,12 +173,28 @@ class BatchSamplerShard(BatchSampler):
                 "You need to use `even_batches=False` when the batch sampler has no batch size. If you "
                 "are not calling this method directly, set `accelerator.even_batches=False` instead."
             )
+        self.truncate_dataset = truncate_dataset
+        self.gradient_steps = gradient_steps
+        if truncate_dataset and gradient_steps is None:
+            raise ValueError("gradient_steps must be provided when truncate_dataset is True")
+        self._optimal_size = self._calculate_optimal_size()
+
+    def _calculate_optimal_size(self):
+        """Calculate the optimal dataset size to prevent GPU deadlocks."""
+        if not self.truncate_dataset:
+            return None
+        # Calculate total samples needed per epoch to ensure even distribution
+        samples_per_epoch = self.batch_size * self.gradient_steps * self.num_processes
+        return samples_per_epoch
 
     @property
     def total_length(self):
         return len(self.batch_sampler)
 
     def __len__(self):
+        if self.truncate_dataset and self._optimal_size is not None:
+            total_batches = self._optimal_size // self.batch_size
+            return total_batches // self.num_processes
         if self.split_batches:
             # Split batches does not change the length of the batch sampler
             return len(self.batch_sampler)
@@ -195,15 +218,28 @@ class BatchSamplerShard(BatchSampler):
     def _iter_with_split(self):
         initial_data = []
         batch_length = self.batch_sampler.batch_size // self.num_processes
+        batch_yielded = 0
+
+        max_batches = None
+        if self.truncate_dataset and self._optimal_size is not None:
+            max_batches = self._optimal_size // self.batch_size
+            max_batches = max_batches // self.num_processes
+
         for idx, batch in enumerate(self.batch_sampler):
+            if max_batches is not None and batch_yielded >= max_batches:
+                break
             if idx == 0:
                 initial_data = batch
             if len(batch) == self.batch_size:
                 # If the batch is full, we yield the part of it this process is responsible of.
                 yield batch[batch_length * self.process_index : batch_length * (self.process_index + 1)]
+                batch_yielded += 1
 
         # If drop_last is True of the last batch was full, iteration is over, otherwise...
         if not self.drop_last and len(initial_data) > 0 and len(batch) < self.batch_size:
+            if max_batches is not None and batch_yielded >= max_batches:
+                return
+
             if not self.even_batches:
                 if len(batch) > batch_length * self.process_index:
                     yield batch[batch_length * self.process_index : batch_length * (self.process_index + 1)]
@@ -217,7 +253,16 @@ class BatchSamplerShard(BatchSampler):
     def _iter_with_no_split(self):
         initial_data = []
         batch_to_yield = []
+        batches_yielded = 0
+
+        max_batches = None
+        if self.truncate_dataset and self._optimal_size is not None:
+            max_batches = self._optimal_size // self.batch_size
+            max_batches = max_batches // self.num_processes
+
         for idx, batch in enumerate(self.batch_sampler):
+            if max_batches is not None and batches_yielded >= max_batches:
+                break
             # We gather the initial indices in case we need to circle back at the end.
             if not self.drop_last and idx < self.num_processes:
                 initial_data += batch
@@ -229,9 +274,12 @@ class BatchSamplerShard(BatchSampler):
                 self.batch_size is None or len(batch) == self.batch_size
             ):
                 yield batch_to_yield
+                batches_yielded += 1
                 batch_to_yield = []
 
         # If drop_last is True, iteration is over, otherwise...
+        if max_batches is not None and batches_yielded >= max_batches:
+            return
         if not self.drop_last and len(initial_data) > 0:
             if not self.even_batches:
                 if len(batch_to_yield) > 0:
