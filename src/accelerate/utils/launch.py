@@ -30,6 +30,7 @@ from ..utils import (
     is_ccl_available,
     is_fp8_available,
     is_hpu_available,
+    is_ipex_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
@@ -192,6 +193,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
+    if is_ipex_available():
+        current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
     if args.enable_cpu_affinity:
         current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return cmd, current_env
