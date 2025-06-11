@@ -1872,7 +1872,6 @@ class FullyShardedDataParallelPlugin:
                 "Setting environment variable to match `cpu_ram_efficient_loading`."
             )
             os.environ[env_var] = str(self.cpu_ram_efficient_loading)
-
         if self.context_parallel_size is None:
             self.context_parallel_size = os.environ.get(env_prefix + "CONTEXT_PARALLEL_SIZE", None)
 

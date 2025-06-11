@@ -404,12 +404,14 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
         env = self.fsdp_envs[fsdp_version].copy()
         for context_parallel_shard_rotation in ["allgather", "alltoall"]:
-            env["ACCELERATE_CONTEXT_PARALLEL_SHARD_ROTATION"] = context_parallel_shard_rotation
+            env["FSDP_CONTEXT_PARALLEL_SHARD_ROTATION"] = context_parallel_shard_rotation
+            env["FSDP_CONTEXT_PARALLEL_SIZE"] = "2"
             with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert fsdp_plugin.context_parallel_shard_rotation == context_parallel_shard_rotation
 
             env = self.fsdp_envs[fsdp_version].copy()
+            env["FSDP_CONTEXT_PARALLEL_SIZE"] = "2"
             with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin(
                     context_parallel_shard_rotation=context_parallel_shard_rotation
