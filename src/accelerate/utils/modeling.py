@@ -1598,7 +1598,10 @@ def check_device_map(model: nn.Module, device_map: dict[str, Union[int, str, tor
     invalid_keys = [k for k in device_map if k != "" and k not in all_module_names]
 
     if invalid_keys:
-        print(f"Warning: The following device_map keys do not match any submodules in the model: {invalid_keys}")
+        warnings.warn(
+            f"The following device_map keys do not match any submodules in the model: {invalid_keys}",
+            UserWarning
+        )
 
     all_model_tensors = [name for name, _ in model.state_dict().items()]
     for module_name in device_map.keys():
