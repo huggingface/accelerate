@@ -90,7 +90,6 @@ class FSDPPluginIntegration(AccelerateTestCase):
             1: self.fsdp1_env,
             2: self.fsdp2_env,
         }
-
         self.current_fsdp_version = 1
 
     def test_sharding_strategy(self):
@@ -474,7 +473,6 @@ class FSDPIntegrationTest(TempDirTestCase):
         }
         self.n_train = 160
         self.n_val = 160
-
         self.current_fsdp_version = 1
 
     @require_fp16
