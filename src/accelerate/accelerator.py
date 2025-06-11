@@ -1547,8 +1547,6 @@ class Accelerator:
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
-        _fully_shard_kwargs = {}
-
         if (context_parallel_size := getattr(self.state.fsdp_plugin, "context_parallel_size", None)) is not None:
             if context_parallel_size > self.state.num_processes:
                 raise ValueError(
@@ -1566,17 +1564,15 @@ class Accelerator:
 
             world_size = self.state.num_processes
 
-            dp_shard_size = world_size // context_parallel_size
+            fsdp_size = world_size // context_parallel_size
 
             device_mesh = init_device_mesh(
                 device_type=self.device.type,
-                mesh_shape=(dp_shard_size, context_parallel_size),
-                mesh_dim_names=("dp_shard", "cp"),
+                mesh_shape=(fsdp_size, context_parallel_size),
+                mesh_dim_names=("fsdp", "cp"),
             )
-            device_mesh["dp_shard", "cp"]._flatten("dp_shard_cp")
-            _fully_shard_kwargs["mesh"] = device_mesh[
-                "dp_shard_cp"
-            ]  # apply fully_shard to a joint mesh of cp and dp_shard
+            self.state.torch_device_mesh = device_mesh
+            device_mesh["fsdp", "cp"]._flatten("fsdp_cp")
 
             self._cp_context = functools.partial(context_parallel, mesh=device_mesh["cp"])
 
@@ -1608,7 +1604,7 @@ class Accelerator:
         self._models.append(model)
 
         # Prepare everything FSDP2 related for the model (except AC)
-        model = fsdp2_prepare_model(self, model, fully_shard_kwargs=_fully_shard_kwargs)
+        model = fsdp2_prepare_model(self, model)
 
         # Remove the old model from the list
         if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
