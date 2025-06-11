@@ -1116,25 +1116,28 @@ def prepare_data_loader(
             process_index = process_index // submesh_tp_size
             num_processes = num_processes // submesh_tp_size
         else:
-            # when device mesh is used, specifically with TP
+            # when device mesh is used, specifically with TP or CP
             # then there is need to update process_index and num_processes
-            # to bring in the effect of generating same batch across TP ranks
+            # to bring in the effect of generating same batch across TP/CP ranks
             # and different batch across FSDP and DP ranks.
             # Example:
-            # if device mesh is (dp,fsdp,tp) = (2, 2, 3)
-            # ranks would range from 0...11
-            # from data angle ranks should look like 0 0 0 1 1 1 2 2 2 3 3 3
+            # if device mesh is (dp,fsdp,tp,cp) = (2, 2, 2, 3)
+            # ranks would range from 0...23
+            # from data angle ranks should look like 0 0 0 0 0 0 1 1 1 1 1 1 ...
             # processes with same ranks/ids would receive the same batch
             submesh_fsdp_size = 1
             submesh_dp_size = 1
             submesh_tp_size = 1
+            submesh_cp_size = 1
             if "tp" in torch_device_mesh.mesh_dim_names:
                 submesh_tp_size = torch_device_mesh["tp"].size()
             if "dp" in torch_device_mesh.mesh_dim_names:
                 submesh_dp_size = torch_device_mesh["dp"].size()
             if "fsdp" in torch_device_mesh.mesh_dim_names:
                 submesh_fsdp_size = torch_device_mesh["fsdp"].size()
-            process_index = process_index // submesh_tp_size
+            if "cp" in torch_device_mesh.mesh_dim_names:
+                submesh_cp_size = torch_device_mesh["cp"].size()
+            process_index = process_index // (submesh_tp_size * submesh_cp_size)
             num_processes = submesh_fsdp_size * submesh_dp_size
 
     # Sanity check

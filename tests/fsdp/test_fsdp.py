@@ -97,9 +97,10 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
         def test_wrapper(*args, **kwargs):
             for fsdp_version in FSDP_VERSIONS:
+                print(f"Running test with FSDP version {fsdp_version} from {FSDP_VERSIONS}")
                 try:
                     self.current_fsdp_version = fsdp_version
-                    return orig_test_method(*args, **kwargs)
+                    orig_test_method(*args, **kwargs)
                 except Exception as e:
                     raise type(e)(f"FSDP version {fsdp_version}: {str(e)}") from e
 
@@ -426,12 +427,14 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
         env = self.fsdp_envs[fsdp_version].copy()
         for context_parallel_shard_rotation in ["allgather", "alltoall"]:
-            env["ACCELERATE_CONTEXT_PARALLEL_SHARD_ROTATION"] = context_parallel_shard_rotation
+            env["FSDP_CONTEXT_PARALLEL_SHARD_ROTATION"] = context_parallel_shard_rotation
+            env["FSDP_CONTEXT_PARALLEL_SIZE"] = "2"
             with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 assert fsdp_plugin.context_parallel_shard_rotation == context_parallel_shard_rotation
 
             env = self.fsdp_envs[fsdp_version].copy()
+            env["FSDP_CONTEXT_PARALLEL_SIZE"] = "2"
             with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin(
                     context_parallel_shard_rotation=context_parallel_shard_rotation
