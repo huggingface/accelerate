@@ -32,11 +32,13 @@ from accelerate.test_utils.testing import (
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
+    require_torch_min_version,
     run_first,
     slow,
 )
 from accelerate.utils import is_bf16_available, is_fp16_available, is_hpu_available, patch_environment, set_seed
 from accelerate.utils.constants import (
+    CONTEXT_PARALLEL_PYTORCH_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
@@ -492,7 +494,7 @@ class FSDPIntegrationTest(TempDirTestCase):
             for fsdp_version in FSDP_VERSIONS:
                 try:
                     self.current_fsdp_version = fsdp_version
-                    return orig_test_method(*args, **kwargs)
+                    orig_test_method(*args, **kwargs)
                 except Exception as e:
                     raise type(e)(f"FSDP version {fsdp_version}: {str(e)}") from e
 
@@ -654,3 +656,20 @@ class FSDPIntegrationTest(TempDirTestCase):
             )
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_config)
+
+    @require_multi_device
+    @require_torch_min_version(version=CONTEXT_PARALLEL_PYTORCH_VERSION)
+    def test_fsdp2_context_parallel_dataloader(self):
+        if (fsdp_version := self.current_fsdp_version) != 2:
+            return
+
+        self.test_file_path = self.test_scripts_folder / "test_distributed_dataloader.py"
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, fsdp_version=fsdp_version)
+
+        cmd_config = cmd.copy()
+        cmd_config.extend(["--use_fsdp", "--fsdp_context_parallel_size=2"])
+
+        cmd_config.append(self.test_file_path)
+
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd_config)

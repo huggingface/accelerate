@@ -610,6 +610,18 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
     )
+    fsdp_args.add_argument(
+        "--fsdp_context_parallel_size",
+        type=int,
+        default=None,
+        help="FSDP's context parallel size. (useful only when `use_fsdp` flag is passed and `fsdp_version` is 2).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_context_parallel_shard_rotation",
+        type=str,
+        default=None,
+        help="FSDP's context parallel shard rotation. (useful only when `use_fsdp` flag is passed and `fsdp_version` is 2).",
+    )
 
     # megatron_lm args
     megatron_lm_args = parser.add_argument_group("Megatron-LM Arguments", "Arguments related to Megatron-LM.")
