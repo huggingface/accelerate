@@ -33,11 +33,17 @@ from accelerate.test_utils.testing import (
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
+    require_torch_min_version,
     run_first,
     slow,
 )
 from accelerate.utils import is_bf16_available, is_fp16_available, is_hpu_available, patch_environment, set_seed
 from accelerate.utils.constants import (
+<<<<<<< HEAD
+=======
+    CONTEXT_PARALLEL_PYTORCH_VERSION,
+    FSDP2_PYTORCH_VERSION,
+>>>>>>> d4ef46c2 (Test: distributed dataloader)
     FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
