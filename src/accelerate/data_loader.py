@@ -1007,6 +1007,7 @@ def prepare_data_loader(
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
     torch_device_mesh=None,
+    cp=False,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -1137,10 +1138,9 @@ def prepare_data_loader(
             process_index = process_index // submesh_tp_size
             num_processes = submesh_fsdp_size * submesh_dp_size
 
-    # put cp size here
-    cp_size = 
-    process_index = process_index // cp_size
-    num_processes = num_processes // cp_size
+    if cp:
+        process_index = 0
+        num_processes = 1
     
     # Sanity check
     if split_batches:
