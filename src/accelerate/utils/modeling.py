@@ -677,10 +677,6 @@ def compute_module_sizes(
         module_list = model.named_buffers(recurse=True)
 
     for name, tensor in module_list:
-        print("check")
-        print(name)
-        print(tensor.dtype)
-        print(dtype_byte_size(tensor.dtype))
         if special_dtypes is not None and name in special_dtypes:
             size = tensor.numel() * special_dtypes_size[name]
         elif dtype is None:
@@ -1113,8 +1109,6 @@ def _init_infer_auto_device_map(
         main_devices = ["cpu"]
 
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
-    print("module sizes")
-    print(module_sizes)
     tied_parameters = find_tied_parameters(model)
     if check_tied_parameters_in_config(model) and len(tied_parameters) == 0:
         logger.warning(
@@ -1348,8 +1342,6 @@ def infer_auto_device_map(
         no_split_module_classes,
         modules_to_treat,
     ) = _init_infer_auto_device_map(model, max_memory, no_split_module_classes, dtype, special_dtypes)
-    print('max_memory')
-    print(max_memory)
 
     device_map = OrderedDict()
     current_device = 0
