@@ -305,8 +305,8 @@ def set_module_tensor_to_device(
         # # fix the case where the device is meta, we don't want to put it on cpu because there is no data =0
         if (
             param is not None
-            and param.device.type != "cuda"
-            and torch.device(device).type == "cuda"
+            and param.device.type not in ("cuda", "xpu")
+            and torch.device(device).type in ("cuda", "xpu")
             and param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]
         ):
             device_quantization = device
