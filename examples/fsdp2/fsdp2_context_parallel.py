@@ -140,10 +140,13 @@ def main():
         if step >= total_num_steps:
             break
 
+        # get number of tokens before context_parallel shards the batch
+        batch_tokens = batch["input_ids"].shape[0] * batch["input_ids"].shape[1]
+
         loss = training_step(batch, model, optimizer, accelerator)
 
-        batch_tokens = batch["input_ids"].shape[0] * batch["input_ids"].shape[1]
-        metrics = performance_tracker.step(batch_tokens)
+        # each batch gets the same data, we divide by the number of processes to get the number of tokens per process
+        metrics = performance_tracker.step(batch_tokens // accelerator.num_processes)
 
         log_metrics = {"loss": loss.item()}
 
