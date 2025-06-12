@@ -2392,7 +2392,7 @@ class Accelerator:
             return self.state.torch_tp_plugin.torch_device_mesh
         elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
-        elif self.is_fsdp2 and hasattr(self.state, "_torch_device_mesh"):
+        elif self.is_fsdp2 and hasattr(self.state, "torch_device_mesh"):
             return self.state.torch_device_mesh
         return None
 
