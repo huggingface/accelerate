@@ -815,6 +815,7 @@ class DataLoaderConfiguration:
             " underlying dataset is an `IterableDataset`, `False` otherwise."
         },
     )
+    cp: bool = field(default=False)
     even_batches: bool = field(
         default=True,
         metadata={

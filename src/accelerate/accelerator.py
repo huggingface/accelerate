@@ -649,6 +649,10 @@ class Accelerator:
         return self.dataloader_config.dispatch_batches
 
     @property
+    def cp(self):
+        return self.dataloader_config.cp
+
+    @property
     def even_batches(self):
         return self.dataloader_config.even_batches
 
@@ -2410,6 +2414,7 @@ class Accelerator:
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
             torch_device_mesh=device_mesh,
+            cp=self.cp,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
