@@ -2088,6 +2088,8 @@ class TorchTensorParallelPlugin:
         # support for other devices has to be investigated
         if is_hpu_available(init_hccl=True):
             device = "hpu"
+        elif is_xpu_availabe():
+            device = "xpu"
         else:
             device = "cuda"
 
