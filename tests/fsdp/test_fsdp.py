@@ -32,11 +32,13 @@ from accelerate.test_utils.testing import (
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
+    require_torch_min_version,
     run_first,
     slow,
 )
 from accelerate.utils import is_bf16_available, is_fp16_available, is_hpu_available, patch_environment, set_seed
 from accelerate.utils.constants import (
+    CONTEXT_PARALLEL_PYTORCH_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
@@ -89,25 +91,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
             1: self.fsdp1_env,
             2: self.fsdp2_env,
         }
-
-    def run(self, result=None):
-        """Override run to get the current test name and format failures to include FSDP version."""
-        test_method = getattr(self, self._testMethodName)
-        orig_test_method = test_method
-
-        def test_wrapper(*args, **kwargs):
-            for fsdp_version in FSDP_VERSIONS:
-                try:
-                    self.current_fsdp_version = fsdp_version
-                    return orig_test_method(*args, **kwargs)
-                except Exception as e:
-                    raise type(e)(f"FSDP version {fsdp_version}: {str(e)}") from e
-
-        setattr(self, self._testMethodName, test_wrapper)
-        try:
-            return super().run(result)
-        finally:
-            setattr(self, self._testMethodName, orig_test_method)
+        self.current_fsdp_version = 1
 
     def test_sharding_strategy(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
@@ -420,6 +404,32 @@ class FSDPPluginIntegration(AccelerateTestCase):
             assert fsdp_plugin.cpu_ram_efficient_loading is False
             assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
+    def test_fsdp2_context_parallel(self):
+        if (fsdp_version := self.current_fsdp_version) != 2:
+            return
+
+        env = self.fsdp_envs[fsdp_version].copy()
+        for context_parallel_shard_rotation in ["allgather", "alltoall"]:
+            env["FSDP_CONTEXT_PARALLEL_SHARD_ROTATION"] = context_parallel_shard_rotation
+            env["FSDP_CONTEXT_PARALLEL_SIZE"] = "2"
+            with patch_environment(**env):
+                fsdp_plugin = FullyShardedDataParallelPlugin()
+                assert fsdp_plugin.context_parallel_shard_rotation == context_parallel_shard_rotation
+
+            env = self.fsdp_envs[fsdp_version].copy()
+            env["FSDP_CONTEXT_PARALLEL_SIZE"] = "2"
+            with patch_environment(**env):
+                fsdp_plugin = FullyShardedDataParallelPlugin(
+                    context_parallel_shard_rotation=context_parallel_shard_rotation
+                )
+                assert fsdp_plugin.context_parallel_shard_rotation == context_parallel_shard_rotation
+
+
+class FSDP2PluginIntegration(FSDPPluginIntegration):
+    def setUp(self):
+        super().setUp()
+        self.current_fsdp_version = 2
+
 
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
@@ -461,25 +471,7 @@ class FSDPIntegrationTest(TempDirTestCase):
         }
         self.n_train = 160
         self.n_val = 160
-
-    def run(self, result=None):
-        """Override run to get the current test name and format failures to include FSDP version."""
-        test_method = getattr(self, self._testMethodName)
-        orig_test_method = test_method
-
-        def test_wrapper(*args, **kwargs):
-            for fsdp_version in FSDP_VERSIONS:
-                try:
-                    self.current_fsdp_version = fsdp_version
-                    return orig_test_method(*args, **kwargs)
-                except Exception as e:
-                    raise type(e)(f"FSDP version {fsdp_version}: {str(e)}") from e
-
-        setattr(self, self._testMethodName, test_wrapper)
-        try:
-            return super().run(result)
-        finally:
-            setattr(self, self._testMethodName, orig_test_method)
+        self.current_fsdp_version = 1
 
     @require_fp16
     def test_performance(self):
@@ -633,3 +625,25 @@ class FSDPIntegrationTest(TempDirTestCase):
             )
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_config)
+
+    @require_torch_min_version(version=CONTEXT_PARALLEL_PYTORCH_VERSION)
+    def test_fsdp2_context_parallel_dataloader(self):
+        if (fsdp_version := self.current_fsdp_version) != 2:
+            return
+
+        self.test_file_path = self.test_scripts_folder / "test_distributed_dataloader.py"
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, fsdp_version=fsdp_version)
+
+        cmd_config = cmd.copy()
+        cmd_config.extend(["--use_fsdp", "--fsdp_context_parallel_size=2"])
+
+        cmd_config.append(self.test_file_path)
+
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd_config)
+
+
+class FSDP2IntegrationTest(FSDPIntegrationTest):
+    def setUp(self):
+        super().setUp()
+        self.current_fsdp_version = 2

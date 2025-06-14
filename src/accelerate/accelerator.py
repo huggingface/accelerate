@@ -1254,6 +1254,65 @@ class Accelerator:
             with contextlib.nullcontext(joinables):
                 yield
 
+    @contextmanager
+    def context_parallel(
+        self,
+        buffers: list[torch.Tensor] | None = None,
+        buffer_seq_dims: list[int] | None = None,
+        no_restore_buffers: set[torch.Tensor] | None = None,
+    ):
+        """
+        A context manager that enables context parallel training.
+
+        Args:
+            buffers (`list[torch.Tensor]`, `optional`):
+                Buffers, which are going to be sharded along the sequence dimension. Common examples are inputs, labels
+                or positional embedding buffers. This context manager will modify these buffers in-place, and after
+                exiting the context, the buffers will be restored to their original state. To avoid unnecessary
+                restores, you can use `no_restore_buffers` to specify which buffers don't need to be restored.
+            buffer_seq_dims (`list[int]`, `optional`):
+                Sequence dimensions of `buffers`.
+            no_restore_buffers (`set[torch.Tensor]`, `optional`):
+                This set must be a subset of `buffers`. Specifies which buffers from `buffers` argument won't be
+                restored after the context exits. These buffers will be then kept in sharded state.
+
+        <Tip warning={true}>
+
+        `context_parallel` is currently only supported together with FSDP2, and requires `context_parallel_size` to be
+        set. If either of these conditions are not met, this context manager will have no effect.
+
+        </Tip>
+
+        <Tip warning={true}>
+
+        This context manager has to be recreated with each training step, as shown in the example below.
+
+        </Tip>
+
+        Example:
+
+        ```python
+        >>> for batch in dataloader:
+        ...     with accelerator.context_parallel(
+        ...         buffers=[batch["input_ids"], batch["attention_mask"]],
+        ...         buffer_seq_dims=[1, 1],
+        ...         no_restore_buffers={batch["input_ids"]},
+        ...     ):
+        ...         outputs = model(batch)
+        ...         ...
+        ```
+        """
+
+        if (
+            getattr(self.state.fsdp_plugin, "context_parallel_size", None) is None
+            or (cp_context := getattr(self, "_cp_context", None)) is None
+        ):
+            warnings.warn("Context parallel is not configured, this context manager will have no effect.")
+            yield
+        else:
+            with cp_context(buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers):
+                yield
+
     def print(self, *args, **kwargs):
         """
         Drop in replacement of `print()` to only print once per server.
@@ -1463,6 +1522,35 @@ class Accelerator:
 
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
+
+        if (context_parallel_size := getattr(self.state.fsdp_plugin, "context_parallel_size", None)) is not None:
+            if context_parallel_size > self.state.num_processes:
+                raise ValueError(
+                    f"context_parallel_size set to {context_parallel_size}, which is greater than the number of processes {self.state.num_processes}. Please set to None or use a smaller value."
+                )
+
+            from torch.distributed.device_mesh import init_device_mesh
+            from torch.distributed.tensor.experimental import context_parallel
+            from torch.distributed.tensor.experimental._attention import set_rotate_method
+
+            context_parallel_shard_rotation = getattr(
+                self.state.fsdp_plugin, "context_parallel_shard_rotation", "allgather"
+            )
+            set_rotate_method(context_parallel_shard_rotation)
+
+            world_size = self.state.num_processes
+
+            fsdp_size = world_size // context_parallel_size
+
+            device_mesh = init_device_mesh(
+                device_type=self.device.type,
+                mesh_shape=(fsdp_size, context_parallel_size),
+                mesh_dim_names=("fsdp", "cp"),
+            )
+            self.state.torch_device_mesh = device_mesh
+            device_mesh["fsdp", "cp"]._flatten("fsdp_cp")
+
+            self._cp_context = functools.partial(context_parallel, mesh=device_mesh["cp"])
 
         # Apply AC if needed
         if self.state.fsdp_plugin.activation_checkpointing:
@@ -2304,6 +2392,8 @@ class Accelerator:
             return self.state.torch_tp_plugin.torch_device_mesh
         elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
+        elif self.is_fsdp2 and hasattr(self.state, "torch_device_mesh"):
+            return self.state.torch_device_mesh
         return None
 
     def _prepare_msamp(self, *args, device_placement):
