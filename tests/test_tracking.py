@@ -16,6 +16,7 @@ import csv
 import json
 import logging
 import os
+import random
 import re
 import subprocess
 import tempfile
@@ -42,6 +43,7 @@ from accelerate.test_utils.testing import (
     require_matplotlib,
     require_mlflow,
     require_pandas,
+    require_swanlab,
     require_tensorboard,
     require_wandb,
     skip,
@@ -53,6 +55,7 @@ from accelerate.tracking import (
     DVCLiveTracker,
     GeneralTracker,
     MLflowTracker,
+    SwanLabTracker,
     TensorBoardTracker,
     WandBTracker,
 )
@@ -520,6 +523,123 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         self.assertCountEqual(plot["data"][0]["cells"]["values"], [[1, 2], [3, 4], [5, 6]])
 
 
+@require_swanlab
+@mock.patch.dict(os.environ, {"SWANLAB_MODE": "offline"})
+class SwanLabTrackingTest(TempDirTestCase, MockingTestCase):
+    def setUp(self):
+        super().setUp()
+        # Setting Path where SwanLab parsed log files are saved via the SWANLAB_LOG_DIR env var
+        self.add_mocks(mock.patch.dict(os.environ, {"SWANLAB_LOG_DIR": self.tmpdir}))
+
+    @skip
+    def test_swanlab(self):
+        # Disable hardware monitoring to prevent errors in test mode.
+        import swanlab
+        from swanlab.log.backup import BackupHandler
+        from swanlab.log.backup.datastore import DataStore
+        from swanlab.log.backup.models import ModelsParser
+
+        swanlab.merge_settings(swanlab.Settings(hardware_monitor=False))
+        # Start a fake training session.
+        accelerator = Accelerator(log_with="swanlab")
+        project_name = "test_project_with_config"
+        experiment_name = "test"
+        description = "test project for swanlab"
+        tags = ["my_tag"]
+        config = {
+            "epochs": 10,
+            "learning_rate": 0.01,
+            "offset": 0.1,
+        }
+        kwargs = {
+            "swanlab": {
+                "experiment_name": experiment_name,
+                "description": description,
+                "tags": tags,
+            }
+        }
+        accelerator.init_trackers(project_name, config, kwargs)
+        record_metrics = []
+        record_scalars = []
+        record_images_count = 0
+        record_logs = []
+        for epoch in range(1, swanlab.config.epochs):
+            acc = 1 - 2**-epoch - random.random() / epoch - 0.1
+            loss = 2**-epoch + random.random() / epoch + 0.1
+            ll = swanlab.log(
+                {
+                    "accuracy": acc,
+                    "loss": loss,
+                    "image": swanlab.Image(np.random.random((3, 3, 3))),
+                },
+                step=epoch,
+            )
+            log = f"epoch={epoch}, accuracy={acc}, loss={loss}"
+            print(log)
+            record_scalars.extend([acc, loss])
+            record_images_count += 1
+            record_logs.append(log)
+            record_metrics.extend([x for _, x in ll.items()])
+        accelerator.end_training()
+
+        # Load latest offline log
+        run_dir = swanlab.get_run().public.run_dir
+        assert os.path.exists(run_dir) is True
+        ds = DataStore()
+        ds.open_for_scan(os.path.join(run_dir.__str__(), BackupHandler.BACKUP_FILE).__str__())
+        with ModelsParser() as models_parser:
+            for record in ds:
+                if record is None:
+                    continue
+                models_parser.parse_record(record)
+        header, project, experiment, logs, runtime, columns, scalars, medias, footer = models_parser.get_parsed()
+
+        # test file header
+        assert header.backup_type == "DEFAULT"
+
+        # test project info
+        assert project.name == project_name
+        assert project.workspace is None
+        assert project.public is None
+
+        # test experiment info
+        assert experiment.name is not None
+        assert experiment.description == description
+        assert experiment.tags == tags
+
+        # test log record
+        backup_logs = [log.message for log in logs]
+        for record_log in record_logs:
+            assert record_log in backup_logs, "Log not found in backup logs: " + record_log
+
+        # test runtime info
+        runtime_info = runtime.to_file_model(os.path.join(run_dir.__str__(), "files"))
+        assert runtime_info.conda is None, "Not using conda, should be None"
+        assert isinstance(runtime_info.requirements, str), "Requirements should be a string"
+        assert isinstance(runtime_info.metadata, dict), "Metadata should be a dictionary"
+        assert isinstance(runtime_info.config, dict), "Config should be a dictionary"
+        for key in runtime_info.config:
+            assert key in config, f"Config key {key} not found in original config"
+            assert runtime_info.config[key]["value"] == config[key], (
+                f"Config value for {key} does not match original value"
+            )
+
+        # test scalar
+        assert len(scalars) + len(medias) == len(record_metrics), "Total metrics count does not match"
+        backup_scalars = [
+            metric.metric["data"]
+            for metric in record_metrics
+            if metric.column_info.chart_type.value.column_type == "FLOAT"
+        ]
+        assert len(backup_scalars) == len(scalars), "Total scalars count does not match"
+        for scalar in backup_scalars:
+            assert scalar in record_scalars, f"Scalar {scalar} not found in original scalars"
+        backup_images = [
+            metric for metric in record_metrics if metric.column_info.chart_type.value.column_type == "IMAGE"
+        ]
+        assert len(backup_images) == record_images_count, "Total images count does not match"
+
+
 class MyCustomTracker(GeneralTracker):
     "Basic tracker that writes to a csv for testing"
 
@@ -728,3 +848,12 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
             self.assertEqual(PartialState._shared_state, {})
             _ = Accelerator(log_with=tracker)
             self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_swanlab
+    def test_swanlab_deferred_init(self):
+        """Test that SwanLab tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = SwanLabTracker(run_name="test_swanlab")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})

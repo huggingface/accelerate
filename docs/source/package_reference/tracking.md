@@ -48,3 +48,8 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] tracking.ClearMLTracker
     - __init__
+
+## SwanLabTracker
+
+[[autodoc]] tracking.SwanLabTracker
+    - __init__
