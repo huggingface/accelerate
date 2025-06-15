@@ -2523,7 +2523,7 @@ class Accelerator:
             # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
             loss = loss / self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
-            self.deepspeed_engine_wrapped.backward(loss, **kwargs)
+            self.deepspeed_engine_wrapped.backward(loss, sync_gradients=self.sync_gradients, **kwargs)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             return
         elif self.scaler is not None:
@@ -2664,8 +2664,9 @@ class Accelerator:
                             parameters, max_norm, norm_type=norm_type
                         )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
         elif self.distributed_type == DistributedType.DEEPSPEED:
-            # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
-            # We cannot return the gradient norm because DeepSpeed does it.
+            # DeepSpeed handles gradient clipping internally, but we can retrieve the gradient norm
+            if self.deepspeed_engine_wrapped is not None:
+                return self.deepspeed_engine_wrapped.get_global_grad_norm()
             return None
         elif self.distributed_type == DistributedType.XLA:
             # Reduce gradients first for XLA
