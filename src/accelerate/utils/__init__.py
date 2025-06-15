@@ -281,6 +281,7 @@ from .other import (
     is_port_in_use,
     load,
     merge_dicts,
+    model_has_dtensor,
     recursive_getattr,
     save,
     wait_for_everyone,

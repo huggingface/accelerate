@@ -194,6 +194,33 @@ def compile_regions_deepspeed(module: torch.nn.Module, **compile_kwargs):
         module.compile(**compile_kwargs)
 
 
+def model_has_dtensor(model: torch.nn.Module) -> bool:
+    """
+    Check if the model has DTensor parameters.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to check.
+
+    Returns:
+        `bool`: Whether the model has DTensor parameters.
+    """
+    dtensor_available = False
+    # We have to do this disgusting import dance because DTensor changed location in 2.5.0
+    try:
+        from torch.distributed.tensor import DTensor
+
+        dtensor_available = True
+    except ImportError:
+        try:
+            from torch.distributed._tensor import DTensor
+
+            dtensor_available = True
+        except ImportError:
+            pass
+    return dtensor_available and any(isinstance(p, DTensor) for p in model.parameters())
+
+
 def extract_model_from_parallel(
     model, keep_fp32_wrapper: bool = True, keep_torch_compile: bool = True, recursive: bool = False
 ):
