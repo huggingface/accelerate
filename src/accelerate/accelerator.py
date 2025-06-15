@@ -108,6 +108,7 @@ from .utils import (
     is_xpu_available,
     load_fsdp_model,
     load_fsdp_optimizer,
+    model_has_dtensor,
     pad_across_processes,
     parse_choice_from_env,
     recursively_apply,
@@ -1620,6 +1621,10 @@ class Accelerator:
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,
             ):
+                if model_has_dtensor(model):
+                    raise ValueError(
+                        "Your model contains `DTensor` parameters, which is incompatible with DDP. Maybe you loaded your model with `device_map='auto'`?"
+                    )
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                     # TODO: Look at enabling native TP training directly with a proper config
