@@ -91,17 +91,17 @@ def main():
     fsdp_plugin = FullyShardedDataParallelPlugin(
         auto_wrap_policy="transformer_based_wrap",
         transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
-        # cpu_ram_efficient_loading=True,
-        # activation_checkpointing=True,
+        cpu_ram_efficient_loading=True,
+        activation_checkpointing=True,
         fsdp_version=2,
         **extra_kwargs,
     )
-    fsdp_plugin.set_mixed_precision("bf16")
 
     # Initialize accelerator
     accelerator = Accelerator(
         log_with=args.log_with,
         fsdp_plugin=fsdp_plugin,
+        mixed_precision="bf16",
     )
 
     accelerator.init_trackers(
