@@ -1305,10 +1305,10 @@ class Accelerator:
 
         if (
             getattr(self.state, "fsdp_plugin", None) is None
-            or getattr(self.state.fsdp_plugin, "context_parallel_size", None) is None
+            or self.state.fsdp_plugin.context_parallel_size == 1
             or (cp_context := getattr(self, "_cp_context", None)) is None
         ):
-            warnings.warn("Context parallel is not configured, this context manager will have no effect.")
+            logger.warning("Context parallel + FSDP2 is not configured, this context manager will have no effect.")
             yield
         else:
             with cp_context(buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers):
@@ -1524,7 +1524,7 @@ class Accelerator:
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
-        if (context_parallel_size := getattr(self.state.fsdp_plugin, "context_parallel_size", None)) is not None:
+        if (context_parallel_size := self.state.fsdp_plugin.cp_size) > 1:
             if context_parallel_size > self.state.num_processes:
                 raise ValueError(
                     f"context_parallel_size set to {context_parallel_size}, which is greater than the number of processes {self.state.num_processes}. Please set to None or use a smaller value."
@@ -1534,10 +1534,8 @@ class Accelerator:
             from torch.distributed.tensor.experimental import context_parallel
             from torch.distributed.tensor.experimental._attention import set_rotate_method
 
-            context_parallel_shard_rotation = getattr(
-                self.state.fsdp_plugin, "context_parallel_shard_rotation", "allgather"
-            )
-            set_rotate_method(context_parallel_shard_rotation)
+            cp_comm_strategy = self.state.fsdp_plugin.cp_comm_strategy
+            set_rotate_method(cp_comm_strategy)
 
             world_size = self.state.num_processes
 
