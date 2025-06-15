@@ -1304,7 +1304,8 @@ class Accelerator:
         """
 
         if (
-            getattr(self.state.fsdp_plugin, "context_parallel_size", None) is None
+            getattr(self.state, "fsdp_plugin", None) is None
+            or getattr(self.state.fsdp_plugin, "context_parallel_size", None) is None
             or (cp_context := getattr(self, "_cp_context", None)) is None
         ):
             warnings.warn("Context parallel is not configured, this context manager will have no effect.")
