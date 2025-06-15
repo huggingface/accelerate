@@ -631,6 +631,109 @@ ds_config: {'bf16': {'enabled': False}, 'zero_optimization': {'stage': 3, 'stage
 `Important code changes when using DeepSpeed Config File`.
 2. Only when `gradient_accumulation_steps` is `auto`, the value passed while creating `Accelerator` object via `Accelerator(gradient_accumulation_steps=k)` will be used. When using DeepSpeed Plugin, the value from it will be used and it will overwrite the value passed while creating Accelerator object.
 
+## Unified Training Loop
+
+One of the major benefits of using Accelerate with DeepSpeed is that you can write a single training loop that works seamlessly with both DeepSpeed and non-DeepSpeed backends. This eliminates the need for separate code paths and simplifies your training scripts.
+
+### Automatic Gradient Accumulation Boundary Handling
+
+Previously, when using DeepSpeed, users had to manually handle gradient accumulation boundaries by calling `model.set_gradient_accumulation_boundary()` and managing when to perform optimizer steps. With the enhanced Accelerate integration, this is now handled automatically.
+
+**Before (manual boundary management):**
+```python
+# This approach required separate code paths for DeepSpeed vs standard training
+def backward_step(loss, is_final_micro_batch=False):
+    if using_deepspeed:
+        model.set_gradient_accumulation_boundary(is_final_micro_batch)
+        model.backward(loss)
+        if is_final_micro_batch:
+            model.step()
+    else:
+        accelerator.backward(loss)
+        if accelerator.sync_gradients:
+            optimizer.step()
+            optimizer.zero_grad()
+```
+
+**After (unified approach):**
+```python
+# This approach works identically for both DeepSpeed and standard training!
+with accelerator.accumulate(model):
+    outputs = model(inputs)
+    loss = loss_fn(outputs, targets)
+    
+    # Handles DeepSpeed boundaries automatically!
+    accelerator.backward(loss)
+    
+    # Works consistently for both backends!
+    if accelerator.sync_gradients:
+        accelerator.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+        optimizer.zero_grad()
+```
+
+### Complete Training Loop Example
+
+Here's a complete example showing how to write a training loop that works with both DeepSpeed and standard training:
+
+```python
+from accelerate import Accelerator
+from accelerate.utils import DeepSpeedPlugin
+import torch
+
+# Setup accelerator (works for both DeepSpeed and standard)
+deepspeed_plugin = DeepSpeedPlugin(
+    gradient_accumulation_steps=4,
+    gradient_clipping=1.0,
+    zero_stage=2
+)
+accelerator = Accelerator(
+    gradient_accumulation_steps=4,
+    deepspeed_plugin=deepspeed_plugin  # Remove this line for standard training
+)
+
+# Prepare components
+model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+
+# Training loop - IDENTICAL for both backends!
+model.train()
+for batch in dataloader:
+    with accelerator.accumulate(model):
+        outputs = model(**batch)
+        loss = outputs.loss
+        
+        # Handles DeepSpeed boundaries automatically!
+        accelerator.backward(loss)
+        
+        # Consistent API for both backends!
+        if accelerator.sync_gradients:
+            # This now works with DeepSpeed too and returns gradient norms!
+            grad_norm = accelerator.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            optimizer.zero_grad()
+            
+            # Log metrics consistently
+            print(f"Loss: {loss.item():.4f}, Grad Norm: {grad_norm}")
+```
+
+### Key Benefits
+
+1. **No separate code paths**: The same training loop works for both DeepSpeed and standard training
+2. **Automatic boundary management**: Accelerate handles `set_gradient_accumulation_boundary()` calls automatically
+3. **Consistent gradient clipping**: `accelerator.clip_grad_norm_()` now works with DeepSpeed and returns gradient norms
+4. **Simplified debugging**: No need to maintain two different training implementations
+
+### Migration from Manual Boundary Management
+
+If you're currently using manual DeepSpeed boundary management, you can easily migrate:
+
+1. Remove manual `model.set_gradient_accumulation_boundary()` calls
+2. Replace `model.backward(loss)` with `accelerator.backward(loss)`
+3. Replace `model.step()` with the standard `optimizer.step()` inside `if accelerator.sync_gradients:`
+4. Use `accelerator.clip_grad_norm_()` instead of manual gradient norm calculation
+
+This migration will make your code work with both DeepSpeed and standard training without any additional changes.
+
 ## Saving and loading
 
 1. Saving and loading of models is unchanged for ZeRO Stage-1 and Stage-2.

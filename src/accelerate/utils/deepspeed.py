@@ -261,21 +261,38 @@ class DeepSpeedEngineWrapper:
     def __init__(self, engine):
         self.engine = engine
 
-    def backward(self, loss, **kwargs):
+    def backward(self, loss, sync_gradients=True, **kwargs):
+        # Set gradient accumulation boundary based on Accelerate's sync_gradients state
+        # This tells DeepSpeed whether this is the final micro-batch before gradient sync
+        if hasattr(self.engine, "set_gradient_accumulation_boundary"):
+            self.engine.set_gradient_accumulation_boundary(sync_gradients)
+
         # runs backpropagation and handles mixed precision
         self.engine.backward(loss, **kwargs)
 
-        # Deepspeed's `engine.step` performs the following operations:
-        # - gradient accumulation check
-        # - gradient clipping
-        # - optimizer step
-        # - zero grad
-        # - checking overflow
-        # - lr_scheduler step (only if engine.lr_scheduler is not None)
-        self.engine.step()
+        # Only perform step and related operations at gradient accumulation boundaries
+        if sync_gradients:
+            # Deepspeed's `engine.step` performs the following operations:
+            # - gradient accumulation check
+            # - gradient clipping
+            # - optimizer step
+            # - zero grad
+            # - checking overflow
+            # - lr_scheduler step (only if engine.lr_scheduler is not None)
+            self.engine.step()
         # and this plugin overrides the above calls with no-ops when Accelerate runs under
         # Deepspeed, but allows normal functionality for non-Deepspeed cases thus enabling a simple
         # training loop that works transparently under many training regimes.
+
+    def get_global_grad_norm(self):
+        """Get the global gradient norm from DeepSpeed engine if available."""
+        if hasattr(self.engine, "get_global_grad_norm"):
+            grad_norm = self.engine.get_global_grad_norm()
+            # Convert to scalar if it's a tensor
+            if hasattr(grad_norm, "item"):
+                return grad_norm.item()
+            return grad_norm
+        return None
 
 
 class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
