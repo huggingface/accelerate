@@ -72,22 +72,29 @@ def training_step(batch, model, optimizer, accelerator: Accelerator):
         optimizer.step()
         optimizer.zero_grad()
 
+        # torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG)
+
         return loss
 
 
 def main():
     set_seed(42)
     args = parse_args()
+    extra_kwargs = {}
+    if args.context_parallel_size > 1:
+        extra_kwargs = {
+            "context_parallel_size": args.context_parallel_size,
+            "context_parallel_shard_rotation": args.context_parallel_shard_rotation,
+        }
 
     # Configure FSDP2 plugin
     fsdp_plugin = FullyShardedDataParallelPlugin(
         auto_wrap_policy="transformer_based_wrap",
         transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
-        cpu_ram_efficient_loading=True,
+        # cpu_ram_efficient_loading=True,
+        # activation_checkpointing=True,
         fsdp_version=2,
-        context_parallel_size=args.context_parallel_size,
-        context_parallel_shard_rotation=args.context_parallel_shard_rotation,
-        activation_checkpointing=True,
+        **extra_kwargs,
     )
     fsdp_plugin.set_mixed_precision("bf16")
 
