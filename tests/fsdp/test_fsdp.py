@@ -404,25 +404,23 @@ class FSDPPluginIntegration(AccelerateTestCase):
             assert fsdp_plugin.cpu_ram_efficient_loading is False
             assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
-    def test_fsdp2_context_parallel(self):
+    def test_cp(self):
         if (fsdp_version := self.current_fsdp_version) != 2:
             return
 
         env = self.fsdp_envs[fsdp_version].copy()
-        for context_parallel_shard_rotation in ["allgather", "alltoall"]:
-            env["FSDP_CONTEXT_PARALLEL_SHARD_ROTATION"] = context_parallel_shard_rotation
-            env["FSDP_CONTEXT_PARALLEL_SIZE"] = "2"
+        for cp_comm_strategy in ["allgather", "alltoall"]:
+            env["FSDP_CP_COMM_STRATEGY"] = cp_comm_strategy
+            env["FSDP_CP_SIZE"] = "2"
             with patch_environment(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
-                assert fsdp_plugin.context_parallel_shard_rotation == context_parallel_shard_rotation
+                assert fsdp_plugin.cp_comm_strategy == cp_comm_strategy
 
             env = self.fsdp_envs[fsdp_version].copy()
-            env["FSDP_CONTEXT_PARALLEL_SIZE"] = "2"
+            env["FSDP_CP_SIZE"] = "2"
             with patch_environment(**env):
-                fsdp_plugin = FullyShardedDataParallelPlugin(
-                    context_parallel_shard_rotation=context_parallel_shard_rotation
-                )
-                assert fsdp_plugin.context_parallel_shard_rotation == context_parallel_shard_rotation
+                fsdp_plugin = FullyShardedDataParallelPlugin(cp_comm_strategy=cp_comm_strategy)
+                assert fsdp_plugin.cp_comm_strategy == cp_comm_strategy
 
 
 class FSDP2PluginIntegration(FSDPPluginIntegration):
@@ -626,8 +624,9 @@ class FSDPIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_config)
 
+    # TODO: Should probably be moved to a separate test file
     @require_torch_min_version(version=CONTEXT_PARALLEL_PYTORCH_VERSION)
-    def test_fsdp2_context_parallel_dataloader(self):
+    def test_dist_dataloader(self):
         if (fsdp_version := self.current_fsdp_version) != 2:
             return
 
@@ -635,7 +634,7 @@ class FSDPIntegrationTest(TempDirTestCase):
         cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, fsdp_version=fsdp_version)
 
         cmd_config = cmd.copy()
-        cmd_config.extend(["--use_fsdp", "--fsdp_context_parallel_size=2"])
+        cmd_config.extend(["--use_fsdp", "--fsdp_cp_size=2"])
 
         cmd_config.append(self.test_file_path)
 

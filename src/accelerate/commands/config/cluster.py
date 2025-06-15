@@ -506,16 +506,16 @@ def get_cluster_input():
             )
 
             if fsdp_version == 2:
-                fsdp_config["fsdp_context_parallel_size"] = _ask_field(
-                    "What should be your FSDP's context parallel size? [1]: ",
+                fsdp_config["fsdp_cp_size"] = _ask_field(
+                    "What should be your FSDP's context parallel size? (Input 1 or leave blank for no context parallel) [1]: ",
                     int,
                     default=1,
                     error_message="Please enter an integer.",
                 )
 
-            if fsdp_version == 2 and fsdp_config.get("fsdp_context_parallel_size", 1) != 1:
-                fsdp_config["fsdp_context_parallel_shard_rotation"] = _ask_options(
-                    "What should be your FSDP's context parallel shard rotation? [allgather]: ",
+            if fsdp_version == 2 and fsdp_config.get("fsdp_cp_size", 1) != 1:
+                fsdp_config["fsdp_cp_comm_strategy"] = _ask_options(
+                    "What should be your FSDP's context parallel communication strategy? [allgather]: ",
                     ["allgather", "alltoall"],
                     lambda x: ["allgather", "alltoall"][int(x)],
                     default=0,
