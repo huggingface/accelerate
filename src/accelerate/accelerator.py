@@ -1278,7 +1278,7 @@ class Accelerator:
 
         <Tip warning={true}>
 
-        `context_parallel` is currently only supported together with FSDP2, and requires `context_parallel_size` to be
+        `context_parallel` is currently only supported together with FSDP2, and requires `cp_size` to be
         set. If either of these conditions are not met, this context manager will have no effect.
 
         </Tip>
@@ -1305,7 +1305,7 @@ class Accelerator:
 
         if (
             getattr(self.state, "fsdp_plugin", None) is None
-            or self.state.fsdp_plugin.context_parallel_size == 1
+            or self.state.fsdp_plugin.cp_size == 1
             or (cp_context := getattr(self, "_cp_context", None)) is None
         ):
             logger.warning("Context parallel + FSDP2 is not configured, this context manager will have no effect.")
@@ -1527,7 +1527,7 @@ class Accelerator:
         if (context_parallel_size := self.state.fsdp_plugin.cp_size) > 1:
             if context_parallel_size > self.state.num_processes:
                 raise ValueError(
-                    f"context_parallel_size set to {context_parallel_size}, which is greater than the number of processes {self.state.num_processes}. Please set to None or use a smaller value."
+                    f"`cp_size` set to {context_parallel_size}, which is greater than the number of processes {self.state.num_processes}. Please set to 1 to disable context parallel or use a smaller value."
                 )
 
             from torch.distributed.device_mesh import init_device_mesh

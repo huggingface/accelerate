@@ -1551,7 +1551,7 @@ class FullyShardedDataParallelPlugin:
             The size of the context parallel group. Only applicable when `fsdp_version` is set to 2, else error will be
             raised. Defaults to 1 (CP not applied).
         cp_comm_strategy (`str`, defaults to `allgather`):
-            The shard rotation strategy to use, only used when `context_parallel_size` > 1 and `fsdp_version` is set to 2.
+            The shard rotation strategy to use, only used when `cp_size` > 1 and `fsdp_version` is set to 2.
     """
 
     fsdp_version: int = field(
@@ -1706,7 +1706,7 @@ class FullyShardedDataParallelPlugin:
     cp_comm_strategy: str = field(
         default=None,
         metadata={
-            "help": "The shard rotation strategy to use, only used when `context_parallel_size` > 1 and `fsdp_version` is set to 2. Defaults to `allgather`."
+            "help": "The shard rotation strategy to use, only used when `cp_size` > 1 and `fsdp_version` is set to 2. Defaults to `allgather`."
         },
     )
 
