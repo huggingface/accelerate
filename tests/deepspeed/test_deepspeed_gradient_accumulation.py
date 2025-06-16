@@ -106,11 +106,7 @@ class DeepSpeedGradientAccumulationTest(AccelerateTestCase):
             batch_data = next(iter(train_dataloader))
             # Create proper input format for GPT2 model (RegressionDataset returns {"x": scalar, "y": scalar})
             # We need to create dummy input_ids for the GPT2 model
-            batch_size = len(batch_data["x"]) if isinstance(batch_data["x"], torch.Tensor) else 1
-            if isinstance(batch_data["x"], torch.Tensor):
-                batch_size = batch_data["x"].shape[0]
-            else:
-                batch_size = 1
+            batch_size = batch_data["x"].shape[0] if isinstance(batch_data["x"], torch.Tensor) else 1
 
             # Create dummy input_ids for GPT2 model and move to same device as model
             device = next(model.parameters()).device
