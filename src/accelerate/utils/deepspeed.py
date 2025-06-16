@@ -264,8 +264,7 @@ class DeepSpeedEngineWrapper:
     def backward(self, loss, sync_gradients=True, **kwargs):
         # Set gradient accumulation boundary based on Accelerate's sync_gradients state
         # This tells DeepSpeed whether this is the final micro-batch before gradient sync
-        if hasattr(self.engine, "set_gradient_accumulation_boundary"):
-            self.engine.set_gradient_accumulation_boundary(sync_gradients)
+        self.engine.set_gradient_accumulation_boundary(is_boundary=sync_gradients)
 
         # runs backpropagation and handles mixed precision
         self.engine.backward(loss, **kwargs)
