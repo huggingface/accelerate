@@ -284,14 +284,12 @@ class DeepSpeedEngineWrapper:
         # training loop that works transparently under many training regimes.
 
     def get_global_grad_norm(self):
-        """Get the global gradient norm from DeepSpeed engine if available."""
-        if hasattr(self.engine, "get_global_grad_norm"):
-            grad_norm = self.engine.get_global_grad_norm()
-            # Convert to scalar if it's a tensor
-            if hasattr(grad_norm, "item"):
-                return grad_norm.item()
-            return grad_norm
-        return None
+        """Get the global gradient norm from DeepSpeed engine."""
+        grad_norm = self.engine.get_global_grad_norm()
+        # Convert to scalar if it's a tensor
+        if hasattr(grad_norm, "item"):
+            return grad_norm.item()
+        return grad_norm
 
 
 class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
