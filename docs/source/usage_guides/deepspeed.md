@@ -631,7 +631,6 @@ ds_config: {'bf16': {'enabled': False}, 'zero_optimization': {'stage': 3, 'stage
 `Important code changes when using DeepSpeed Config File`.
 2. Only when `gradient_accumulation_steps` is `auto`, the value passed while creating `Accelerator` object via `Accelerator(gradient_accumulation_steps=k)` will be used. When using DeepSpeed Plugin, the value from it will be used and it will overwrite the value passed while creating Accelerator object.
 
-
 ## Saving and loading
 
 1. Saving and loading of models is unchanged for ZeRO Stage-1 and Stage-2.
