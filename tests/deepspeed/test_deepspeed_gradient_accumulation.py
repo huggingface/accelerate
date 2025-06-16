@@ -32,7 +32,7 @@ from accelerate.utils.dataclasses import DeepSpeedPlugin
 
 set_seed(42)
 
-GPT2_TINY = "sshleifer/tiny-gpt2"
+GPT2_TINY = "hf-internal-testing/tiny-random-gpt2"
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 FP16 = "fp16"
