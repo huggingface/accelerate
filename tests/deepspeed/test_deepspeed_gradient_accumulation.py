@@ -71,10 +71,6 @@ class DeepSpeedGradientAccumulationTest(AccelerateTestCase):
             WORLD_SIZE="1",
         )
 
-    def get_config_dict(self, stage):
-        # As some tests modify the dict, always make a copy
-        return deepcopy(self.ds_config_dict[stage])
-
     def test_gradient_accumulation_boundary_integration(self):
         """Test that gradient accumulation boundaries are automatically handled by DeepSpeed integration."""
         gradient_accumulation_steps = 4
