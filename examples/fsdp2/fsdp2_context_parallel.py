@@ -36,10 +36,8 @@ def parse_args():
     parser.add_argument("--sequence-length", type=int, default=128_000, help="Sequence length for the dataset")
     parser.add_argument("--num-steps", type=int, default=100, help="Number of training steps")
     parser.add_argument("--log-with", type=str, default="wandb", help="Logging service to use")
-    parser.add_argument("--context-parallel-size", type=int, default=8, help="Context parallel size")
-    parser.add_argument(
-        "--context-parallel-shard-rotation", type=str, default="allgather", help="Context parallel shard rotation"
-    )
+    parser.add_argument("--cp-size", type=int, default=8, help="Context parallel size")
+    parser.add_argument("--cp-comm-strategy", type=str, default="allgather", help="Context parallel shard rotation")
     return parser.parse_args()
 
 
@@ -72,7 +70,7 @@ def training_step(batch, model, optimizer, accelerator: Accelerator):
         optimizer.step()
         optimizer.zero_grad()
 
-        # torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG)
+        torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG)
 
         return loss
 
@@ -80,12 +78,6 @@ def training_step(batch, model, optimizer, accelerator: Accelerator):
 def main():
     set_seed(42)
     args = parse_args()
-    extra_kwargs = {}
-    if args.context_parallel_size > 1:
-        extra_kwargs = {
-            "context_parallel_size": args.context_parallel_size,
-            "context_parallel_shard_rotation": args.context_parallel_shard_rotation,
-        }
 
     # Configure FSDP2 plugin
     fsdp_plugin = FullyShardedDataParallelPlugin(
@@ -94,7 +86,8 @@ def main():
         cpu_ram_efficient_loading=True,
         activation_checkpointing=True,
         fsdp_version=2,
-        **extra_kwargs,
+        cp_size=args.cp_size,
+        cp_comm_strategy=args.cp_comm_strategy,
     )
 
     # Initialize accelerator
@@ -109,8 +102,8 @@ def main():
         config={
             "sequence_length": args.sequence_length,
             "num_steps": args.num_steps,
-            "context_parallel_size": args.context_parallel_size,
-            "context_parallel_shard_rotation": args.context_parallel_shard_rotation,
+            "cp_size": args.cp_size,
+            "cp_comm_strategy": args.cp_comm_strategy,
         },
     )
 
