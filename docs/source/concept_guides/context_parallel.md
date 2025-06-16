@@ -43,8 +43,8 @@ from accelerate.utils import FullyShardedDataParallelPlugin
 plugin = FullyShardedDataParallelPlugin(
     ...
     fsdp_version=2,
-+   context_parallel_size=8,
-+   context_parallel_shard_rotation="allgather",
++   cp_size=8,
++   cp_comm_strategy="allgather",
 )
 accelerator = Accelerator(fsdp_plugin=plugin)
 ```
@@ -77,8 +77,8 @@ The context manager takes a few arguments, that are used to configure the contex
 ## Configurable options
 Accelerate provides only a few options to configure context parallelism, which are:
 
-- `context_parallel_size`: The number of ranks to shard the inputs to the attention computation across the sequence dimension.
-- `context_parallel_shard_rotation`: The rotation method to use for the shards. We strongly reccomend keeping this as `"allgather"`, as it's very likely it will outperform `"alltoall"` in most cases.
+- `cp_size`: The number of ranks to shard the inputs to the attention computation across the sequence dimension.
+- `cp_comm_strategy`: The rotation method to use for the shards. We strongly reccomend keeping this as `"allgather"`, as it's very likely it will outperform `"alltoall"` in most cases.
 
 Context parallel size is rather self-explanatory, it's the number of ranks across which the inputs are to be-sharded.
 Context parallel shard rotation defines how the shards of the inputs are rotated across ranks. We'll cover the 2 options in more detail in the next section.
