@@ -37,6 +37,22 @@ accelerate launch --fsdp2_fp8.py --sequence_length 8192 --num_steps 1000 --log_w
 
 ## FSDP2 + context parallelism (`fsdp2_context_parallel.py`)
 
-In this file, we showcase integration of context parallelism with FSDP2. Context parallelism is a technique that allows us to scale the training to sequence length of up to a million tokens. With `accelerator.context_parallel` context manager, we replace the attention implementation with a context parallel version, which enables us to train on a sequence length of up to 128k tokens on 8x H100 GPUs.
+In this file, we showcase integration of context parallelism with FSDP2. Context parallelism is a technique that allows us to scale the training to sequence length of up to a million tokens. With `accelerator.context_parallel` context manager, we replace the attention implementation with a context parallel version, which enables us to train on a sequence length of up to 128k tokens on 8x H100 GPUs, with possibility of endless scaling if we have enough GPUs.
 
-For a detailed explanation and more details, please refer to [this guide](https://huggingface.co/docs/accelerate/concept_guides/context_parallel).
+For a detailed explanation and more details, please refer to [this guide](https://huggingface.co/docs/accelerate/concept_guides/context_parallel). You can run the example with the following command:
+
+```bash
+accelerate launch --fsdp2_context_parallel.py --sequence_length 128000 --num_steps 1000 --log_with wandb --cp_size 8 --cp_comm_strategy allgather
+```
+
+More details about the context parallelism can be found in the [concept guide](https://huggingface.co/docs/accelerate/concept_guides/context_parallel). You can see some results below:
+
+<p align="center">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/examples/fsdp2/cp_perf.png" alt="context parallelism memory usage" />
+  <br>
+  <em>Figure 1: Memory usage and speed of context parallelism for up-to 256k context size.</em>
+</p>
+
+
+
+

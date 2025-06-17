@@ -66,6 +66,18 @@ for batch in dataloader:
 > [!Warning]
 > This context manager has to be recreated with each training step, as shown in the example above. It's crucial to do so.
 
+This can scale your context size to 1M+ sequence length potentially. Below, we showcase speed and memory usage of context parallelism for up-to 256k context size. We can see that when we double the context size and number of GPUs, we can achieve consistent memory usage, potentiall enabling endless context length scaling.
+
+<p align="center">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/examples/fsdp2/cp_perf.png" alt="context parallelism memory usage" />
+  <br>
+  <em>Figure 1: Memory usage and speed of context parallelism for up-to 256k context size.</em>
+</p>
+
+> [!Tip]
+> These examples were created with a script you can find [in the examples folder](https://github.com/huggingface/accelerate/blob/main/examples/fsdp2/fsdp2_context_parallel.py). For instructions on how to run it, see the [README](https://github.com/huggingface/accelerate/blob/main/examples/fsdp2/README.md) in the same folder.
+
+
 ## Accelerate's interface
 
 The context manager takes a few arguments, that are used to configure the context parallelism.
