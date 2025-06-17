@@ -120,7 +120,13 @@ def main():
     model, optimizer = accelerator.prepare(model, optimizer)
 
     accelerator.print("Preparing dataset... this might take a while")
-    dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
+    dataset = get_dataset(
+        accelerator,
+        tokenizer,
+        args.sequence_length,
+        processing_batch_size=args.sequence_length
+        // 20,  # we need to override the default processing batch size to avoid empty packed sequences
+    )
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
     dataloader = accelerator.prepare(dataloader)
 

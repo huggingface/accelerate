@@ -25,7 +25,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from accelerate import Accelerator
 
 
-def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int) -> Dataset:
+def get_dataset(
+    accelerator: Accelerator,
+    tokenizer: AutoTokenizer,
+    seq_len: int,
+    processing_batch_size: int = 1000,
+) -> Dataset:
     """
     Load and prepare TinyStories dataset.
 
@@ -33,6 +38,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
         accelerator (Accelerator): Accelerate accelerator instance
         tokenizer (AutoTokenizer): Hugging Face tokenizer
         seq_len (int): Sequence length for the dataset
+        processing_batch_size (int): Batch size for processing the dataset
 
     Returns:
         Dataset: Packed dataset
@@ -51,7 +57,9 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
         return tokenized_batch
 
     with accelerator.main_process_first():
-        tokenized_dataset = raw_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
+        tokenized_dataset = raw_dataset.map(
+            tokenize_function, batched=True, remove_columns=["text"], batch_size=processing_batch_size
+        )
 
     def create_packed_sequences(examples):
         all_tokens = []
@@ -76,7 +84,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
             create_packed_sequences,
             batched=True,
             remove_columns=tokenized_dataset.column_names,
-            batch_size=1000,
+            batch_size=processing_batch_size,
         )
 
     return packed_dataset.shuffle(seed=42)
