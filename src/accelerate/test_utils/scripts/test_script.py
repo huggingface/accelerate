@@ -625,7 +625,7 @@ def training_check(use_seedable_sampler=False):
             msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
         )
 
-    # IPEX support is only for CPU
+    # IPEX CPU tests
     if is_ipex_available():
         print("ipex BF16 training check.")
         AcceleratorState._reset_state()

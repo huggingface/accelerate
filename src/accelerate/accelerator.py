@@ -1404,7 +1404,14 @@ class Accelerator:
             old_named_params = self._get_named_parameters(*args, drop_refs=False)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if (self.device.type == "cpu" or self.device.type == "xpu") and self.state.use_ipex:
+            if (
+                is_torch_version("<", "2.7.0")
+                and (self.device.type == "cpu" or self.device.type == "xpu")
+                and self.state.use_ipex
+            ):
+                logger.warning(
+                    "You are using lower version of PyTorch(< 2.7.0) with ipex acceleration on Intel CPU or XPU, Intel has upstreamed most of the optimizations into stock PyTorch from 2.7.0, we enourage you to install the latest stock PyTorch and enjoy the out-of-experience on Intel CPU/XPU."
+                )
                 args = self._prepare_ipex(*args)
         if self.fp8_backend == "TE":
             args = self._prepare_te(*args)
