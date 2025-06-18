@@ -33,6 +33,7 @@ import torch
 
 from .constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
+    CONTEXT_PARALLEL_PYTORCH_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -1548,6 +1549,11 @@ class FullyShardedDataParallelPlugin:
         min_num_params (`Optional[int]`, defaults to `None`):
             The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy`
             is `size_based_wrap`.
+        cp_size (`int`, defaults to `1`):
+            The size of the context parallel group. Only applicable when `fsdp_version` is set to 2, else error will be
+            raised. Defaults to 1 (CP not applied).
+        cp_comm_strategy (`str`, defaults to `allgather`):
+            The shard rotation strategy to use, only used when `cp_size` > 1 and `fsdp_version` is set to 2.
     """
 
     fsdp_version: int = field(
@@ -1691,6 +1697,18 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={
             "help": "The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy` is `size_based_wrap`."
+        },
+    )
+    cp_size: int = field(
+        default=None,
+        metadata={
+            "help": "The size of the context parallel group. Only applicable when `fsdp_version` is set to 2, else error will be raised. Defaults to 1 (CP not applied)"
+        },
+    )
+    cp_comm_strategy: str = field(
+        default=None,
+        metadata={
+            "help": "The shard rotation strategy to use, only used when `cp_size` > 1 and `fsdp_version` is set to 2. Defaults to `allgather`."
         },
     )
 
@@ -1854,6 +1872,28 @@ class FullyShardedDataParallelPlugin:
                 "Setting environment variable to match `cpu_ram_efficient_loading`."
             )
             os.environ[env_var] = str(self.cpu_ram_efficient_loading)
+
+        if self.cp_size is None:
+            self.cp_size = int(os.environ.get(env_prefix + "CP_SIZE", "1"))
+
+        if self.cp_size > 1 and self.fsdp_version != 2:
+            raise ValueError(
+                f"cp_size set to {self.cp_size}. This is not supported with FSDP1, please set to 1 or use `fsdp_version=2`"
+            )
+
+        if self.cp_size > 1 and not is_torch_version(">=", CONTEXT_PARALLEL_PYTORCH_VERSION):
+            raise ValueError(
+                f"cp_size set to {self.cp_size}. This is not supported with PyTorch < {CONTEXT_PARALLEL_PYTORCH_VERSION}, please set to None or upgrade your PyTorch version."
+            )
+
+        if self.cp_comm_strategy is None:
+            self.cp_comm_strategy = os.environ.get(env_prefix + "CP_COMM_STRATEGY", "allgather")
+
+        # No need to further check versions, as that check is done in the `context_parallel_size` check
+        if self.cp_comm_strategy not in ["allgather", "alltoall"]:
+            raise ValueError(
+                f"cp_comm_strategy set to {self.cp_comm_strategy}. Must be one of ['allgather', 'alltoall']."
+            )
 
         if isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)
