@@ -281,6 +281,10 @@ def is_comet_ml_available():
     return _is_package_available("comet_ml")
 
 
+def is_swanlab_available():
+    return _is_package_available("swanlab")
+
+
 def is_boto3_available():
     return _is_package_available("boto3")
 
