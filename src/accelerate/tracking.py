@@ -137,7 +137,7 @@ class GeneralTracker:
 
     def start(self):
         """
-        Lazy initialization of the tracker inside Accelerator to avoid initalizing PartialState before
+        Lazy initialization of the tracker inside Accelerator to avoid initializing PartialState before
         InitProcessGroupKwargs.
         """
         pass
