@@ -511,6 +511,15 @@ class Accelerator:
             gradient_accumulation_steps = int(
                 parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
             )
+            
+            # If using DeepSpeed, update gradient accumulation steps from the DeepSpeed plugin
+            if self.state.distributed_type == DistributedType.DEEPSPEED and self.state.deepspeed_plugin is not None:
+                deepspeed_gradient_accumulation_steps = self.state.deepspeed_plugin.get_value(
+                    "gradient_accumulation_steps"
+                )
+                if deepspeed_gradient_accumulation_steps != gradient_accumulation_steps:
+                    gradient_accumulation_steps = deepspeed_gradient_accumulation_steps
+            
             gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
