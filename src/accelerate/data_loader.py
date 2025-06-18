@@ -1198,7 +1198,8 @@ def prepare_data_loader(
         if is_datasets_available():
             from datasets import IterableDataset as DatasetsIterableDataset
         if (
-            is_datasets_available() and isinstance(new_dataset, DatasetsIterableDataset) 
+            is_datasets_available()
+            and isinstance(new_dataset, DatasetsIterableDataset)
             and not split_batches
             and new_dataset.n_shard > num_processes
         ):
