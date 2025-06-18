@@ -782,4 +782,5 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
         k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k: v for k, v in named_params.items()
     }
     named_params = {k.replace("._orig_mod", ""): v for k, v in named_params.items()}
+    named_params = {k.replace("_cp_wrapped_model.", ""): v for k, v in named_params.items()}
     return named_params

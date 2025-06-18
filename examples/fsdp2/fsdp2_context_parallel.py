@@ -54,25 +54,18 @@ def training_step(batch, model, optimizer, accelerator: Accelerator):
     Returns:
         loss: Training loss
     """
-    input_ids = batch["input_ids"]
-    labels = batch["labels"]
 
     # Use context parallel for efficient long sequence processing
-    with accelerator.context_parallel(
-        buffers=[input_ids, labels],
-        buffer_seq_dims=[1, 1],  # Sequence dimension is dimension 1 for both tensors
-        no_restore_buffers={input_ids, labels},  # Don't restore these buffers after forward pass
-    ):
-        outputs = model(**batch)
-        loss = outputs.loss
+    outputs = model(**batch)
+    loss = outputs.loss
 
-        accelerator.backward(loss)
-        optimizer.step()
-        optimizer.zero_grad()
+    accelerator.backward(loss)
+    optimizer.step()
+    optimizer.zero_grad()
 
-        torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG)
+    torch.distributed.all_reduce(loss, op=torch.distributed.ReduceOp.AVG)
 
-        return loss
+    return loss
 
 
 def main():
@@ -143,6 +136,7 @@ def main():
         "Each step takes ~10 seconds with default settings on 8x H100 SXM GPUs, seeing logs takes a while"
     )
     for step, batch in enumerate(dataloader):
+        print(f"Step {step}")
         if step >= total_num_steps:
             break
 

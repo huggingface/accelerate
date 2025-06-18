@@ -30,6 +30,7 @@ from types import MethodType
 from typing import Any, Callable, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
@@ -175,6 +176,52 @@ _split_batches = object()
 _dispatch_batches = object()
 _even_batches = object()
 _use_seedable_sampler = object()
+
+
+class ContextParallelWrapper(torch.nn.Module):
+    def __init__(self, model, mesh, accelerator):
+        super().__init__()
+        self._cp_wrapped_model = model  # Store as a submodule
+        self.mesh = mesh
+        self.accelerator = accelerator
+
+    def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
+        from torch.distributed.tensor.experimental._attention import context_parallel
+
+        buffers = [input_ids]
+        buffer_seq_dims = [1]
+
+        if attention_mask is not None:
+            buffers.append(attention_mask)
+            buffer_seq_dims.append(1)
+
+        if labels is not None:
+            buffers.append(labels)
+            buffer_seq_dims.append(1)
+        from functools import partial
+
+        cp_context = partial(
+            context_parallel,
+            mesh=self.mesh,
+            buffers=buffers,
+            buffer_seq_dims=buffer_seq_dims,
+            no_restore_buffers=set(buffers),
+        )
+        self.accelerator.cp_context = cp_context()
+
+        self.accelerator.cp_context.__enter__()
+
+        return self._cp_wrapped_model(input_ids=input_ids, attention_mask=attention_mask, labels=labels, **kwargs)
+
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self._cp_wrapped_model, name)
+
+
+def create_context_parallel_model(model, mesh, accelerator):
+    return ContextParallelWrapper(model, mesh, accelerator)
 
 
 class Accelerator:
@@ -1524,6 +1571,10 @@ class Accelerator:
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
+        # Apply AC if needed
+        if self.state.fsdp_plugin.activation_checkpointing:
+            model = fsdp2_apply_ac(self, model)
+
         if (context_parallel_size := self.state.fsdp_plugin.cp_size) > 1:
             if context_parallel_size > self.state.num_processes:
                 raise ValueError(
@@ -1531,7 +1582,6 @@ class Accelerator:
                 )
 
             from torch.distributed.device_mesh import init_device_mesh
-            from torch.distributed.tensor.experimental import context_parallel
             from torch.distributed.tensor.experimental._attention import set_rotate_method
 
             cp_comm_strategy = self.state.fsdp_plugin.cp_comm_strategy
@@ -1549,11 +1599,7 @@ class Accelerator:
             self.state.torch_device_mesh = device_mesh
             device_mesh["fsdp", "cp"]._flatten("fsdp_cp")
 
-            self._cp_context = functools.partial(context_parallel, mesh=device_mesh["cp"])
-
-        # Apply AC if needed
-        if self.state.fsdp_plugin.activation_checkpointing:
-            model = fsdp2_apply_ac(self, model)
+            model = create_context_parallel_model(model, mesh=device_mesh["cp"], accelerator=self)
 
         # Apply compile if needed, has to be *after* applying AC
         # Copied from: `accelerator.prepare_model` ~ L1804
@@ -2621,6 +2667,9 @@ class Accelerator:
             self.lomo_backward(loss, learning_rate)
         else:
             loss.backward(**kwargs)
+
+        if hasattr(self, "cp_context"):
+            self.cp_context.__exit__(None, None, None)
 
     def set_trigger(self):
         """
