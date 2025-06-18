@@ -205,20 +205,13 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
     Returns:
         `bool`: Whether the model has DTensor parameters.
     """
-    dtensor_available = False
-    # We have to do this disgusting import dance because DTensor changed location in 2.5.0
-    try:
+    if is_torch_version(">=", "2.5.0"):
         from torch.distributed.tensor import DTensor
+    else:
+        # from torch 2.0.0 (oldest supported accelerate torch version), DTensor is in torch.distributed._tensor
+        from torch.distributed._tensor import DTensor
 
-        dtensor_available = True
-    except ImportError:
-        try:
-            from torch.distributed._tensor import DTensor
-
-            dtensor_available = True
-        except ImportError:
-            pass
-    return dtensor_available and any(isinstance(p, DTensor) for p in model.parameters())
+    return any(isinstance(p, DTensor) for p in model.parameters())
 
 
 def extract_model_from_parallel(
