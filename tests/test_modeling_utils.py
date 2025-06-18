@@ -353,11 +353,11 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest()
 
         device_map = {
-            'linear1': 'cpu',        # Valid module
-            'batchnorm': 'cpu',      # Valid module
-            'linear2': 'cpu',        # Valid module
-            'invalid_module': 0,     # Invalid - should trigger warning
-            'another_invalid': 1     # Invalid - should trigger warning
+            "linear1": "cpu",  # Valid module
+            "batchnorm": "cpu",  # Valid module
+            "linear2": "cpu",  # Valid module
+            "invalid_module": 0,  # Invalid - should trigger warning
+            "another_invalid": 1,  # Invalid - should trigger warning
         }
 
         # Test for the warning about invalid keys
