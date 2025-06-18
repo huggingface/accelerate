@@ -32,6 +32,7 @@ from .utils import (
     find_batch_size,
     get_data_structure,
     initialize_tensors,
+    is_datasets_available,
     is_torch_version,
     is_torchdata_stateful_dataloader_available,
     send_to_device,
@@ -1194,7 +1195,16 @@ def prepare_data_loader(
         dataloader.sampler.generator = generator
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
-        if isinstance(new_dataset, IterableDataset):
+        if is_datasets_available():
+            from datasets import IterableDataset as DatasetsIterableDataset
+        if (
+            is_datasets_available()
+            and isinstance(new_dataset, DatasetsIterableDataset)
+            and not split_batches
+            and new_dataset.n_shard > num_processes
+        ):
+            new_dataset = new_dataset.shard(num_shards=num_processes, index=process_index)
+        elif isinstance(new_dataset, IterableDataset):
             if getattr(dataloader.dataset, "generator", None) is not None:
                 synchronized_generator = dataloader.dataset.generator
             new_dataset = IterableDatasetShard(
