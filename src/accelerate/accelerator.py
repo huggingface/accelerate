@@ -525,9 +525,6 @@ class Accelerator:
                         f"DeepSpeed config has {deepspeed_gradient_accumulation_steps}. Using DeepSpeed's value."
                     )
                 gradient_accumulation_steps = deepspeed_gradient_accumulation_steps
-                logger.debug(
-                    f"Overriding gradient_accumulation_steps with DeepSpeed's configuration: {deepspeed_gradient_accumulation_steps}"
-                )
 
         # Create or update the gradient accumulation plugin
         if gradient_accumulation_plugin is None:
