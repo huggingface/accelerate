@@ -3743,8 +3743,7 @@ class Accelerator:
         elif self.is_fsdp2:
             from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
 
-            # This hangs if `cpu_offload` is also True
-            options = StateDictOptions(full_state_dict=True, broadcast_from_rank0=True)
+            options = StateDictOptions(full_state_dict=True, broadcast_from_rank0=True, cpu_offload=True)
             state_dict = get_model_state_dict(model, options=options)
         elif self.distributed_type == DistributedType.FSDP:
             from torch.distributed.fsdp import FullStateDictConfig, StateDictType
