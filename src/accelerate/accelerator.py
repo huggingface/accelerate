@@ -508,32 +508,13 @@ class Accelerator:
                 raise ValueError(
                     "You can only pass one of `gradient_accumulation_steps` and `gradient_accumulation_plugin`. Please only pass in the created `GradientAccumulationPlugin` object."
                 )
-            gradient_accumulation_steps = gradient_accumulation_plugin.num_steps
         else:
             gradient_accumulation_steps = int(
                 parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
             )
+            gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
 
         # If using DeepSpeed, update gradient accumulation steps from the DeepSpeed plugin
-        if self.state.distributed_type == DistributedType.DEEPSPEED and self.state.deepspeed_plugin is not None:
-            deepspeed_gradient_accumulation_steps = self.state.deepspeed_plugin.get_value(
-                "gradient_accumulation_steps"
-            )
-            if deepspeed_gradient_accumulation_steps != gradient_accumulation_steps:
-                if gradient_accumulation_plugin is not None:
-                    logger.warning(
-                        f"Gradient accumulation steps mismatch: GradientAccumulationPlugin has {gradient_accumulation_steps}, "
-                        f"DeepSpeed config has {deepspeed_gradient_accumulation_steps}. Using DeepSpeed's value."
-                    )
-                gradient_accumulation_steps = deepspeed_gradient_accumulation_steps
-
-        # Create or update the gradient accumulation plugin
-        if gradient_accumulation_plugin is None:
-            gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
-        else:
-            # Update the plugin's num_steps if it was changed due to DeepSpeed sync
-            if gradient_accumulation_plugin.num_steps != gradient_accumulation_steps:
-                gradient_accumulation_plugin.num_steps = gradient_accumulation_steps
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
@@ -1959,6 +1940,15 @@ class Accelerator:
             must_match=False,
             gradient_accumulation_steps=self.gradient_accumulation_steps,
         )
+
+        deepspeed_gradient_accumulation_steps = deepspeed_plugin.get_value("gradient_accumulation_steps")
+        # update gradient_accumulation_steps if there is a mismatch
+        if deepspeed_gradient_accumulation_steps != self.gradient_accumulation_steps:
+            logger.warning(
+                f"Gradient accumulation steps mismatch: GradientAccumulationPlugin has {self.gradient_accumulation_steps}, "
+                f"DeepSpeed config has {deepspeed_gradient_accumulation_steps}. Using DeepSpeed's value."
+            )
+            self.gradient_accumulation_steps = deepspeed_gradient_accumulation_steps
 
         config_kwargs = {
             "gradient_clipping": 1.0,

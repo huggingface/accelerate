@@ -22,7 +22,6 @@ from transformers import AutoModel
 from transformers.trainer_utils import set_seed
 
 from accelerate.accelerator import Accelerator
-from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_deepspeed
 from accelerate.test_utils.training import RegressionDataset
 from accelerate.utils import patch_environment
@@ -240,44 +239,3 @@ class DeepSpeedGradientAccumulationTest(AccelerateTestCase):
             self.assertEqual(len(sync_values), 2)
             self.assertFalse(sync_values[0])  # First step: not syncing
             self.assertTrue(sync_values[1])  # Second step: syncing
-
-    def test_gradient_accumulation_with_different_steps(self):
-        """Test gradient accumulation with different accumulation step values."""
-        for gradient_accumulation_steps in [1, 2, 4, 8]:
-            with self.subTest(gradient_accumulation_steps=gradient_accumulation_steps):
-                AcceleratorState._reset_state()
-
-                deepspeed_plugin = DeepSpeedPlugin(
-                    gradient_accumulation_steps=gradient_accumulation_steps,
-                    gradient_clipping=1.0,
-                    zero_stage=2,
-                    offload_optimizer_device="cpu",
-                    offload_param_device="cpu",
-                    zero3_save_16bit_model=False,
-                    zero3_init_flag=False,
-                )
-
-                with patch_environment(**self.dist_env):
-                    accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
-
-                    # Ensure the step counter starts at 0 for predictable behavior
-                    accelerator.step = 0
-
-                    # Track sync_gradients values
-                    sync_values = []
-
-                    # Simulate the gradient accumulation loop
-                    for step in range(gradient_accumulation_steps):
-                        with accelerator.accumulate(None):  # Don't need actual model for this test
-                            sync_values.append(accelerator.sync_gradients)
-
-                    # Verify sync pattern
-                    expected_sync = [False] * (gradient_accumulation_steps - 1) + [True]
-                    if gradient_accumulation_steps == 1:
-                        expected_sync = [True]  # Special case: always sync when steps=1
-
-                    self.assertEqual(
-                        sync_values,
-                        expected_sync,
-                        f"Failed for gradient_accumulation_steps={gradient_accumulation_steps}",
-                    )
