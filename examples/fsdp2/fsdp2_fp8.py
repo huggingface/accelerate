@@ -187,7 +187,10 @@ def main():
     def collate_fn(batch):
         input_ids = torch.tensor([item["input_ids"] for item in batch], dtype=torch.long)
         labels = torch.tensor([item["labels"] for item in batch], dtype=torch.long)
-        return {"input_ids": input_ids, "labels": labels}
+        # Transformers expect `labels` to not be shifted, though we already shifted them, so we pass them both
+        # We need to pass both `shift_labels` and `labels` to the model, as the loss is calculated inside `if labels is not None`
+        # `shift_labels` take precedence over `labels` in this case
+        return {"input_ids": input_ids, "labels": labels, "shift_labels": labels}
 
     # We keep batch size at 1, as it is basically the same as sequence length, which we use instead
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=collate_fn)
