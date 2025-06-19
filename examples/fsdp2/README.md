@@ -42,7 +42,7 @@ In this file, we showcase integration of context parallelism with FSDP2. Context
 For a detailed explanation and more details, please refer to [this guide](https://huggingface.co/docs/accelerate/concept_guides/context_parallel). You can run the example with the following command:
 
 ```bash
-accelerate launch --fsdp2_context_parallel.py --sequence_length 128000 --num_steps 1000 --log_with wandb --cp_size 8 --cp_comm_strategy allgather
+accelerate launch --num_processes 8 fsdp2_context_parallel.py --sequence-length 128000 --num-steps 1000 --log-with wandb --cp-size 8 --cp-comm-strategy allgather
 ```
 
 More details about the context parallelism can be found in the [concept guide](https://huggingface.co/docs/accelerate/concept_guides/context_parallel). You can see some results below:
