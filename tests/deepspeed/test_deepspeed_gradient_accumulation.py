@@ -22,7 +22,6 @@ from transformers import AutoModel
 from transformers.trainer_utils import set_seed
 
 from accelerate.accelerator import Accelerator
-from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_deepspeed
 from accelerate.test_utils.training import RegressionDataset
 from accelerate.utils import patch_environment
@@ -240,4 +239,3 @@ class DeepSpeedGradientAccumulationTest(AccelerateTestCase):
             self.assertEqual(len(sync_values), 2)
             self.assertFalse(sync_values[0])  # First step: not syncing
             self.assertTrue(sync_values[1])  # Second step: syncing
-
