@@ -1290,7 +1290,6 @@ class Accelerator:
         return obj
 
     def prepare(self, *args, device_placement=None):
-        from accelerate.utils import is_torch_version
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
         order.
@@ -1336,6 +1335,7 @@ class Accelerator:
         ... )
         ```
         """
+        from accelerate.utils import is_torch_version
         if device_placement is None:
             device_placement = [None for _ in args]
         elif self.distributed_type in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM):
