@@ -778,7 +778,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             if "dp" in self.torch_device_mesh.mesh_dim_names:
                 self.submesh_dp = self.torch_device_mesh["dp"]
             if "fsdp" in self.torch_device_mesh.mesh_dim_names:
-                self.submesh_fsdp = self.torch_device_mesh["fsdp"]
+                self.submesh_fsdp = self.torch_device_mesh["dp_shard"]
         if self.submesh_tp and (self.submesh_dp or self.submesh_fsdp):
             raise ValueError("TP + (DP/FSDP) is not yet supported in dispatch mode")
 
@@ -1133,8 +1133,8 @@ def prepare_data_loader(
                 submesh_tp_size = torch_device_mesh["tp"].size()
             if "dp" in torch_device_mesh.mesh_dim_names:
                 submesh_dp_size = torch_device_mesh["dp"].size()
-            if "fsdp" in torch_device_mesh.mesh_dim_names:
-                submesh_fsdp_size = torch_device_mesh["fsdp"].size()
+            if "dp_shard" in torch_device_mesh.mesh_dim_names:
+                submesh_fsdp_size = torch_device_mesh["dp_shard"].size()
             process_index = process_index // submesh_tp_size
             num_processes = submesh_fsdp_size * submesh_dp_size
 

@@ -1474,6 +1474,57 @@ class Accelerator:
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
+        _fully_shard_kwargs = {}
+
+        _fully_shard_kwargs["mesh"] = self.state.fsdp_plugin.device_mesh
+
+        if (context_parallel_size := getattr(self.state.fsdp_plugin, "context_parallel_size", None)) is not None:
+            if context_parallel_size > self.state.num_processes:
+                raise ValueError(
+                    f"context_parallel_size set to {context_parallel_size}, which is greater than the number of processes {self.state.num_processes}. Please set to None or use a smaller value."
+                )
+
+            from torch.distributed.device_mesh import init_device_mesh
+            from torch.distributed.tensor.experimental import context_parallel
+            from torch.distributed.tensor.experimental._attention import set_rotate_method
+
+            context_parallel_shard_rotation = getattr(
+                self.state.fsdp_plugin, "context_parallel_shard_rotation", "allgather"
+            )
+            set_rotate_method(context_parallel_shard_rotation)
+
+            world_size = self.state.num_processes
+
+            dp_shard_size = world_size // context_parallel_size
+
+            # if we don't have a mesh, we need to create one
+            if (device_mesh := _fully_shard_kwargs.get("mesh", None)) is None:
+                device_mesh = init_device_mesh(
+                    device_type=self.device.type,
+                    mesh_shape=(dp_shard_size, context_parallel_size),
+                    mesh_dim_names=("dp_shard", "cp"),
+                )
+
+            self._cp_context = functools.partial(context_parallel, mesh=device_mesh["cp"])
+
+            _fully_shard_kwargs["mesh"] = device_mesh
+
+        # Flatten the mesh if needed
+        if (device_mesh := _fully_shard_kwargs.get("mesh", None)) is not None:
+            dp_shard_cp_dims = []
+            other_dims = []
+            for n in ["dp_shard", "cp"]:
+                if n in device_mesh.mesh_dim_names:
+                    dp_shard_cp_dims.append(n)
+                else:
+                    other_dims.append(n)
+
+            device_mesh[dp_shard_cp_dims]._flatten("dp_shard_cp")
+
+            _fully_shard_kwargs["mesh"] = device_mesh
+
+        self._fsdp_device_mesh = _fully_shard_kwargs["mesh"]
+
         # Apply AC if needed
         if self.state.fsdp_plugin.activation_checkpointing:
             model = fsdp2_apply_ac(self, model)
@@ -1497,12 +1548,14 @@ class Accelerator:
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
                         # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
                         param_group["params"][i] = torch.empty_like(p)
+                        if isinstance(p, torch.distributed.tensor.DTensor):
+                            p = p._local_tensor
                         param_group["params"][i].data_ptr = p.data_ptr()
 
         self._models.append(model)
 
         # Prepare everything FSDP2 related for the model (except AC)
-        model = fsdp2_prepare_model(self, model)
+        model = fsdp2_prepare_model(self, model, fully_shard_kwargs=_fully_shard_kwargs)
 
         # Remove the old model from the list
         if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
@@ -2323,6 +2376,8 @@ class Accelerator:
             return self.state.torch_tp_plugin.torch_device_mesh
         elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
+        elif hasattr(self, "_fsdp_device_mesh"):
+            return self._fsdp_device_mesh
         return None
 
     def _prepare_msamp(self, *args, device_placement):
@@ -3643,6 +3698,8 @@ class Accelerator:
                 if not drop_refs:
                     named_parameters.update({n: p for n, p in obj.named_parameters()})
                     continue
+
+                accessor_mapping[torch.distributed.tensor.DTensor] = "_local_tensor"
 
                 # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
                 # the underlying pointer is actually hidden in `_tensor` attribute

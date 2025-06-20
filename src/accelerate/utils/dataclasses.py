@@ -1693,6 +1693,10 @@ class FullyShardedDataParallelPlugin:
             "help": "The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy` is `size_based_wrap`."
         },
     )
+    device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = field(
+        default=None,
+        metadata={"help": "A device mesh to use for FSDP. Only applicable when `fsdp_version` is set to 2."},
+    )
 
     def __post_init__(self):
         from torch.distributed.fsdp import (

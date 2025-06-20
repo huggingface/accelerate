@@ -588,12 +588,14 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     return model
 
 
-def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
+def fsdp2_prepare_model(accelerator, model: torch.nn.Module, fully_shard_kwargs: dict = None) -> torch.nn.Module:
     """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
         model (`torch.nn.Module`): The model to prepare
+        fully_shard_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to `fully_shard`
 
     Returns:
         `torch.nn.Module`: Prepared model
@@ -605,6 +607,10 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     )
     if is_type_fsdp:
         return model
+
+    fully_shard_kwargs = fully_shard_kwargs or {}
+    if fully_shard_kwargs.get("mesh", None) is not None:
+        fully_shard_kwargs["mesh"] = fully_shard_kwargs["mesh"]["dp_shard_cp"]
 
     fsdp2_plugin = accelerator.state.fsdp_plugin
 
@@ -618,6 +624,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
     }
+    fsdp2_kwargs.update(fully_shard_kwargs)
 
     model_has_params4bit = False
     for name, param in model.named_parameters():
