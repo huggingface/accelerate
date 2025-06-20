@@ -1580,12 +1580,14 @@ class Accelerator:
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
                         # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
                         param_group["params"][i] = torch.empty_like(p)
+                        if isinstance(p, torch.distributed.tensor.DTensor):
+                            p = p._local_tensor
                         param_group["params"][i].data_ptr = p.data_ptr()
 
         self._models.append(model)
 
         # Prepare everything FSDP2 related for the model (except AC)
-        model = fsdp2_prepare_model(self, model)
+        model = fsdp2_prepare_model(self, model, fully_shard_kwargs=_fully_shard_kwargs)
 
         # Remove the old model from the list
         if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
@@ -3789,6 +3791,8 @@ class Accelerator:
                 if not drop_refs:
                     named_parameters.update({n: p for n, p in obj.named_parameters()})
                     continue
+
+                accessor_mapping[torch.distributed.tensor.DTensor] = "_local_tensor"
 
                 # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
                 # the underlying pointer is actually hidden in `_tensor` attribute
