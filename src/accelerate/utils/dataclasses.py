@@ -289,7 +289,7 @@ class InitProcessGroupKwargs(KwargsHandler):
 # Literals
 Backend = Literal["MSAMP", "TE"]
 OptLevel = Literal["O1", "O2"]
-FP8Format = Literal["E4M3", "HYBRID"]
+FP8Format = Literal["HYBRID", "E4M3", "E5M2"]
 AmaxComputeAlgorithm = Literal["max", "most_recent"]
 
 
@@ -342,8 +342,8 @@ class TERecipeKwargs(KwargsHandler):
         interval (`int`, *optional*, default to 1):
             The interval to use for how often the scaling factor is recomputed.
         fp8_format (`str`, *optional*, default to "HYBRID"):
-            The format to use for the FP8 recipe. Must be one of `HYBRID` or `E4M3`. (Generally `HYBRID` for training,
-            `E4M3` for evaluation)
+            The format to use for the FP8 recipe. Must be one of `HYBRID`, `E4M3` or `E5M2`. (Generally `HYBRID` for
+            training, `E4M3` or `E5M2` for evaluation)
         amax_history_len (`int`, *optional*, default to 1024):
             The length of the history to use for the scaling factor computation
         amax_compute_algo (`str`, *optional*, default to "most_recent"):
