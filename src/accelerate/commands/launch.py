@@ -692,8 +692,8 @@ def launch_command_parser(subparsers=None):
     fp8_args.add_argument(
         "--fp8_format",
         type=str,
-        default="E4M3",
-        choices=["E4M3", "HYBRID"],
+        default="HYBRID",
+        choices=["HYBRID", "E4M3", "E5M2"],
         help="The format to use for the FP8 recipe (useful only when `--fp8_backend=te` is passed).",
     )
     fp8_args.add_argument(
