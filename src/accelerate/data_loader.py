@@ -778,7 +778,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             if "dp" in self.torch_device_mesh.mesh_dim_names:
                 self.submesh_dp = self.torch_device_mesh["dp"]
             if "fsdp" in self.torch_device_mesh.mesh_dim_names:
-                self.submesh_fsdp = self.torch_device_mesh["dp_shard"]
+                self.submesh_fsdp = self.torch_device_mesh["fsdp"]
         if self.submesh_tp and (self.submesh_dp or self.submesh_fsdp):
             raise ValueError("TP + (DP/FSDP) is not yet supported in dispatch mode")
 
