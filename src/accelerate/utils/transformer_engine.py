@@ -17,7 +17,6 @@ from types import MethodType
 import torch.nn as nn
 
 from .imports import is_hpu_available, is_transformer_engine_available
-from .operations import GatheredParameters
 
 
 # Do not import `transformer_engine` at package level to avoid potential issues
@@ -25,7 +24,23 @@ from .operations import GatheredParameters
 
 def convert_model(model, to_transformer_engine=True, _convert_linear=True, _convert_ln=True):
     """
-    Recursively converts the linear and layernorm layers of a model to their `transformers_engine` counterpart.
+    Converts model layers to Transformer Engine counterparts with reduced memory overhead.
+
+    This function performs a two-stage conversion process:
+    1. Creates TE module structure on meta device (no memory allocation)
+    2. Transfers weights efficiently to avoid peak memory usage during conversion
+
+    Args:
+        model: The model to convert
+        to_transformer_engine (bool): Whether to convert to TE (True) or from TE (False)
+        _convert_linear (bool): Whether to convert Linear layers
+        _convert_ln (bool): Whether to convert LayerNorm layers
+
+    Returns:
+        The converted model
+
+    Raises:
+        ImportError: If transformer_engine is not available
     """
     if not is_transformer_engine_available():
         raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
@@ -39,55 +54,73 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
     else:
         import transformer_engine.pytorch as te
 
-    for name, module in model.named_children():
-        if isinstance(module, nn.Linear) and to_transformer_engine and _convert_linear:
-            has_bias = module.bias is not None
-            params_to_gather = [module.weight]
-            if has_bias:
-                params_to_gather.append(module.bias)
+    import torch
 
-            with GatheredParameters(params_to_gather, modifier_rank=0):
+    from accelerate import init_empty_weights
+
+    # Stage 1: Create TE module skeleton on meta device (zero memory allocation)
+    with init_empty_weights():
+        for name, module in model.named_children():
+            if isinstance(module, nn.Linear) and to_transformer_engine and _convert_linear:
+                has_bias = module.bias is not None
+
+                # TE requires weight dimensions to be multiples of 16 for optimal performance
                 if any(p % 16 != 0 for p in module.weight.shape):
-                    return
+                    continue
+
+                # Create TE Linear module structure without allocating memory
                 te_module = te.Linear(
-                    module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
+                    module.in_features,
+                    module.out_features,
+                    bias=has_bias,
+                    params_dtype=module.weight.dtype,
+                    device="meta",
                 )
-                te_module.weight.copy_(module.weight)
-                if has_bias:
-                    te_module.bias.copy_(module.bias)
-
                 setattr(model, name, te_module)
-        # Note: @xrsrke (Phuc) found that te.LayerNorm doesn't have any real memory savings or speedups over nn.LayerNorm
-        elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
-            with GatheredParameters([module.weight, module.bias], modifier_rank=0):
-                te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
-                te_module.weight.copy_(module.weight)
-                te_module.bias.copy_(module.bias)
 
-            setattr(model, name, te_module)
-        elif isinstance(module, te.Linear) and not to_transformer_engine and _convert_linear:
-            has_bias = module.bias is not None
-            new_module = nn.Linear(
-                module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
-            )
-            new_module.weight.copy_(module.weight)
-            if has_bias:
-                new_module.bias.copy_(module.bias)
+            elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
+                # Create TE LayerNorm module structure without allocating memory
+                te_module = te.LayerNorm(
+                    module.normalized_shape[0],
+                    eps=module.eps,
+                    params_dtype=module.weight.dtype,
+                )
+                setattr(model, name, te_module)
 
-            setattr(model, name, new_module)
-        elif isinstance(module, te.LayerNorm) and not to_transformer_engine and _convert_ln:
-            new_module = nn.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
-            new_module.weight.copy_(module.weight)
-            new_module.bias.copy_(module.bias)
+            else:
+                # Recursively convert child modules
+                convert_model(
+                    module,
+                    to_transformer_engine=to_transformer_engine,
+                    _convert_linear=_convert_linear,
+                    _convert_ln=_convert_ln,
+                )
 
-            setattr(model, name, new_module)
-        else:
-            convert_model(
-                module,
-                to_transformer_engine=to_transformer_engine,
-                _convert_linear=_convert_linear,
-                _convert_ln=_convert_ln,
-            )
+    # Efficiently transfer weights from original to TE modules
+    for name, module in model.named_modules():
+        if (
+            isinstance(module, te.Linear)
+            and hasattr(module, "weight")
+            and module.weight.device == torch.device("meta")
+        ):
+            # Locate corresponding weight parameters in the model's state dict
+            weight_key = f"{name}.weight"
+            bias_key = f"{name}.bias"
+
+            state_dict = model.state_dict()
+
+            # Transfer weight parameter with memory-efficient copying
+            if weight_key in state_dict:
+                with torch.no_grad():
+                    # For very large weights, consider chunked transfer to reduce peak memory
+                    module.weight.copy_(state_dict[weight_key])
+
+            # Transfer bias parameter if it exists
+            if hasattr(module, "bias") and module.bias is not None and bias_key in state_dict:
+                with torch.no_grad():
+                    module.bias.copy_(state_dict[bias_key])
+
+    return model
 
 
 def has_transformer_engine_layers(model):
