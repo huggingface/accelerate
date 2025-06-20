@@ -1201,7 +1201,7 @@ def prepare_data_loader(
             is_datasets_available()
             and isinstance(new_dataset, DatasetsIterableDataset)
             and not split_batches
-            and new_dataset.n_shard > num_processes
+            and new_dataset.n_shards > num_processes
         ):
             new_dataset = new_dataset.shard(num_shards=num_processes, index=process_index)
         elif isinstance(new_dataset, IterableDataset):
