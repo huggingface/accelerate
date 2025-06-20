@@ -1478,48 +1478,16 @@ class Accelerator:
 
         _fully_shard_kwargs["mesh"] = self.state.fsdp_plugin.device_mesh
 
-        if (context_parallel_size := getattr(self.state.fsdp_plugin, "context_parallel_size", None)) is not None:
-            if context_parallel_size > self.state.num_processes:
-                raise ValueError(
-                    f"context_parallel_size set to {context_parallel_size}, which is greater than the number of processes {self.state.num_processes}. Please set to None or use a smaller value."
-                )
-
-            from torch.distributed.device_mesh import init_device_mesh
-            from torch.distributed.tensor.experimental import context_parallel
-            from torch.distributed.tensor.experimental._attention import set_rotate_method
-
-            context_parallel_shard_rotation = getattr(
-                self.state.fsdp_plugin, "context_parallel_shard_rotation", "allgather"
-            )
-            set_rotate_method(context_parallel_shard_rotation)
-
-            world_size = self.state.num_processes
-
-            dp_shard_size = world_size // context_parallel_size
-
-            # if we don't have a mesh, we need to create one
-            if (device_mesh := _fully_shard_kwargs.get("mesh", None)) is None:
-                device_mesh = init_device_mesh(
-                    device_type=self.device.type,
-                    mesh_shape=(dp_shard_size, context_parallel_size),
-                    mesh_dim_names=("dp_shard", "cp"),
-                )
-
-            self._cp_context = functools.partial(context_parallel, mesh=device_mesh["cp"])
-
-            _fully_shard_kwargs["mesh"] = device_mesh
-
-        # Flatten the mesh if needed
         if (device_mesh := _fully_shard_kwargs.get("mesh", None)) is not None:
             dp_shard_cp_dims = []
             other_dims = []
-            for n in ["dp_shard", "cp"]:
+            for n in ["fsdp", "cp"]:
                 if n in device_mesh.mesh_dim_names:
                     dp_shard_cp_dims.append(n)
                 else:
                     other_dims.append(n)
 
-            device_mesh[dp_shard_cp_dims]._flatten("dp_shard_cp")
+            device_mesh[dp_shard_cp_dims]._flatten("fsdp_cp")
 
             _fully_shard_kwargs["mesh"] = device_mesh
 

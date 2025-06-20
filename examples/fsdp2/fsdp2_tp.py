@@ -55,7 +55,7 @@ def main():
     accelerator_kwargs = {}
 
     if args.apply_tp and args.apply_fsdp:
-        device_mesh = init_device_mesh(mesh_dim_names=("dp_shard", "tp"), mesh_shape=(4, 2), device_type="cuda")
+        device_mesh = init_device_mesh(mesh_dim_names=("fsdp", "tp"), mesh_shape=(4, 2), device_type="cuda")
         plugin_kwargs["device_mesh"] = device_mesh
         model_kwargs["device_mesh"] = device_mesh
 

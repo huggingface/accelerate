@@ -610,7 +610,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module, fully_shard_kwargs:
 
     fully_shard_kwargs = fully_shard_kwargs or {}
     if fully_shard_kwargs.get("mesh", None) is not None:
-        fully_shard_kwargs["mesh"] = fully_shard_kwargs["mesh"]["dp_shard_cp"]
+        fully_shard_kwargs["mesh"] = fully_shard_kwargs["mesh"]["fsdp_cp"]
 
     fsdp2_plugin = accelerator.state.fsdp_plugin
 
