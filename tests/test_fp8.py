@@ -40,6 +40,17 @@ from accelerate.utils import (
 )
 
 
+def check_gpu_memory_usage_is_low():
+    import pynvml
+
+    pynvml.nvmlInit()
+    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+    info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+    # Check if GPU memory usage is low (e.g., less than 100MB)
+    assert info.used < 100 * 1024 * 1024, f"GPU memory usage is too high: {info.used / (1024 * 1024)} MB"
+    pynvml.nvmlShutdown()
+
+
 def can_convert_te_model():
     accelerator_kwargs = {"mixed_precision": "fp8", "kwargs_handlers": [FP8RecipeKwargs(backend="TE")]}
     accelerator = Accelerator(**accelerator_kwargs)
@@ -49,13 +60,14 @@ def can_convert_te_model():
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
 
     model, optimizer, dataloader, scheduler = accelerator.prepare(model, optimizer, dataloader, scheduler)
+    check_gpu_memory_usage_is_low()
     assert has_transformer_engine_layers(model)
 
 
 def maintain_proper_deepspeed_config(expected_version):
-    assert AcceleratorState().deepspeed_plugin.zero_stage == expected_version, (
-        f"Expected zero stage {expected_version} but got {AcceleratorState().deepspeed_plugin.zero_stage}"
-    )
+    assert (
+        AcceleratorState().deepspeed_plugin.zero_stage == expected_version
+    ), f"Expected zero stage {expected_version} but got {AcceleratorState().deepspeed_plugin.zero_stage}"
 
 
 def can_convert_ao_model():
