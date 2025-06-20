@@ -1290,6 +1290,7 @@ class Accelerator:
         return obj
 
     def prepare(self, *args, device_placement=None):
+        from accelerate.utils import is_torch_version
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
         order.
