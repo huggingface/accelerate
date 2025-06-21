@@ -612,10 +612,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module, fully_shard_kwargs:
     if is_type_fsdp:
         return model
 
-    fully_shard_kwargs = fully_shard_kwargs or {}
-    if fully_shard_kwargs.get("mesh", None) is not None:
-        fully_shard_kwargs["mesh"] = fully_shard_kwargs["mesh"]["fsdp_cp"]
-
     fsdp2_plugin = accelerator.state.fsdp_plugin
 
     fsdp2_plugin.set_auto_wrap_policy(model)
@@ -631,7 +627,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module, fully_shard_kwargs:
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
         "mesh": mesh["fsdp_cp"] if mesh else None,
     }
-    fsdp2_kwargs.update(fully_shard_kwargs)
 
     model_has_params4bit = False
     for name, param in model.named_parameters():

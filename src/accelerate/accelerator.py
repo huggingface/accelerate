@@ -1346,6 +1346,44 @@ class Accelerator:
         """
         self.state.print(*args, **kwargs)
 
+    def _initialize_device_mesh(self):
+        mesh_dims = {}
+        # TODO: figure out why it crashes without hasattr
+        if hasattr(self.state, "torch_tp_plugin") and self.state.torch_tp_plugin is not None:
+            mesh_dims["tp"] = self.state.torch_tp_plugin.tp_size
+        if hasattr(self.state, "fsdp_plugin") and self.state.fsdp_plugin is not None:
+            mesh_dims["fsdp"] = self.num_processes // mesh_dims.get("tp", 1)
+
+        # mesh_dims["cp"] = 1
+        # mesh_dims["dp"] = 1
+        # mesh_dims["pp"] = 1
+        # mesh_dims["ep"] = 1
+
+        if len(mesh_dims) == 0:
+            self.state.torch_device_mesh = None
+            return
+
+        # Sort mesh_dims by the canonical order: "dp", "fsdp", "pp", "cp", "tp", "ep"
+        mesh_order = ["pp", "dp", "fsdp", "cp", "tp", "ep"]
+        sorted_items = sorted(
+            mesh_dims.items(), key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
+        )
+        mesh_names = tuple(name for name, _ in sorted_items)
+        mesh_values = tuple(value for _, value in sorted_items)
+
+        device_mesh = torch.distributed.init_device_mesh(
+            self.device.type, mesh_shape=mesh_values, mesh_dim_names=mesh_names
+        )
+
+        # device_mesh[("fsdp", "cp")]._flatten("fsdp_cp")
+        # device_mesh[("dp", "fsdp")]._flatten("dp_fsdp")
+
+        # ("cp", "dp", "pp" and "ep") will be used for CP, DP, PP and EP respectively
+        # ("fsdp", "cp") compose a "fsdp_cp" submesh, over which model is going to be sharded
+        # ("dp", "fsdp") compose a "dp_fsdp" submesh, over which data is going to be replicated
+        # ("dp", "fsdp_cp") compose a 2D mesh, where model is sharded over "fsdp_cp" and replicated over "dp", resulting in a HSDP support
+        self.state.torch_device_mesh = device_mesh
+
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer
         if first_pass:
@@ -1587,7 +1625,7 @@ class Accelerator:
         self._models.append(model)
 
         # Prepare everything FSDP2 related for the model (except AC)
-        model = fsdp2_prepare_model(self, model, fully_shard_kwargs=_fully_shard_kwargs)
+        model = fsdp2_prepare_model(self, model)
 
         # Remove the old model from the list
         if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
