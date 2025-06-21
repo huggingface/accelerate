@@ -985,7 +985,8 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
-                if self.torch_tp_plugin is not None:
+                # FSDP2 supersedes TP
+                if self.torch_tp_plugin is not None and not self.is_fsdp2:
                     self.distributed_type = DistributedType.TP
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
                 if is_ipex_available():

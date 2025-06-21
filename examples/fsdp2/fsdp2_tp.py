@@ -50,18 +50,8 @@ def main():
 
     set_seed(42)
 
-    plugin_kwargs = {}
     model_kwargs = {}
     accelerator_kwargs = {}
-
-    if args.apply_tp and args.apply_fsdp:
-        device_mesh = init_device_mesh(mesh_dim_names=("fsdp", "tp"), mesh_shape=(4, 2), device_type="cuda")
-        plugin_kwargs["device_mesh"] = device_mesh
-        model_kwargs["device_mesh"] = device_mesh
-
-    if args.apply_tp:
-        model_kwargs["tp_plan"] = "auto"
-        model_kwargs["tp_size"] = 2
 
     if args.apply_fsdp:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
@@ -69,19 +59,21 @@ def main():
             cpu_ram_efficient_loading=False,
             auto_wrap_policy="transformer_based_wrap",
             transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
-            **plugin_kwargs,
         )
-        fsdp2_plugin.set_mixed_precision("bf16")
         accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
+        model_kwargs["device_map"] = {"": "cuda"}
 
-    if not args.apply_fsdp and args.apply_tp:
+    if args.apply_tp:
         tp_plugin = TorchTensorParallelPlugin(tp_size=2)
         accelerator_kwargs["torch_tp_plugin"] = tp_plugin
+        model_kwargs["device_map"] = "auto"
 
     accelerator = Accelerator(
         log_with=["wandb"],
+        mixed_precision="bf16",
         **accelerator_kwargs,
     )
+
     accelerator.init_trackers(
         project_name="fsdp2-tp",
         config={"apply_tp": args.apply_tp, "apply_fsdp": args.apply_fsdp},
@@ -91,6 +83,7 @@ def main():
         MODEL_ID,
         torch_dtype=torch.bfloat16,
         use_cache=False,
+        device_mesh=accelerator.torch_device_mesh,
         **model_kwargs,
     )
 

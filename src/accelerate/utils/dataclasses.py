@@ -1693,10 +1693,6 @@ class FullyShardedDataParallelPlugin:
             "help": "The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy` is `size_based_wrap`."
         },
     )
-    device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = field(
-        default=None,
-        metadata={"help": "A device mesh to use for FSDP. Only applicable when `fsdp_version` is set to 2."},
-    )
 
     def __post_init__(self):
         from torch.distributed.fsdp import (
@@ -2075,9 +2071,6 @@ class TorchTensorParallelPlugin:
         metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
     )
 
-    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
-    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
-
     def __post_init__(self):
         if not isinstance(self.tp_size, int):
             raise ValueError(f"`tp_size` set to {self.tp_size}, please set to an `int`.")
@@ -2089,21 +2082,6 @@ class TorchTensorParallelPlugin:
             raise ValueError(
                 f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
             )
-        from torch.distributed.device_mesh import init_device_mesh
-
-        # support for other devices has to be investigated
-        if is_hpu_available(init_hccl=True):
-            device = "hpu"
-        elif is_xpu_available():
-            device = "xpu"
-        else:
-            device = "cuda"
-
-        mesh_dim_name = "tp"
-
-        # device mesh is not used for model sharding
-        # it is only used for preparing data loader
-        self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
 
 
 @dataclass
