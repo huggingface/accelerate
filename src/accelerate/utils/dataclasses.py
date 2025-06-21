@@ -2071,9 +2071,6 @@ class TorchTensorParallelPlugin:
         metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
     )
 
-    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
-    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
-
     def __post_init__(self):
         if not isinstance(self.tp_size, int):
             raise ValueError(f"`tp_size` set to {self.tp_size}, please set to an `int`.")
@@ -2085,21 +2082,6 @@ class TorchTensorParallelPlugin:
             raise ValueError(
                 f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
             )
-        from torch.distributed.device_mesh import init_device_mesh
-
-        # support for other devices has to be investigated
-        if is_hpu_available(init_hccl=True):
-            device = "hpu"
-        elif is_xpu_available():
-            device = "xpu"
-        else:
-            device = "cuda"
-
-        mesh_dim_name = "tp"
-
-        # device mesh is not used for model sharding
-        # it is only used for preparing data loader
-        self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
 
 
 @dataclass
