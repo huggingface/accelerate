@@ -245,7 +245,7 @@ As was pointed out in this [blog-post](https://huggingface.co/blog/gradient_accu
 
 >  [...] for gradient accumulation across token-level tasks like causal LM training, the correct loss should be computed by the **total loss across all batches in a gradient accumulation step** divided by the **total number of all non padding tokens in those batches**. This is not the same as the average of the per-batch loss values. 
 
-In other words, some adjustements must be made on losses that operate on a token-level basis.
+In other words, some adjustments must be made on losses that operate on a token-level basis.
 
 ### Skeleton code
 
@@ -282,7 +282,7 @@ for update_step in range(total_updates):
         num_items_in_batch = accelerator.gather(num_items_in_batch).sum().item()
             
         for i, batch in enumerate(batch_samples):
-            # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unecessary communications when accumulating
+            # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unnecessary communications when accumulating
             # cf: https://muellerzr.github.io/blog/gradient_accumulation.html
             if (i < len(batch_samples) - 1 and accelerator.num_processes > 1):
                 ctx = model.no_sync
@@ -294,7 +294,7 @@ for update_step in range(total_updates):
             with ctx():
                 inputs, targets = batch
                 outputs = model(inputs)
-                loss = loss_function(outputs, targets) # the loss function shoud sum over samples rather than averaging
+                loss = loss_function(outputs, targets) # the loss function should sum over samples rather than averaging
                 
                 # We multiply by num_processes because the DDP calculates the average gradient across all devices whereas dividing by num_items_in_batch already takes into account all devices
                 # Same reason for gradient_accumulation_steps, but this times it's Accelerate that calculate the average gradient across the accumulated steps
@@ -394,7 +394,7 @@ for update_step in range(total_gradient_updates):
         for i, batch in enumerate(batch_samples):
             inputs, labels = batch["input_ids"], batch["labels"]
             total_batched_samples += 1
-            # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unecessary communications when accumulating
+            # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unnecessary communications when accumulating
             # cf: https://muellerzr.github.io/blog/gradient_accumulation.html
             if (i < len(batch_samples) - 1 and accelerator.num_processes > 1):
                 ctx = model.no_sync
