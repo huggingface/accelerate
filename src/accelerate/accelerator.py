@@ -425,6 +425,10 @@ class Accelerator:
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
 
+        parallelism_config = parallelism_config or ParallelismConfig()
+        parallelism_config._init_from_kwargs(kwargs_handlers)
+        parallelism_config.validate()
+
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,

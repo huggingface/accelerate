@@ -2815,7 +2815,23 @@ class ParallelismConfig:
         if self.tp_size < 1:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
 
+    def _init_from_kwargs(self, kwargs_handlers: list[KwargsHandler]):
+        for handler in kwargs_handlers:
+            if isinstance(handler, DistributedDataParallelKwargs):
+                self.dp_handler = handler
+            elif isinstance(handler, TorchTensorParallelKwargs):
+                self.tp_handler = handler
+            else:
+                pass
+
+        self._is_fully_initialized = True
+
     def _validate(self, accelerator: "Accelerator"):
+        if not getattr(self, "_is_fully_initialized", False):
+            raise ValueError(
+                "ParallelismConfig is not fully initialized. Please call `_init_from_kwargs` with kwargs handlers before validation."
+            )
+
         _warnings = {}
         if self.dp_size * self.tp_size > accelerator.num_processes:
             raise ValueError(
