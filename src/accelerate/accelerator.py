@@ -427,7 +427,6 @@ class Accelerator:
 
         parallelism_config = parallelism_config or ParallelismConfig()
         parallelism_config._init_from_kwargs(kwargs_handlers)
-        parallelism_config.validate()
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -441,6 +440,10 @@ class Accelerator:
             _from_accelerator=True,
             **kwargs,
         )
+
+        # This is a bit clunky, as this needs to be called after `AcceleratorState` is initialized, but _init_from_kwargs has to be called before
+        parallelism_config._validate(self)
+        self._set_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -700,6 +703,10 @@ class Accelerator:
     @property
     def is_fsdp2(self):
         return self.state.is_fsdp2
+
+    @property
+    def device_mesh(self):
+        return self.state.device_mesh
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
@@ -1819,14 +1826,14 @@ class Accelerator:
             mesh_dims["dp"] = pc.dp_size
 
         if self.is_fsdp2:
-            mesh_dims["fsdp"] = self.num_processes / (pc.tp_size * pc.dp_size)
+            mesh_dims["fsdp"] = self.num_processes // (pc.tp_size * pc.dp_size)
 
         # mesh_dims["cp"] = 1
         # mesh_dims["pp"] = 1
         # mesh_dims["ep"] = 1
 
         if len(mesh_dims) == 0:
-            self.state.torch_device_mesh = None
+            self.state.device_mesh = None
             return
 
         # Sort mesh_dims by the canonical order: "dp", "fsdp", "pp", "cp", "tp", "ep"
@@ -1834,6 +1841,7 @@ class Accelerator:
         sorted_items = sorted(
             mesh_dims.items(), key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
         )
+        sorted_items = [(name, value) for name, value in sorted_items if value > 1]
         mesh_names = tuple(name for name, _ in sorted_items)
         mesh_values = tuple(value for _, value in sorted_items)
 
@@ -1842,13 +1850,14 @@ class Accelerator:
         )
 
         # device_mesh[("fsdp", "cp")]._flatten("fsdp_cp")
-        device_mesh[("dp", "fsdp")]._flatten("dp_fsdp")
+        if all(name in device_mesh.mesh_dim_names for name in ("fsdp", "dp")):
+            device_mesh[("dp", "fsdp")]._flatten("dp_fsdp")
 
         # ("cp", "dp", "pp" and "ep") will be used for CP, DP, PP and EP respectively
         # ("fsdp", "cp") compose a "fsdp_cp" submesh, over which model is going to be sharded
         # ("dp", "fsdp") compose a "dp_fsdp" submesh, over which data is going to be replicated
         # ("dp", "fsdp_cp") compose a 2D mesh, where model is sharded over "fsdp_cp" and replicated over "dp", resulting in a HSDP support
-        self.state.torch_device_mesh = device_mesh
+        self.state.device_mesh = device_mesh
 
     def _prepare_ao(self, *args):
         if not is_torchao_available():
@@ -2363,7 +2372,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
         else:
-            return self.state.torch_device_mesh
+            return self.state.device_mesh
 
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():

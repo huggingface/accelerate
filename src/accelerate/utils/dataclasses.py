@@ -2799,7 +2799,7 @@ class ParallelismConfig:
     tp_handler: Union[None, TorchTensorParallelKwargs] = None
 
     def __repr__(self):
-        return f"ParallelismConfig(dp_size={self.dp_size}, tp_size={self.tp_size}), total_processes={self.dp_size * self.tp_size}"
+        return f"ParallelismConfig(dp_size={self.dp_size}, tp_size={self.tp_size}, total_size={self.dp_size * self.tp_size})"
 
     @property
     def dp_enabled(self):
@@ -2816,6 +2816,7 @@ class ParallelismConfig:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
 
     def _init_from_kwargs(self, kwargs_handlers: list[KwargsHandler]):
+        kwargs_handlers = kwargs_handlers or []
         for handler in kwargs_handlers:
             if isinstance(handler, DistributedDataParallelKwargs):
                 self.dp_handler = handler
@@ -2838,13 +2839,17 @@ class ParallelismConfig:
                 f"Your current {self} requires {self.dp_size * self.tp_size} processes, but the current Accelerator is set to use {accelerator.num_processes} processes."
             )
 
-        if accelerator.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.FSDP]:
+        if accelerator.distributed_type not in (
+            DistributedType.MULTI_GPU,
+            DistributedType.FSDP,
+            DistributedType.MULTI_CPU,
+        ):
             raise ValueError(
                 f"ParallelismConfig is only compatible with DistributedType.MULTI_GPU or DistributedType.FSDP, but got {accelerator.distributed_type}."
                 f" If you want to compose other parallelisms with your distributed type, check its configuration options."
             )
 
-        if not accelerator.is_fsdp2:
+        if accelerator.distributed_type == DistributedType.FSDP and not accelerator.is_fsdp2:
             raise ValueError("ParallelismConfig is only compatible with FSDP2. FSDP1 supports only 1D parallelism.")
 
         attr_to_cls_mapping = {
@@ -2865,6 +2870,9 @@ class ParallelismConfig:
                 _warnings.add(
                     f"ParallelismConfig.{parallelism}_config is set, but {parallelism}_size is set to 1. This config will be ignored."
                 )
+
+        if not accelerator.is_fsdp2 and (self.tp_enabled and self.dp_enabled):
+            raise ValueError("Currently TP+DP composition is not supported.")
 
         if _warnings:
             warnings.warn(
