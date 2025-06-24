@@ -18,11 +18,9 @@ This example demonstrates how to use Accelerate's context_parallel feature for e
 """
 
 import argparse
-import contextlib
 
 import torch
 import torch.distributed as dist
-from torch.distributed.device_mesh import init_device_mesh
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
 
@@ -36,9 +34,9 @@ MODEL_ID = "NousResearch/Hermes-3-Llama-3.1-8B"
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--apply-tp", action="store_true")
-    parser.add_argument("--profile", action="store_true")
     parser.add_argument("--apply-fsdp", action="store_true")
+    parser.add_argument("--tp-size", type=int, default=2)
+    parser.add_argument("--sequence-length", type=int, default=4096)
     return parser.parse_args()
 
 
@@ -61,29 +59,32 @@ def main():
             transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
         )
         accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
-        model_kwargs["device_map"] = {"": "cuda"}
 
-    if args.apply_tp:
-        tp_plugin = TorchTensorParallelPlugin(tp_size=2)
-        accelerator_kwargs["torch_tp_plugin"] = tp_plugin
-        model_kwargs["device_map"] = "auto"
+    if args.tp_size > 1 and not args.apply_fsdp:
+        if args.tp_size != dist.get_world_size():
+            raise ValueError(
+                f"TP size {args.tp_size} does not match world size {dist.get_world_size()}. Either set TP size to {dist.get_world_size()} or apply FSDP2."
+            )
+
+    if args.tp_size > 1:
+        accelerator_kwargs["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=args.tp_size)
 
     accelerator = Accelerator(
         log_with=["wandb"],
         mixed_precision="bf16",
         **accelerator_kwargs,
     )
-
     accelerator.init_trackers(
         project_name="fsdp2-tp",
-        config={"apply_tp": args.apply_tp, "apply_fsdp": args.apply_fsdp},
+        config={"apply_fsdp": args.apply_fsdp, "tp_size": args.tp_size},
     )
 
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         torch_dtype=torch.bfloat16,
         use_cache=False,
-        device_mesh=accelerator.torch_device_mesh,
+        device_map="auto" if args.tp_size > 1 else None,
+        device_mesh=accelerator.torch_device_mesh if args.tp_size > 1 else None,
         **model_kwargs,
     )
 
@@ -92,7 +93,7 @@ def main():
 
     model, optimizer = accelerator.prepare(model, optimizer)
 
-    dataset = get_dataset(accelerator, tokenizer, 256)
+    dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
     dataloader = accelerator.prepare(dataloader)
 
@@ -101,52 +102,34 @@ def main():
     total_num_steps = min(1000, len(dataloader))
     performance_tracker = PerformanceTracker(warmup_steps=10)
 
-    if args.profile:
-        prof = torch.profiler.profile(
-            activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
-            record_shapes=True,
-            profile_memory=True,
-            with_stack=True,
-        )
-    else:
-        prof = contextlib.nullcontext()
+    for step, batch in enumerate(dataloader):
+        if step >= total_num_steps:
+            break
 
-    with prof:
-        for step, batch in enumerate(dataloader):
-            if step >= total_num_steps:
-                break
+        outputs = model(**batch)
+        loss = outputs.loss
 
-            outputs = model(**batch)
-            loss = outputs.loss
+        accelerator.backward(loss)
+        optimizer.step()
+        optimizer.zero_grad()
 
-            accelerator.backward(loss)
-            optimizer.step()
-            optimizer.zero_grad()
+        dist.all_reduce(loss, op=dist.ReduceOp.AVG)
 
-            if args.profile:
-                break
+        batch_tokens = batch["input_ids"].shape[1]
+        metrics = performance_tracker.step(batch_tokens)
 
-            dist.all_reduce(loss, op=dist.ReduceOp.AVG)
+        print_msg = f"Step {step}/{total_num_steps}, Loss: {loss.item():.4f}"
+        log_metrics = {"loss": loss.item()}
 
-            batch_tokens = batch["input_ids"].shape[1]
-            metrics = performance_tracker.step(batch_tokens)
+        if "warmup_completed" in metrics:
+            accelerator.print("Warm up completed! Starting performance tracking...")
+        elif metrics:
+            print_msg += f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f}"
 
-            print_msg = f"Step {step}/{total_num_steps}, Loss: {loss.item():.4f}"
-            log_metrics = {"loss": loss.item()}
+        if step % 10 == 0 or step == total_num_steps - 1:
+            accelerator.print(print_msg)
 
-            if "warmup_completed" in metrics:
-                accelerator.print("Warm up completed! Starting performance tracking...")
-            elif metrics:
-                print_msg += f" | Average steps/s: {metrics['steps_per_second']:.2f}"
-
-            if step % 10 == 0 or step == total_num_steps - 1:
-                accelerator.print(print_msg)
-
-            accelerator.log(log_metrics)
-
-    if args.profile and accelerator.is_main_process:
-        trace_name = f"trace_{'tp' if args.apply_tp else 'no_tp'}.json"
-        prof.export_chrome_trace(trace_name)
+        accelerator.log(log_metrics)
 
     accelerator.wait_for_everyone()
     accelerator.end_training()
