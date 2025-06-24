@@ -33,6 +33,7 @@ import torch
 
 from .constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
+    BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -57,6 +58,8 @@ from .versions import compare_versions, is_torch_version
 if TYPE_CHECKING:
     # Mock imports for type checking
     from torchao.float8 import Float8LinearConfig
+
+    from accelerate import Accelerator
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +148,28 @@ class DDPCommunicationHookType(BaseEnum):
     BF16 = "bf16"
     POWER_SGD = "power_sgd"
     BATCHED_POWER_SGD = "batched_power_sgd"
+
+
+@dataclass
+class TorchTensorParallelKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize your torch tensor parallelism.
+    """
+
+    enable_async_tp: bool = False
+
+    def __post_init__(self):
+        if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
+            raise ValueError(
+                f"Torch tensor parallelism is only available in PyTorch {BETA_TP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                "Please upgrade your PyTorch version."
+            )
+
+        if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
+            raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+
+        if self.enable_async_tp:
+            warnings.warn("Async tensor parallelism is currently not supported, ignoring this option.")
 
 
 @dataclass
@@ -582,7 +607,6 @@ class DistributedType(str, enum.Enum):
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
-    TP = "TP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
     MULTI_HPU = "MULTI_HPU"
@@ -2061,48 +2085,6 @@ class FullyShardedDataParallelPlugin:
 
 
 @dataclass
-class TorchTensorParallelPlugin:
-    """
-    This plugin is used to enable tensor parallelism using PyTorch >= 2.0.
-    """
-
-    tp_size: int = field(
-        default=1,
-        metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
-    )
-
-    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
-    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
-
-    def __post_init__(self):
-        if not isinstance(self.tp_size, int):
-            raise ValueError(f"`tp_size` set to {self.tp_size}, please set to an `int`.")
-
-        if self.tp_size <= 1:
-            raise ValueError("`tp_size` must be greater than 1.")
-
-        if is_torch_version("<", BETA_TP_AVAILABLE_PYTORCH_VERSION):
-            raise ValueError(
-                f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
-            )
-        from torch.distributed.device_mesh import init_device_mesh
-
-        # support for other devices has to be investigated
-        if is_hpu_available(init_hccl=True):
-            device = "hpu"
-        elif is_xpu_available():
-            device = "xpu"
-        else:
-            device = "cuda"
-
-        mesh_dim_name = "tp"
-
-        # device mesh is not used for model sharding
-        # it is only used for preparing data loader
-        self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
-
-
-@dataclass
 class MegatronLMPlugin:
     """
     Plugin for Megatron-LM to enable tensor, pipeline, sequence and data parallelism. Also to enable selective
@@ -2805,6 +2787,74 @@ class BnbQuantizationConfig:
 
         if not isinstance(self.torch_dtype, torch.dtype):
             raise ValueError("torch_dtype must be a torch.dtype")
+
+
+@dataclass
+class ParallelismConfig:
+    dp_size: int = 1
+    tp_size: int = 1
+
+    # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
+    dp_handler: Union[None, DistributedDataParallelKwargs] = None
+    tp_handler: Union[None, TorchTensorParallelKwargs] = None
+
+    def __repr__(self):
+        return f"ParallelismConfig(dp_size={self.dp_size}, tp_size={self.tp_size}), total_processes={self.dp_size * self.tp_size}"
+
+    @property
+    def dp_enabled(self):
+        return self.dp_size > 1
+
+    @property
+    def tp_enabled(self):
+        return self.tp_size > 1
+
+    def __post_init__(self):
+        if self.dp_size < 1:
+            raise ValueError(f"dp_size must be at least 1, but got {self.dp_size}")
+        if self.tp_size < 1:
+            raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
+
+    def _validate(self, accelerator: "Accelerator"):
+        _warnings = {}
+        if self.dp_size * self.tp_size > accelerator.num_processes:
+            raise ValueError(
+                f"Your current {self} requires {self.dp_size * self.tp_size} processes, but the current Accelerator is set to use {accelerator.num_processes} processes."
+            )
+
+        if accelerator.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.FSDP]:
+            raise ValueError(
+                f"ParallelismConfig is only compatible with DistributedType.MULTI_GPU or DistributedType.FSDP, but got {accelerator.distributed_type}."
+                f" If you want to compose other parallelisms with your distributed type, check its configuration options."
+            )
+
+        if not accelerator.is_fsdp2:
+            raise ValueError("ParallelismConfig is only compatible with FSDP2. FSDP1 supports only 1D parallelism.")
+
+        attr_to_cls_mapping = {
+            "dp_handler": (DistributedDataParallelKwargs,),
+            "tp_handler": (TorchTensorParallelKwargs,),
+        }
+
+        for attr, possible_classes in attr_to_cls_mapping.items():
+            attr_value = getattr(self, attr, None)
+            if attr_value is not None and not isinstance(attr_value, possible_classes):
+                raise ValueError(f"{attr} must be an instance of {possible_classes}, but got {type(attr_value)}.")
+
+        for parallelism in ("dp", "tp"):
+            if (
+                getattr(self, f"{parallelism}_size", 1) > 1
+                and getattr(self, f"{parallelism}_config", None) is not None
+            ):
+                _warnings.add(
+                    f"ParallelismConfig.{parallelism}_config is set, but {parallelism}_size is set to 1. This config will be ignored."
+                )
+
+        if _warnings:
+            warnings.warn(
+                "ParallelismConfig has the following warnings:\n" + "\n".join(_warnings),
+                UserWarning,
+            )
 
 
 def get_module_class_from_name(module, name):

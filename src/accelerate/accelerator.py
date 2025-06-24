@@ -64,13 +64,14 @@ from .utils import (
     LoggerType,
     MegatronLMPlugin,
     MSAMPRecipeKwargs,
+    ParallelismConfig,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
     RNGType,
     TERecipeKwargs,
     TorchDynamoPlugin,
-    TorchTensorParallelPlugin,
+    TorchTensorParallelKwargs,
     apply_fp8_autowrap,
     check_os_kernel,
     clean_state_dict_for_safetensors,
@@ -206,9 +207,6 @@ class Accelerator:
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
-        torch_tp_plugin ([`~utils.TorchTensorParallelPlugin`], *optional*):
-            Tweak your torch tensor parallel. This argument is optional and can be configured directly using
-            *accelerate config*
         megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -279,7 +277,6 @@ class Accelerator:
         dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
-        torch_tp_plugin: TorchTensorParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
@@ -291,6 +288,7 @@ class Accelerator:
         dynamo_backend: DynamoBackend | str | None = None,
         dynamo_plugin: TorchDynamoPlugin | None = None,
         deepspeed_plugins: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
+        parallelism_config: ParallelismConfig | None = None,
     ):
         self.trackers = []
         if project_config is not None:
@@ -364,13 +362,6 @@ class Accelerator:
             if not is_torch_version(">=", FSDP_PYTORCH_VERSION):
                 raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
 
-        if isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
-            if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
-                raise ValueError(f"TP requires PyTorch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}")
-
-            if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
-                raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
-
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
                 FullyShardedDataParallelPlugin() if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" else None
@@ -383,9 +374,6 @@ class Accelerator:
         if fsdp_plugin is not None and fsdp_plugin.fsdp_version == 2:
             if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
                 raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
-
-        if torch_tp_plugin is not None and not isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
-            raise TypeError("`torch_tp_plugin` must be a TorchTensorParallelPlugin object.")
 
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
@@ -401,7 +389,6 @@ class Accelerator:
                 raise ImportError("Megatron is not installed. please build it from source.")
 
         # Kwargs handlers
-        self.ddp_handler = None
         self.scaler_handler = None
         self.init_handler = None
         self.fp8_recipe_handler = None
@@ -414,7 +401,6 @@ class Accelerator:
 
         found_handlers = set()
         handler_class_to_attr = {
-            DistributedDataParallelKwargs: "ddp_handler",
             GradScalerKwargs: "scaler_handler",
             InitProcessGroupKwargs: "init_handler",
             FP8RecipeKwargs: "fp8_recipe_handler",
@@ -446,8 +432,8 @@ class Accelerator:
             dynamo_plugin=dynamo_plugin,
             deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
-            torch_tp_plugin=torch_tp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
+            parallelism_config=parallelism_config,
             _from_accelerator=True,
             **kwargs,
         )
@@ -626,6 +612,10 @@ class Accelerator:
     @property
     def distributed_type(self):
         return self.state.distributed_type
+
+    @property
+    def parallelism_config(self):
+        return self.state.parallelism_config
 
     @property
     def num_processes(self):
@@ -1631,7 +1621,11 @@ class Accelerator:
                 DistributedType.MULTI_HPU,
             ):
                 if any(p.requires_grad for p in model.parameters()):
-                    kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                    kwargs = (
+                        self.parallelism_config.dp_handler.to_kwargs()
+                        if self.parallelism_config.dp_handler is not None
+                        else {}
+                    )
                     # TODO: Look at enabling native TP training directly with a proper config
                     if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true":
                         if self.device.type == "hpu":
@@ -1644,19 +1638,17 @@ class Accelerator:
                     model = torch.nn.parallel.DistributedDataParallel(
                         model, device_ids=device_ids, output_device=output_device, **kwargs
                     )
-                    if self.ddp_handler is not None:
-                        self.ddp_handler.register_comm_hook(model)
-            elif self.distributed_type == DistributedType.TP:
-                if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
-                    raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+                    if self.parallelism_config.dp_handler is not None:
+                        self.parallelism_config.dp_handler.register_comm_hook(model)
+            elif self.parallelism_config.tp_handler:
                 if not hasattr(model, "tp_size"):
                     raise NotImplementedError(
                         "Model should undergo tensor parallel before passing it to accelerate."
                         "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
                     )
-                if model.tp_size != self.state.torch_tp_plugin.tp_size:
+                if model.tp_size != self.parallelism_config.tp_size:
                     raise ValueError(
-                        f"tp_size in the plugin {self.state.torch_tp_plugin.tp_size} should be same as model's tp size {model.tp_size}"
+                        f"tp_size in the plugin {self.parallelism_config.tp_handler.tp_size} should be same as model's tp size {model.tp_size}"
                     )
             elif self.is_fsdp2:
                 raise ValueError(
@@ -1792,10 +1784,14 @@ class Accelerator:
                     del self._models[-2]
                 self._models[-1] = model
             elif self.distributed_type == DistributedType.MULTI_CPU:
-                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                kwargs = (
+                    self.parallelism_config.dp_handler.to_kwargs()
+                    if self.parallelism_config.dp_handler is not None
+                    else {}
+                )
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
-                if self.ddp_handler is not None:
-                    self.ddp_handler.register_comm_hook(model)
+                if self.parallelism_config.dp_handler is not None:
+                    self.parallelism_config.dp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
@@ -1808,6 +1804,47 @@ class Accelerator:
             else:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
+
+    def _set_device_mesh(self):
+        mesh_dims = {}
+        pc = self.parallelism_config
+
+        if pc is not None and pc.tp_enabled:
+            mesh_dims["tp"] = pc.tp_size
+        if pc is not None and pc.dp_enabled:
+            mesh_dims["dp"] = pc.dp_size
+
+        if self.is_fsdp2:
+            mesh_dims["fsdp"] = self.num_processes / (pc.tp_size * pc.dp_size)
+
+        # mesh_dims["cp"] = 1
+        # mesh_dims["pp"] = 1
+        # mesh_dims["ep"] = 1
+
+        if len(mesh_dims) == 0:
+            self.state.torch_device_mesh = None
+            return
+
+        # Sort mesh_dims by the canonical order: "dp", "fsdp", "pp", "cp", "tp", "ep"
+        mesh_order = ["pp", "dp", "fsdp", "cp", "tp", "ep"]
+        sorted_items = sorted(
+            mesh_dims.items(), key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
+        )
+        mesh_names = tuple(name for name, _ in sorted_items)
+        mesh_values = tuple(value for _, value in sorted_items)
+
+        device_mesh = torch.distributed.init_device_mesh(
+            self.device.type, mesh_shape=mesh_values, mesh_dim_names=mesh_names
+        )
+
+        # device_mesh[("fsdp", "cp")]._flatten("fsdp_cp")
+        device_mesh[("dp", "fsdp")]._flatten("dp_fsdp")
+
+        # ("cp", "dp", "pp" and "ep") will be used for CP, DP, PP and EP respectively
+        # ("fsdp", "cp") compose a "fsdp_cp" submesh, over which model is going to be sharded
+        # ("dp", "fsdp") compose a "dp_fsdp" submesh, over which data is going to be replicated
+        # ("dp", "fsdp_cp") compose a 2D mesh, where model is sharded over "fsdp_cp" and replicated over "dp", resulting in a HSDP support
+        self.state.torch_device_mesh = device_mesh
 
     def _prepare_ao(self, *args):
         if not is_torchao_available():
@@ -2319,11 +2356,10 @@ class Accelerator:
         Prepare the device mesh for distributed training. The dataloader will determine how to load data based on the
         device mesh.
         """
-        if self.state.torch_tp_plugin:
-            return self.state.torch_tp_plugin.torch_device_mesh
-        elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
+        if self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
-        return None
+        else:
+            return self.state.torch_device_mesh
 
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():

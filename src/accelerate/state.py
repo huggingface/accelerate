@@ -29,6 +29,7 @@ from .utils import (
     DistributedType,
     DynamoBackend,
     GradientAccumulationPlugin,
+    ParallelismConfig,
     check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
     deepspeed_required,
@@ -866,6 +867,8 @@ class AcceleratorState:
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
           in use.
+        - **parallelism_config** ([`~accelerate.utils.ParallelismConfig`]) -- The parallelism configuration
+          for the current training environment. This is used to configure the distributed training environment.
         - **initialized** (`bool`) -- Whether or not the `AcceleratorState` has been initialized from `Accelerator`.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type
@@ -894,8 +897,8 @@ class AcceleratorState:
         dynamo_plugin=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
-        torch_tp_plugin=None,
         megatron_lm_plugin=None,
+        parallelism_config: ParallelismConfig | None = None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -908,8 +911,8 @@ class AcceleratorState:
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
             self.deepspeed_plugins = None
+            self.parallelism_config = parallelism_config
             self.use_ipex = None
-            self.torch_tp_plugin = torch_tp_plugin
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
