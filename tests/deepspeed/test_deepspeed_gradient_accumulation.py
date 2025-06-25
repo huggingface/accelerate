@@ -37,7 +37,6 @@ FP16 = "fp16"
 
 
 @require_deepspeed
-@require_cuda
 class DeepSpeedGradientAccumulationTest(AccelerateTestCase):
     def setUp(self):
         super().setUp()
