@@ -183,7 +183,8 @@ def training_function(config, args):
         # New Code #
         accelerator.print(
             prof.key_averages().table(
-                sort_by="self_cpu_time_total" if args.cpu else f"self_{accelerator.device.type}_time_total", row_limit=-1
+                sort_by="self_cpu_time_total" if args.cpu else f"self_{accelerator.device.type}_time_total",
+                row_limit=-1,
             )
         )
 

@@ -22,7 +22,7 @@ from transformers import AutoModel
 from transformers.trainer_utils import set_seed
 
 from accelerate.accelerator import Accelerator
-from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_deepspeed
+from accelerate.test_utils.testing import AccelerateTestCase, require_deepspeed
 from accelerate.test_utils.training import RegressionDataset
 from accelerate.utils import patch_environment
 from accelerate.utils.dataclasses import DeepSpeedPlugin

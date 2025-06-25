@@ -60,8 +60,8 @@ def notebook_launcher(
 
     <Tip warning={true}>
 
-    To use this function absolutely zero calls to an accelerator must be made in the notebook session before calling. If
-    any have been made, you will need to restart the notebook and make sure no cells use any accelerator capability.
+    To use this function absolutely zero calls to an accelerator must be made in the notebook session before calling.
+    If any have been made, you will need to restart the notebook and make sure no cells use any accelerator capability.
 
     Setting `ACCELERATE_DEBUG_MODE="1"` in your environment will run a test before truly launching to ensure that none
     of those calls have been made.
