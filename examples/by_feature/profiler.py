@@ -31,8 +31,8 @@ from accelerate.utils import ProfileKwargs
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
-#   - single CPU or single device(CUDA GPU, Intel XPU etc.)
-#   - multi AI device (using PyTorch distributed mode)
+#   - single CPU or single device (CUDA GPU, Intel XPU etc.)
+#   - multi devices (using PyTorch distributed mode)
 #   - (multi) TPUs
 #   - fp16 (mixed-precision) or fp32 (normal precision)
 #
