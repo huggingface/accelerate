@@ -107,6 +107,7 @@ from .utils import (
     is_xpu_available,
     load_fsdp_model,
     load_fsdp_optimizer,
+    model_has_dtensor,
     pad_across_processes,
     parse_choice_from_env,
     recursively_apply,
