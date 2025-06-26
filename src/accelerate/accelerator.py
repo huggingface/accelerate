@@ -1061,7 +1061,8 @@ class Accelerator:
         """
         context = contextlib.nullcontext
         if self.use_distributed:
-            context = getattr(model, "no_sync", context)
+            if self.distributed_type != DistributedType.DEEPSPEED or self.state.deepspeed_plugin.zero_stage < 2:
+                context = getattr(model, "no_sync", context)
 
         with context():
             yield
