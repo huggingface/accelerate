@@ -60,8 +60,8 @@ def notebook_launcher(
 
     <Tip warning={true}>
 
-    To use this function absolutely zero calls to an accelerator must be made in the notebook session before calling.
-    If any have been made, you will need to restart the notebook and make sure no cells use any accelerator capability.
+    To use this function absolutely zero calls to a device must be made in the notebook session before calling.
+    If any have been made, you will need to restart the notebook and make sure no cells use any device capability.
 
     Setting `ACCELERATE_DEBUG_MODE="1"` in your environment will run a test before truly launching to ensure that none
     of those calls have been made.
@@ -76,11 +76,11 @@ def notebook_launcher(
             Tuple of arguments to pass to the function (it will receive `*args`).
         num_processes (`int`, *optional*):
             The number of processes to use for training. Will default to 8 in Colab/Kaggle if a TPU is available, to
-            the number of accelerators available otherwise.
+            the number of devices available otherwise.
         mixed_precision (`str`, *optional*, defaults to `"no"`):
-            If `fp16` or `bf16`, will use mixed precision training on multi-accelerator.
+            If `fp16` or `bf16`, will use mixed precision training on multi-device.
         use_port (`str`, *optional*, defaults to `"29500"`):
-            The port to use to communicate between processes when launching a multi-accelerator training.
+            The port to use to communicate between processes when launching a multi-device training.
         master_addr (`str`, *optional*, defaults to `"127.0.0.1"`):
             The address to use for communication between processes.
         node_rank (`int`, *optional*, defaults to 0):
@@ -105,7 +105,7 @@ def notebook_launcher(
     Example:
 
     ```python
-    # Assume this is defined in a Jupyter Notebook on an instance with two accelerators
+    # Assume this is defined in a Jupyter Notebook on an instance with two devices
     from accelerate import notebook_launcher
 
 
@@ -158,27 +158,27 @@ def notebook_launcher(
     else:
         if num_processes is None:
             raise ValueError(
-                "You have to specify the number of accelerators you would like to use, add `num_processes=...` to your call."
+                "You have to specify the number of devices you would like to use, add `num_processes=...` to your call."
             )
         if node_rank >= num_nodes:
             raise ValueError("The node_rank must be less than the number of nodes.")
         if num_processes > 1:
-            # Multi-accelerator launch
+            # Multi-device launch
             from torch.distributed.launcher.api import LaunchConfig, elastic_launch
             from torch.multiprocessing import start_processes
             from torch.multiprocessing.spawn import ProcessRaisedException
 
             if len(AcceleratorState._shared_state) > 0:
                 raise ValueError(
-                    "To launch a multi-accelerator training from your notebook, the `Accelerator` should only be initialized "
+                    "To launch a multi-device training from your notebook, the `Accelerator` should only be initialized "
                     "inside your training function. Restart your notebook and make sure no cells initializes an "
                     "`Accelerator`."
                 )
-            # Check for specific libraries known to initialize accelerator that users constantly use
+            # Check for specific libraries known to initialize device that users constantly use
             problematic_imports = are_libraries_initialized("bitsandbytes")
             if len(problematic_imports) > 0:
                 err = (
-                    "Could not start distributed process. Libraries known to initialize accelerator upon import have been "
+                    "Could not start distributed process. Libraries known to initialize device upon import have been "
                     "imported already. Please keep these imports inside your training function to try and help with this:"
                 )
                 for lib_name in problematic_imports:
@@ -203,28 +203,28 @@ def notebook_launcher(
             # process here (the other ones will be set be the launcher).
             with patch_environment(**patched_env):
                 # First dummy launch
-                accelerator_type = (
+                device_type = (
                     torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
                 )
-                distributed_type = "MULTI_XPU" if accelerator_type == "xpu" else "MULTI_GPU"
+                distributed_type = "MULTI_XPU" if device_type == "xpu" else "MULTI_GPU"
                 if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
                     launcher = PrepareForLaunch(test_launch, distributed_type=distributed_type)
                     try:
                         start_processes(launcher, args=(), nprocs=num_processes, start_method="fork")
                     except ProcessRaisedException as e:
                         err = "An issue was found when verifying a stable environment for the notebook launcher."
-                        if f"Cannot re-initialize {accelerator_type.upper()} in forked subprocess" in e.args[0]:
+                        if f"Cannot re-initialize {device_type.upper()} in forked subprocess" in e.args[0]:
                             raise RuntimeError(
                                 f"{err}"
                                 "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
                                 "Please review your imports and test them when running the `notebook_launcher()` to identify "
-                                f"which one is problematic and causing {accelerator_type.upper()} to be initialized."
+                                f"which one is problematic and causing {device_type.upper()} to be initialized."
                             ) from e
                         else:
                             raise RuntimeError(f"{err} The following error was raised: {e}") from e
                 # Now the actual launch
                 launcher = PrepareForLaunch(function, distributed_type=distributed_type)
-                print(f"Launching training on {num_processes} {accelerator_type.upper()}s.")
+                print(f"Launching training on {num_processes} {device_type.upper()}s.")
                 try:
                     if rdzv_conf is None:
                         rdzv_conf = {}
@@ -248,12 +248,12 @@ def notebook_launcher(
                         launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template
                     elastic_launch(config=LaunchConfig(**launch_config_kwargs), entrypoint=function)(*args)
                 except ProcessRaisedException as e:
-                    if f"Cannot re-initialize {accelerator_type.upper()} in forked subprocess" in e.args[0]:
+                    if f"Cannot re-initialize {device_type.upper()} in forked subprocess" in e.args[0]:
                         raise RuntimeError(
-                            f"{accelerator_type.upper()} has been initialized before the `notebook_launcher` could create a forked subprocess. "
+                            f"{device_type.upper()} has been initialized before the `notebook_launcher` could create a forked subprocess. "
                             "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
                             "Please review your imports and test them when running the `notebook_launcher()` to identify "
-                            f"which one is problematic and causing {accelerator_type.upper()} to be initialized."
+                            f"which one is problematic and causing {device_type.upper()} to be initialized."
                         ) from e
                     else:
                         raise RuntimeError(f"An issue was found when launching the training: {e}") from e
