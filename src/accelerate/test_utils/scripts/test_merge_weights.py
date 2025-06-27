@@ -79,10 +79,6 @@ def mock_training(accelerator, model):
 
 def check_weights(operation, state_1, state_2):
     for weight_1, weight_2 in zip(state_1.values(), state_2.values()):
-        if str(weight_1.device) != torch_device:
-            weight_1 = weight_1.to(torch_device)
-        if str(weight_2.device) != torch_device:
-            weight_2 = weight_2.to(torch_device)
         if operation == "same":
             assert torch.allclose(weight_1, weight_2)
         else:
@@ -91,7 +87,7 @@ def check_weights(operation, state_1, state_2):
 
 def check_safetensors_weights(path, model):
     safe_state_dict = load_file(path / "model.safetensors")
-    safe_loaded_model = TinyModel()
+    safe_loaded_model = TinyModel().to(torch_device)
     check_weights("diff", model.state_dict(), safe_loaded_model.state_dict())
     safe_loaded_model.load_state_dict(safe_state_dict)
     check_weights("same", model.state_dict(), safe_loaded_model.state_dict())
@@ -99,7 +95,7 @@ def check_safetensors_weights(path, model):
 
 def check_pytorch_weights(path, model):
     nonsafe_state_dict = torch.load(path / "pytorch_model.bin", weights_only=True)
-    nonsafe_loaded_model = TinyModel()
+    nonsafe_loaded_model = TinyModel().to(torch_device)
     check_weights("diff", model.state_dict(), nonsafe_loaded_model.state_dict())
     nonsafe_loaded_model.load_state_dict(nonsafe_state_dict)
     check_weights("same", model.state_dict(), nonsafe_loaded_model.state_dict())
