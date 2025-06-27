@@ -229,7 +229,7 @@ def initialize_tensors(data_structure):
     """
 
     def _initialize_tensor(tensor_info):
-        return torch.empty(*tensor_info.shape, dtype=tensor_info.dtype)
+        return torch.zeros(*tensor_info.shape, dtype=tensor_info.dtype)
 
     return recursively_apply(_initialize_tensor, data_structure, test_type=is_tensor_information)
 
