@@ -453,6 +453,12 @@ class Accelerator:
             **kwargs,
         )
 
+        self._initialize_device_mesh()
+        if self.is_fsdp2:
+            assert self.torch_device_mesh is not None, (
+                "FSDP2 requires a device mesh"
+            )  # TODO: remove later, just for debug
+
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
         # Check for automatic FP8 recipe creation
@@ -707,6 +713,10 @@ class Accelerator:
     @property
     def is_fsdp2(self):
         return self.state.is_fsdp2
+
+    @property
+    def torch_device_mesh(self):
+        return self.state.torch_device_mesh
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
@@ -1274,6 +1284,44 @@ class Accelerator:
         """
         self.state.print(*args, **kwargs)
 
+    def _initialize_device_mesh(self):
+        mesh_dims = {}
+        # TODO: figure out why it crashes without hasattr
+        if hasattr(self.state, "torch_tp_plugin") and self.state.torch_tp_plugin is not None:
+            mesh_dims["tp"] = self.state.torch_tp_plugin.tp_size
+        if hasattr(self.state, "fsdp_plugin") and self.state.fsdp_plugin is not None:
+            mesh_dims["fsdp"] = self.num_processes // mesh_dims.get("tp", 1)
+
+        # mesh_dims["cp"] = 1
+        # mesh_dims["dp"] = 1
+        # mesh_dims["pp"] = 1
+        # mesh_dims["ep"] = 1
+
+        if len(mesh_dims) == 0:
+            self.state.torch_device_mesh = None
+            return
+
+        # Sort mesh_dims by the canonical order: "dp", "fsdp", "pp", "cp", "tp", "ep"
+        mesh_order = ["pp", "dp", "fsdp", "cp", "tp", "ep"]
+        sorted_items = sorted(
+            mesh_dims.items(), key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
+        )
+        mesh_names = tuple(name for name, _ in sorted_items)
+        mesh_values = tuple(value for _, value in sorted_items)
+
+        device_mesh = torch.distributed.init_device_mesh(
+            self.device.type, mesh_shape=mesh_values, mesh_dim_names=mesh_names
+        )
+
+        # device_mesh[("fsdp", "cp")]._flatten("fsdp_cp")
+        # device_mesh[("dp", "fsdp")]._flatten("dp_fsdp")
+
+        # ("cp", "dp", "pp" and "ep") will be used for CP, DP, PP and EP respectively
+        # ("fsdp", "cp") compose a "fsdp_cp" submesh, over which model is going to be sharded
+        # ("dp", "fsdp") compose a "dp_fsdp" submesh, over which data is going to be replicated
+        # ("dp", "fsdp_cp") compose a 2D mesh, where model is sharded over "fsdp_cp" and replicated over "dp", resulting in a HSDP support
+        self.state.torch_device_mesh = device_mesh
+
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer
         if first_pass:
@@ -1475,7 +1523,6 @@ class Accelerator:
 
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
-
         # Apply AC if needed
         if self.state.fsdp_plugin.activation_checkpointing:
             model = fsdp2_apply_ac(self, model)
@@ -1499,6 +1546,8 @@ class Accelerator:
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
                         # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
                         param_group["params"][i] = torch.empty_like(p)
+                        if isinstance(p, torch.distributed.tensor.DTensor):
+                            p = p._local_tensor
                         param_group["params"][i].data_ptr = p.data_ptr()
 
         self._models.append(model)
@@ -1652,7 +1701,9 @@ class Accelerator:
                     )
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
-            elif self.distributed_type == DistributedType.TP:
+            elif self.distributed_type == DistributedType.TP or (
+                self.is_fsdp2 and self.state.torch_tp_plugin is not None
+            ):
                 if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
                     raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
                 if not hasattr(model, "tp_size"):
@@ -2325,11 +2376,9 @@ class Accelerator:
         Prepare the device mesh for distributed training. The dataloader will determine how to load data based on the
         device mesh.
         """
-        if self.state.torch_tp_plugin:
-            return self.state.torch_tp_plugin.torch_device_mesh
-        elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
+        if self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
-        return None
+        return self.state.torch_device_mesh
 
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
@@ -3649,6 +3698,8 @@ class Accelerator:
                 if not drop_refs:
                     named_parameters.update({n: p for n, p in obj.named_parameters()})
                     continue
+
+                accessor_mapping[torch.distributed.tensor.DTensor] = "_local_tensor"
 
                 # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
                 # the underlying pointer is actually hidden in `_tensor` attribute
