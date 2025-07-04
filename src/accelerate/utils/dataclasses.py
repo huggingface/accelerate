@@ -2791,6 +2791,20 @@ class BnbQuantizationConfig:
 
 @dataclass
 class ParallelismConfig:
+    """
+    A dataclass to configure the parallelism of the model.
+
+    Args:
+        dp_size (`int`, defaults to `1`):
+            The size of the data parallel group. If `dp_size` is set to `1`, the data parallel group will not be used.
+        tp_size (`int`, defaults to `1`):
+            The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be used.
+        dp_handler (`~utils.DistributedDataParallelKwargs`, defaults to `None`):
+            The handler for the data parallel group.
+        tp_handler (`~utils.TorchTensorParallelKwargs`, defaults to `None`):
+            The handler for the tensor parallel group.
+    """
+
     dp_size: int = 1
     tp_size: int = 1
 
@@ -2819,6 +2833,11 @@ class ParallelismConfig:
         if self.tp_size < 1:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
 
+        self._sizes = {
+            "dp": self.dp_size,
+            "tp": self.tp_size,
+        }
+
     def _init_from_kwargs(self, kwargs_handlers: list[KwargsHandler]):
         kwargs_handlers = kwargs_handlers or []
         for handler in kwargs_handlers:
@@ -2831,54 +2850,59 @@ class ParallelismConfig:
 
         self._is_fully_initialized = True
 
+    def _set_size(self, parallelism: str, size: int):
+        assert parallelism in self._sizes.keys(), f"Parallelism must be one of {self._sizes.keys()}"
+        self._sizes[parallelism] = size
+        setattr(self, f"{parallelism}_size", size)
+
+    def parallelisms_enabled(self) -> int:
+        return sum(1 for parallelism in ("dp", "tp") if getattr(self, f"{parallelism}_enabled", False))
+
     def _validate(self, accelerator: "Accelerator"):
         if not getattr(self, "_is_fully_initialized", False):
             raise ValueError(
                 "ParallelismConfig is not fully initialized. Please call `_init_from_kwargs` with kwargs handlers before validation."
             )
 
-        _warnings = {}
-        if self.dp_size * self.tp_size > accelerator.num_processes:
+        _warnings = set()
+
+        if self.total_size > accelerator.num_processes:
             raise ValueError(
-                f"Your current {self} requires {self.dp_size * self.tp_size} processes, but the current Accelerator is set to use {accelerator.num_processes} processes."
+                f"Your current {self} requires {self.total_size} processes, but the current Accelerator is set to use {accelerator.num_processes} processes."
             )
 
-        if accelerator.distributed_type not in (
-            DistributedType.MULTI_GPU,
-            DistributedType.FSDP,
-            DistributedType.MULTI_CPU,
-        ):
+        if (not accelerator.multi_device) and (not accelerator.is_fsdp2):
             raise ValueError(
-                f"ParallelismConfig is only compatible with DistributedType.MULTI_GPU/CPU or DistributedType.FSDP, but got {accelerator.distributed_type}."
-                f" If you want to compose other parallelisms with your distributed type, check its configuration options."
+                f"ParallelismConfig is only compatible with DistributedType.MULTI_{{device_type}} or DistributedType.FSDP (version 2), but got {accelerator.distributed_type}."
             )
 
-        if accelerator.distributed_type == DistributedType.FSDP and not accelerator.is_fsdp2:
-            raise ValueError("ParallelismConfig is only compatible with FSDP2. FSDP1 supports only 1D parallelism.")
-
-        attr_to_cls_mapping = {
-            "dp_handler": (DistributedDataParallelKwargs,),
-            "tp_handler": (TorchTensorParallelKwargs,),
-        }
-
-        for attr, possible_classes in attr_to_cls_mapping.items():
-            attr_value = getattr(self, attr, None)
-            if attr_value is not None and not isinstance(attr_value, possible_classes):
-                raise ValueError(f"{attr} must be an instance of {possible_classes}, but got {type(attr_value)}.")
-
-        for parallelism in ("dp", "tp"):
-            if (
-                getattr(self, f"{parallelism}_size", 1) > 1
-                and getattr(self, f"{parallelism}_config", None) is not None
-            ):
+        if self.parallelisms_enabled() == 1 and (not accelerator.is_composable_parallelism_enabled):
+            if non_zero_parallelism := [
+                (parallelism, size)
+                for parallelism, size in self._sizes.items()
+                if size > 1 and size < accelerator.num_processes
+            ]:
+                parallelism, size = non_zero_parallelism[0]
                 _warnings.add(
-                    f"ParallelismConfig.{parallelism}_config is set, but {parallelism}_size is set to 1. This config will be ignored."
+                    f"You are configuring a single parallelism ({parallelism}), but the size is set to {size} which is less than the total number of processes {accelerator.num_processes}. "
+                    f"Your choice of {size} will be ignored and total number of processes ({accelerator.num_processes}) will be used instead."
+                )
+                self._set_size(parallelism, accelerator.num_processes)
+
+        # This is to make sure the original behavior is preserved
+        if accelerator.multi_device and self.total_size == 1:
+            self._set_size("dp", accelerator.num_processes)
+
+        for parallelism, size in self._sizes.items():
+            if size > 1 and getattr(self, f"{parallelism}_handler", None) is not None:
+                _warnings.add(
+                    f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is set to 1. This handler will be ignored."
                 )
 
-        if not accelerator.is_fsdp2 and (self.tp_enabled and self.dp_enabled):
+        if self.tp_enabled and self.dp_enabled:
             raise ValueError("Currently TP+DP composition is not supported.")
 
-        if _warnings:
+        if _warnings and accelerator.is_main_process:
             warnings.warn(
                 "ParallelismConfig has the following warnings:\n" + "\n".join(_warnings),
                 UserWarning,

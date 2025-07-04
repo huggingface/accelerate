@@ -439,9 +439,9 @@ class Accelerator:
             **kwargs,
         )
 
-        if self.multi_device and self.parallelism_config.total_size == 1:
-            # We gotta do this to keep backwards compatibility
-            self.parallelism_config.dp_size = self.num_processes
+        # Helper flag to check if we are in a composable parallelism setup
+        # Later we can add DeepSpeed, etc
+        self._composable_parallelism_enabled = self.is_fsdp2
 
         # This is a bit clunky, as this needs to be called after `AcceleratorState` is initialized, but _init_from_kwargs has to be called before
         parallelism_config._validate(self)
@@ -717,6 +717,10 @@ class Accelerator:
     @property
     def is_fsdp2(self):
         return self.state.is_fsdp2
+
+    @property
+    def is_composable_parallelism_enabled(self):
+        return self.is_fsdp2
 
     @property
     def device_mesh(self):
@@ -1657,7 +1661,7 @@ class Accelerator:
                         )
                     if model.tp_size != self.parallelism_config.tp_size:
                         raise ValueError(
-                            f"tp_size in the plugin {self.parallelism_config.tp_handler.tp_size} should be same as model's tp size {model.tp_size}"
+                            f"tp_size in the plugin {self.parallelism_config.tp_size} should be same as model's tp size {model.tp_size}"
                         )
             elif self.is_fsdp2:
                 raise ValueError(
