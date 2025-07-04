@@ -20,10 +20,11 @@ Accelerate provides a general tracking API that can be used to log useful items 
 
 ## Integrated Trackers
 
-Currently `Accelerate` supports seven trackers out-of-the-box:
+Currently `Accelerate` supports eight trackers out-of-the-box:
 
 - TensorBoard
-- WandB
+- WandB 
+- Trackio
 - CometML
 - Aim
 - MLFlow
@@ -98,6 +99,14 @@ accelerator = Accelerator(log_with="tensorboard", project_dir=".")
 # use with ProjectConfiguration
 config = ProjectConfiguration(project_dir=".", logging_dir="another/directory")
 accelerator = Accelerator(log_with="tensorboard", project_config=config)
+```
+
+### Using trackio
+
+[`trackio`](https://github.com/gradio-app/trackio) is a lightweight, 💯 free experiment tracking Python library built on top of Datasets and Spaces. You can use it as a drop-in replacement for WandB:
+
+```py
+import trackio as wandb
 ```
 
 ## Implementing Custom Trackers

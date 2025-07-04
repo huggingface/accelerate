@@ -29,6 +29,15 @@ rendered properly in your Markdown viewer.
 [[autodoc]] tracking.WandBTracker
     - __init__
 
+## Trackio
+
+[Trackio](https://github.com/gradio-app/trackio) is a drop-in replacement for WandB. Refer to [`WandBTracker`] for more information.
+
+```py
+import trackio as wandb
+```
+
+
 ## CometMLTracker
 
 [[autodoc]] tracking.CometMLTracker
