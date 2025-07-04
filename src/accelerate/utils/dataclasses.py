@@ -2802,6 +2802,10 @@ class ParallelismConfig:
         return f"ParallelismConfig(dp_size={self.dp_size}, tp_size={self.tp_size}, total_size={self.dp_size * self.tp_size})"
 
     @property
+    def total_size(self):
+        return self.dp_size * self.tp_size
+
+    @property
     def dp_enabled(self):
         return self.dp_size > 1
 
@@ -2845,7 +2849,7 @@ class ParallelismConfig:
             DistributedType.MULTI_CPU,
         ):
             raise ValueError(
-                f"ParallelismConfig is only compatible with DistributedType.MULTI_GPU or DistributedType.FSDP, but got {accelerator.distributed_type}."
+                f"ParallelismConfig is only compatible with DistributedType.MULTI_GPU/CPU or DistributedType.FSDP, but got {accelerator.distributed_type}."
                 f" If you want to compose other parallelisms with your distributed type, check its configuration options."
             )
 

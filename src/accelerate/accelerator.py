@@ -52,7 +52,6 @@ from .utils import (
     AutocastKwargs,
     DataLoaderConfiguration,
     DeepSpeedPlugin,
-    DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
     FP8RecipeKwargs,
@@ -71,7 +70,6 @@ from .utils import (
     RNGType,
     TERecipeKwargs,
     TorchDynamoPlugin,
-    TorchTensorParallelKwargs,
     apply_fp8_autowrap,
     check_os_kernel,
     clean_state_dict_for_safetensors,
@@ -441,6 +439,10 @@ class Accelerator:
             **kwargs,
         )
 
+        if self.multi_device and self.parallelism_config.total_size == 1:
+            # We gotta do this to keep backwards compatibility
+            self.parallelism_config.dp_size = self.num_processes
+
         # This is a bit clunky, as this needs to be called after `AcceleratorState` is initialized, but _init_from_kwargs has to be called before
         parallelism_config._validate(self)
         self._set_device_mesh()
@@ -615,6 +617,18 @@ class Accelerator:
         Whether the Accelerator is configured for distributed training
         """
         return self.state.use_distributed
+
+    @property
+    def multi_device(self):
+        return self.use_distributed and self.distributed_type in (
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
+            DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
+        )
 
     @property
     def distributed_type(self):
@@ -1212,15 +1226,7 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        if self.distributed_type in (
-            DistributedType.MULTI_GPU,
-            DistributedType.MULTI_NPU,
-            DistributedType.MULTI_MLU,
-            DistributedType.MULTI_SDAA,
-            DistributedType.MULTI_MUSA,
-            DistributedType.MULTI_XPU,
-            DistributedType.MULTI_HPU,
-        ):
+        if self.multi_device:
             dl_even_batches_values = []
 
             if even_batches is not None:
@@ -1622,45 +1628,37 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
-            if self.distributed_type in (
-                DistributedType.MULTI_GPU,
-                DistributedType.MULTI_MLU,
-                DistributedType.MULTI_SDAA,
-                DistributedType.MULTI_MUSA,
-                DistributedType.MULTI_NPU,
-                DistributedType.MULTI_XPU,
-                DistributedType.MULTI_HPU,
-            ):
-                if any(p.requires_grad for p in model.parameters()):
-                    kwargs = (
-                        self.parallelism_config.dp_handler.to_kwargs()
-                        if self.parallelism_config.dp_handler is not None
-                        else {}
-                    )
-                    # TODO: Look at enabling native TP training directly with a proper config
-                    if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true":
-                        if self.device.type == "hpu":
-                            device_ids, output_device = [self.device.index], self.device.index
+            if self.multi_device:
+                if self.parallelism_config.dp_enabled:
+                    if any(p.requires_grad for p in model.parameters()):
+                        kwargs = (
+                            self.parallelism_config.dp_handler.to_kwargs()
+                            if self.parallelism_config.dp_handler is not None
+                            else {}
+                        )
+                        # TODO: Look at enabling native TP training directly with a proper config
+                        if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true":
+                            if self.device.type == "hpu":
+                                device_ids, output_device = [self.device.index], self.device.index
+                            else:
+                                device_ids, output_device = [self.local_process_index], self.local_process_index
                         else:
-                            device_ids, output_device = [self.local_process_index], self.local_process_index
-                    else:
-                        device_ids, output_device = None, None
-
-                    model = torch.nn.parallel.DistributedDataParallel(
-                        model, device_ids=device_ids, output_device=output_device, **kwargs
-                    )
-                    if self.parallelism_config.dp_handler is not None:
-                        self.parallelism_config.dp_handler.register_comm_hook(model)
-            elif self.parallelism_config.tp_handler:
-                if not hasattr(model, "tp_size"):
-                    raise NotImplementedError(
-                        "Model should undergo tensor parallel before passing it to accelerate."
-                        "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
-                    )
-                if model.tp_size != self.parallelism_config.tp_size:
-                    raise ValueError(
-                        f"tp_size in the plugin {self.parallelism_config.tp_handler.tp_size} should be same as model's tp size {model.tp_size}"
-                    )
+                            device_ids, output_device = None, None
+                        model = torch.nn.parallel.DistributedDataParallel(
+                            model, device_ids=device_ids, output_device=output_device, **kwargs
+                        )
+                        if self.parallelism_config.dp_handler is not None:
+                            self.parallelism_config.dp_handler.register_comm_hook(model)
+                elif self.parallelism_config.tp_enabled:
+                    if not hasattr(model, "tp_size"):
+                        raise NotImplementedError(
+                            "Model should undergo tensor parallel before passing it to accelerate."
+                            "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
+                        )
+                    if model.tp_size != self.parallelism_config.tp_size:
+                        raise ValueError(
+                            f"tp_size in the plugin {self.parallelism_config.tp_handler.tp_size} should be same as model's tp size {model.tp_size}"
+                        )
             elif self.is_fsdp2:
                 raise ValueError(
                     "FSDP2 preparation should be done via `accelerate.prepare()`, as it requires a model and an optimizer."
@@ -1794,12 +1792,8 @@ class Accelerator:
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
                 self._models[-1] = model
-            elif self.distributed_type == DistributedType.MULTI_CPU:
-                kwargs = (
-                    self.parallelism_config.dp_handler.to_kwargs()
-                    if self.parallelism_config.dp_handler is not None
-                    else {}
-                )
+            elif self.distributed_type == DistributedType.MULTI_CPU and self.parallelism_config.dp_enabled:
+                kwargs = self.parallelism_config.dp_handler.to_kwargs() if self.parallelism_config.dp_handler else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
                 if self.parallelism_config.dp_handler is not None:
                     self.parallelism_config.dp_handler.register_comm_hook(model)
@@ -3593,14 +3587,7 @@ class Accelerator:
 
         map_location = load_model_func_kwargs.pop("map_location", None)
         if map_location is None:
-            if self.num_processes > 1 and self.distributed_type in (
-                DistributedType.MULTI_GPU,
-                DistributedType.MULTI_MLU,
-                DistributedType.MULTI_SDAA,
-                DistributedType.MULTI_MUSA,
-                DistributedType.MULTI_NPU,
-                DistributedType.MULTI_HPU,
-            ):
+            if self.num_processes > 1 and self.multi_device and self.distributed_type != DistributedType.MULTI_XPU:
                 map_location = "on_device"
             else:
                 map_location = "cpu"
