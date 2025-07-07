@@ -125,6 +125,7 @@ from .utils.constants import (
     FSDP2_PYTORCH_VERSION,
     FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
+    SCALER_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import compile_regions, compile_regions_deepspeed, is_compiled_module
@@ -3520,6 +3521,18 @@ class Accelerator:
                 logger.info(f"Megatron-LM Model , Optimizer and Scheduler loaded from input dir {input_dir}")
             else:
                 models.append(model)
+
+        # We need to load the scaler state before the optimizer for FSDP2
+        # (`torch.distributed.checkpoint.set_optimizer_state_dict`) which we use to set the state of the optimizer calls `optimizer.step` on
+        # a dummy tensor, but since the scaler is not initialized, it will raise an error (the scaler exists but its `_scale` is None)
+        if self.scaler is not None and self.is_fsdp2:
+            input_scaler_file = os.path.join(input_dir, SCALER_NAME)
+            scaler_state = torch.load(input_scaler_file)
+            self.scaler.load_state_dict(scaler_state)
+            # We also need to call the `_lazy_init_scale_growth_tracker` to initialize the scaler, as it would else be called
+            # on the first call to scale
+            self.scaler._lazy_init_scale_growth_tracker(self.scaler._device)
+            logger.info("GradScaler state loaded successfully")
 
         # Load the optimizers taking care of FSDP and DeepSpeed nuances
         optimizers = []
