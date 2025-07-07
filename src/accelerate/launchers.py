@@ -60,8 +60,8 @@ def notebook_launcher(
 
     <Tip warning={true}>
 
-    To use this function absolutely zero calls to a device must be made in the notebook session before calling.
-    If any have been made, you will need to restart the notebook and make sure no cells use any device capability.
+    To use this function absolutely zero calls to a device must be made in the notebook session before calling. If any
+    have been made, you will need to restart the notebook and make sure no cells use any device capability.
 
     Setting `ACCELERATE_DEBUG_MODE="1"` in your environment will run a test before truly launching to ensure that none
     of those calls have been made.
@@ -203,9 +203,7 @@ def notebook_launcher(
             # process here (the other ones will be set be the launcher).
             with patch_environment(**patched_env):
                 # First dummy launch
-                device_type = (
-                    torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
-                )
+                device_type = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
                 distributed_type = "MULTI_XPU" if device_type == "xpu" else "MULTI_GPU"
                 if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
                     launcher = PrepareForLaunch(test_launch, distributed_type=distributed_type)
