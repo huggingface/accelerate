@@ -483,7 +483,7 @@ class TrackioTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to the `trackio.log` method.
         """
-        self.run.log(values, step=step, **kwargs)
+        self.run.log(values, **kwargs)
         logger.debug("Successfully logged to trackio")
 
     @on_main_process
