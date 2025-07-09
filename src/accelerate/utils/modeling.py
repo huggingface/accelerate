@@ -295,9 +295,9 @@ def set_module_tensor_to_device(
 
         if dtype is None:
             # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
-            value = value.to(old_value.dtype)
+            value = value.to(old_value.dtype, non_blocking=True)
         elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
-            value = value.to(dtype)
+            value = value.to(dtype, non_blocking=True)
 
     device_quantization = None
     with torch.no_grad():
@@ -326,15 +326,15 @@ def set_module_tensor_to_device(
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
-            new_value = old_value.to(device)
+            new_value = old_value.to(device, non_blocking=True)
             if dtype is not None and device in ["meta", torch.device("meta")]:
                 if not str(old_value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
-                    new_value = new_value.to(dtype)
+                    new_value = new_value.to(dtype, non_blocking=True)
 
                 if not is_buffer:
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
-            new_value = value.to(device)
+            new_value = value.to(device, non_blocking=True)
         else:
             new_value = torch.tensor(value, device=device)
         if device_quantization is not None:
@@ -347,24 +347,24 @@ def set_module_tensor_to_device(
             if param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]:
                 if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
                     # downcast to fp16 if any - needed for 8bit serialization
-                    new_value = new_value.to(torch.float16)
+                    new_value = new_value.to(torch.float16, non_blocking=True)
                 # quantize module that are going to stay on the cpu so that we offload quantized weights
                 if device == "cpu" and param_cls.__name__ == "Int8Params":
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(0).to("cpu")
-                    new_value.CB = new_value.CB.to("cpu")
-                    new_value.SCB = new_value.SCB.to("cpu")
+                    new_value.CB = new_value.CB.to("cpu", non_blocking=True)
+                    new_value.SCB = new_value.SCB.to("cpu", non_blocking=True)
                 else:
-                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device, non_blocking=True)
             elif param_cls.__name__ in ["QTensor", "QBitsTensor"]:
-                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(device)
+                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(device, non_blocking=True)
             elif param_cls.__name__ in ["AffineQuantizedTensor"]:
-                new_value = new_value.to(device)
+                new_value = new_value.to(device, non_blocking=True)
             else:
-                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
+                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device, non_blocking=True)
 
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
-                module._parameters[tensor_name].SCB = fp16_statistics.to(device)
+                module._parameters[tensor_name].SCB = fp16_statistics.to(device, non_blocking=True)
                 del fp16_statistics
             # as we put the weight to meta, it doesn't have SCB attr anymore. make sure that it is not a meta weight
             if (
@@ -390,9 +390,10 @@ def set_module_tensor_to_device(
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
                     module.weight = module.weight.cuda(device_index)
-    # clean pre and post forward hook
-    if device != "cpu":
-        clear_device_cache()
+    
+    # # clean pre and post forward hook
+    # if device != "cpu":
+    #     clear_device_cache()
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
     # order to avoid duplicating memory, see above.
