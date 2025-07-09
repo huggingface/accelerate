@@ -552,7 +552,8 @@ def require_matplotlib(test_case):
 
 
 _atleast_one_tracker_available = (
-    any([is_wandb_available(), is_tensorboard_available(), is_trackio_available(), is_swanlab_available()]) and not is_comet_ml_available()
+    any([is_wandb_available(), is_tensorboard_available(), is_trackio_available(), is_swanlab_available()])
+    and not is_comet_ml_available()
 )
 
 
