@@ -427,8 +427,8 @@ class TrackioTracker(GeneralTracker):
         run_name (`str`):
             The name of the experiment run. Will be used as the `project` name when instantiating trackio.
         **kwargs (additional keyword arguments, *optional*):
-            Additional key word arguments passed along to the `trackio.init` method.
-            Reference: https://github.com/gradio-app/trackio/blob/814809552310468b13f84f33764f1369b4e5136c/trackio/__init__.py#L22
+            Additional key word arguments passed along to the `trackio.init` method. Reference:
+            https://github.com/gradio-app/trackio/blob/814809552310468b13f84f33764f1369b4e5136c/trackio/__init__.py#L22
     """
 
     name = "trackio"
