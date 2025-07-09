@@ -516,23 +516,6 @@ class Accelerator:
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
 
-        if self.is_fsdp2:
-            from torch.distributed.device_mesh import init_device_mesh
-
-            context_parallel_size = self.state.fsdp_plugin.cp_size
-
-            world_size = self.state.num_processes
-
-            fsdp_size = world_size // context_parallel_size
-
-            device_mesh = init_device_mesh(
-                device_type=self.device.type,
-                mesh_shape=(fsdp_size, context_parallel_size),
-                mesh_dim_names=("fsdp", "cp"),
-            )
-            device_mesh["fsdp", "cp"]._flatten("fsdp_cp")
-            self.state.torch_device_mesh = device_mesh
-
         self.device_placement = device_placement
         if dataloader_config is None:
             dataloader_config = DataLoaderConfiguration()
@@ -1339,7 +1322,7 @@ class Accelerator:
 
         if (
             getattr(self.state, "fsdp_plugin", None) is None
-            or self.state.fsdp_plugin.cp_size == 1
+            or not self.parallelism_config.cp_enabled
             or (cp_context := getattr(self, "_cp_context", None)) is None
         ):
             logger.warning("Context parallel + FSDP2 is not configured, this context manager will have no effect.")
@@ -1565,19 +1548,14 @@ class Accelerator:
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
-        if (context_parallel_size := self.state.fsdp_plugin.cp_size) > 1:
-            if context_parallel_size > self.state.num_processes:
-                raise ValueError(
-                    f"`cp_size` set to {context_parallel_size}, which is greater than the number of processes {self.state.num_processes}. Please set to 1 to disable context parallel or use a smaller value."
-                )
-
+        if self.parallelism_config.cp_enabled:
             from torch.distributed.tensor.experimental import context_parallel
             from torch.distributed.tensor.experimental._attention import set_rotate_method
 
-            cp_comm_strategy = self.state.fsdp_plugin.cp_comm_strategy
+            cp_comm_strategy = self.parallelism_config.cp_handler.cp_comm_strategy
             set_rotate_method(cp_comm_strategy)
 
-            self._cp_context = functools.partial(context_parallel, mesh=self.state.torch_device_mesh["cp"])
+            self._cp_context = functools.partial(context_parallel, mesh=self.state.device_mesh["cp"])
 
         # Apply AC if needed
         if self.state.fsdp_plugin.activation_checkpointing:
@@ -1909,18 +1887,34 @@ class Accelerator:
         return model
 
     def _set_device_mesh(self):
+        def sort_by_order(item):
+            if isinstance(item, tuple):
+                item = item[0]
+            mesh_order = ["dp", "fsdp", "pp", "cp", "tp", "ep"]
+            return mesh_order.index(item) if item in mesh_order else len(mesh_order)
+
         mesh_dims = {}
         pc = self.parallelism_config
 
-        if pc is not None and pc.tp_enabled:
-            mesh_dims["tp"] = pc.tp_size
-        if pc is not None and pc.dp_enabled:
-            mesh_dims["dp"] = pc.dp_size
+        # Replicate data over dp_submesh
+        dp_submesh = []
+        # Shard model over fsdp_submesh
+        fsdp_submesh = []
 
         if self.is_fsdp2:
-            mesh_dims["fsdp"] = self.num_processes // (pc.tp_size * pc.dp_size)
+            mesh_dims["fsdp"] = self.num_processes // (pc.tp_size * pc.dp_size * pc.cp_size)
+            dp_submesh.append("fsdp")
+            fsdp_submesh.append("fsdp")
 
-        # mesh_dims["cp"] = 1
+        if pc.tp_enabled:
+            mesh_dims["tp"] = pc.tp_size
+        if pc.dp_enabled:
+            mesh_dims["dp"] = pc.dp_size
+            dp_submesh.append("dp")
+        if pc.cp_enabled:
+            mesh_dims["cp"] = pc.cp_size
+            fsdp_submesh.append("cp")
+
         # mesh_dims["pp"] = 1
         # mesh_dims["ep"] = 1
 
@@ -1929,11 +1923,11 @@ class Accelerator:
             return
 
         # Sort mesh_dims by the canonical order: "dp", "fsdp", "pp", "cp", "tp", "ep"
-        mesh_order = ["pp", "dp", "fsdp", "cp", "tp", "ep"]
         sorted_items = sorted(
-            mesh_dims.items(), key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
+            mesh_dims.items(), key=sort_by_order,
         )
-        sorted_items = [(name, value) for name, value in sorted_items if value > 1]
+        sorted_items = [(name, value) for name, value in sorted_items if value > 1 or name == "fsdp"]
+
         mesh_names = tuple(name for name, _ in sorted_items)
         mesh_values = tuple(value for _, value in sorted_items)
 
@@ -1941,9 +1935,12 @@ class Accelerator:
             self.device.type, mesh_shape=mesh_values, mesh_dim_names=mesh_names
         )
 
-        # device_mesh[("fsdp", "cp")]._flatten("fsdp_cp")
-        if all(name in device_mesh.mesh_dim_names for name in ("fsdp", "dp")):
-            device_mesh[("dp", "fsdp")]._flatten("dp_fsdp")
+        device_mesh[tuple(sorted(fsdp_submesh, key=sort_by_order))]._flatten("fsdp_cp")
+        device_mesh[tuple(sorted(dp_submesh, key=sort_by_order))]._flatten("dp_fsdp")
+
+        logger.info(
+            f"Device mesh initialized with dimensions: {device_mesh.mesh_dim_names} and shape: {device_mesh.shape}"
+        )
 
         # ("cp", "dp", "pp" and "ep") will be used for CP, DP, PP and EP respectively
         # ("fsdp", "cp") compose a "fsdp_cp" submesh, over which model is going to be sharded

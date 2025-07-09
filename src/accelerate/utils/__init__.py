@@ -37,6 +37,7 @@ from .dataclasses import (
     AutocastKwargs,
     BnbQuantizationConfig,
     ComputeEnvironment,
+    ContextParallelKwargs,
     CustomDtype,
     DataLoaderConfiguration,
     DDPCommunicationHookType,

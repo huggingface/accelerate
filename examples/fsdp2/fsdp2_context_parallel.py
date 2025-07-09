@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator
-from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
+from accelerate.utils import ContextParallelKwargs, FullyShardedDataParallelPlugin, ParallelismConfig, set_seed
 from utils import PerformanceTracker, create_collate_fn, get_dataset, setup_tokenizer
 
 
@@ -86,8 +86,11 @@ def main():
         cpu_ram_efficient_loading=True,
         activation_checkpointing=True,
         fsdp_version=2,
+    )
+
+    parallelism_config = ParallelismConfig(
         cp_size=args.cp_size,
-        cp_comm_strategy=args.cp_comm_strategy,
+        cp_handler=ContextParallelKwargs(cp_comm_strategy=args.cp_comm_strategy),
     )
 
     # Initialize accelerator
@@ -95,6 +98,7 @@ def main():
         log_with=args.log_with,
         fsdp_plugin=fsdp_plugin,
         mixed_precision="bf16",
+        parallelism_config=parallelism_config,
     )
 
     accelerator.init_trackers(

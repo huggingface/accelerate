@@ -616,7 +616,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     original_sd = model.state_dict()
 
-    mesh = getattr(accelerator.state, "torch_device_mesh", None)
+    mesh = accelerator.state.device_mesh
 
     fsdp2_kwargs = {
         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
