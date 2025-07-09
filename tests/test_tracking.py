@@ -44,8 +44,8 @@ from accelerate.test_utils.testing import (
     require_mlflow,
     require_pandas,
     require_swanlab,
-    require_trackio,
     require_tensorboard,
+    require_trackio,
     require_wandb,
     skip,
 )
@@ -58,8 +58,8 @@ from accelerate.tracking import (
     MLflowTracker,
     SwanLabTracker,
     TensorBoardTracker,
-    WandBTracker,
     TrackioTracker,
+    WandBTracker,
 )
 from accelerate.utils import (
     ProjectConfiguration,
