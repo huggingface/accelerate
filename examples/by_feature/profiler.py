@@ -31,8 +31,8 @@ from accelerate.utils import ProfileKwargs
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
-#   - single CPU or single GPU
-#   - multi GPUS (using PyTorch distributed mode)
+#   - single CPU or single device (CUDA GPU, Intel XPU etc.)
+#   - multi devices (using PyTorch distributed mode)
 #   - (multi) TPUs
 #   - fp16 (mixed-precision) or fp32 (normal precision)
 #
@@ -183,7 +183,8 @@ def training_function(config, args):
         # New Code #
         accelerator.print(
             prof.key_averages().table(
-                sort_by="self_cpu_time_total" if args.cpu else "self_cuda_time_total", row_limit=-1
+                sort_by="self_cpu_time_total" if args.cpu else f"self_{accelerator.device.type}_time_total",
+                row_limit=-1,
             )
         )
 
@@ -215,7 +216,7 @@ def main():
         choices=["no", "fp16", "bf16", "fp8"],
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
-        "and an Nvidia Ampere GPU.",
+        "and an Nvidia Ampere GPU or an Intel XPU.",
     )
     # New Code #
     parser.add_argument(

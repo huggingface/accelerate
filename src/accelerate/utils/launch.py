@@ -328,6 +328,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
+        current_env["FSDP_CP_SIZE"] = str(args.fsdp_cp_size)
+        current_env["FSDP_CP_COMM_STRATEGY"] = str(args.fsdp_cp_comm_strategy)
 
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"

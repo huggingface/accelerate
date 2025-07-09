@@ -2790,6 +2790,24 @@ class BnbQuantizationConfig:
 
 
 @dataclass
+class ContextParallelKwargs:
+    """
+    A dataclass to configure the context parallel group.
+    """
+
+    cp_comm_strategy: str = field(
+        default=None,
+        metadata={
+            "help": "The shard rotation strategy to use, only used when `cp_size` > 1 and `fsdp_version` is set to 2. Defaults to `allgather`."
+        },
+    )
+
+    def __post_init__(self):
+        if self.cp_comm_strategy is not None and self.cp_comm_strategy not in ["allgather", "rotate"]:
+            raise ValueError(f"cp_comm_strategy must be in ['allgather', 'rotate'], but got {self.cp_comm_strategy}")
+
+
+@dataclass
 class ParallelismConfig:
     """
     A dataclass to configure the parallelism of the model.
@@ -2807,10 +2825,12 @@ class ParallelismConfig:
 
     dp_size: int = 1
     tp_size: int = 1
+    cp_size: int = 1
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     dp_handler: Union[None, DistributedDataParallelKwargs] = None
     tp_handler: Union[None, TorchTensorParallelKwargs] = None
+    cp_handler: Union[None, ContextParallelKwargs] = None
 
     def __repr__(self):
         return f"ParallelismConfig(dp_size={self.dp_size}, tp_size={self.tp_size}, total_size={self.dp_size * self.tp_size})"
@@ -2827,15 +2847,22 @@ class ParallelismConfig:
     def tp_enabled(self):
         return self.tp_size > 1
 
+    @property
+    def cp_enabled(self):
+        return self.cp_size > 1
+
     def __post_init__(self):
         if self.dp_size < 1:
             raise ValueError(f"dp_size must be at least 1, but got {self.dp_size}")
         if self.tp_size < 1:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
+        if self.cp_size < 1:
+            raise ValueError(f"cp_size must be at least 1, but got {self.cp_size}")
 
         self._sizes = {
             "dp": self.dp_size,
             "tp": self.tp_size,
+            "cp": self.cp_size,
         }
 
     def _init_from_kwargs(self, kwargs_handlers: list[KwargsHandler]):
@@ -2845,6 +2872,8 @@ class ParallelismConfig:
                 self.dp_handler = handler
             elif isinstance(handler, TorchTensorParallelKwargs):
                 self.tp_handler = handler
+            elif isinstance(handler, ContextParallelKwargs):
+                self.cp_handler = handler
             else:
                 pass
 
@@ -2856,7 +2885,7 @@ class ParallelismConfig:
         setattr(self, f"{parallelism}_size", size)
 
     def parallelisms_enabled(self) -> int:
-        return sum(1 for parallelism in ("dp", "tp") if getattr(self, f"{parallelism}_enabled", False))
+        return sum(1 for parallelism in ("dp", "tp", "cp") if getattr(self, f"{parallelism}_enabled", False))
 
     def _validate(self, accelerator: "Accelerator"):
         if not getattr(self, "_is_fully_initialized", False):
@@ -2865,6 +2894,8 @@ class ParallelismConfig:
             )
 
         _warnings = set()
+
+        # TODO: proper warning for context parallel
 
         if self.total_size > accelerator.num_processes:
             raise ValueError(
@@ -2894,7 +2925,7 @@ class ParallelismConfig:
             self._set_size("dp", accelerator.num_processes)
 
         for parallelism, size in self._sizes.items():
-            if size > 1 and getattr(self, f"{parallelism}_handler", None) is not None:
+            if size > 1 and getattr(self, f"{parallelism}_handler", None) is None:
                 _warnings.add(
                     f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is set to 1. This handler will be ignored."
                 )
