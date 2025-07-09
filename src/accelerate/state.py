@@ -213,12 +213,6 @@ class PartialState:
                             if self.backend == "tccl":
                                 local_rank = os.environ.get("LOCAL_RANK", -1)
                                 torch.sdaa.set_device(f"sdaa:{local_rank}")
-                            if (
-                                self.backend == "nccl"
-                                and os.environ.get("ACCELERATE_USE_FSDP", "false") == "true"
-                                and os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true"
-                            ):
-                                self.backend = "cuda:nccl,cpu:gloo"
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
                         use_deepspeed = True
@@ -230,6 +224,15 @@ class PartialState:
                         if self.backend == "tccl":
                             local_rank = os.environ.get("LOCAL_RANK", -1)
                             torch.sdaa.set_device(f"sdaa:{local_rank}")
+                        if (
+                            self.backend == "nccl"
+                            and os.environ.get("ACCELERATE_USE_FSDP", "false") == "true"
+                            and (
+                                os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true"
+                                or os.environ.get("FSDP_STATE_DICT_TYPE", "SHARDED_STATE_DICT") == "FULL_STATE_DICT"
+                            )
+                        ):
+                            self.backend = "cuda:nccl,cpu:gloo"
                         torch.distributed.init_process_group(backend=self.backend, **kwargs)
 
             # XPU and CPU require special env configs to be set

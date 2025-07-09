@@ -179,10 +179,9 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
         else nullcontext()
     )
     sd_options = _prepare_sd_options(fsdp_plugin)
-
     with ctx:
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
-            if type(model) is not FSDP and accelerator.process_index != 0:
+            if type(model) is not FSDP and accelerator.process_index != 0 and not accelerator.is_fsdp2:
                 if not fsdp_plugin.sync_module_states and fsdp_plugin.fsdp_version == 1:
                     raise ValueError(
                         "Set the `sync_module_states` flag to `True` so that model states are synced across processes when "
@@ -192,7 +191,12 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             input_model_file = os.path.join(input_dir, weights_name)
             logger.info(f"Loading model from {input_model_file}")
-            state_dict = torch.load(input_model_file, weights_only=True)
+            # we want an empty state dict for FSDP2 as we use `broadcast_from_rank0`
+            load_model = not accelerator.is_fsdp2 or accelerator.is_main_process
+            if load_model:
+                state_dict = torch.load(input_model_file, weights_only=True)
+            else:
+                state_dict = {}
             logger.info(f"Model loaded from {input_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.LOCAL_STATE_DICT:
             weights_name = (
