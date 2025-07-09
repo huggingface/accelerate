@@ -181,9 +181,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
     sd_options = _prepare_sd_options(fsdp_plugin)
     with ctx:
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
-            if (
-                type(model) is not FSDP and not isinstance(model, torch.distributed.fsdp.FSDPModule)
-            ) and accelerator.process_index != 0:
+            if type(model) is not FSDP and accelerator.process_index != 0:
                 if not fsdp_plugin.sync_module_states and fsdp_plugin.fsdp_version == 1:
                     raise ValueError(
                         "Set the `sync_module_states` flag to `True` so that model states are synced across processes when "
