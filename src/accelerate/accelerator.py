@@ -230,7 +230,11 @@ class Accelerator:
             - `"all"`
             - `"tensorboard"`
             - `"wandb"`
+            - `"trackio"`
+            - `"aim"`
             - `"comet_ml"`
+            - `"mlflow"`
+            - `"dvclive"`
             - `"swanlab"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.

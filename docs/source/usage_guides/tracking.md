@@ -101,14 +101,6 @@ config = ProjectConfiguration(project_dir=".", logging_dir="another/directory")
 accelerator = Accelerator(log_with="tensorboard", project_config=config)
 ```
 
-### Using trackio
-
-[`trackio`](https://github.com/gradio-app/trackio) is a lightweight, 💯 free experiment tracking Python library built on top of Datasets and Spaces. You can use it as a drop-in replacement for WandB:
-
-```py
-import trackio as wandb
-```
-
 ## Implementing Custom Trackers
 
 To implement a new tracker to be used in `Accelerator`, a new one can be made through implementing the [`GeneralTracker`] class.

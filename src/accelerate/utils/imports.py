@@ -285,6 +285,10 @@ def is_swanlab_available():
     return _is_package_available("swanlab")
 
 
+def is_trackio_available():
+    return _is_package_available("trackio")
+
+
 def is_boto3_available():
     return _is_package_available("boto3")
 

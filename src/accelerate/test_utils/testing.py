@@ -69,6 +69,7 @@ from ..utils import (
     is_torchao_available,
     is_torchdata_stateful_dataloader_available,
     is_torchvision_available,
+    is_trackio_available,
     is_transformer_engine_available,
     is_transformers_available,
     is_triton_available,
@@ -455,6 +456,13 @@ def require_wandb(test_case):
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
 
 
+def require_trackio(test_case):
+    """
+    Decorator marking a test that requires trackio installed. These tests are skipped when trackio isn't installed
+    """
+    return unittest.skipUnless(is_trackio_available(), "test requires trackio")(test_case)
+
+
 def require_comet_ml(test_case):
     """
     Decorator marking a test that requires comet_ml installed. These tests are skipped when comet_ml isn't installed
@@ -544,7 +552,7 @@ def require_matplotlib(test_case):
 
 
 _atleast_one_tracker_available = (
-    any([is_wandb_available(), is_tensorboard_available(), is_swanlab_available()]) and not is_comet_ml_available()
+    any([is_wandb_available(), is_tensorboard_available(), is_trackio_available(), is_swanlab_available()]) and not is_comet_ml_available()
 )
 
 

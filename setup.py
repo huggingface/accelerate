@@ -49,6 +49,7 @@ extras["test_trackers"] = [
     "mlflow",
     "matplotlib",
     "swanlab",
+    "trackio",
 ]
 extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
