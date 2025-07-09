@@ -15,6 +15,7 @@
 import importlib
 import importlib.metadata
 import os
+import sys
 import warnings
 from functools import lru_cache, wraps
 
@@ -286,7 +287,7 @@ def is_swanlab_available():
 
 
 def is_trackio_available():
-    return _is_package_available("trackio")
+    return sys.version_info >= (3, 10) and _is_package_available("trackio")
 
 
 def is_boto3_available():
