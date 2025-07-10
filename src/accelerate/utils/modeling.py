@@ -356,13 +356,19 @@ def set_module_tensor_to_device(
                     new_value.CB = new_value.CB.to("cpu")
                     new_value.SCB = new_value.SCB.to("cpu")
                 else:
-                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device, non_blocking=non_blocking)
+                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(
+                        device, non_blocking=non_blocking
+                    )
             elif param_cls.__name__ in ["QTensor", "QBitsTensor"]:
-                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(device, non_blocking=non_blocking)
+                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(
+                    device, non_blocking=non_blocking
+                )
             elif param_cls.__name__ in ["AffineQuantizedTensor"]:
                 new_value = new_value.to(device, non_blocking=non_blocking)
             else:
-                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device, non_blocking=non_blocking)
+                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(
+                    device, non_blocking=non_blocking
+                )
 
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
@@ -392,7 +398,7 @@ def set_module_tensor_to_device(
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
                     module.weight = module.weight.cuda(device_index)
-    
+
     # clean pre and post forward hook
     if _empty_cache:
         if device != "cpu":
