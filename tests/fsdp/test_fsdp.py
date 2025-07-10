@@ -29,7 +29,6 @@ from accelerate.test_utils.testing import (
     get_launch_command,
     path_in_accelerate_package,
     require_fp16,
-    require_fsdp2,
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
@@ -38,6 +37,7 @@ from accelerate.test_utils.testing import (
 )
 from accelerate.utils import is_bf16_available, is_fp16_available, is_hpu_available, patch_environment, set_seed
 from accelerate.utils.constants import (
+    FSDP2_PYTORCH_VERSION,
     FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -46,6 +46,7 @@ from accelerate.utils.constants import (
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enable_fsdp_ram_efficient_loading
+from accelerate.utils.versions import is_torch_version
 
 
 set_seed(42)
@@ -61,6 +62,10 @@ if is_fp16_available():
     dtypes.append(FP16)
 if is_bf16_available():
     dtypes.append(BF16)
+
+FSDP_VERSIONS = [1]
+if is_torch_version(">=", FSDP2_PYTORCH_VERSION):
+    FSDP_VERSIONS.append(2)
 
 
 @require_non_cpu
@@ -85,7 +90,24 @@ class FSDPPluginIntegration(AccelerateTestCase):
             2: self.fsdp2_env,
         }
 
-        self.current_fsdp_version = 1
+    def run(self, result=None):
+        """Override run to get the current test name and format failures to include FSDP version."""
+        test_method = getattr(self, self._testMethodName)
+        orig_test_method = test_method
+
+        def test_wrapper(*args, **kwargs):
+            for fsdp_version in FSDP_VERSIONS:
+                try:
+                    self.current_fsdp_version = fsdp_version
+                    return orig_test_method(*args, **kwargs)
+                except Exception as e:
+                    raise type(e)(f"FSDP version {fsdp_version}: {str(e)}") from e
+
+        setattr(self, self._testMethodName, test_wrapper)
+        try:
+            return super().run(result)
+        finally:
+            setattr(self, self._testMethodName, orig_test_method)
 
     def test_sharding_strategy(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
@@ -399,15 +421,6 @@ class FSDPPluginIntegration(AccelerateTestCase):
             assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
 
-@require_fsdp2
-@require_non_cpu
-@require_non_torch_xla
-class FSDP2PluginIntegration(FSDPPluginIntegration):
-    def setUp(self):
-        super().setUp()
-        self.current_fsdp_version = 2
-
-
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
 @require_non_torch_xla
@@ -449,7 +462,24 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.n_train = 160
         self.n_val = 160
 
-        self.current_fsdp_version = 1
+    def run(self, result=None):
+        """Override run to get the current test name and format failures to include FSDP version."""
+        test_method = getattr(self, self._testMethodName)
+        orig_test_method = test_method
+
+        def test_wrapper(*args, **kwargs):
+            for fsdp_version in FSDP_VERSIONS:
+                try:
+                    self.current_fsdp_version = fsdp_version
+                    return orig_test_method(*args, **kwargs)
+                except Exception as e:
+                    raise type(e)(f"FSDP version {fsdp_version}: {str(e)}") from e
+
+        setattr(self, self._testMethodName, test_wrapper)
+        try:
+            return super().run(result)
+        finally:
+            setattr(self, self._testMethodName, orig_test_method)
 
     @require_fp16
     def test_performance(self):
@@ -603,15 +633,3 @@ class FSDPIntegrationTest(TempDirTestCase):
             )
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_config)
-
-
-@require_fsdp2
-@run_first
-# Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
-@require_non_torch_xla
-@require_multi_device
-@slow
-class FSDP2IntegrationTest(FSDPIntegrationTest):
-    def setUp(self):
-        super().setUp()
-        self.current_fsdp_version = 2

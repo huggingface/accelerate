@@ -250,10 +250,6 @@ def require_fp8(test_case):
     return unittest.skipUnless(fp8_is_available, "test requires FP8 support")(test_case)
 
 
-def require_fsdp2(test_case):
-    return unittest.skipUnless(is_torch_version(">=", "2.5.0"), "test requires FSDP2 (torch >= 2.5.0)")(test_case)
-
-
 def require_mlu(test_case):
     """
     Decorator marking a test that requires MLU. These tests are skipped when there are no MLU available.
