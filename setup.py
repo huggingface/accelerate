@@ -24,7 +24,7 @@ extras["quality"] = [
 extras["docs"] = []
 extras["test_prod"] = ["pytest>=7.2.0,<=8.0.0", "pytest-xdist", "pytest-subtests", "parameterized", "pytest-order"]
 extras["test_dev"] = [
-    "datasets",
+    "datasets==3.6.0",
     "diffusers",
     "evaluate",
     "torchdata>=0.8.0",
