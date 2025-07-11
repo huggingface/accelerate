@@ -223,7 +223,7 @@ def set_module_tensor_to_device(
     fp16_statistics: Optional[torch.HalfTensor] = None,
     tied_params_map: Optional[dict[int, dict[torch.device, torch.Tensor]]] = None,
     non_blocking: bool = False,
-    _empty_cache: bool = True,
+    clear_cache: bool = True,
 ):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
@@ -247,6 +247,10 @@ def set_module_tensor_to_device(
             A map of current data pointers to dictionaries of devices to already dispatched tied weights. For a given
             execution device, this parameter is useful to reuse the first available pointer of a shared weight on the
             device for all others, instead of duplicating memory.
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            If `True`, the device transfer will be asynchronous with respect to the host, if possible.
+        clear_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not to clear the device cache after setting the tensor on the device.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -400,7 +404,7 @@ def set_module_tensor_to_device(
                     module.weight = module.weight.cuda(device_index)
 
     # clean pre and post forward hook
-    if _empty_cache:
+    if clear_cache:
         if device != "cpu":
             clear_device_cache()
 
