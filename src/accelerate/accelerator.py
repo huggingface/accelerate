@@ -306,10 +306,10 @@ class Accelerator:
 
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
-        else:
-            mixed_precision = parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
-        if mixed_precision not in PrecisionType:
-            raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}")
+            if mixed_precision not in PrecisionType:
+                raise ValueError(
+                    f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
+                )
 
         if dynamo_plugin is not None and dynamo_backend is not None:
             raise ValueError("You cannot pass in both `dynamo_plugin` and `dynamo_backend`, please only pass in one.")
@@ -488,7 +488,7 @@ class Accelerator:
         self.delayed_fp8_autocast = False
         if self.has_fp8_handler:
             # We already check if FP8 is available during `self.state`
-            if mixed_precision != "fp8" and (
+            if not self.fp8_enabled and (
                 self.distributed_type not in (DistributedType.FSDP, DistributedType.DEEPSPEED)
             ):
                 raise ValueError("Passing in an FP8 configuration requires setting `mixed_precision='fp8'`.")
