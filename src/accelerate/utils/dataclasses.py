@@ -616,8 +616,10 @@ class FP8BackendType(str, enum.Enum):
     """
 
     # Subclassing str as well as Enum allows the `FP8BackendType` to be JSON-serializable out of the box.
+    NO = "NO"
     TE = "TE"
     MSAMP = "MSAMP"
+    AO = "AO"
 
 
 class ComputeEnvironment(str, enum.Enum):
