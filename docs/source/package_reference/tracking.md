@@ -29,6 +29,11 @@ rendered properly in your Markdown viewer.
 [[autodoc]] tracking.WandBTracker
     - __init__
 
+## Trackio
+
+[[autodoc]] tracking.TrackioTracker
+    - __init__
+
 ## CometMLTracker
 
 [[autodoc]] tracking.CometMLTracker

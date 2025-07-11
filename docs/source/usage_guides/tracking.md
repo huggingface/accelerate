@@ -20,10 +20,11 @@ Accelerate provides a general tracking API that can be used to log useful items 
 
 ## Integrated Trackers
 
-Currently `Accelerate` supports seven trackers out-of-the-box:
+Currently `Accelerate` supports eight trackers out-of-the-box:
 
 - TensorBoard
-- WandB
+- WandB 
+- Trackio
 - CometML
 - Aim
 - MLFlow

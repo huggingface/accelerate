@@ -45,6 +45,7 @@ from accelerate.test_utils.testing import (
     require_pandas,
     require_swanlab,
     require_tensorboard,
+    require_trackio,
     require_wandb,
     skip,
 )
@@ -57,6 +58,7 @@ from accelerate.tracking import (
     MLflowTracker,
     SwanLabTracker,
     TensorBoardTracker,
+    TrackioTracker,
     WandBTracker,
 )
 from accelerate.utils import (
@@ -797,6 +799,15 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
         """Test that WandB tracker initialization doesn't initialize distributed"""
         PartialState._reset_state()
         tracker = WandBTracker(run_name="test_wandb")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_trackio
+    def test_trackio_deferred_init(self):
+        """Test that trackio tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = TrackioTracker(run_name="test_trackio")
         self.assertEqual(PartialState._shared_state, {})
         _ = Accelerator(log_with=tracker)
         self.assertNotEqual(PartialState._shared_state, {})
