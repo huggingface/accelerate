@@ -616,11 +616,14 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     original_sd = model.state_dict()
 
+    mesh = getattr(accelerator.state, "torch_device_mesh", None)
+
     fsdp2_kwargs = {
         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
         "offload_policy": fsdp2_plugin.cpu_offload,
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
+        "mesh": mesh["fsdp_cp"] if mesh else None,
     }
 
     model_has_params4bit = False
