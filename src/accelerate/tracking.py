@@ -336,7 +336,16 @@ class WandBTracker(GeneralTracker):
         """
         import wandb
 
-        wandb.config.update(values, allow_val_change=True)
+        if os.environ.get("WANDB_MODE") == "offline":
+            # In offline mode, restart wandb with config included
+            if hasattr(self, 'run') and self.run:
+                self.run.finish()
+
+            init_kwargs = self.init_kwargs.copy()
+            init_kwargs['config'] = values
+            self.run = wandb.init(project=self.run_name, **init_kwargs)
+        else:
+            wandb.config.update(values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to WandB")
 
     @on_main_process
