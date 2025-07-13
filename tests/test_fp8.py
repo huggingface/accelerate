@@ -41,7 +41,11 @@ from accelerate.utils import (
 
 
 def can_convert_te_model():
-    accelerator_kwargs = {"mixed_precision": "fp8", "kwargs_handlers": [FP8RecipeKwargs(backend="TE")]}
+    accelerator_kwargs = {
+        "mixed_precision": "fp8",
+        "kwargs_handlers": [FP8RecipeKwargs(backend="TE")],
+        "device_placement": False,
+    }
     accelerator = Accelerator(**accelerator_kwargs)
     dataloader = torch.utils.data.DataLoader(torch.randn(10, 32), batch_size=2)
     model = torch.nn.Sequential(torch.nn.Linear(32, 32), torch.nn.Linear(32, 16))
@@ -53,9 +57,9 @@ def can_convert_te_model():
 
 
 def maintain_proper_deepspeed_config(expected_version):
-    assert AcceleratorState().deepspeed_plugin.zero_stage == expected_version, (
-        f"Expected zero stage {expected_version} but got {AcceleratorState().deepspeed_plugin.zero_stage}"
-    )
+    assert (
+        AcceleratorState().deepspeed_plugin.zero_stage == expected_version
+    ), f"Expected zero stage {expected_version} but got {AcceleratorState().deepspeed_plugin.zero_stage}"
 
 
 def can_convert_ao_model():
@@ -168,6 +172,10 @@ class TestTorchAO(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    # import debugpy
+    # debugpy.listen(("localhost", 5678))
+    # print("Waiting for debugger attach...")
+    # debugpy.wait_for_client()
     # TE suite
     if is_transformer_engine_available():
         can_convert_te_model()
