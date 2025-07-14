@@ -2925,9 +2925,9 @@ class ParallelismConfig:
             self._set_size("dp", accelerator.num_processes)
 
         for parallelism, size in self._sizes.items():
-            if size > 1 and getattr(self, f"{parallelism}_handler", None) is None:
+            if size == 1 and getattr(self, f"{parallelism}_handler", None) is not None:
                 _warnings.add(
-                    f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is set to 1. This handler will be ignored."
+                    f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is >= 1. This handler will be ignored."
                 )
 
         if self.tp_enabled and self.dp_enabled:
