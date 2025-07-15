@@ -181,6 +181,7 @@ class PartialState:
         if not self.initialized:
             self._cpu = cpu
             self.backend = None
+            self.device_mesh = None
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
             self.debug = parse_flag_from_env("ACCELERATE_DEBUG_MODE")

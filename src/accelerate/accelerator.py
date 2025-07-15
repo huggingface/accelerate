@@ -1843,6 +1843,42 @@ class Accelerator:
         mesh_names = tuple(name for name, _ in sorted_items)
         mesh_values = tuple(value for _, value in sorted_items)
 
+
+        if (device_mesh := PartialState().device_mesh) is not None:
+            # validate that the device mesh lines up with the parallelism_config
+            if device_mesh.mesh_dim_names is None:
+                raise ValueError(
+                    "A device mesh was found with PartialState().device_mesh, but "
+                    "device_mesh.mesh_dim_names is None! Please ensure you construct "
+                    "your device mesh using the mesh_dim_names keyword argument."
+                )
+            
+            if mesh_names != device_mesh.mesh_dim_names:
+                raise ValueError(
+                    "A device mesh was found with PartialState().device_mesh, but"
+                    f"device mesh dimensions mismatch. Expected {mesh_names}, "
+                    f"but existing device mesh has {device_mesh.mesh_dim_names}"
+                )
+            
+            expected_shape = dict(zip(mesh_names, mesh_values))
+            actual_shape = dict(zip(device_mesh.mesh_dim_names, device_mesh.mesh.shape))
+            
+            mismatches = []
+            for dim_name, expected_size in expected_shape.items():
+                if actual_shape[dim_name] != expected_size:
+                    mismatches.append(
+                        f"dimension '{dim_name}': expected {expected_size}, got {actual_shape[dim_name]}"
+                    )
+            
+            if mismatches:
+                raise ValueError(
+                    "A device mesh was found with PartialState().device_mesh, but "
+                    f"device mesh size mismatch(es) were found: {', '.join(mismatches)}"
+                )
+        
+            self.state.device_mesh = device_mesh
+            return
+        
         device_mesh = torch.distributed.init_device_mesh(
             self.device.type, mesh_shape=mesh_values, mesh_dim_names=mesh_names
         )
