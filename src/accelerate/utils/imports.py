@@ -15,6 +15,7 @@
 import importlib
 import importlib.metadata
 import os
+import sys
 import warnings
 from functools import lru_cache, wraps
 
@@ -283,6 +284,10 @@ def is_comet_ml_available():
 
 def is_swanlab_available():
     return _is_package_available("swanlab")
+
+
+def is_trackio_available():
+    return sys.version_info >= (3, 10) and _is_package_available("trackio")
 
 
 def is_boto3_available():
