@@ -464,6 +464,7 @@ def get_non_persistent_buffers(module: nn.Module, recurse: bool = False, fqns: b
 
     return non_persistent_buffers_set
 
+
 def check_tied_parameters_in_config(model: nn.Module):
     """
     Check if there is any indication in the given model that some weights should be tied.
