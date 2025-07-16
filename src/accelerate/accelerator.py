@@ -329,7 +329,7 @@ class Accelerator:
 
         if deepspeed_plugins is None:
             # First check if we're creating another `Accelerator` w/o setting `deepspeed_plugin`
-            if PartialState._shared_state != {} and PartialState().distributed_type == DistributedType.DEEPSPEED:
+            if AcceleratorState._shared_state != {} and AcceleratorState().distributed_type == DistributedType.DEEPSPEED:
                 deepspeed_plugins = AcceleratorState().deepspeed_plugins
             else:
                 # init from env variables
@@ -339,8 +339,8 @@ class Accelerator:
         else:
             # If we're creating a second `Accelerator`, users shouldn't be passing in a `deepspeed_plugin`
             if (
-                PartialState().distributed_type == DistributedType.DEEPSPEED
-                and AcceleratorState._shared_state != {}
+                AcceleratorState._shared_state != {}
+                and AcceleratorState().distributed_type == DistributedType.DEEPSPEED
                 and AcceleratorState().deepspeed_plugins is not None
             ):
                 raise NotImplementedError(
