@@ -34,7 +34,6 @@ else:
     backend = "inductor"
 
 
-@require_non_hpu
 @require_huggingface_suite
 class RegionalCompilationTester(unittest.TestCase):
     def _get_model_and_inputs(self):
@@ -109,6 +108,7 @@ class RegionalCompilationTester(unittest.TestCase):
         release_memory(model, full_compilation_model, regional_compilation_model)
 
     @slow
+    @require_non_hpu
     @require_non_cpu
     @require_huggingface_suite
     def test_regional_compilation_inference_speedup(self):
