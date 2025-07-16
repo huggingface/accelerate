@@ -2816,6 +2816,15 @@ class ParallelismConfig:
         return f"ParallelismConfig(dp_size={self.dp_size}, tp_size={self.tp_size}, total_size={self.dp_size * self.tp_size})"
 
     @property
+    def dp_dims(self):
+        dims = []
+        if dp_replicate_size > 1:
+            dims += ["dp_replicate"]
+        if dp_shard_size > 1:
+            dims += ["dp_shard"]
+        return dims
+    
+    @property
     def total_size(self):
         return self.dp_size * self.tp_size
 
