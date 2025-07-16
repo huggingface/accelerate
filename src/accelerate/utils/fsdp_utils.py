@@ -592,12 +592,14 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     return model
 
 
-def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
+def fsdp2_prepare_model(accelerator, model: torch.nn.Module, fully_shard_kwargs: dict = None) -> torch.nn.Module:
     """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
         model (`torch.nn.Module`): The model to prepare
+        fully_shard_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to `fully_shard`
 
     Returns:
         `torch.nn.Module`: Prepared model
@@ -621,6 +623,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "offload_policy": fsdp2_plugin.cpu_offload,
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
+        "mesh": accelerator.torch_device_mesh["fsdp"],
     }
 
     model_has_params4bit = False
