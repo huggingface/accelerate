@@ -44,6 +44,7 @@ FSDP_PYTORCH_VERSION = (
     "2.1.0.a0+32f93b1"  # Technically should be 2.1.0, but MS-AMP uses this specific prerelease in their Docker image.
 )
 FSDP2_PYTORCH_VERSION = "2.6.0"
+CONTEXT_PARALLEL_PYTORCH_VERSION = "2.7.0"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich", "mpich", "nossh", "slurm"]
 TORCH_DYNAMO_MODES = ["default", "reduce-overhead", "max-autotune"]
