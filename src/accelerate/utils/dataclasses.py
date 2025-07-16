@@ -2795,8 +2795,10 @@ class ParallelismConfig:
     A dataclass to configure the parallelism of the model.
 
     Args:
-        dp_size (`int`, defaults to `1`):
-            The size of the data parallel group. If `dp_size` is set to `1`, the data parallel group will not be used.
+        dp_replicate_size (`int`, defaults to `1`):
+            The size of the data parallel group. If `dp_replicate_size` is set to `1`, the data parallel replication group will not be used.
+        dp_shard_size (`int`, defaults to `1`):
+            The size of the data parallel group. If `dp_shard_size` is set to `1`, the data parallel sharding group will not be used.
         tp_size (`int`, defaults to `1`):
             The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be used.
         dp_handler (`~utils.DistributedDataParallelKwargs`, defaults to `None`):
@@ -2805,7 +2807,8 @@ class ParallelismConfig:
             The handler for the tensor parallel group.
     """
 
-    dp_size: int = 1
+    dp_replicate_size: int = 1
+    dp_shard_size: int = 1
     tp_size: int = 1
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
@@ -2816,11 +2819,15 @@ class ParallelismConfig:
         return f"ParallelismConfig(dp_size={self.dp_size}, tp_size={self.tp_size}, total_size={self.dp_size * self.tp_size})"
 
     @property
-    def dp_dims(self):
+    def valid_mesh_dims(self):
+        return ["dp_replicate", "dp_shard", "tp"]
+    
+    @property
+    def dp_dim_names(self):
         dims = []
-        if dp_replicate_size > 1:
+        if self.dp_replicate_size > 1:
             dims += ["dp_replicate"]
-        if dp_shard_size > 1:
+        if self.dp_shard_size > 1:
             dims += ["dp_shard"]
         return dims
     
@@ -2830,22 +2837,36 @@ class ParallelismConfig:
 
     @property
     def dp_enabled(self):
-        return self.dp_size > 1
+        return self.dp_replicate_size > 1
+
+    @property
+    def hsdp_enabled(self):
+        return self.dp_shard_size > 1 and  self.dp_replicate_size > 1
+
+    @property
+    def fsdp_enabled(self):
+        return self.dp_shard_size > 1
 
     @property
     def tp_enabled(self):
         return self.tp_size > 1
 
+    @property
+    def mesh_dims(self)
     def __post_init__(self):
         if self.dp_size < 1:
             raise ValueError(f"dp_size must be at least 1, but got {self.dp_size}")
         if self.tp_size < 1:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
 
-        self._sizes = {
+        self._ = {
             "dp": self.dp_size,
             "tp": self.tp_size,
         }
+
+    # @property
+    # def mesh_dim_names(self):
+        
 
     def _init_from_kwargs(self, kwargs_handlers: list[KwargsHandler]):
         kwargs_handlers = kwargs_handlers or []
@@ -2911,6 +2932,10 @@ class ParallelismConfig:
         if self.tp_enabled and self.dp_enabled:
             raise ValueError("Currently TP+DP composition is not supported.")
 
+        if self.dp_shard_size and self.dp_handler:
+            raise ValueError("dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with"
+                             "FSDP.")
+        
         if _warnings and accelerator.is_main_process:
             warnings.warn(
                 "ParallelismConfig has the following warnings:\n" + "\n".join(_warnings),

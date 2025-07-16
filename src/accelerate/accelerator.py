@@ -1814,17 +1814,16 @@ class Accelerator:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
     
+
+    def _validate_device_mesh(self):
+        # this function should validate a given device mesh against the parallelism config
+        # +/ plugins configured
+        # e.g. if dp_shard_size > 1 then fsdp must be enabled (and not ddp)
+        pass
+
     def _set_device_mesh(self):
         mesh_dims = {}
         pc = self.parallelism_config
-
-        # Should we assert this is always provided? It will underpin a lot of distributed functionality
-        if pc is not None:
-            if pc.tp_enabled:
-                mesh_dims["tp"] = pc.tp_size
-            if pc.dp_enabled:
-                mesh_dims["dp"] = pc.dp_size
-
         # @Matej is this right?
         if self.is_fsdp2:
             mesh_dims["fsdp"] = self.num_processes // (pc.tp_size * pc.dp_size)
@@ -1836,9 +1835,10 @@ class Accelerator:
         if len(mesh_dims) == 0:
             self.state.device_mesh = None
             return
-
-        # Sort mesh_dims by the canonical order: "dp", "fsdp", "pp", "cp", "tp", "ep"
-        mesh_order = ["pp", "dp_replicate", "dp_shard", "cp", "tp", "ep"]
+        
+        # TODO: update this as we add additional parallelisms
+        # mesh_order = ["pp", "dp_replicate", "dp_shard", "cp", "tp", "ep"]
+        mesh_order = ["dp_replicate", "dp_shard", "tp"]
         sorted_items = sorted(
             mesh_dims.items(), key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
         )
