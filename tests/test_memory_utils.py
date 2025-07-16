@@ -61,7 +61,31 @@ class MemoryTest(unittest.TestCase):
                 raise_fake_out_of_memory()
 
         mock_training_loop_function()
-        assert batch_sizes == [128, 64, 32, 16, 8]
+        assert batch_sizes == [
+            128,
+            115,
+            103,
+            92,
+            82,
+            73,
+            65,
+            58,
+            52,
+            46,
+            41,
+            36,
+            32,
+            28,
+            25,
+            22,
+            19,
+            17,
+            15,
+            13,
+            11,
+            9,
+            8,
+        ]
 
     def test_memory_explicit(self):
         batch_sizes = []
@@ -75,7 +99,31 @@ class MemoryTest(unittest.TestCase):
             return batch_size, arg1
 
         bs, arg1 = mock_training_loop_function("hello")
-        assert batch_sizes == [128, 64, 32, 16, 8]
+        assert batch_sizes == [
+            128,
+            115,
+            103,
+            92,
+            82,
+            73,
+            65,
+            58,
+            52,
+            46,
+            41,
+            36,
+            32,
+            28,
+            25,
+            22,
+            19,
+            17,
+            15,
+            13,
+            11,
+            9,
+            8,
+        ]
         assert [bs, arg1] == [8, "hello"]
 
     def test_start_zero(self):
