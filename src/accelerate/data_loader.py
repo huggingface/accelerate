@@ -566,7 +566,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         try:
             current_batch = next(dataloader_iter)
         except StopIteration:
-            yield
+            self.end()
+            return
 
         batch_index = 0
         while True:
