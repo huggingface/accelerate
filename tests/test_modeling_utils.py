@@ -349,6 +349,26 @@ class ModelingUtilsTester(unittest.TestCase):
 
         check_device_map(model, {"linear1": 0, "linear2": 1, "batchnorm": 1})
 
+    def test_check_device_map_invalid_keys(self):
+        model = ModelForTest()
+
+        device_map = {
+            "linear1": "cpu",  # Valid module
+            "batchnorm": "cpu",  # Valid module
+            "linear2": "cpu",  # Valid module
+            "invalid_module": 0,  # Invalid - should trigger warning
+            "another_invalid": 1,  # Invalid - should trigger warning
+        }
+
+        # Test for the warning about invalid keys
+        with self.assertWarns(UserWarning) as cm:
+            check_device_map(model, device_map)
+
+        warning_msg = str(cm.warning)
+        self.assertIn("device_map keys do not match any submodules", warning_msg)
+        self.assertIn("invalid_module", warning_msg)
+        self.assertIn("another_invalid", warning_msg)
+
     def shard_test_model(self, model, tmp_dir):
         module_index = {
             "linear1": "checkpoint_part1.bin",
