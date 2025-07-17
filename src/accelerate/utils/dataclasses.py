@@ -2792,7 +2792,7 @@ class BnbQuantizationConfig:
 @dataclass
 class ParallelismConfig:
     """
-    A dataclass to configure the parallelism of the model.
+    A dataclass to configure parallelisms applied to the model. 
 
     Args:
         dp_replicate_size (`int`, defaults to `1`):
@@ -2805,6 +2805,12 @@ class ParallelismConfig:
             The handler for the data parallel group.
         tp_handler (`~utils.TorchTensorParallelKwargs`, defaults to `None`):
             The handler for the tensor parallel group.
+
+    You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size` together:
+        - `dp_replicate_size == 1` and `dp_shard_size > 1`, we obtain Fully Sharded Data Parallel (FSDP).
+        - `dp_replicate_size == 1` and `dp_shard_size = 1`, we obtain Distributed Data Parallel (DDP).
+        - `dp_replicate_size > 1` and `dp_shard_size > 1`, we obtain Hybrid Sharded Data Parallel (HSDP).
+
     """
 
     dp_replicate_size: int = 1
@@ -2816,11 +2822,11 @@ class ParallelismConfig:
     tp_handler: Union[None, TorchTensorParallelKwargs] = None
 
     def __repr__(self):
-        return f"ParallelismConfig(dp_size={self.dp_size}, tp_size={self.tp_size}, total_size={self.dp_size * self.tp_size})"
-
+        return f"ParallelismConfig(dp_replicate_size={self.dp_replicate_size}, dp_shard_size={self.dp_shard_size}, tp_size={self.tp_size}, total_size={self.total_size})"
+    
     @property
     def valid_mesh_dims(self):
-        return ["dp_replicate", "dp_shard", "tp"]
+        return set(("dp_replicate", "dp_shard", "tp"))
     
     @property
     def dp_dim_names(self):
@@ -2833,7 +2839,7 @@ class ParallelismConfig:
     
     @property
     def total_size(self):
-        return self.dp_size * self.tp_size
+        return self.dp_replicate_size * self.dp_shard_size * self.tp_size
 
     @property
     def dp_enabled(self):
@@ -2847,27 +2853,70 @@ class ParallelismConfig:
     def fsdp_enabled(self):
         return self.dp_shard_size > 1
 
-    @property
+    @property 
     def tp_enabled(self):
         return self.tp_size > 1
 
     @property
-    def mesh_dims(self)
+    def mesh_dims(self):
+        return self.dp_dim_names + (["tp"] if self.tp_enabled else [])
+
+    def validate_device_mesh(self, device_mesh):
+        if device_mesh.ndim != self.total_size:
+            raise ValueError(
+                f"Device mesh dimension {device_mesh.ndim} does not match the total size of the parallelism config {self.total_size}."
+            )
+        mesh_dim_names = set(device_mesh.mesh_dim_names)
+
+        if not mesh_dim_names.issubset(self.valid_mesh_dims):
+            raise ValueError(
+                f"Device mesh dimensions {mesh_dim_names} contain invalid dimensions. Valid dimensions are {self.valid_mesh_dims}."
+            )
+        if not mesh_dim_names.issubset(self.mesh_dims):
+            raise ValueError(
+                f"Device mesh dimensions {mesh_dim_names} do not match the expected dimensions {self.mesh_dims}."
+            )
+
+    def get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
+        """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""
+        
+        # Build mesh dimensions dictionary
+        mesh_dims = {}
+        if self.dp_replicate_size > 1:
+            mesh_dims["dp_replicate"] = self.dp_replicate_size
+        if self.dp_shard_size > 1:
+            mesh_dims["dp_shard"] = self.dp_shard_size
+        if self.tp_size > 1:
+            mesh_dims["tp"] = self.tp_size
+        
+        # Apply canonical ordering
+        mesh_order = ["dp_replicate", "dp_shard", "tp"]
+        sorted_items = sorted(
+            mesh_dims.items(), 
+            key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
+        )
+        
+        # Extract names and values
+        mesh_names = tuple(name for name, _ in sorted_items)
+        mesh_values = tuple(value for _, value in sorted_items)
+        
+        return mesh_values, mesh_names
+
     def __post_init__(self):
-        if self.dp_size < 1:
-            raise ValueError(f"dp_size must be at least 1, but got {self.dp_size}")
+        # Basic size validation
+        if self.dp_replicate_size < 1:
+            raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
+        if self.dp_shard_size < 1:
+            raise ValueError(f"dp_shard_size must be at least 1, but got {self.dp_shard_size}")
         if self.tp_size < 1:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
-
-        self._ = {
-            "dp": self.dp_size,
+        
+        self._sizes = {
+            "dp_replicate": self.dp_replicate_size,
+            "dp_shard": self.dp_shard_size,
             "tp": self.tp_size,
         }
-
-    # @property
-    # def mesh_dim_names(self):
         
-
     def _init_from_kwargs(self, kwargs_handlers: list[KwargsHandler]):
         kwargs_handlers = kwargs_handlers or []
         for handler in kwargs_handlers:
@@ -2885,10 +2934,7 @@ class ParallelismConfig:
         self._sizes[parallelism] = size
         setattr(self, f"{parallelism}_size", size)
 
-    def parallelisms_enabled(self) -> int:
-        return sum(1 for parallelism in ("dp", "tp") if getattr(self, f"{parallelism}_enabled", False))
-
-    def _validate(self, accelerator: "Accelerator"):
+    def validate_accelerator(self, accelerator: "Accelerator"):
         if not getattr(self, "_is_fully_initialized", False):
             raise ValueError(
                 "ParallelismConfig is not fully initialized. Please call `_init_from_kwargs` with kwargs handlers before validation."

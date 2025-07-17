@@ -445,7 +445,7 @@ class Accelerator:
 
         # This is a bit clunky, as this needs to be called after `AcceleratorState` is initialized, but _init_from_kwargs has to be called before
         parallelism_config._validate(self)
-        self._set_device_mesh()
+        self._build_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -1813,58 +1813,41 @@ class Accelerator:
             else:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
-    
 
-    def _validate_device_mesh(self):
-        # this function should validate a given device mesh against the parallelism config
-        # +/ plugins configured
-        # e.g. if dp_shard_size > 1 then fsdp must be enabled (and not ddp)
-        pass
-
-    def _set_device_mesh(self):
-        mesh_dims = {}
-        pc = self.parallelism_config
-        # @Matej is this right?
-        if self.is_fsdp2:
-            mesh_dims["fsdp"] = self.num_processes // (pc.tp_size * pc.dp_size)
-
-        # mesh_dims["cp"] = 1
-        # mesh_dims["pp"] = 1
-        # mesh_dims["ep"] = 1
-
-        if len(mesh_dims) == 0:
+    def _build_device_mesh(self):
+        if self.parallelism_config is None:
             self.state.device_mesh = None
             return
+            
+        # Validate config works with current setup
+        if self.parallelism_config.total_size != self.num_processes:
+            raise ValueError(
+                f"ParallelismConfig total_size ({self.parallelism_config.total_size}) does not match "
+                f"num_processes ({self.num_processes}). Please adjust dp_replicate_size, "
+                f"dp_shard_size, or tp_size."
+            )
         
-        # TODO: update this as we add additional parallelisms
-        # mesh_order = ["pp", "dp_replicate", "dp_shard", "cp", "tp", "ep"]
-        mesh_order = ["dp_replicate", "dp_shard", "tp"]
-        sorted_items = sorted(
-            mesh_dims.items(), key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
-        )
-        sorted_items = [(name, value) for name, value in sorted_items if value > 1]
-        mesh_names = tuple(name for name, _ in sorted_items)
-        mesh_values = tuple(value for _, value in sorted_items)
-
-
-        if (device_mesh := PartialState().device_mesh) is not None:
-            # validate that the device mesh lines up with the parallelism_config
-            if device_mesh.mesh_dim_names is None:
+        # Get mesh specification from ParallelismConfig
+        mesh_shape, mesh_dim_names = self.parallelism_config.get_mesh()
+        
+        if not mesh_shape:  # No parallelism enabled
+            self.state.device_mesh = None
+            return
+            
+        # Validate existing mesh or create new one
+        if (existing_mesh := PartialState().device_mesh) is not None:
+            # Use existing validate_device_mesh method
+            self.parallelism_config.validate_device_mesh(existing_mesh)
+            
+            # Additional validation for shape and names
+            if mesh_dim_names != existing_mesh.mesh_dim_names:
                 raise ValueError(
-                    "A device mesh was found with PartialState().device_mesh, but "
-                    "device_mesh.mesh_dim_names is None! Please ensure you construct "
-                    "your device mesh using the mesh_dim_names keyword argument."
+                    f"Device mesh dimensions mismatch. Expected {mesh_dim_names}, "
+                    f"but existing device mesh has {existing_mesh.mesh_dim_names}"
                 )
             
-            if mesh_names != device_mesh.mesh_dim_names:
-                raise ValueError(
-                    "A device mesh was found with PartialState().device_mesh, but"
-                    f"device mesh dimensions mismatch. Expected {mesh_names}, "
-                    f"but existing device mesh has {device_mesh.mesh_dim_names}"
-                )
-            
-            expected_shape = dict(zip(mesh_names, mesh_values))
-            actual_shape = dict(zip(device_mesh.mesh_dim_names, device_mesh.mesh.shape))
+            expected_shape = dict(zip(mesh_dim_names, mesh_shape))
+            actual_shape = dict(zip(existing_mesh.mesh_dim_names, existing_mesh.mesh.shape))
             
             mismatches = []
             for dim_name, expected_size in expected_shape.items():
@@ -1875,26 +1858,23 @@ class Accelerator:
             
             if mismatches:
                 raise ValueError(
-                    "A device mesh was found with PartialState().device_mesh, but "
-                    f"device mesh size mismatch(es) were found: {', '.join(mismatches)}"
+                    f"Device mesh size mismatch(es): {', '.join(mismatches)}"
                 )
-        
+            
+            self.state.device_mesh = existing_mesh
+        else:
+            # Create new device mesh
+            device_mesh = torch.distributed.init_device_mesh(
+                self.device.type, 
+                mesh_shape=mesh_shape, 
+                mesh_dim_names=mesh_dim_names
+            )
+            
+            # Apply flattening for HSDP if both dp dimensions exist
+            if set(("dp_replicate", "dp_shard")).issubset(set(device_mesh.mesh_dim_names)):
+                device_mesh[("dp_replicate", "dp_shard")]._flatten("dp_fsdp")
+            
             self.state.device_mesh = device_mesh
-            return
-        
-        device_mesh = torch.distributed.init_device_mesh(
-            self.device.type, mesh_shape=mesh_values, mesh_dim_names=mesh_names
-        )
-
-        # device_mesh[("fsdp", "cp")]._flatten("fsdp_cp")
-        if set(("fsdp", "dp")).issubset(set(device_mesh.mesh_dim_names)):
-            device_mesh[("dp", "fsdp")]._flatten("dp_fsdp")
-
-        # ("cp", "dp", "pp" and "ep") will be used for CP, DP, PP and EP respectively
-        # ("fsdp", "cp") compose a "fsdp_cp" submesh, over which model is going to be sharded
-        # ("dp", "fsdp") compose a "dp_fsdp" submesh, over which data is going to be replicated
-        # ("dp", "fsdp_cp") compose a 2D mesh, where model is sharded over "fsdp_cp" and replicated over "dp", resulting in a HSDP support
-        self.state.device_mesh = device_mesh
 
     def _prepare_ao(self, *args):
         if not is_torchao_available():
