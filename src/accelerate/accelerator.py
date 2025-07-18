@@ -444,7 +444,7 @@ class Accelerator:
         self._composable_parallelism_enabled = self.is_fsdp2
 
         # This is a bit clunky, as this needs to be called after `AcceleratorState` is initialized, but _init_from_kwargs has to be called before
-        parallelism_config._validate(self)
+        parallelism_config.validate_accelerator(self)
         self._build_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"

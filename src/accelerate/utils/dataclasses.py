@@ -2862,20 +2862,40 @@ class ParallelismConfig:
         return self.dp_dim_names + (["tp"] if self.tp_enabled else [])
 
     def validate_device_mesh(self, device_mesh):
-        if device_mesh.ndim != self.total_size:
+        """Validate that a device mesh is compatible with this parallelism configuration."""
+        # Check that the total size matches
+        if device_mesh.size() != self.total_size:
             raise ValueError(
-                f"Device mesh dimension {device_mesh.ndim} does not match the total size of the parallelism config {self.total_size}."
+                f"Device mesh size {device_mesh.size()} does not match the total size of the parallelism config {self.total_size}."
             )
+        
+        # Check that dimension names are valid
         mesh_dim_names = set(device_mesh.mesh_dim_names)
-
         if not mesh_dim_names.issubset(self.valid_mesh_dims):
             raise ValueError(
                 f"Device mesh dimensions {mesh_dim_names} contain invalid dimensions. Valid dimensions are {self.valid_mesh_dims}."
             )
-        if not mesh_dim_names.issubset(self.mesh_dims):
+        
+        # Check that dimension names match expected configuration
+        expected_dims = set(self.mesh_dims)
+        if mesh_dim_names != expected_dims:
             raise ValueError(
-                f"Device mesh dimensions {mesh_dim_names} do not match the expected dimensions {self.mesh_dims}."
+                f"Device mesh dimensions {mesh_dim_names} do not match the expected dimensions {expected_dims}."
             )
+        
+        # Check that dimension sizes match
+        mesh_shape, mesh_names = self.get_mesh()
+        for i, (dim_name, expected_size) in enumerate(zip(mesh_names, mesh_shape)):
+            if device_mesh.mesh_dim_names[i] != dim_name:
+                raise ValueError(
+                    f"Device mesh dimension order mismatch. Expected {dim_name} at position {i}, "
+                    f"but got {device_mesh.mesh_dim_names[i]}."
+                )
+            if device_mesh.shape[i] != expected_size:
+                raise ValueError(
+                    f"Device mesh dimension size mismatch for {dim_name}. Expected {expected_size}, "
+                    f"but got {device_mesh.shape[i]}."
+                )
 
     def get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
         """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""
@@ -2947,12 +2967,12 @@ class ParallelismConfig:
                 f"Your current {self} requires {self.total_size} processes, but the current Accelerator is set to use {accelerator.num_processes} processes."
             )
 
-        if (not accelerator.multi_device) and (not accelerator.is_fsdp2):
+        if self.total_size > 1 and (not accelerator.multi_device) and (not accelerator.is_fsdp2):
             raise ValueError(
                 f"ParallelismConfig is only compatible with DistributedType.MULTI_{{device_type}} or DistributedType.FSDP (version 2), but got {accelerator.distributed_type}."
             )
 
-        if self.parallelisms_enabled() == 1 and (not accelerator.is_composable_parallelism_enabled):
+        if self.total_size > 1 and (not accelerator.is_composable_parallelism_enabled):
             if non_zero_parallelism := [
                 (parallelism, size)
                 for parallelism, size in self._sizes.items()
