@@ -611,10 +611,6 @@ def concatenate(data, dim=0):
         The same data structure as `data` with all the tensors concatenated.
     """
     if isinstance(data[0], (tuple, list)):
-        return honor_type(
-            data[0],
-            (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))),
-        )
         first_inner = data[0][0] if len(data[0]) > 0 else None
 
         if isinstance(first_inner, (torch.Tensor, tuple, list, Mapping)):
