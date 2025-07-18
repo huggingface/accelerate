@@ -612,18 +612,11 @@ def concatenate(data, dim=0):
     """
     if isinstance(data[0], (tuple, list)):
         first_inner = data[0][0] if len(data[0]) > 0 else None
-
-        if isinstance(first_inner, (torch.Tensor, tuple, list, Mapping)):
-            return honor_type(
-                data[0],
-                (
-                    concatenate([d[i] for d in data], dim=dim)
-                    for i in range(len(data[0]))
-                ),
-            )
-        else:
-            # If inner element are not nested, flatten
+            
+        if isinstance(first_inner, str):
             return honor_type(data[0], [item for sublist in data for item in sublist])
+        else:
+            return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
 
     elif isinstance(data[0], Mapping):
         return type(data[0])(
