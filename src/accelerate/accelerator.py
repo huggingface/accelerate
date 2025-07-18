@@ -1816,42 +1816,22 @@ class Accelerator:
 
     def _build_device_mesh(self):
         """Build and validate device mesh based on parallelism configuration."""
-        if self.parallelism_config is None:
-            self.state.device_mesh = None
-            return
-            
-        # Get mesh specification from ParallelismConfig
         mesh_shape, mesh_dim_names = self.parallelism_config.get_mesh()
-        
-        if not mesh_shape:  # No parallelism enabled
-            self.state.device_mesh = None
-            return
-            
-        # Validate existing mesh or create new one
+    
         if (existing_mesh := PartialState().device_mesh) is not None:
-            # Use ParallelismConfig validation - this handles all the complex validation logic
             self.parallelism_config.validate_device_mesh(existing_mesh)
             self.state.device_mesh = existing_mesh
         else:
-            # Create new device mesh with better error handling
-            try:
-                device_mesh = torch.distributed.init_device_mesh(
-                    self.device.type, 
-                    mesh_shape=mesh_shape, 
-                    mesh_dim_names=mesh_dim_names
-                )
                 
-                # Apply flattening for HSDP if both dp dimensions exist
-                # This creates submeshes that FSDP can use for hybrid sharding
-                if set(("dp_replicate", "dp_shard")).issubset(set(device_mesh.mesh_dim_names)):
-                    device_mesh[("dp_replicate", "dp_shard")]._flatten("dp_fsdp")
-                
-                self.state.device_mesh = device_mesh
-            except Exception as e:
-                raise RuntimeError(
-                    f"Failed to create device mesh with shape {mesh_shape} and dimensions {mesh_dim_names}. "
-                    f"Original error: {e}"
-                ) from e
+            device_mesh = torch.distributed.init_device_mesh(
+                self.device.type, 
+                mesh_shape=mesh_shape, 
+                mesh_dim_names=mesh_dim_names
+            )
+            if set(("dp_replicate", "dp_shard")).issubset(set(device_mesh.mesh_dim_names)):
+                device_mesh[("dp_replicate", "dp_shard")]._flatten("dp_fsdp")
+            
+            self.state.device_mesh = device_mesh
 
     def _prepare_ao(self, *args):
         if not is_torchao_available():
