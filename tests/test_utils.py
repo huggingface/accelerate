@@ -58,7 +58,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
-from accelerate.utils.operations import is_namedtuple
+from accelerate.utils.operations import is_namedtuple, concatenate
 
 
 if is_torch_xla_available():
@@ -390,6 +390,35 @@ class UtilsTester(unittest.TestCase):
         result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 66 items now
         assert result.shape == torch.Size([66, 4, 4])
+
+    def test_concatenate_batches(self):
+        # Tensor batches test
+        batch1 = {
+            "x": torch.rand(4, 1),
+            "y": torch.from_numpy(np.array([[1.0, 2.0, 3.0]] * 4, dtype=np.float32)),
+        }
+
+        batch2 = {
+            "x": torch.rand(4, 1),
+            "y": torch.from_numpy(np.array([[1.0, 2.0, 3.0]] * 4, dtype=np.float32)),
+        }
+
+        batch = concatenate([batch1, batch2], dim=0)
+
+        assert batch["x"].shape == (8, 1)
+        assert batch["y"].shape == (8, 3)
+
+        # String test
+        batch1 = {"x": torch.rand(4, 1), "animals": ["dog", "cat", "baby", "penguin"]}
+        batch2 = {
+            "x": torch.rand(4, 1),
+            "animals": ["koala", "samurai", "iguana", "rabbit"],
+        }
+
+        batch = concatenate([batch1, batch2], dim=0)
+
+        assert batch["x"].shape == (8, 1)
+        assert batch["animals"] == batch1["animals"] + batch2["animals"]
 
     def test_send_to_device_compiles(self):
         compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
