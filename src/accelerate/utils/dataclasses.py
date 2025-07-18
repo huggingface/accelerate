@@ -2960,12 +2960,15 @@ class ParallelismConfig:
                 "ParallelismConfig is not fully initialized. Please call `_init_from_kwargs` with kwargs handlers before validation."
             )
 
-        _warnings = set()
-
-        if self.total_size > accelerator.num_processes:
+        # Validate that total_size matches num_processes exactly
+        if self.total_size != accelerator.num_processes:
             raise ValueError(
-                f"Your current {self} requires {self.total_size} processes, but the current Accelerator is set to use {accelerator.num_processes} processes."
+                f"ParallelismConfig total_size ({self.total_size}) does not match "
+                f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size, "
+                f"dp_shard_size, or tp_size."
             )
+
+        _warnings = set()
 
         if self.total_size > 1 and (not accelerator.multi_device) and (not accelerator.is_fsdp2):
             raise ValueError(

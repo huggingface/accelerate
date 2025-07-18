@@ -1815,18 +1815,11 @@ class Accelerator:
         return model
 
     def _build_device_mesh(self):
+        """Build and validate device mesh based on parallelism configuration."""
         if self.parallelism_config is None:
             self.state.device_mesh = None
             return
             
-        # Validate config works with current setup
-        if self.parallelism_config.total_size != self.num_processes:
-            raise ValueError(
-                f"ParallelismConfig total_size ({self.parallelism_config.total_size}) does not match "
-                f"num_processes ({self.num_processes}). Please adjust dp_replicate_size, "
-                f"dp_shard_size, or tp_size."
-            )
-        
         # Get mesh specification from ParallelismConfig
         mesh_shape, mesh_dim_names = self.parallelism_config.get_mesh()
         
@@ -1836,45 +1829,29 @@ class Accelerator:
             
         # Validate existing mesh or create new one
         if (existing_mesh := PartialState().device_mesh) is not None:
-            # Use existing validate_device_mesh method
+            # Use ParallelismConfig validation - this handles all the complex validation logic
             self.parallelism_config.validate_device_mesh(existing_mesh)
-            
-            # Additional validation for shape and names
-            if mesh_dim_names != existing_mesh.mesh_dim_names:
-                raise ValueError(
-                    f"Device mesh dimensions mismatch. Expected {mesh_dim_names}, "
-                    f"but existing device mesh has {existing_mesh.mesh_dim_names}"
-                )
-            
-            expected_shape = dict(zip(mesh_dim_names, mesh_shape))
-            actual_shape = dict(zip(existing_mesh.mesh_dim_names, existing_mesh.mesh.shape))
-            
-            mismatches = []
-            for dim_name, expected_size in expected_shape.items():
-                if actual_shape[dim_name] != expected_size:
-                    mismatches.append(
-                        f"dimension '{dim_name}': expected {expected_size}, got {actual_shape[dim_name]}"
-                    )
-            
-            if mismatches:
-                raise ValueError(
-                    f"Device mesh size mismatch(es): {', '.join(mismatches)}"
-                )
-            
             self.state.device_mesh = existing_mesh
         else:
-            # Create new device mesh
-            device_mesh = torch.distributed.init_device_mesh(
-                self.device.type, 
-                mesh_shape=mesh_shape, 
-                mesh_dim_names=mesh_dim_names
-            )
-            
-            # Apply flattening for HSDP if both dp dimensions exist
-            if set(("dp_replicate", "dp_shard")).issubset(set(device_mesh.mesh_dim_names)):
-                device_mesh[("dp_replicate", "dp_shard")]._flatten("dp_fsdp")
-            
-            self.state.device_mesh = device_mesh
+            # Create new device mesh with better error handling
+            try:
+                device_mesh = torch.distributed.init_device_mesh(
+                    self.device.type, 
+                    mesh_shape=mesh_shape, 
+                    mesh_dim_names=mesh_dim_names
+                )
+                
+                # Apply flattening for HSDP if both dp dimensions exist
+                # This creates submeshes that FSDP can use for hybrid sharding
+                if set(("dp_replicate", "dp_shard")).issubset(set(device_mesh.mesh_dim_names)):
+                    device_mesh[("dp_replicate", "dp_shard")]._flatten("dp_fsdp")
+                
+                self.state.device_mesh = device_mesh
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to create device mesh with shape {mesh_shape} and dimensions {mesh_dim_names}. "
+                    f"Original error: {e}"
+                ) from e
 
     def _prepare_ao(self, *args):
         if not is_torchao_available():
