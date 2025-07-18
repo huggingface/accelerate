@@ -611,9 +611,28 @@ def concatenate(data, dim=0):
         The same data structure as `data` with all the tensors concatenated.
     """
     if isinstance(data[0], (tuple, list)):
-        return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
+        return honor_type(
+            data[0],
+            (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))),
+        )
+        first_inner = data[0][0] if len(data[0]) > 0 else None
+
+        if isinstance(first_inner, (torch.Tensor, tuple, list, Mapping)):
+            return honor_type(
+                data[0],
+                (
+                    concatenate([d[i] for d in data], dim=dim)
+                    for i in range(len(data[0]))
+                ),
+            )
+        else:
+            # If inner element are not nested, flatten
+            return honor_type(data[0], [item for sublist in data for item in sublist])
+
     elif isinstance(data[0], Mapping):
-        return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
+        return type(data[0])(
+            {k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()}
+        )
     elif not isinstance(data[0], torch.Tensor):
         raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
     return torch.cat(data, dim=dim)
