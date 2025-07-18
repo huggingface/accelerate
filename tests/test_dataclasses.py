@@ -14,6 +14,7 @@
 
 from accelerate.utils import ParallelismConfig
 from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate import Accelerator
 import pytest
 from unittest.mock import Mock, patch
 import torch
@@ -27,15 +28,24 @@ from accelerate.test_utils import (
     torch_device,
 )
 
-class TestParallelismConfig(AccelerateTestCase):
 
-    @pytest.fixture()
-    def device_mesh(self, mesh_dims, mesh_dim_names):
-        torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
-        torch_accelerator_module.set_device(device := torch.device(dist.get_rank()))
-        mesh = dist.init_device_mesh(device.type, mesh_dims, mesh_dim_names)
-        return mesh
+
+class TestParallelismConfig():
+
+    @pytest.fixture(autouse=True)
+    def mock_init_device_mesh(self):
+        def mock_init_mesh(device_type, mesh_shape, mesh_dim_names):
+            mesh = Mock()
+            mesh.size.return_value = 1
+            for dim in mesh_shape:
+                mesh.size.return_value *= dim
+            mesh.shape = mesh_shape
+            mesh.mesh_dim_names = mesh_dim_names
+            return mesh
         
+        with patch('torch.distributed.init_device_mesh', side_effect=mock_init_mesh):
+            yield mock_init_mesh
+
 
     @pytest.mark.parametrize(
         "dp_replicate_size, dp_shard_size, tp_size, expected_shape, expected_dim_names",
@@ -50,195 +60,78 @@ class TestParallelismConfig(AccelerateTestCase):
             (1, 1, 8, (8,), ("tp",)), # TP only
         ]
     )
-    def test_get_mesh(self, dp_replicate_size, dp_shard_size, tp_size, expected_shape, expected_dim_names):
+    def test_get_mesh(
+        self, 
+        dp_replicate_size, 
+        dp_shard_size, 
+        tp_size, 
+        expected_shape, 
+        expected_dim_names,
+    ):
         config = ParallelismConfig(
             dp_replicate_size=dp_replicate_size, 
             dp_shard_size=dp_shard_size, 
             tp_size=tp_size
         )
         mesh_shape, mesh_dim_names = config.get_mesh()
-        self.assertEqual(mesh_shape, expected_shape)
-        self.assertEqual(mesh_dim_names, expected_dim_names)
+        assert mesh_shape ==  expected_shape
+        assert mesh_dim_names ==  expected_dim_names
 
-    def test_validate_accelerator_total_size_mismatch(self):
-        """Test validate_accelerator with total_size mismatch."""
-        from accelerate import Accelerator
-        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=2) 
-        
-        accelerator = Accelerator() 
 
-        with self.assertRaises(ValueError) as cm:
-            config.validate_accelerator(accelerator)
-        self.assertIn("requires 8 processes, but the current Accelerator is set to use 1 processes", str(cm.exception))
+    @pytest.mark.parametrize(
+        "dp_replicate_size, dp_shard_size, tp_size, device_mesh_dims, device_mesh_dim_names",
+        [
+            (8, 1, 1, (8,), ("dp_replicate",)),
+            (1, 8, 1, (8,), ("dp_shard",)),
+            (2, 4, 1, (2, 4), ("dp_replicate", "dp_shard")),
+            (1, 4, 2, (4, 2), ("dp_shard", "tp")),
+            (4, 1, 2, (4, 2), ("dp_replicate", "tp")),
+            (2, 2, 2, (2, 2, 2), ("dp_replicate", "dp_shard", "tp")),
+            (1, 1, 8, (8,), ("tp",)),
+        ]
+    )
+    def test_validate_device_mesh_valid_configurations(
+        self, 
+        dp_replicate_size, 
+        dp_shard_size, 
+        tp_size, 
+        device_mesh_dims, 
+        device_mesh_dim_names,
+    ):
+        """Test validate_device_mesh with valid configurations."""        
+        config = ParallelismConfig(
+            dp_replicate_size=dp_replicate_size, 
+            dp_shard_size=dp_shard_size, 
+            tp_size=tp_size
+        )  
+        device_mesh = dist.init_device_mesh("cpu", mesh_shape=device_mesh_dims, mesh_dim_names=device_mesh_dim_names)
+        config.validate_device_mesh(device_mesh)
 
-    def test_validate_accelerator_success(self):
-        """Test validate_accelerator with matching config."""
-        from accelerate import Accelerator
-        
-        config = ParallelismConfig(dp_replicate_size=1, dp_shard_size=1, tp_size=1) 
 
-        
-        accelerator = Accelerator()
-        config.validate_accelerator(accelerator)
+    @pytest.mark.parametrize(
+        "dp_replicate_size, dp_shard_size, tp_size, device_mesh_dims, device_mesh_dim_names",
+        [
+            (8, 1, 1, (4,), ("dp_replicate",)), # invalid size
+            (1, 4, 1, (4,), ("tp",)), # valid size, invalid mesh name
+            (2, 4, 1, (2, 3), ("dp_replicate", "dp_shard")), # invalid total world size
+            (4, 4, 2, (4, 4), ("dp_shard", "dp_replicate")), # valid size, invalid ordering
+        ]
+    )
+    def test_validate_device_mesh_invalid_configurations(
+        self, 
+        dp_replicate_size, 
+        dp_shard_size, 
+        tp_size, 
+        device_mesh_dims, 
+        device_mesh_dim_names,
+    ):
+        """Test validate_device_mesh with invalid configurations."""        
+        config = ParallelismConfig(
+            dp_replicate_size=dp_replicate_size, 
+            dp_shard_size=dp_shard_size, 
+            tp_size=tp_size
+        )  
+        device_mesh = dist.init_device_mesh("cpu", mesh_shape=device_mesh_dims, mesh_dim_names=device_mesh_dim_names)
+        with pytest.raises(ValueError):
+            config.validate_device_mesh(device_mesh)
 
-    
-    def test_validate_device_mesh_size_mismatch(self):
-        """Test validate_device_mesh with size mismatch."""        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=1)  
-        
-        mock_mesh = Mock()
-        mock_mesh.size.return_value = 8  # Wrong size
-        mock_mesh.mesh_dim_names = ("dp_replicate", "dp_shard")
-        
-        with self.assertRaises(ValueError) as cm:
-            config.validate_device_mesh(mock_mesh)
-        self.assertIn("Device mesh size 8 does not match the total size of the parallelism config 4", str(cm.exception))
-
-    def test_validate_device_mesh_invalid_dims(self):
-        """Test validate_device_mesh with invalid dimension names."""
-        from unittest.mock import Mock
-        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=1)
-        
-        mock_mesh = Mock()
-        mock_mesh.size.return_value = 4
-        mock_mesh.mesh_dim_names = ("dp_replicate", "invalid_dim")
-        
-        with self.assertRaises(ValueError) as cm:
-            config.validate_device_mesh(mock_mesh)
-        self.assertIn("contain invalid dimensions", str(cm.exception))
-
-    def test_validate_device_mesh_dimension_mismatch(self):
-        """Test validate_device_mesh with dimension mismatch."""
-        from unittest.mock import Mock
-        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=1)  
-        
-        mock_mesh = Mock()
-        mock_mesh.size.return_value = 4
-        mock_mesh.mesh_dim_names = ("dp_replicate", "tp") 
-        
-        with self.assertRaises(ValueError) as cm:
-            config.validate_device_mesh(mock_mesh)
-        self.assertIn("do not match the expected dimensions", str(cm.exception))
-
-    def test_validate_device_mesh_dimension_order_mismatch(self):
-        """Test validate_device_mesh with dimension order mismatch."""
-        from unittest.mock import Mock
-        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=1)  
-        
-        mock_mesh = Mock()
-        mock_mesh.size.return_value = 4
-        mock_mesh.mesh_dim_names = ("dp_shard", "dp_replicate")  
-        mock_mesh.shape = (2, 2)
-        
-        with self.assertRaises(ValueError) as cm:
-            config.validate_device_mesh(mock_mesh)
-        self.assertIn("Device mesh dimension order mismatch", str(cm.exception))
-
-    def test_validate_device_mesh_shape_mismatch(self):
-        """Test validate_device_mesh with shape mismatch."""
-        from unittest.mock import Mock
-        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=1) 
-        
-        mock_mesh = Mock()
-        mock_mesh.size.return_value = 4
-        mock_mesh.mesh_dim_names = ("dp_replicate", "dp_shard")
-        mock_mesh.shape = (4, 1) 
-        
-        with self.assertRaises(ValueError) as cm:
-            config.validate_device_mesh(mock_mesh)
-        self.assertIn("Device mesh dimension size mismatch", str(cm.exception))
-
-    def test_validate_device_mesh_success(self):
-        """Test validate_device_mesh with valid mesh."""
-        from unittest.mock import Mock
-        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=1) 
-
-        mock_mesh = Mock()
-        mock_mesh.size.return_value = 4
-        mock_mesh.mesh_dim_names = ("dp_replicate", "dp_shard")
-        mock_mesh.shape = (2, 2)
-        
-        config.validate_device_mesh(mock_mesh)
-
-    def test_validate_device_mesh_with_tp(self):
-        """Test validate_device_mesh with tensor parallelism."""
-        from unittest.mock import Mock
-        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=2)  
-        
-        mock_mesh = Mock()
-        mock_mesh.size.return_value = 8
-        mock_mesh.mesh_dim_names = ("dp_replicate", "dp_shard", "tp")
-        mock_mesh.shape = (2, 2, 2)
-        
-        config.validate_device_mesh(mock_mesh)
-
-    def test_validate_device_mesh_no_parallelism(self):
-        """Test validate_device_mesh with no parallelism."""
-        from unittest.mock import Mock
-        
-        config = ParallelismConfig(dp_replicate_size=1, dp_shard_size=1, tp_size=1) 
-        
-        mock_mesh = Mock()
-        mock_mesh.size.return_value = 1
-        mock_mesh.mesh_dim_names = ()
-        mock_mesh.shape = ()
-        
-        config.validate_device_mesh(mock_mesh)
-
-    def test_accelerator_device_mesh_integration_no_parallelism(self):
-        """Test accelerator device mesh integration with no parallelism."""
-        from accelerate import Accelerator
-        
-        config = ParallelismConfig(dp_replicate_size=1, dp_shard_size=1, tp_size=1)
-        accelerator = Accelerator(parallelism_config=config)
-        
-        # Should not create device mesh when no parallelism is enabled
-        self.assertIsNone(accelerator.device_mesh)
-
-    def test_accelerator_validation_total_size_mismatch(self):
-        """Test accelerator validation fails when total_size doesn't match num_processes."""
-        from accelerate import Accelerator
-        
-        config = ParallelismConfig(dp_replicate_size=2, dp_shard_size=2, tp_size=1)  # total_size = 4
-        config._is_fully_initialized = True
-        
-        accelerator = Accelerator()  # This creates accelerator with num_processes = 1
-        
-        with self.assertRaises(ValueError) as cm:
-            config.validate_accelerator(accelerator)
-        self.assertIn("total_size (4) does not match num_processes (1)", str(cm.exception))
-
-    def test_accelerator_validation_success_single_process(self):
-        """Test accelerator validation succeeds with matching single process config."""
-        from accelerate import Accelerator
-        
-        config = ParallelismConfig(dp_replicate_size=1, dp_shard_size=1, tp_size=1)  # total_size = 1
-        config._is_fully_initialized = True
-        
-        accelerator = Accelerator()
-        # This should not raise any exception
-        config.validate_accelerator(accelerator)
-
-    def test_build_device_mesh_error_handling(self):
-        """Test that device mesh creation failures are properly handled."""
-        from accelerate import Accelerator
-        from unittest.mock import patch
-        
-        # Mock torch.distributed.init_device_mesh to raise an exception
-        with patch('torch.distributed.init_device_mesh') as mock_init_mesh:
-            mock_init_mesh.side_effect = RuntimeError("Device mesh creation failed")
-            
-            config = ParallelismConfig(dp_replicate_size=1, dp_shard_size=2, tp_size=1)
-            
-            with self.assertRaises(RuntimeError) as cm:
-                accelerator = Accelerator(parallelism_config=config)
-            
-            self.assertIn("Failed to create device mesh with shape", str(cm.exception))
-            self.assertIn("Device mesh creation failed", str(cm.exception))

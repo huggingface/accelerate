@@ -2960,7 +2960,6 @@ class ParallelismConfig:
                 "ParallelismConfig is not fully initialized. Please call `_init_from_kwargs` with kwargs handlers before validation."
             )
 
-        # Validate that total_size matches num_processes exactly
         if self.total_size != accelerator.num_processes:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
@@ -2997,9 +2996,6 @@ class ParallelismConfig:
                 _warnings.add(
                     f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is set to 1. This handler will be ignored."
                 )
-
-        if self.tp_enabled and self.dp_enabled:
-            raise ValueError("Currently TP+DP composition is not supported.")
 
         if self.dp_shard_size and self.dp_handler:
             raise ValueError("dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with"
