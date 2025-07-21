@@ -432,8 +432,6 @@ class Accelerator:
             parallelism_config = PartialState().parallelism_config
         elif parallelism_config is None:
             parallelism_config = ParallelismConfig()
-            
-        parallelism_config._init_from_deprecated(kwargs_handlers)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -1641,37 +1639,32 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
-            if self.multi_device:
-                if self.parallelism_config.dp_enabled and not self.parallelism_config.fsdp_enabled:
-                    if any(p.requires_grad for p in model.parameters()):
-                        kwargs = (
-                            self.parallelism_config.dp_handler.to_kwargs()
-                            if self.parallelism_config.dp_handler is not None
-                            else {}
-                        )
-                        # TODO: Look at enabling native TP training directly with a proper config
-                        if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true":
-                            if self.device.type == "hpu":
-                                device_ids, output_device = [self.device.index], self.device.index
-                            else:
-                                device_ids, output_device = [self.local_process_index], self.local_process_index
+            if self.multi_device and not self.parallelism_config.tp_enabled:
+                if any(p.requires_grad for p in model.parameters()):
+                    kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                    # TODO: Look at enabling native TP training directly with a proper config
+                    if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true":
+                        if self.device.type == "hpu":
+                            device_ids, output_device = [self.device.index], self.device.index
                         else:
-                            device_ids, output_device = None, None
-                        model = torch.nn.parallel.DistributedDataParallel(
-                            model, device_ids=device_ids, output_device=output_device, **kwargs
-                        )
-                        if self.parallelism_config.dp_handler is not None:
-                            self.parallelism_config.dp_handler.register_comm_hook(model)
-                elif self.parallelism_config.tp_enabled:
-                    if not hasattr(model, "tp_size"):
-                        raise NotImplementedError(
-                            "Model should undergo tensor parallel before passing it to accelerate."
-                            "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
-                        )
-                    if model.tp_size != self.parallelism_config.tp_size:
-                        raise ValueError(
-                            f"tp_size in the plugin {self.parallelism_config.tp_size} should be same as model's tp size {model.tp_size}"
-                        )
+                            device_ids, output_device = [self.local_process_index], self.local_process_index
+                    else:
+                        device_ids, output_device = None, None
+                    model = torch.nn.parallel.DistributedDataParallel(
+                        model, device_ids=device_ids, output_device=output_device, **kwargs
+                    )
+                    if self.ddp_handler is not None:
+                        self.ddp_handler.register_comm_hook(model)
+            elif self.parallelism_config.tp_enabled:
+                if not hasattr(model, "tp_size"):
+                    raise NotImplementedError(
+                        "Model should undergo tensor parallel before passing it to accelerate."
+                        "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
+                    )
+                if model.tp_size != self.parallelism_config.tp_size:
+                    raise ValueError(
+                        f"tp_size in the plugin {self.parallelism_config.tp_size} should be same as model's tp size {model.tp_size}"
+                    )
             elif self.is_fsdp2:
                 raise ValueError(
                     "FSDP2 preparation should be done via `accelerate.prepare()`, as it requires a model and an optimizer."
@@ -1806,10 +1799,10 @@ class Accelerator:
                     del self._models[-2]
                 self._models[-1] = model
             elif self.distributed_type == DistributedType.MULTI_CPU and self.parallelism_config.dp_enabled:
-                kwargs = self.parallelism_config.dp_handler.to_kwargs() if self.parallelism_config.dp_handler else {}
+                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
-                if self.parallelism_config.dp_handler is not None:
-                    self.parallelism_config.dp_handler.register_comm_hook(model)
+                if self.ddp_handler is not None:
+                    self.ddp_handler.register_comm_hook(model)
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast

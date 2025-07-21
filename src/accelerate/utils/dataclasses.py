@@ -193,12 +193,6 @@ class DistributedDataParallelKwargs(KwargsHandler):
     ] = DDPCommunicationHookType.NO
     comm_state_option: dict = field(default_factory=dict)
 
-    def __post_init__(self):
-        warnings.warn(
-            "DistributedDataParallelKwargs is deprecated and will be removed in future versions of Accelerate. "
-            "Please use `ParallelismConfig` with `DistributedDataParallelConfig` instead.",
-        )
-
     def to_dict(self, ignore_keys=("comm_hook", "comm_wrapper", "comm_state_option")):
         return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
 
@@ -240,13 +234,6 @@ class DistributedDataParallelKwargs(KwargsHandler):
                 state=state,
                 hook=hook,
             )
-
-
-@dataclass
-class DistributedDataParallelConfig(DistributedDataParallelKwargs):
-    # For now we can just inherit as we don't add any new functionality, we will copy the functionality as we deprecate
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
 
 @dataclass
@@ -2903,15 +2890,13 @@ class ParallelismConfig:
             composing DDP + TP is currently not supported.
         tp_size (`int`, defaults to `1`):
             The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be used.
-        dp_handler (`~utils.DistributedDataParallelConfig`, defaults to `None`):
-            The handler for the data parallel group.
         tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
             The handler for the tensor parallel group.
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size` together:
         - `dp_replicate_size == 1` and `dp_shard_size > 1`, we obtain Fully Sharded Data Parallel (FSDP).
-        - `dp_replicate_size == 1` and `dp_shard_size = 1`, we obtain Distributed Data Parallel (DDP).
         - `dp_replicate_size > 1` and `dp_shard_size > 1`, we obtain Hybrid Sharded Data Parallel (HSDP).
+        - `dp_replicate_size > 1` and `dp_shard_size == 1` is an invalid configuration, to use pure DP, use `DistributedDataParallelKwargs` instead.
 
     """
 
@@ -2920,7 +2905,6 @@ class ParallelismConfig:
     tp_size: int = 1
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
-    dp_handler: Union[None, DistributedDataParallelConfig] = None
     tp_handler: Union[None, TorchTensorParallelConfig] = None
 
     def __repr__(self):
@@ -3035,17 +3019,6 @@ class ParallelismConfig:
             "tp": self.tp_size,
         }
 
-    def _init_from_deprecated(self, *args):
-        for handler in args:
-            if isinstance(handler, DistributedDataParallelKwargs):
-                self.dp_handler = DistributedDataParallelConfig(**handler.to_dict())
-            elif isinstance(handler, TorchTensorParallelPlugin):
-                pass
-            else:
-                pass
-
-        self._is_fully_initialized = True
-
     def _set_size(self, parallelism: str, size: int):
         assert parallelism in self._sizes.keys(), f"Parallelism must be one of {self._sizes.keys()}"
         self._sizes[parallelism] = size
@@ -3055,17 +3028,7 @@ class ParallelismConfig:
         # This is to make sure the original behavior is preserved
         _warnings = set()
         if accelerator.multi_device and self.total_size == 1:
-            _warnings.add(
-                "ParallelismConfig is configured with total_size=1, but accelerator is multi_device. "
-                "Setting dp_replicate_size to num_processes. If this is unexpected, please ensure you "
-                "provide a ParallelismConfig when constructing the accelerator."
-            )
             self._set_size("dp", accelerator.num_processes)
-
-        if not getattr(self, "_is_fully_initialized", False):
-            raise ValueError(
-                "ParallelismConfig is not fully initialized. Please call `_init_from_kwargs` with kwargs handlers before validation."
-            )
 
         if self.total_size != accelerator.num_processes:
             raise ValueError(
@@ -3093,16 +3056,19 @@ class ParallelismConfig:
                 self._set_size(parallelism, accelerator.num_processes)
 
         for parallelism, size in self._sizes.items():
-            if size > 1 and getattr(self, f"{parallelism}_handler", None) is not None:
+            if size == 1 and getattr(self, f"{parallelism}_handler", None) is not None:
                 _warnings.add(
                     f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is set to 1. This handler will be ignored."
                 )
 
+<<<<<<< Updated upstream
         if self.dp_shard_size and self.dp_handler and self.dp_replicate_size == 1:
             raise ValueError(
                 "dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with FSDP."
             )
 
+=======
+>>>>>>> Stashed changes
         if _warnings and accelerator.is_main_process:
             warnings.warn(
                 "ParallelismConfig has the following warnings:\n" + "\n".join(_warnings),
