@@ -90,17 +90,13 @@ def main():
         **model_kwargs,
     )
     print("Memory usage after model load")
-    memory_usage = gpu_memory_usage_all()
-    for i, mem in enumerate(memory_usage):
-        print(f"GPU {i}: {mem:.2f} GB")
+    print(gpu_memory_usage_all())
     tokenizer = setup_tokenizer(MODEL_ID)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 
     model, optimizer = accelerator.prepare(model, optimizer)
     print("Memory usage after model prepare")
-    memory_usage = gpu_memory_usage_all()
-    for i, mem in enumerate(memory_usage):
-        print(f"GPU {i}: {mem:.2f} GB")
+    print(gpu_memory_usage_all())
     exit()
 
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)

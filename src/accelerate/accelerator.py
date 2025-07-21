@@ -428,7 +428,11 @@ class Accelerator:
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
 
-        parallelism_config = parallelism_config or ParallelismConfig()
+        if PartialState().parallelism_config is not None:
+            parallelism_config = PartialState().parallelism_config
+        elif parallelism_config is None:
+            parallelism_config = ParallelismConfig()
+            
         parallelism_config._init_from_deprecated(kwargs_handlers)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
