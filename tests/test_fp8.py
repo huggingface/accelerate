@@ -31,6 +31,7 @@ from accelerate.test_utils import (
     require_multi_device,
     require_torchao,
     require_transformer_engine,
+    require_transformer_engine_mxfp8,
     run_first,
 )
 from accelerate.test_utils.testing import require_deepspeed, run_command
@@ -102,6 +103,27 @@ class TestTransformerEngine(unittest.TestCase):
                     mixed_precision: fp8
                     fp8_config:
                       backend: TE
+                    """
+                )
+            )
+            command = get_launch_command(config_file=str(config_file), monitor_interval=0.1)
+            command += ["-m", "tests.test_fp8", "--test_te", "--from_config"]
+            run_command(command)
+
+
+    @require_transformer_engine_mxfp8
+    def test_can_prepare_model_with_mxfp8_block_scaling(self):
+        with tempfile.TemporaryDirectory() as dir_name:
+            config_file = Path(dir_name) / "config.yaml"
+            config_file.write_text(
+                textwrap.dedent(
+                    """
+                    distributed_type: "NO"
+                    num_processes: 1
+                    mixed_precision: fp8
+                    fp8_config:
+                      backend: TE
+                      use_mxfp8_block_scaling: true
                     """
                 )
             )

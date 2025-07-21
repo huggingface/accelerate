@@ -114,6 +114,12 @@ def is_transformer_engine_available():
         return _is_package_available("transformer_engine", "transformer-engine")
 
 
+def is_transformer_engine_mxfp8_available():
+    if _is_package_available("transformer_engine", "transformer-engine"):
+        import transformer_engine.pytorch as te
+        return te.fp8.check_mxfp8_support()[0]
+    return False
+
 def is_lomo_available():
     return _is_package_available("lomo_optim")
 

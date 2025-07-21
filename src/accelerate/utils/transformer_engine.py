@@ -146,14 +146,32 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
 
     if is_hpu_available():
         import intel_transformer_engine.recipe as te_recipe
+        is_fp8_block_scaling_available = False
+        message = "MXFP8 block scaling is not available on HPU."
+
     else:
         import transformer_engine.common.recipe as te_recipe
+        import transformer_engine.pytorch as te
+        is_fp8_block_scaling_available, message = te.fp8.check_mxfp8_support()
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
     if "fp8_format" in kwargs:
         kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
     use_during_eval = kwargs.pop("use_autocast_during_eval", False)
-    fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+    use_mxfp8_block_scaling = kwargs.pop("use_mxfp8_block_scaling", False)
+
+    if use_mxfp8_block_scaling and not is_fp8_block_scaling_available:
+        raise ValueError(f"MXFP8 block scaling is not available: {message}")
+
+    if use_mxfp8_block_scaling:
+        if "amax_compute_algo" in kwargs:
+            raise ValueError("`amax_compute_algo` is not supported for MXFP8 block scaling.")
+        if "amax_history_len" in kwargs:
+            raise ValueError("`amax_history_len` is not supported for MXFP8 block scaling.")
+        fp8_recipe = te_recipe.MXFP8BlockScaling(**kwargs)
+    else:
+        fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+
     new_forward = contextual_fp8_autocast(model.forward, fp8_recipe, use_during_eval)
 
     if hasattr(model.forward, "__func__"):
