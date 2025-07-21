@@ -728,7 +728,7 @@ class Accelerator:
         return self.is_fsdp2
 
     @property
-    def device_mesh(self):
+    def torch_device_mesh(self):
         return self.state.device_mesh
 
     @contextmanager
@@ -1821,7 +1821,7 @@ class Accelerator:
 
     def _build_device_mesh(self):
         """Build and validate device mesh based on parallelism configuration."""
-        mesh_shape, mesh_dim_names = self.parallelism_config.get_mesh()
+        mesh_dim_names, mesh_shape = self.parallelism_config.get_mesh()
 
         if (existing_mesh := PartialState().device_mesh) is not None:
             self.parallelism_config.validate_device_mesh(existing_mesh)

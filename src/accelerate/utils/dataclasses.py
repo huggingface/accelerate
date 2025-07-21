@@ -2960,7 +2960,7 @@ class ParallelismConfig:
         return self.tp_size > 1
 
     @property
-    def mesh_dims(self):
+    def active_mesh_dims(self):
         return self.dp_dim_names + (["tp"] if self.tp_enabled else [])
 
     def validate_device_mesh(self, device_mesh):
@@ -2979,15 +2979,15 @@ class ParallelismConfig:
             )
 
         # Check that dimension names match expected configuration
-        expected_dims = set(self.mesh_dims)
+        expected_dims = set(self.active_mesh_dims)
         if mesh_dim_names != expected_dims:
             raise ValueError(
                 f"Device mesh dimensions {mesh_dim_names} do not match the expected dimensions {expected_dims}."
             )
 
         # Check that dimension sizes match
-        mesh_shape, mesh_names = self.get_mesh()
-        for i, (dim_name, expected_size) in enumerate(zip(mesh_names, mesh_shape)):
+        mesh_dim_names, mesh_shape = self.get_mesh()
+        for i, (dim_name, expected_size) in enumerate(zip(mesh_dim_names, mesh_shape)):
             if device_mesh.mesh_dim_names[i] != dim_name:
                 raise ValueError(
                     f"Device mesh dimension order mismatch. Expected {dim_name} at position {i}, "
@@ -3003,26 +3003,16 @@ class ParallelismConfig:
         """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""
 
         # Build mesh dimensions dictionary
-        mesh_dims = {}
-        if self.dp_replicate_size > 1:
-            mesh_dims["dp_replicate"] = self.dp_replicate_size
-        if self.dp_shard_size > 1:
-            mesh_dims["dp_shard"] = self.dp_shard_size
-        if self.tp_size > 1:
-            mesh_dims["tp"] = self.tp_size
+        mesh_dims = {parallelism: self._sizes[parallelism] for parallelism in self.active_mesh_dims}
 
         # Apply canonical ordering
         mesh_order = ["dp_replicate", "dp_shard", "tp"]
         sorted_items = sorted(
             mesh_dims.items(),
-            key=lambda x: (mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)),
+            key=lambda x: (mesh_order.index(x[0])),
         )
 
-        # Extract names and values
-        mesh_names = tuple(name for name, _ in sorted_items)
-        mesh_values = tuple(value for _, value in sorted_items)
-
-        return mesh_values, mesh_names
+        return zip(*sorted_items)
 
     def __post_init__(self):
         # Basic size validation
@@ -3110,7 +3100,7 @@ class ParallelismConfig:
 
         if self.dp_shard_size and self.dp_handler and self.dp_replicate_size == 1:
             raise ValueError(
-                "dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with _init_from_deprecatedFSDP."
+                "dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with FSDP."
             )
 
         if _warnings and accelerator.is_main_process:

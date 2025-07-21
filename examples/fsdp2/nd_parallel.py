@@ -27,11 +27,10 @@ from transformers import AutoModelForCausalLM
 from accelerate import Accelerator
 from accelerate.utils.dataclasses import ParallelismConfig
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
-from utils import PerformanceTracker, create_collate_fn, get_dataset, setup_tokenizer
+from utils import PerformanceTracker, create_collate_fn, get_dataset, setup_tokenizer, gpu_memory_usage_all
 
 
 MODEL_ID = "NousResearch/Llama-3.2-1B"
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -58,8 +57,9 @@ def main():
         dp_shard_size = args.dp_shard_size,
         tp_size = args.tp_size,
     )
-
-    if parallelism_config.fsdp_enabled > 1:
+    print(parallelism_config)
+    print(parallelism_config.fsdp_enabled)
+    if parallelism_config.fsdp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
             cpu_ram_efficient_loading=False,
@@ -89,11 +89,19 @@ def main():
         device_mesh=accelerator.torch_device_mesh if args.tp_size > 1 else None,
         **model_kwargs,
     )
-
+    print("Memory usage after model load")
+    memory_usage = gpu_memory_usage_all()
+    for i, mem in enumerate(memory_usage):
+        print(f"GPU {i}: {mem:.2f} GB")
     tokenizer = setup_tokenizer(MODEL_ID)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 
     model, optimizer = accelerator.prepare(model, optimizer)
+    print("Memory usage after model prepare")
+    memory_usage = gpu_memory_usage_all()
+    for i, mem in enumerate(memory_usage):
+        print(f"GPU {i}: {mem:.2f} GB")
+    exit()
 
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
@@ -126,8 +134,12 @@ def main():
         if "warmup_completed" in metrics:
             accelerator.print("Warm up completed! Starting performance tracking...")
         elif metrics:
-            print_msg += f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f}"
-
+            print_msg += f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f}\n"
+            print_msg += (
+                f"\tMemory (GB): active={metrics['peak_memory_active']:.1f}, "
+                f"alloc={metrics['peak_memory_alloc']:.1f}, "
+                f"reserved={metrics['peak_memory_reserved']:.1f}"
+            )
         if step % 10 == 0 or step == total_num_steps - 1:
             accelerator.print(print_msg)
 
@@ -142,28 +154,38 @@ if __name__ == "__main__":
     main()
 
 """
+###############################################################################################
+# baseline FSDP
+accelerate launch --num_processes 8 nd_parallel.py --dp_shard_size 8 --dp_replicate_size 1
+Step 10/100, Loss: 6.5720 | Average steps/s: 3.27 | Average tokens/s: 418.59
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 20/100, Loss: 5.3464 | Average steps/s: 3.27 | Average tokens/s: 418.25
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 30/100, Loss: 5.1396 | Average steps/s: 3.27 | Average tokens/s: 418.78
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 40/100, Loss: 5.2014 | Average steps/s: 3.28 | Average tokens/s: 419.30
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 50/100, Loss: 4.7968 | Average steps/s: 3.28 | Average tokens/s: 419.64
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 60/100, Loss: 4.5652 | Average steps/s: 3.28 | Average tokens/s: 419.87
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 70/100, Loss: 4.8120 | Average steps/s: 3.28 | Average tokens/s: 420.04
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 80/100, Loss: 4.2034 | Average steps/s: 3.28 | Average tokens/s: 420.23
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 90/100, Loss: 4.5770 | Average steps/s: 3.28 | Average tokens/s: 420.34
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+Step 99/100, Loss: 4.3255 | Average steps/s: 3.28 | Average tokens/s: 420.44
+        Memory (GB): active=11.6, alloc=11.6, reserved=12.2
+
+###############################################################################################
+
 accelerate launch --num_processes 8 nd_parallel.py --dp_shard_size 4 --dp_replicate_size 2
-Step 10/100, Loss: 6.5720 | Average steps/s: 3.31 | Average tokens/s: 423.49
-Step 20/100, Loss: 5.3464 | Average steps/s: 3.08 | Average tokens/s: 394.24
-Step 30/100, Loss: 5.1396 | Average steps/s: 3.16 | Average tokens/s: 404.93
-Step 40/100, Loss: 5.2014 | Average steps/s: 3.20 | Average tokens/s: 409.06
-Step 50/100, Loss: 4.7968 | Average steps/s: 3.21 | Average tokens/s: 411.40
-Step 60/100, Loss: 4.5652 | Average steps/s: 3.22 | Average tokens/s: 412.77
-Step 70/100, Loss: 4.8120 | Average steps/s: 3.23 | Average tokens/s: 413.79
-Step 80/100, Loss: 4.2034 | Average steps/s: 3.24 | Average tokens/s: 414.57
-Step 90/100, Loss: 4.5770 | Average steps/s: 3.24 | Average tokens/s: 415.17
-Step 99/100, Loss: 4.3255 | Average steps/s: 3.25 | Average tokens/s: 415.62
+
+
+###############################################################################################
 
 accelerate launch --num_processes 8 nd_parallel.py --dp_shard_size 2 --dp_replicate_size 4
-Step 10/100, Loss: 6.5720 | Average steps/s: 3.29 | Average tokens/s: 421.75
-Step 20/100, Loss: 5.3464 | Average steps/s: 3.27 | Average tokens/s: 419.02
-Step 30/100, Loss: 5.1396 | Average steps/s: 3.28 | Average tokens/s: 419.80
-Step 40/100, Loss: 5.2014 | Average steps/s: 3.28 | Average tokens/s: 420.26
-Step 50/100, Loss: 4.7968 | Average steps/s: 3.28 | Average tokens/s: 420.48
-Step 60/100, Loss: 4.5652 | Average steps/s: 3.29 | Average tokens/s: 420.68
-Step 70/100, Loss: 4.8120 | Average steps/s: 3.29 | Average tokens/s: 420.68
-Step 80/100, Loss: 4.2034 | Average steps/s: 3.29 | Average tokens/s: 420.71
-Step 90/100, Loss: 4.5770 | Average steps/s: 3.29 | Average tokens/s: 420.77
-Step 99/100, Loss: 4.3255 | Average steps/s: 3.29 | Average tokens/s: 420.74
+
 
 """

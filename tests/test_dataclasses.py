@@ -72,7 +72,7 @@ class TestParallelismConfig():
             dp_shard_size=dp_shard_size, 
             tp_size=tp_size
         )
-        mesh_shape, mesh_dim_names = config.get_mesh()
+        mesh_dim_names, mesh_shape = config.get_mesh()
         assert mesh_shape ==  expected_shape
         assert mesh_dim_names ==  expected_dim_names
 
