@@ -71,6 +71,7 @@ from ..utils import (
     is_torchvision_available,
     is_trackio_available,
     is_transformer_engine_available,
+    is_transformer_engine_mxfp8_available,
     is_transformers_available,
     is_triton_available,
     is_wandb_available,
@@ -539,6 +540,13 @@ def require_transformer_engine(test_case):
     """
     return unittest.skipUnless(is_transformer_engine_available(), "test requires transformers engine")(test_case)
 
+
+def require_transformer_engine_mxfp8(test_case):
+    """
+    Decorator marking a test that requires transformers engine FP8 block scaling available. These tests are skipped when transformers
+    engine FP8 block scaling isn't available
+    """
+    return unittest.skipUnless(is_transformer_engine_mxfp8_available(), "test requires transformers engine FP8 block scaling")(test_case)
 
 def require_torchao(test_case):
     """

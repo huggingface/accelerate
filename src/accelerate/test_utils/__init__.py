@@ -53,6 +53,7 @@ from .testing import (
     require_torchvision,
     require_tpu,
     require_transformer_engine,
+    require_transformer_engine_mxfp8,
     require_xpu,
     run_first,
     skip,
