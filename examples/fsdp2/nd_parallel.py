@@ -59,7 +59,7 @@ def main():
         tp_size = args.tp_size,
     )
 
-    print(f"Using parallelism config: {parallelism_config}")
+    # print(f"Using parallelism config: {parallelism_config}")
     if parallelism_config.fsdp_enabled > 1:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
