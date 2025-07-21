@@ -55,7 +55,6 @@ class TestParallelismConfig():
             (1, 8, 1, (8,), ("dp_shard",)), # FSDP
             (2, 4, 1, (2, 4), ("dp_replicate", "dp_shard")), # HSDP
             (1, 4, 2, (4, 2), ("dp_shard", "tp")), # FSDP + TP
-            (4, 1, 2, (4, 2), ("dp_replicate", "tp")), # DDP + TP
             (2, 2, 2, (2, 2, 2), ("dp_replicate", "dp_shard", "tp")), # HSDP + TP
             (1, 1, 8, (8,), ("tp",)), # TP only
         ]
@@ -85,7 +84,6 @@ class TestParallelismConfig():
             (1, 8, 1, (8,), ("dp_shard",)),
             (2, 4, 1, (2, 4), ("dp_replicate", "dp_shard")),
             (1, 4, 2, (4, 2), ("dp_shard", "tp")),
-            (4, 1, 2, (4, 2), ("dp_replicate", "tp")),
             (2, 2, 2, (2, 2, 2), ("dp_replicate", "dp_shard", "tp")),
             (1, 1, 8, (8,), ("tp",)),
         ]

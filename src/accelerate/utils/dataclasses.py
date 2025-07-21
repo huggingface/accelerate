@@ -27,7 +27,7 @@ from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union, get_args
+from typing import Any, Callable, get_args, Literal, Optional, TYPE_CHECKING, Union
 
 import torch
 
@@ -165,11 +165,17 @@ class TorchTensorParallelKwargs(KwargsHandler):
                 "Please upgrade your PyTorch version."
             )
 
-        if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
-            raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+        if not compare_versions(
+            "transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION
+        ):
+            raise ValueError(
+                f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+            )
 
         if self.enable_async_tp:
-            warnings.warn("Async tensor parallelism is currently not supported, ignoring this option.")
+            warnings.warn(
+                "Async tensor parallelism is currently not supported, ignoring this option."
+            )
 
 
 @dataclass
@@ -209,7 +215,9 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
     comm_hook: DDPCommunicationHookType = DDPCommunicationHookType.NO
     comm_wrapper: Literal[
-        DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16
+        DDPCommunicationHookType.NO,
+        DDPCommunicationHookType.FP16,
+        DDPCommunicationHookType.BF16,
     ] = DDPCommunicationHookType.NO
     comm_state_option: dict = field(default_factory=dict)
 
@@ -217,7 +225,10 @@ class DistributedDataParallelKwargs(KwargsHandler):
         return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
 
     def register_comm_hook(self, model):
-        from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
+        from torch.distributed.algorithms.ddp_comm_hooks import (
+            default_hooks,
+            powerSGD_hook,
+        )
 
         hook_map: dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
@@ -240,7 +251,11 @@ class DistributedDataParallelKwargs(KwargsHandler):
         if hook:
             state = (
                 powerSGD_hook.PowerSGDState(None, **self.comm_state_option)
-                if self.comm_hook in (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD)
+                if self.comm_hook
+                in (
+                    DDPCommunicationHookType.POWER_SGD,
+                    DDPCommunicationHookType.BATCHED_POWER_SGD,
+                )
                 else None
             )
             model.register_comm_hook(
@@ -388,9 +403,13 @@ class TERecipeKwargs(KwargsHandler):
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
         if not is_transformer_engine_available():
-            raise ImportError("TransformerEngine is not available. Please install it or use a different backend.")
+            raise ImportError(
+                "TransformerEngine is not available. Please install it or use a different backend."
+            )
         if self.use_autocast_during_eval is None:
-            self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
+            self.use_autocast_during_eval = parse_flag_from_env(
+                env_prefix + "USE_AUTOCAST_DURING_EVAL"
+            )
         if self.margin is None:
             self.margin = int(os.environ.get(env_prefix + "MARGIN", 0))
         if self.interval is None:
@@ -399,14 +418,22 @@ class TERecipeKwargs(KwargsHandler):
             self.fp8_format = os.environ.get(env_prefix + "FORMAT", "HYBRID")
         self.fp8_format = self.fp8_format.upper()
         if self.fp8_format not in get_args(FP8Format):
-            raise ValueError(f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}.")
+            raise ValueError(
+                f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}."
+            )
         if self.amax_compute_algo is None:
-            self.amax_compute_algo = os.environ.get(env_prefix + "AMAX_COMPUTE_ALGO", "most_recent")
+            self.amax_compute_algo = os.environ.get(
+                env_prefix + "AMAX_COMPUTE_ALGO", "most_recent"
+            )
         self.amax_compute_algo = self.amax_compute_algo.lower()
         if self.amax_compute_algo not in get_args(AmaxComputeAlgorithm):
-            raise ValueError(f"`amax_compute_algo` must be one of {' or '.join(get_args(AmaxComputeAlgorithm))}")
+            raise ValueError(
+                f"`amax_compute_algo` must be one of {' or '.join(get_args(AmaxComputeAlgorithm))}"
+            )
         if self.amax_history_len is None:
-            self.amax_history_len = int(os.environ.get(env_prefix + "AMAX_HISTORY_LEN", 1024))
+            self.amax_history_len = int(
+                os.environ.get(env_prefix + "AMAX_HISTORY_LEN", 1024)
+            )
         if self.override_linear_precision is None:
             fprop = parse_flag_from_env(env_prefix + "OVERRIDE_FPROP")
             dgrad = parse_flag_from_env(env_prefix + "OVERRIDE_DGRAD")
@@ -428,7 +455,9 @@ class MSAMPRecipeKwargs(KwargsHandler):
         if self.opt_level is None:
             self.opt_level = os.environ.get(env_prefix + "OPT_LEVEL", "O2")
         if self.opt_level not in get_args(OptLevel):
-            raise ValueError(f"`opt_level` must be one of {' or '.join(get_args(OptLevel))}")
+            raise ValueError(
+                f"`opt_level` must be one of {' or '.join(get_args(OptLevel))}"
+            )
 
 
 @dataclass
@@ -452,7 +481,9 @@ class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
             self.backend = os.environ.get(env_prefix + "BACKEND", default_backend)
         self.backend = self.backend.upper()
         if self.backend not in get_args(Backend):
-            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine) to use `FP8RecipeKwargs`.")
+            raise ValueError(
+                "`backend` must be 'MSAMP' or 'TE' (TransformerEngine) to use `FP8RecipeKwargs`."
+            )
         super().__post_init__()
 
 
@@ -521,7 +552,9 @@ class ProfileKwargs(KwargsHandler):
     with_modules: bool = False
     output_trace_dir: Optional[str] = None
 
-    def _get_profiler_activity(self, activity: ProfilerActivity) -> torch.profiler.ProfilerActivity:
+    def _get_profiler_activity(
+        self, activity: ProfilerActivity
+    ) -> torch.profiler.ProfilerActivity:
         """Get the profiler activity from the string.
 
         Args:
@@ -548,7 +581,9 @@ class ProfileKwargs(KwargsHandler):
                 profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
 
         if activity not in profiler_activity_map:
-            raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
+            raise ValueError(
+                f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}."
+            )
         return profiler_activity_map[activity]
 
     def build(self) -> torch.profiler.profile:
@@ -560,7 +595,9 @@ class ProfileKwargs(KwargsHandler):
         """
         activities: Optional[list[ProfilerActivity]] = None
         if self.activities is not None:
-            activities = [self._get_profiler_activity(activity) for activity in self.activities]
+            activities = [
+                self._get_profiler_activity(activity) for activity in self.activities
+            ]
         schedule: Optional[torch.profiler.schedule] = None
         if self.schedule_option is not None:
             schedule = torch.profiler.schedule(**self.schedule_option)
@@ -903,7 +940,9 @@ class ProjectConfiguration:
             the main one.
     """
 
-    project_dir: str = field(default=None, metadata={"help": "A path to a directory for storing data."})
+    project_dir: str = field(
+        default=None, metadata={"help": "A path to a directory for storing data."}
+    )
     logging_dir: str = field(
         default=None,
         metadata={
@@ -912,7 +951,9 @@ class ProjectConfiguration:
     )
     automatic_checkpoint_naming: bool = field(
         default=False,
-        metadata={"help": "Whether saved states should be automatically iteratively named."},
+        metadata={
+            "help": "Whether saved states should be automatically iteratively named."
+        },
     )
 
     total_limit: int = field(
@@ -973,7 +1014,10 @@ class GradientAccumulationPlugin(KwargsHandler):
     ```
     """
 
-    num_steps: int = field(default=None, metadata={"help": "The number of steps to accumulate gradients for."})
+    num_steps: int = field(
+        default=None,
+        metadata={"help": "The number of steps to accumulate gradients for."},
+    )
     adjust_scheduler: bool = field(
         default=True,
         metadata={
@@ -1021,15 +1065,31 @@ class TorchDynamoPlugin(KwargsHandler):
 
     backend: DynamoBackend = field(
         default=None,
-        metadata={"help": f"Possible options are {[b.value.lower() for b in DynamoBackend]}"},
+        metadata={
+            "help": f"Possible options are {[b.value.lower() for b in DynamoBackend]}"
+        },
     )
     mode: str = field(
-        default=None, metadata={"help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"}
+        default=None,
+        metadata={
+            "help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"
+        },
     )
-    fullgraph: bool = field(default=None, metadata={"help": "Whether it is ok to break model into several subgraphs"})
-    dynamic: bool = field(default=None, metadata={"help": "Whether to use dynamic shape for tracing"})
-    options: Any = field(default=None, metadata={"help": "A dictionary of options to pass to the backend."})
-    disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
+    fullgraph: bool = field(
+        default=None,
+        metadata={"help": "Whether it is ok to break model into several subgraphs"},
+    )
+    dynamic: bool = field(
+        default=None, metadata={"help": "Whether to use dynamic shape for tracing"}
+    )
+    options: Any = field(
+        default=None,
+        metadata={"help": "A dictionary of options to pass to the backend."},
+    )
+    disable: bool = field(
+        default=False,
+        metadata={"help": "Turn torch.compile() into a no-op for testing"},
+    )
 
     use_regional_compilation: bool = field(
         default=None,
@@ -1053,14 +1113,24 @@ class TorchDynamoPlugin(KwargsHandler):
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")
         if self.fullgraph is None:
-            self.fullgraph = str_to_bool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
+            self.fullgraph = (
+                str_to_bool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
+            )
         if self.use_regional_compilation is None:
             self.use_regional_compilation = (
-                str_to_bool(os.environ.get(prefix + "USE_REGIONAL_COMPILATION", "False")) == 1
+                str_to_bool(
+                    os.environ.get(prefix + "USE_REGIONAL_COMPILATION", "False")
+                )
+                == 1
             )
 
-        if self.dynamic is None and os.environ.get(prefix + "USE_DYNAMIC", None) is not None:
-            self.dynamic = str_to_bool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
+        if (
+            self.dynamic is None
+            and os.environ.get(prefix + "USE_DYNAMIC", None) is not None
+        ):
+            self.dynamic = (
+                str_to_bool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
+            )
 
     def to_dict(self):
         dynamo_config = copy.deepcopy(self.__dict__)
@@ -1124,30 +1194,44 @@ class DeepSpeedPlugin:
             "help": "Number of steps to accumulate gradients before updating optimizer states. If not set, will use the value from the `Accelerator` directly."
         },
     )
-    gradient_clipping: float = field(default=None, metadata={"help": "Enable gradient clipping with value"})
+    gradient_clipping: float = field(
+        default=None, metadata={"help": "Enable gradient clipping with value"}
+    )
     zero_stage: int = field(
         default=None,
-        metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
+        metadata={
+            "help": "Possible options are 0,1,2,3; Default will be taken from environment variable"
+        },
     )
     is_train_batch_min: bool = field(
         default=True,
-        metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
+        metadata={
+            "help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"
+        },
     )
     offload_optimizer_device: str = field(
         default=None,
-        metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3."},
+        metadata={
+            "help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3."
+        },
     )
     offload_param_device: str = field(
         default=None,
-        metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."},
+        metadata={
+            "help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."
+        },
     )
     offload_optimizer_nvme_path: str = field(
         default=None,
-        metadata={"help": "Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3."},
+        metadata={
+            "help": "Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3."
+        },
     )
     offload_param_nvme_path: str = field(
         default=None,
-        metadata={"help": "Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3."},
+        metadata={
+            "help": "Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3."
+        },
     )
     zero3_init_flag: bool = field(
         default=None,
@@ -1158,7 +1242,9 @@ class DeepSpeedPlugin:
     )
     zero3_save_16bit_model: bool = field(
         default=None,
-        metadata={"help": "Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3."},
+        metadata={
+            "help": "Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3."
+        },
     )
     transformer_moe_cls_names: str = field(
         default=None,
@@ -1169,7 +1255,9 @@ class DeepSpeedPlugin:
     )
     enable_msamp: bool = field(
         default=None,
-        metadata={"help": "Flag to indicate whether to enable MS-AMP backend for FP8 training."},
+        metadata={
+            "help": "Flag to indicate whether to enable MS-AMP backend for FP8 training."
+        },
     )
     msamp_opt_level: Optional[Literal["O1", "O2"]] = field(
         default=None,
@@ -1187,16 +1275,24 @@ class DeepSpeedPlugin:
 
         if self.gradient_clipping is None:
             gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "auto")
-            self.gradient_clipping = gradient_clipping if gradient_clipping == "auto" else float(gradient_clipping)
+            self.gradient_clipping = (
+                gradient_clipping
+                if gradient_clipping == "auto"
+                else float(gradient_clipping)
+            )
 
         if self.zero_stage is None:
             self.zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", 2))
 
         if self.offload_optimizer_device is None:
-            self.offload_optimizer_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
+            self.offload_optimizer_device = os.environ.get(
+                "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none"
+            )
 
         if self.offload_param_device is None:
-            self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
+            self.offload_param_device = os.environ.get(
+                "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none"
+            )
 
         if self.offload_optimizer_nvme_path is None:
             self.offload_optimizer_nvme_path = os.environ.get(
@@ -1204,20 +1300,27 @@ class DeepSpeedPlugin:
             )
 
         if self.offload_param_nvme_path is None:
-            self.offload_param_nvme_path = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH", "none")
+            self.offload_param_nvme_path = os.environ.get(
+                "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH", "none"
+            )
 
         if self.zero3_save_16bit_model is None:
             self.zero3_save_16bit_model = (
-                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false")
+                == "true"
             )
         if self.enable_msamp is None:
-            self.enable_msamp = os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"
+            self.enable_msamp = (
+                os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"
+            )
 
         if self.msamp_opt_level is None:
             self.msamp_opt_level = os.environ.get("ACCELERATE_FP8_OPT_LEVEL", "O1")
 
         if self.hf_ds_config is None:
-            self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
+            self.hf_ds_config = os.environ.get(
+                "ACCELERATE_DEEPSPEED_CONFIG_FILE", "none"
+            )
         if (
             isinstance(self.hf_ds_config, dict)
             or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
@@ -1228,7 +1331,9 @@ class DeepSpeedPlugin:
             if "gradient_accumulation_steps" not in self.hf_ds_config.config:
                 self.hf_ds_config.config["gradient_accumulation_steps"] = 1
             if "zero_optimization" not in self.hf_ds_config.config:
-                raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
+                raise ValueError(
+                    "Please specify the ZeRO optimization config in the DeepSpeed config."
+                )
 
             self._deepspeed_config_checks()
             plugin_to_config_mapping = {
@@ -1241,7 +1346,11 @@ class DeepSpeedPlugin:
                 "offload_optimizer_nvme_path": "zero_optimization.offload_optimizer.nvme_path",
                 "zero3_save_16bit_model": "zero_optimization.stage3_gather_16bit_weights_on_model_save",
             }
-            kwargs = {v: getattr(self, k) for k, v in plugin_to_config_mapping.items() if getattr(self, k) is not None}
+            kwargs = {
+                v: getattr(self, k)
+                for k, v in plugin_to_config_mapping.items()
+                if getattr(self, k) is not None
+            }
             for key in kwargs.keys():
                 self.fill_match(key, **kwargs, must_match=False)
             self.hf_ds_config.set_stage_and_offload()
@@ -1261,13 +1370,19 @@ class DeepSpeedPlugin:
                     "stage": self.zero_stage,
                     "offload_optimizer": {
                         "device": self.offload_optimizer_device,
-                        "nvme_path": self.offload_optimizer_nvme_path
-                        if self.offload_optimizer_device == "nvme"
-                        else None,
+                        "nvme_path": (
+                            self.offload_optimizer_nvme_path
+                            if self.offload_optimizer_device == "nvme"
+                            else None
+                        ),
                     },
                     "offload_param": {
                         "device": self.offload_param_device,
-                        "nvme_path": self.offload_param_nvme_path if self.offload_param_device == "nvme" else None,
+                        "nvme_path": (
+                            self.offload_param_nvme_path
+                            if self.offload_param_device == "nvme"
+                            else None
+                        ),
                     },
                     "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
@@ -1277,13 +1392,23 @@ class DeepSpeedPlugin:
             self.hf_ds_config = HfDeepSpeedConfig(config)
 
         self.deepspeed_config = self.hf_ds_config.config
-        self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
+        self.deepspeed_config["steps_per_print"] = float(
+            "inf"
+        )  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
             self.zero3_init_flag = (
-                str_to_bool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
+                str_to_bool(
+                    os.environ.get(
+                        "ACCELERATE_DEEPSPEED_ZERO3_INIT",
+                        str(self.hf_ds_config.is_zero3()),
+                    )
+                )
+                == 1
             )
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
-            warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
+            warnings.warn(
+                "DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False."
+            )
             self.zero3_init_flag = False
         # NOTE: Set to False by default, will be set to `True` automatically if it's the first plugin passed
         # to the `Accelerator`'s `deepspeed_plugin` param, *or* `AcceleratorState().enable_deepspeed_plugin(plugin_key)` is manually called
@@ -1296,8 +1421,13 @@ class DeepSpeedPlugin:
                     "MS-AMP is not supported for ZeRO Stage 3. Please use ZeRO Stage 0, 1, or 2 instead."
                 )
             if self.msamp_opt_level not in ["O1", "O2"]:
-                raise ValueError("Invalid optimization level for MS-AMP. Please use one of ['O1' or'O2'].")
-            self.deepspeed_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
+                raise ValueError(
+                    "Invalid optimization level for MS-AMP. Please use one of ['O1' or'O2']."
+                )
+            self.deepspeed_config["msamp"] = {
+                "enabled": True,
+                "opt_level": self.msamp_opt_level,
+            }
 
     def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
         mismatches = [] if mismatches is None else mismatches
@@ -1322,7 +1452,9 @@ class DeepSpeedPlugin:
         ds_val = config.get(ds_key)
         if ds_val is not None and ds_key_long in kwargs:
             if ds_val != kwargs[ds_key_long]:
-                mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key_long}={kwargs[ds_key_long]}")
+                mismatches.append(
+                    f"- ds {ds_key_long}={ds_val} vs arg {ds_key_long}={kwargs[ds_key_long]}"
+                )
 
     def is_auto(self, ds_key_long):
         val = self.hf_ds_config.get_value(ds_key_long)
@@ -1334,7 +1466,9 @@ class DeepSpeedPlugin:
     def get_value(self, ds_key_long, default=None):
         return self.hf_ds_config.get_value(ds_key_long, default)
 
-    def deepspeed_config_process(self, prefix="", mismatches=None, config=None, must_match=True, **kwargs):
+    def deepspeed_config_process(
+        self, prefix="", mismatches=None, config=None, must_match=True, **kwargs
+    ):
         """Process the DeepSpeed config with the values from the kwargs."""
         mismatches = [] if mismatches is None else mismatches
         if config is None:
@@ -1342,10 +1476,16 @@ class DeepSpeedPlugin:
         for key, value in config.items():
             if isinstance(value, dict):
                 self.deepspeed_config_process(
-                    prefix=prefix + key + ".", mismatches=mismatches, config=value, must_match=must_match, **kwargs
+                    prefix=prefix + key + ".",
+                    mismatches=mismatches,
+                    config=value,
+                    must_match=must_match,
+                    **kwargs,
                 )
             else:
-                self.fill_match(prefix + key, mismatches, must_match=must_match, **kwargs)
+                self.fill_match(
+                    prefix + key, mismatches, must_match=must_match, **kwargs
+                )
         if len(mismatches) > 0 and prefix == "":
             mismatches_msg = "\n".join(mismatches)
             raise ValueError(
@@ -1369,11 +1509,17 @@ class DeepSpeedPlugin:
 
         if mixed_precision == "fp8" and self.enable_msamp:
             if "msamp" not in ds_config:
-                ds_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
+                ds_config["msamp"] = {
+                    "enabled": True,
+                    "opt_level": self.msamp_opt_level,
+                }
 
         if mixed_precision != "no":
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
-            if str(ds_config.get(diff_dtype, {}).get("enabled", "False")).lower() == "true":
+            if (
+                str(ds_config.get(diff_dtype, {}).get("enabled", "False")).lower()
+                == "true"
+            ):
                 raise ValueError(
                     f"`--mixed_precision` arg cannot be set to `{mixed_precision}` when `{diff_dtype}` is set in the DeepSpeed config file."
                 )
@@ -1393,17 +1539,29 @@ class DeepSpeedPlugin:
                     "When `zero3_init_flag` is set, it requires Transformers to be installed. "
                     "Please run `pip install transformers`."
                 )
-        if "gradient_accumulation_steps" not in ds_config or ds_config["gradient_accumulation_steps"] == "auto":
+        if (
+            "gradient_accumulation_steps" not in ds_config
+            or ds_config["gradient_accumulation_steps"] == "auto"
+        ):
             ds_config["gradient_accumulation_steps"] = 1
-        if "train_micro_batch_size_per_gpu" not in ds_config or ds_config["train_micro_batch_size_per_gpu"] == "auto":
+        if (
+            "train_micro_batch_size_per_gpu" not in ds_config
+            or ds_config["train_micro_batch_size_per_gpu"] == "auto"
+        ):
             ds_config["train_micro_batch_size_per_gpu"] = 1
         if ds_config.get("train_batch_size", None) == "auto":
             del ds_config["train_batch_size"]
 
         if compare_versions("transformers", "<", "4.46"):
-            from transformers.deepspeed import HfDeepSpeedConfig, unset_hf_deepspeed_config
+            from transformers.deepspeed import (
+                HfDeepSpeedConfig,
+                unset_hf_deepspeed_config,
+            )
         else:
-            from transformers.integrations import HfDeepSpeedConfig, unset_hf_deepspeed_config
+            from transformers.integrations import (
+                HfDeepSpeedConfig,
+                unset_hf_deepspeed_config,
+            )
 
         unset_hf_deepspeed_config()
         self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
@@ -1438,12 +1596,18 @@ class DeepSpeedPlugin:
             "ACCELERATE_MIXED_PRECISION",
         ]
         env_variable_names_to_ignore = [
-            name.replace("ACCELERATE_", "").replace("DEEPSPEED_", "").lower() for name in env_variable_names_to_ignore
+            name.replace("ACCELERATE_", "").replace("DEEPSPEED_", "").lower()
+            for name in env_variable_names_to_ignore
         ]
 
-        deepspeed_fields_from_accelerate_config = os.environ.get("ACCELERATE_CONFIG_DS_FIELDS", "").split(",")
+        deepspeed_fields_from_accelerate_config = os.environ.get(
+            "ACCELERATE_CONFIG_DS_FIELDS", ""
+        ).split(",")
 
-        if any(name in env_variable_names_to_ignore for name in deepspeed_fields_from_accelerate_config):
+        if any(
+            name in env_variable_names_to_ignore
+            for name in deepspeed_fields_from_accelerate_config
+        ):
             raise ValueError(
                 f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}.\n"
                 "Please specify them appropriately in the DeepSpeed config file.\n"
@@ -1454,10 +1618,14 @@ class DeepSpeedPlugin:
 
     def set_moe_leaf_modules(self, model):
         if self.transformer_moe_cls_names is None:
-            self.transformer_moe_cls_names = os.environ.get("ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES", None)
+            self.transformer_moe_cls_names = os.environ.get(
+                "ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES", None
+            )
         if self.transformer_moe_cls_names is not None:
             if compare_versions("deepspeed", "<", "0.14.0"):
-                raise ImportError("DeepSpeed version must be >= 0.14.0 to use MOE support. Please update DeepSpeed.")
+                raise ImportError(
+                    "DeepSpeed version must be >= 0.14.0 to use MOE support. Please update DeepSpeed."
+                )
             from deepspeed.utils import set_z3_leaf_modules
 
             class_names = self.transformer_moe_cls_names.split(",")
@@ -1588,20 +1756,28 @@ class FullyShardedDataParallelPlugin:
         },
     )
 
-    reshard_after_forward: Union[str, "torch.distributed.fsdp.ShardingStrategy", bool] = field(
+    reshard_after_forward: Union[
+        str, "torch.distributed.fsdp.ShardingStrategy", bool
+    ] = field(
         default=None,
         metadata={
             "help": "Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'"
         },
     )
-    backward_prefetch: Optional[Union[str, "torch.distributed.fsdp.BackwardPrefetch"]] = field(
+    backward_prefetch: Optional[
+        Union[str, "torch.distributed.fsdp.BackwardPrefetch"]
+    ] = field(
         default=None,
         metadata={
             "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'. This becomes obsolete in FSDP2."
         },
     )
     mixed_precision_policy: Optional[
-        Union[dict, "torch.distributed.fsdp.MixedPrecision", "torch.distributed.fsdp.MixedPrecisionPolicy"]
+        Union[
+            dict,
+            "torch.distributed.fsdp.MixedPrecision",
+            "torch.distributed.fsdp.MixedPrecisionPolicy",
+        ]
     ] = field(
         default=None,
         metadata={
@@ -1610,16 +1786,20 @@ class FullyShardedDataParallelPlugin:
             "Can also be an instance of `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2."
         },
     )
-    auto_wrap_policy: Optional[Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]] = (
-        field(
-            default=None,
-            metadata={
-                "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
-                "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
-            },
-        )
+    auto_wrap_policy: Optional[
+        Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]
+    ] = field(
+        default=None,
+        metadata={
+            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
+            "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
+        },
     )
-    cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload", "torch.distributed.fsdp.CPUOffloadPolicy"] = field(
+    cpu_offload: Union[
+        bool,
+        "torch.distributed.fsdp.CPUOffload",
+        "torch.distributed.fsdp.CPUOffloadPolicy",
+    ] = field(
         default=None,
         metadata={
             "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2. Defaults to `False`"
@@ -1643,10 +1823,15 @@ class FullyShardedDataParallelPlugin:
         ]
     ] = field(
         default=None,
-        metadata={"help": "State dict config to use. Is determined based on the `state_dict_type` if not passed in."},
+        metadata={
+            "help": "State dict config to use. Is determined based on the `state_dict_type` if not passed in."
+        },
     )
     optim_state_dict_config: Optional[
-        Union["torch.distributed.fsdp.FullOptimStateDictConfig", "torch.distributed.fsdp.ShardedOptimStateDictConfig"]
+        Union[
+            "torch.distributed.fsdp.FullOptimStateDictConfig",
+            "torch.distributed.fsdp.ShardedOptimStateDictConfig",
+        ]
     ] = field(
         default=None,
         metadata={
@@ -1719,10 +1904,7 @@ class FullyShardedDataParallelPlugin:
     )
 
     def __post_init__(self):
-        from torch.distributed.fsdp import (
-            BackwardPrefetch,
-            ShardingStrategy,
-        )
+        from torch.distributed.fsdp import BackwardPrefetch, ShardingStrategy
 
         _fsdp2_warnings = set()
 
@@ -1744,35 +1926,61 @@ class FullyShardedDataParallelPlugin:
             )
         if self.fsdp_version == 1:
             if self.sharding_strategy is None:
-                self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
+                self.sharding_strategy = os.environ.get(
+                    env_prefix + "SHARDING_STRATEGY", "FULL_SHARD"
+                )
             if isinstance(self.sharding_strategy, str):
                 if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
-                    self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
-                if isinstance(self.sharding_strategy, int) or self.sharding_strategy.isdigit():
-                    self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
+                    self.sharding_strategy = (
+                        FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
+                    )
+                if (
+                    isinstance(self.sharding_strategy, int)
+                    or self.sharding_strategy.isdigit()
+                ):
+                    self.sharding_strategy = ShardingStrategy(
+                        int(self.sharding_strategy)
+                    )
                 else:
-                    self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
+                    self.sharding_strategy = ShardingStrategy[
+                        self.sharding_strategy.upper()
+                    ]
 
         # Fallback to `reshard_after_forward` in FSDP1 if `sharding_strategy` is not set
         if self.reshard_after_forward is None and self.sharding_strategy is None:
             reshard_after_forward = os.environ.get(
-                env_prefix + "RESHARD_AFTER_FORWARD", "true" if self.fsdp_version == 2 else "FULL_SHARD"
+                env_prefix + "RESHARD_AFTER_FORWARD",
+                "true" if self.fsdp_version == 2 else "FULL_SHARD",
             )
             if self.fsdp_version == 2:
-                self.reshard_after_forward = str_to_bool(reshard_after_forward.lower(), to_bool=True)
+                self.reshard_after_forward = str_to_bool(
+                    reshard_after_forward.lower(), to_bool=True
+                )
             else:
                 self.reshard_after_forward = reshard_after_forward
         if isinstance(self.reshard_after_forward, str):
             if self.fsdp_version == 2:
-                self.reshard_after_forward = str_to_bool(self.reshard_after_forward.lower(), to_bool=True)
+                self.reshard_after_forward = str_to_bool(
+                    self.reshard_after_forward.lower(), to_bool=True
+                )
             else:
                 # We need to remap based on custom enum values for user readability
                 if self.reshard_after_forward.upper() in FSDP_SHARDING_STRATEGY:
-                    self.reshard_after_forward = FSDP_SHARDING_STRATEGY.index(self.reshard_after_forward.upper()) + 1
-                if isinstance(self.reshard_after_forward, int) or self.reshard_after_forward.isdigit():
-                    self.reshard_after_forward = ShardingStrategy(int(self.reshard_after_forward))
+                    self.reshard_after_forward = (
+                        FSDP_SHARDING_STRATEGY.index(self.reshard_after_forward.upper())
+                        + 1
+                    )
+                if (
+                    isinstance(self.reshard_after_forward, int)
+                    or self.reshard_after_forward.isdigit()
+                ):
+                    self.reshard_after_forward = ShardingStrategy(
+                        int(self.reshard_after_forward)
+                    )
                 else:
-                    self.reshard_after_forward = ShardingStrategy[self.reshard_after_forward.upper()]
+                    self.reshard_after_forward = ShardingStrategy[
+                        self.reshard_after_forward.upper()
+                    ]
 
         if self.fsdp_version == 2 and not isinstance(self.reshard_after_forward, bool):
             raise ValueError(
@@ -1784,47 +1992,79 @@ class FullyShardedDataParallelPlugin:
             )
 
         if self.cpu_offload is None:
-            self.cpu_offload = str_to_bool(os.environ.get(env_prefix + "OFFLOAD_PARAMS", "False")) == 1
+            self.cpu_offload = (
+                str_to_bool(os.environ.get(env_prefix + "OFFLOAD_PARAMS", "False")) == 1
+            )
 
         self.set_cpu_offload()  # abstracted away to hide imports due to version checks
         self.validate_cpu_offload()
 
         if self.backward_prefetch is None:
-            self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
-        if isinstance(self.backward_prefetch, str) and self.backward_prefetch.upper() == "NO_PREFETCH":
+            self.backward_prefetch = os.environ.get(
+                env_prefix + "BACKWARD_PREFETCH", None
+            )
+        if (
+            isinstance(self.backward_prefetch, str)
+            and self.backward_prefetch.upper() == "NO_PREFETCH"
+        ):
             self.backward_prefetch = None
-        if self.backward_prefetch is not None and not isinstance(self.backward_prefetch, BackwardPrefetch):
-            if isinstance(self.backward_prefetch, str) and self.backward_prefetch.upper() in FSDP_BACKWARD_PREFETCH:
-                self.backward_prefetch = FSDP_BACKWARD_PREFETCH.index(self.backward_prefetch.upper()) + 1
-            if isinstance(self.backward_prefetch, int) or self.backward_prefetch.isdigit():
+        if self.backward_prefetch is not None and not isinstance(
+            self.backward_prefetch, BackwardPrefetch
+        ):
+            if (
+                isinstance(self.backward_prefetch, str)
+                and self.backward_prefetch.upper() in FSDP_BACKWARD_PREFETCH
+            ):
+                self.backward_prefetch = (
+                    FSDP_BACKWARD_PREFETCH.index(self.backward_prefetch.upper()) + 1
+                )
+            if (
+                isinstance(self.backward_prefetch, int)
+                or self.backward_prefetch.isdigit()
+            ):
                 self.backward_prefetch = BackwardPrefetch(int(self.backward_prefetch))
             else:
-                self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
+                self.backward_prefetch = BackwardPrefetch[
+                    self.backward_prefetch.upper()
+                ]
         if self.fsdp_version == 2 and self.backward_prefetch is not None:
-            _fsdp2_warnings.add("backward_prefetch is not supported in FSDP2. Setting backward prefetch to None.")
+            _fsdp2_warnings.add(
+                "backward_prefetch is not supported in FSDP2. Setting backward prefetch to None."
+            )
             self.backward_prefetch = None
 
         self.set_state_dict_type()
 
         if self.auto_wrap_policy is None:
-            self.auto_wrap_policy = os.environ.get(env_prefix + "AUTO_WRAP_POLICY", "NO_WRAP")
+            self.auto_wrap_policy = os.environ.get(
+                env_prefix + "AUTO_WRAP_POLICY", "NO_WRAP"
+            )
         if isinstance(self.auto_wrap_policy, str):
             if self.auto_wrap_policy.upper() not in FSDP_AUTO_WRAP_POLICY:
                 raise ValueError(
                     f"Invalid auto wrap policy: {self.auto_wrap_policy}. Must be one of {FSDP_AUTO_WRAP_POLICY}"
                 )
-            from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+            from torch.distributed.fsdp.wrap import (
+                size_based_auto_wrap_policy,
+                transformer_auto_wrap_policy,
+            )
 
             if self.auto_wrap_policy.upper() == "TRANSFORMER_BASED_WRAP":
                 self.auto_wrap_policy = transformer_auto_wrap_policy
                 if self.transformer_cls_names_to_wrap is None:
-                    self.transformer_cls_names_to_wrap = os.environ.get(env_prefix + "TRANSFORMER_CLS_TO_WRAP", None)
+                    self.transformer_cls_names_to_wrap = os.environ.get(
+                        env_prefix + "TRANSFORMER_CLS_TO_WRAP", None
+                    )
                 if isinstance(self.transformer_cls_names_to_wrap, str):
-                    self.transformer_cls_names_to_wrap = self.transformer_cls_names_to_wrap.split(",")
+                    self.transformer_cls_names_to_wrap = (
+                        self.transformer_cls_names_to_wrap.split(",")
+                    )
             elif self.auto_wrap_policy.upper() == "SIZE_BASED_WRAP":
                 self.auto_wrap_policy = size_based_auto_wrap_policy
                 if self.min_num_params is None:
-                    self.min_num_params = int(os.environ.get(env_prefix + "MIN_NUM_PARAMS", 0))
+                    self.min_num_params = int(
+                        os.environ.get(env_prefix + "MIN_NUM_PARAMS", 0)
+                    )
                 elif not isinstance(self.min_num_params, int):
                     raise ValueError(
                         f"`min_num_params` must be an integer. Got {self.min_num_params} of type {type(self.min_num_params)}"
@@ -1833,13 +2073,21 @@ class FullyShardedDataParallelPlugin:
                 self.auto_wrap_policy = None
 
         if self.use_orig_params is None and self.fsdp_version == 1:
-            self.use_orig_params = str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False")) == 1
+            self.use_orig_params = (
+                str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False"))
+                == 1
+            )
         if self.fsdp_version == 2 and self.use_orig_params is not None:
-            _fsdp2_warnings.add("use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters.")
+            _fsdp2_warnings.add(
+                "use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters."
+            )
             self.use_orig_params = None
 
         if self.sync_module_states is None and self.fsdp_version == 1:
-            self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
+            self.sync_module_states = (
+                str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False"))
+                == 1
+            )
         if self.fsdp_version == 2 and self.sync_module_states is not None:
             _fsdp2_warnings.add(
                 "sync_module_states is obsolete in FSDP2, as it is not needed anymore."
@@ -1848,21 +2096,36 @@ class FullyShardedDataParallelPlugin:
             self.sync_module_states = None
 
         if self.forward_prefetch is None and self.fsdp_version == 1:
-            self.forward_prefetch = str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False")) == 1
+            self.forward_prefetch = (
+                str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False"))
+                == 1
+            )
         if self.fsdp_version == 2 and self.forward_prefetch is not None:
-            raise ValueError("forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version=1`")
+            raise ValueError(
+                "forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version=1`"
+            )
 
         if self.activation_checkpointing is None:
             self.activation_checkpointing = (
-                str_to_bool(os.environ.get(env_prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
+                str_to_bool(
+                    os.environ.get(env_prefix + "ACTIVATION_CHECKPOINTING", "False")
+                )
+                == 1
             )
 
         if self.cpu_ram_efficient_loading is None:
             self.cpu_ram_efficient_loading = (
-                str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")) == 1
+                str_to_bool(
+                    os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")
+                )
+                == 1
             )
         # There's no need to specify sync_module_states in FSDP2
-        if self.fsdp_version == 1 and self.cpu_ram_efficient_loading and not self.sync_module_states:
+        if (
+            self.fsdp_version == 1
+            and self.cpu_ram_efficient_loading
+            and not self.sync_module_states
+        ):
             warnings.warn(
                 "sync_module_states cannot be False since efficient cpu ram loading enabled. "
                 "Setting sync_module_states to True."
@@ -1870,7 +2133,9 @@ class FullyShardedDataParallelPlugin:
             self.sync_module_states = True
 
         if self.cpu_ram_efficient_loading != bool(
-            str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False"))
+            str_to_bool(
+                os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")
+            )
         ):
             env_var = env_prefix + "CPU_RAM_EFFICIENT_LOADING"
             warnings.warn(
@@ -1907,7 +2172,11 @@ class FullyShardedDataParallelPlugin:
 
         #  Single warning for all deprecation warnings due to FSDP2 conversion
         if _fsdp2_warnings:
-            logger.warning("Multiple deprecation warnings due to FSDP2 conversion:\n".join(_fsdp2_warnings))
+            logger.warning(
+                "Multiple deprecation warnings due to FSDP2 conversion:\n".join(
+                    _fsdp2_warnings
+                )
+            )
 
     def set_state_dict_type(self, state_dict_type=None):
         """
@@ -1928,7 +2197,8 @@ class FullyShardedDataParallelPlugin:
 
         if self.state_dict_type is None:
             self.state_dict_type = os.environ.get(
-                "FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT" if self.fsdp_version == 1 else "SHARDED_STATE_DICT"
+                "FSDP_STATE_DICT_TYPE",
+                "FULL_STATE_DICT" if self.fsdp_version == 1 else "SHARDED_STATE_DICT",
             )
         if isinstance(self.state_dict_type, str):
             if self.state_dict_type.isdigit():
@@ -1938,16 +2208,25 @@ class FullyShardedDataParallelPlugin:
 
         if self.state_dict_type == StateDictType.FULL_STATE_DICT:
             if self.state_dict_config is None:
-                self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                self.state_dict_config = FullStateDictConfig(
+                    offload_to_cpu=True, rank0_only=True
+                )
             if self.optim_state_dict_config is None:
-                self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                self.optim_state_dict_config = FullOptimStateDictConfig(
+                    offload_to_cpu=True, rank0_only=True
+                )
         elif self.state_dict_type == StateDictType.SHARDED_STATE_DICT:
             if self.state_dict_config is None:
                 self.state_dict_config = ShardedStateDictConfig(offload_to_cpu=True)
             if self.optim_state_dict_config is None:
-                self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
+                self.optim_state_dict_config = ShardedOptimStateDictConfig(
+                    offload_to_cpu=True
+                )
 
-        if self.fsdp_version == 2 and self.state_dict_type == StateDictType.LOCAL_STATE_DICT:
+        if (
+            self.fsdp_version == 2
+            and self.state_dict_type == StateDictType.LOCAL_STATE_DICT
+        ):
             raise ValueError(
                 "FSDP2 does not support LOCAL_STATE_DICT. "
                 "Please set `fsdp_state_dict_type` to `SHARDED_STATE_DICT` or `FULL_STATE_DICT`."
@@ -1958,19 +2237,28 @@ class FullyShardedDataParallelPlugin:
         Given `model`, creates an `auto_wrap_policy` baesd on the passed in policy and if we can use the
         `transformer_cls_to_wrap`
         """
-        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+        from torch.distributed.fsdp.wrap import (
+            size_based_auto_wrap_policy,
+            transformer_auto_wrap_policy,
+        )
 
         # First base off of `_no_split_modules`
         no_split_modules = getattr(model, "_no_split_modules", None)
-        default_transformer_cls_names_to_wrap = list(no_split_modules) if no_split_modules is not None else []
+        default_transformer_cls_names_to_wrap = (
+            list(no_split_modules) if no_split_modules is not None else []
+        )
         if self.auto_wrap_policy == transformer_auto_wrap_policy:
             if self.transformer_cls_names_to_wrap is None:
-                self.transformer_cls_names_to_wrap = default_transformer_cls_names_to_wrap
+                self.transformer_cls_names_to_wrap = (
+                    default_transformer_cls_names_to_wrap
+                )
             transformer_cls_to_wrap = set()
             for layer_class in self.transformer_cls_names_to_wrap:
                 transformer_cls = get_module_class_from_name(model, layer_class)
                 if transformer_cls is None:
-                    raise ValueError(f"Could not find the transformer layer class {layer_class} in the model.")
+                    raise ValueError(
+                        f"Could not find the transformer layer class {layer_class} in the model."
+                    )
                 transformer_cls_to_wrap.add(transformer_cls)
             # Finally we set the auto_wrap_policy to a callable
             self.auto_wrap_policy = functools.partial(
@@ -1980,11 +2268,15 @@ class FullyShardedDataParallelPlugin:
         elif self.auto_wrap_policy == size_based_auto_wrap_policy:
             # If zero, we silently ignore it.
             if self.min_num_params > 0:
-                self.auto_wrap_policy = functools.partial(self.auto_wrap_policy, min_num_params=self.min_num_params)
+                self.auto_wrap_policy = functools.partial(
+                    self.auto_wrap_policy, min_num_params=self.min_num_params
+                )
             else:
                 self.auto_wrap_policy = None
 
-    def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
+    def set_mixed_precision(
+        self, mixed_precision, buffer_autocast=False, override=False
+    ):
         "Sets the mixed precision policy for FSDP"
         mixed_precision_mapping = {
             "fp8": torch.bfloat16,
@@ -1999,7 +2291,10 @@ class FullyShardedDataParallelPlugin:
                 raise ValueError(
                     f"Invalid mixed precision: {mixed_precision}. Must be one of {list(mixed_precision_mapping.keys())}"
                 )
-        elif isinstance(mixed_precision, torch.dtype) and mixed_precision not in mixed_precision_mapping.values():
+        elif (
+            isinstance(mixed_precision, torch.dtype)
+            and mixed_precision not in mixed_precision_mapping.values()
+        ):
             raise ValueError(
                 f"Invalid mixed precision: {mixed_precision}. Must be one of {list(mixed_precision_mapping.values())}"
             )
@@ -2024,9 +2319,13 @@ class FullyShardedDataParallelPlugin:
             valid_keys = ["param_dtype", "reduce_dtype"] + (
                 ["buffer_dtype"] if self.fsdp_version == 1 else ["output_dtype"]
             )
-            missing_keys = [k for k in valid_keys if k not in self.mixed_precision_policy]
+            missing_keys = [
+                k for k in valid_keys if k not in self.mixed_precision_policy
+            ]
             invalid_values = [
-                k for k, v in self.mixed_precision_policy.items() if v not in mixed_precision_mapping.values()
+                k
+                for k, v in self.mixed_precision_policy.items()
+                if v not in mixed_precision_mapping.values()
             ]
             if missing_keys or invalid_values:
                 raise ValueError(
@@ -2051,7 +2350,9 @@ class FullyShardedDataParallelPlugin:
                 if self.fsdp_version == 2
                 else "`torch.distributed.fsdp.MixedPrecision`"
             )
-            raise ValueError(f"mixed_precision_policy must be an instance of {required_type}.")
+            raise ValueError(
+                f"mixed_precision_policy must be an instance of {required_type}."
+            )
 
     def set_cpu_offload(self):
         if self.fsdp_version == 2:
@@ -2181,11 +2482,20 @@ class MegatronLMPlugin:
             Other Megatron-LM arguments. Please refer Megatron-LM.
     """
 
-    tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
-    pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
-    num_micro_batches: int = field(default=None, metadata={"help": "number of micro-batches."})
+    tp_degree: int = field(
+        default=None, metadata={"help": "tensor parallelism degree."}
+    )
+    pp_degree: int = field(
+        default=None, metadata={"help": "pipeline parallelism degree."}
+    )
+    num_micro_batches: int = field(
+        default=None, metadata={"help": "number of micro-batches."}
+    )
     gradient_clipping: float = field(
-        default=None, metadata={"help": "gradient clipping value based on global L2 Norm (0 to disable)"}
+        default=None,
+        metadata={
+            "help": "gradient clipping value based on global L2 Norm (0 to disable)"
+        },
     )
     sequence_parallelism: bool = field(
         default=None,
@@ -2200,14 +2510,17 @@ class MegatronLMPlugin:
         metadata={"help": "enable distributed optimizer"},
     )
     pipeline_model_parallel_split_rank: int = field(
-        default=None, metadata={"help": "Rank where encoder and decoder should be split."}
+        default=None,
+        metadata={"help": "Rank where encoder and decoder should be split."},
     )
     num_layers_per_virtual_pipeline_stage: int = field(
         default=None, metadata={"help": "Number of layers per virtual pipeline stage."}
     )
     is_train_batch_min: str = field(
         default=True,
-        metadata={"help": "If both train & eval dataloaders are specified, this will decide the micro_batch_size"},
+        metadata={
+            "help": "If both train & eval dataloaders are specified, this will decide the micro_batch_size"
+        },
     )
     train_iters: int = field(
         default=None,
@@ -2225,7 +2538,9 @@ class MegatronLMPlugin:
     )
     weight_decay_incr_style: str = field(
         default="constant",
-        metadata={"help": 'Weight decay increment function. choices=["constant", "linear", "cosine"]. '},
+        metadata={
+            "help": 'Weight decay increment function. choices=["constant", "linear", "cosine"]. '
+        },
     )
     start_weight_decay: float = field(
         default=None,
@@ -2237,19 +2552,27 @@ class MegatronLMPlugin:
     )
     lr_decay_style: str = field(
         default="linear",
-        metadata={"help": "Learning rate decay function. choices=['constant', 'linear', 'cosine']."},
+        metadata={
+            "help": "Learning rate decay function. choices=['constant', 'linear', 'cosine']."
+        },
     )
     lr_decay_iters: int = field(
         default=None,
-        metadata={"help": "Number of iterations for learning rate decay. If None defaults to `train_iters`."},
+        metadata={
+            "help": "Number of iterations for learning rate decay. If None defaults to `train_iters`."
+        },
     )
     lr_decay_samples: int = field(
         default=None,
-        metadata={"help": "Number of samples for learning rate decay. If None defaults to `train_samples`."},
+        metadata={
+            "help": "Number of samples for learning rate decay. If None defaults to `train_samples`."
+        },
     )
     lr_warmup_iters: int = field(
         default=None,
-        metadata={"help": "number of iterations to linearly warmup learning rate over."},
+        metadata={
+            "help": "number of iterations to linearly warmup learning rate over."
+        },
     )
     lr_warmup_samples: int = field(
         default=None,
@@ -2257,11 +2580,15 @@ class MegatronLMPlugin:
     )
     lr_warmup_fraction: float = field(
         default=None,
-        metadata={"help": "fraction of lr-warmup-(iters/samples) to linearly warmup learning rate over."},
+        metadata={
+            "help": "fraction of lr-warmup-(iters/samples) to linearly warmup learning rate over."
+        },
     )
     min_lr: float = field(
         default=0,
-        metadata={"help": "Minumum value for learning rate. The scheduler clip values below this threshold."},
+        metadata={
+            "help": "Minumum value for learning rate. The scheduler clip values below this threshold."
+        },
     )
     consumed_samples: list[int] = field(
         default=None,
@@ -2269,12 +2596,18 @@ class MegatronLMPlugin:
             "help": "Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call."
         },
     )
-    no_wd_decay_cond: Optional[Callable] = field(default=None, metadata={"help": "Condition to disable weight decay."})
-    scale_lr_cond: Optional[Callable] = field(default=None, metadata={"help": "Condition to scale learning rate."})
+    no_wd_decay_cond: Optional[Callable] = field(
+        default=None, metadata={"help": "Condition to disable weight decay."}
+    )
+    scale_lr_cond: Optional[Callable] = field(
+        default=None, metadata={"help": "Condition to scale learning rate."}
+    )
     lr_mult: float = field(default=1.0, metadata={"help": "Learning rate multiplier."})
     megatron_dataset_flag: bool = field(
         default=False,
-        metadata={"help": "Whether the format of dataset follows Megatron-LM Indexed/Cached/MemoryMapped format."},
+        metadata={
+            "help": "Whether the format of dataset follows Megatron-LM Indexed/Cached/MemoryMapped format."
+        },
     )
     seq_length: int = field(
         default=None,
@@ -2297,10 +2630,14 @@ class MegatronLMPlugin:
         metadata={"help": "Whether to set all logging options."},
     )
     eval_iters: int = field(
-        default=100, metadata={"help": "Number of iterations to run for evaluation validation/test for."}
+        default=100,
+        metadata={
+            "help": "Number of iterations to run for evaluation validation/test for."
+        },
     )
     eval_interval: int = field(
-        default=1000, metadata={"help": "Interval between running evaluation on validation set."}
+        default=1000,
+        metadata={"help": "Interval between running evaluation on validation set."},
     )
     return_logits: bool = field(
         default=False,
@@ -2328,7 +2665,9 @@ class MegatronLMPlugin:
     )
     custom_megatron_datasets_provider_function: Optional[Callable] = field(
         default=None,
-        metadata={"help": "Custom megatron train_valid_test datasets provider function."},
+        metadata={
+            "help": "Custom megatron train_valid_test datasets provider function."
+        },
     )
     custom_get_batch_function: Optional[Callable] = field(
         default=None,
@@ -2353,17 +2692,30 @@ class MegatronLMPlugin:
         if self.pp_degree is None:
             self.pp_degree = int(os.environ.get(prefix + "PP_DEGREE", 1))
         if self.num_micro_batches is None:
-            self.num_micro_batches = int(os.environ.get(prefix + "NUM_MICRO_BATCHES", 1))
+            self.num_micro_batches = int(
+                os.environ.get(prefix + "NUM_MICRO_BATCHES", 1)
+            )
         if self.gradient_clipping is None:
-            self.gradient_clipping = float(os.environ.get(prefix + "GRADIENT_CLIPPING", 1.0))
+            self.gradient_clipping = float(
+                os.environ.get(prefix + "GRADIENT_CLIPPING", 1.0)
+            )
         if self.recompute_activations is None:
-            self.recompute_activations = str_to_bool(os.environ.get(prefix + "RECOMPUTE_ACTIVATIONS", "False")) == 1
+            self.recompute_activations = (
+                str_to_bool(os.environ.get(prefix + "RECOMPUTE_ACTIVATIONS", "False"))
+                == 1
+            )
         if self.use_distributed_optimizer is None:
             self.use_distributed_optimizer = (
-                str_to_bool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
+                str_to_bool(
+                    os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")
+                )
+                == 1
             )
         if self.sequence_parallelism is None:
-            self.sequence_parallelism = str_to_bool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
+            self.sequence_parallelism = (
+                str_to_bool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False"))
+                == 1
+            )
 
         if self.pp_degree > 1 or self.use_distributed_optimizer:
             self.DDP_impl = "local"
@@ -2439,23 +2791,35 @@ class MegatronLMPlugin:
             self.megatron_lm_default_args["adam_eps"] = optimizer.defaults["eps"]
         elif "sgd" in optimizer_name:
             self.megatron_lm_default_args["optimizer"] = "sgd"
-            self.megatron_lm_default_args["sgd_momentum"] = optimizer.defaults["momentum"]
+            self.megatron_lm_default_args["sgd_momentum"] = optimizer.defaults[
+                "momentum"
+            ]
         else:
-            raise ValueError(f"Optimizer {optimizer_name} is not supported by Megatron-LM")
+            raise ValueError(
+                f"Optimizer {optimizer_name} is not supported by Megatron-LM"
+            )
 
         self.megatron_lm_default_args["lr"] = optimizer.defaults["lr"]
-        self.megatron_lm_default_args["weight_decay"] = optimizer.defaults["weight_decay"]
+        self.megatron_lm_default_args["weight_decay"] = optimizer.defaults[
+            "weight_decay"
+        ]
 
     def set_scheduler_args(self, scheduler):
         if self.train_iters is None:
-            self.train_iters = scheduler.total_num_steps // self.megatron_lm_default_args["data_parallel_size"]
+            self.train_iters = (
+                scheduler.total_num_steps
+                // self.megatron_lm_default_args["data_parallel_size"]
+            )
             if self.train_samples is not None:
                 self.train_samples = None
                 warnings.warn(
                     "Ignoring `train_samples` as `train_iters` based on scheduler is being used for training."
                 )
         if self.lr_warmup_iters is None:
-            self.lr_warmup_iters = scheduler.warmup_num_steps // self.megatron_lm_default_args["data_parallel_size"]
+            self.lr_warmup_iters = (
+                scheduler.warmup_num_steps
+                // self.megatron_lm_default_args["data_parallel_size"]
+            )
             if self.lr_warmup_samples is not None:
                 warnings.warn(
                     "Ignoring `lr_warmup_samples` as `lr_warmup_iters` based on scheduler is being used for training."
@@ -2470,7 +2834,9 @@ class MegatronLMPlugin:
         self.megatron_lm_default_args["lr_decay_samples"] = self.lr_decay_samples
         self.megatron_lm_default_args["lr_warmup_fraction"] = self.lr_warmup_fraction
         self.megatron_lm_default_args["lr_decay_style"] = self.lr_decay_style
-        self.megatron_lm_default_args["weight_decay_incr_style"] = self.weight_decay_incr_style
+        self.megatron_lm_default_args["weight_decay_incr_style"] = (
+            self.weight_decay_incr_style
+        )
         self.megatron_lm_default_args["start_weight_decay"] = self.start_weight_decay
         self.megatron_lm_default_args["end_weight_decay"] = self.end_weight_decay
         self.megatron_lm_default_args["min_lr"] = self.min_lr
@@ -2518,7 +2884,9 @@ def parse_bert_config(megatron_lm_plugin, model, batch_data):
         pretraining_flag = True
     if megatron_lm_plugin.seq_length is not None:
         if megatron_lm_plugin.encoder_seq_length is not None:
-            warnings.warn("Both `seq_length` and `encoder_seq_length` are set. Using `encoder_seq_length`.")
+            warnings.warn(
+                "Both `seq_length` and `encoder_seq_length` are set. Using `encoder_seq_length`."
+            )
         megatron_lm_plugin.seq_length = megatron_lm_plugin.encoder_seq_length
     elif megatron_lm_plugin.encoder_seq_length is not None:
         megatron_lm_plugin.seq_length = megatron_lm_plugin.encoder_seq_length
@@ -2526,15 +2894,23 @@ def parse_bert_config(megatron_lm_plugin, model, batch_data):
         megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
     else:
         megatron_lm_plugin.seq_length = max_position_embeddings
-    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = (
+        megatron_lm_plugin.seq_length
+    )
     megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
     megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
     megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
-    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
-    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = (
+        num_attention_heads
+    )
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = (
+        max_position_embeddings
+    )
     megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
-    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = (
+        model.config.return_dict
+    )
     megatron_lm_plugin.megatron_lm_default_args["num_labels"] = num_labels
 
 
@@ -2549,7 +2925,9 @@ def parse_gpt2_config(megatron_lm_plugin, model, batch_data):
     pretraining_flag = True
     if megatron_lm_plugin.seq_length is not None:
         if megatron_lm_plugin.decoder_seq_length is not None:
-            warnings.warn("Both `seq_length` and `decoder_seq_length` are set. Using `decoder_seq_length`.")
+            warnings.warn(
+                "Both `seq_length` and `decoder_seq_length` are set. Using `decoder_seq_length`."
+            )
         megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
     elif megatron_lm_plugin.decoder_seq_length is not None:
         megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
@@ -2557,17 +2935,27 @@ def parse_gpt2_config(megatron_lm_plugin, model, batch_data):
         megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
     else:
         megatron_lm_plugin.seq_length = max_position_embeddings
-    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
-    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = (
+        megatron_lm_plugin.seq_length
+    )
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = (
+        megatron_lm_plugin.return_logits
+    )
     megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "GPT2BPETokenizer"
     megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
     megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
     megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
-    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
-    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = (
+        num_attention_heads
+    )
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = (
+        max_position_embeddings
+    )
     megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
-    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = (
+        model.config.return_dict
+    )
 
 
 @add_model_config_to_megatron_parser("t5")
@@ -2576,7 +2964,9 @@ def parse_t5_config(megatron_lm_plugin, model, batch_data):
     num_layers = model.config.num_layers
     hidden_size = model.config.d_model
     num_attention_heads = model.config.num_heads
-    max_position_embeddings = model.config.n_positions if hasattr(model.config, "n_positions") else 1024
+    max_position_embeddings = (
+        model.config.n_positions if hasattr(model.config, "n_positions") else 1024
+    )
     orig_vocab_size = model.config.vocab_size
     pretraining_flag = True
     if megatron_lm_plugin.encoder_seq_length is None:
@@ -2589,16 +2979,26 @@ def parse_t5_config(megatron_lm_plugin, model, batch_data):
             megatron_lm_plugin.decoder_seq_length = batch_data["labels"].shape[1]
         else:
             megatron_lm_plugin.decoder_seq_length = max_position_embeddings
-    megatron_lm_plugin.megatron_lm_default_args["encoder_seq_length"] = megatron_lm_plugin.encoder_seq_length
-    megatron_lm_plugin.megatron_lm_default_args["decoder_seq_length"] = megatron_lm_plugin.decoder_seq_length
+    megatron_lm_plugin.megatron_lm_default_args["encoder_seq_length"] = (
+        megatron_lm_plugin.encoder_seq_length
+    )
+    megatron_lm_plugin.megatron_lm_default_args["decoder_seq_length"] = (
+        megatron_lm_plugin.decoder_seq_length
+    )
     megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
     megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
     megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
-    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
-    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = (
+        num_attention_heads
+    )
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = (
+        max_position_embeddings
+    )
     megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
-    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = (
+        model.config.return_dict
+    )
 
 
 @add_model_config_to_megatron_parser("llama")
@@ -2622,17 +3022,27 @@ def parse_llama_config(megatron_lm_plugin, model, batch_data):
         else:
             megatron_lm_plugin.seq_length = max_position_embeddings
 
-    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = (
+        megatron_lm_plugin.return_logits
+    )
     megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "Llama2Tokenizer"
     megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
     megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
     megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
     megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
-    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = (
+        num_attention_heads
+    )
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
-    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
-    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
-    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = (
+        max_position_embeddings
+    )
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = (
+        megatron_lm_plugin.seq_length
+    )
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = (
+        model.config.return_dict
+    )
 
 
 @dataclass
@@ -2664,13 +3074,20 @@ class BnbQuantizationConfig:
             An explicit list of the modules that we don't quantize. We keep them in `torch.float32`.
     """
 
-    load_in_8bit: bool = field(default=False, metadata={"help": "enable 8bit quantization."})
-
-    llm_int8_threshold: float = field(
-        default=6.0, metadata={"help": "value of the outliner threshold. only relevant when load_in_8bit=True"}
+    load_in_8bit: bool = field(
+        default=False, metadata={"help": "enable 8bit quantization."}
     )
 
-    load_in_4bit: bool = field(default=False, metadata={"help": "enable 4bit quantization."})
+    llm_int8_threshold: float = field(
+        default=6.0,
+        metadata={
+            "help": "value of the outliner threshold. only relevant when load_in_8bit=True"
+        },
+    )
+
+    load_in_4bit: bool = field(
+        default=False, metadata={"help": "enable 4bit quantization."}
+    )
 
     bnb_4bit_quant_type: str = field(
         default="fp4",
@@ -2711,7 +3128,9 @@ class BnbQuantizationConfig:
 
     keep_in_fp32_modules: list[str] = field(
         default=None,
-        metadata={"help": "an explicit list of the modules that we don't quantize. We keep them in `torch.float32`."},
+        metadata={
+            "help": "an explicit list of the modules that we don't quantize. We keep them in `torch.float32`."
+        },
     )
 
     def __post_init__(self):
@@ -2736,7 +3155,9 @@ class BnbQuantizationConfig:
         if not isinstance(self.bnb_4bit_quant_type, str):
             raise ValueError("bnb_4bit_quant_type must be a string")
         elif self.bnb_4bit_quant_type not in ["fp4", "nf4"]:
-            raise ValueError(f"bnb_4bit_quant_type must be in ['fp4','nf4'] but found {self.bnb_4bit_quant_type}")
+            raise ValueError(
+                f"bnb_4bit_quant_type must be in ['fp4','nf4'] but found {self.bnb_4bit_quant_type}"
+            )
 
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise ValueError("bnb_4bit_use_double_quant must be a boolean")
@@ -2758,7 +3179,9 @@ class BnbQuantizationConfig:
         if self.skip_modules is not None and not isinstance(self.skip_modules, list):
             raise ValueError("skip_modules must be a list of strings")
 
-        if self.keep_in_fp32_modules is not None and not isinstance(self.keep_in_fp32_modules, list):
+        if self.keep_in_fp32_modules is not None and not isinstance(
+            self.keep_in_fp32_modules, list
+        ):
             raise ValueError("keep_in_fp_32_modules must be a list of strings")
 
         if self.load_in_4bit:
@@ -2768,7 +3191,9 @@ class BnbQuantizationConfig:
             self.target_dtype = torch.int8
 
         if self.load_in_4bit and self.llm_int8_threshold != 6.0:
-            warnings.warn("llm_int8_threshold can only be used for model loaded in 8bit")
+            warnings.warn(
+                "llm_int8_threshold can only be used for model loaded in 8bit"
+            )
 
         if isinstance(self.torch_dtype, str):
             if self.torch_dtype == "fp32":
@@ -2778,7 +3203,9 @@ class BnbQuantizationConfig:
             elif self.torch_dtype == "bf16":
                 self.torch_dtype = torch.bfloat16
             else:
-                raise ValueError(f"torch_dtype must be in ['fp32','fp16','bf16'] but found {self.torch_dtype}")
+                raise ValueError(
+                    f"torch_dtype must be in ['fp32','fp16','bf16'] but found {self.torch_dtype}"
+                )
         if self.load_in_8bit and self.torch_dtype is None:
             self.torch_dtype = torch.float16
 
@@ -2792,13 +3219,14 @@ class BnbQuantizationConfig:
 @dataclass
 class ParallelismConfig:
     """
-    A dataclass to configure parallelisms applied to the model. 
+    A dataclass to configure parallelisms applied to the model.
 
     Args:
         dp_replicate_size (`int`, defaults to `1`):
-            The size of the data parallel group. If `dp_replicate_size` is set to `1`, the data parallel replication group will not be used.
+            The size of the data parallel group. If `dp_replicate_size` is set to 1, the data parallel replication group will not be used.
         dp_shard_size (`int`, defaults to `1`):
-            The size of the data parallel group. If `dp_shard_size` is set to `1`, the data parallel sharding group will not be used.
+            The size of the model shard group. If `dp_replicate_size > 1` and `tp_size > 1`, `dp_shard_size` must also be greater than 1, as
+            composing DDP + TP is currently not supported.
         tp_size (`int`, defaults to `1`):
             The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be used.
         dp_handler (`~utils.DistributedDataParallelKwargs`, defaults to `None`):
@@ -2823,11 +3251,11 @@ class ParallelismConfig:
 
     def __repr__(self):
         return f"ParallelismConfig(dp_replicate_size={self.dp_replicate_size}, dp_shard_size={self.dp_shard_size}, tp_size={self.tp_size}, total_size={self.total_size})"
-    
+
     @property
     def valid_mesh_dims(self):
         return set(("dp_replicate", "dp_shard", "tp"))
-    
+
     @property
     def dp_dim_names(self):
         dims = []
@@ -2836,7 +3264,7 @@ class ParallelismConfig:
         if self.dp_shard_size > 1:
             dims += ["dp_shard"]
         return dims
-    
+
     @property
     def total_size(self):
         return self.dp_replicate_size * self.dp_shard_size * self.tp_size
@@ -2847,13 +3275,13 @@ class ParallelismConfig:
 
     @property
     def hsdp_enabled(self):
-        return self.dp_shard_size > 1 and  self.dp_replicate_size > 1
+        return self.dp_shard_size > 1 and self.dp_replicate_size > 1
 
     @property
     def fsdp_enabled(self):
         return self.dp_shard_size > 1
 
-    @property 
+    @property
     def tp_enabled(self):
         return self.tp_size > 1
 
@@ -2868,21 +3296,21 @@ class ParallelismConfig:
             raise ValueError(
                 f"Device mesh size {device_mesh.size()} does not match the total size of the parallelism config {self.total_size}."
             )
-        
+
         # Check that dimension names are valid
         mesh_dim_names = set(device_mesh.mesh_dim_names)
         if not mesh_dim_names.issubset(self.valid_mesh_dims):
             raise ValueError(
                 f"Device mesh dimensions {mesh_dim_names} contain invalid dimensions. Valid dimensions are {self.valid_mesh_dims}."
             )
-        
+
         # Check that dimension names match expected configuration
         expected_dims = set(self.mesh_dims)
         if mesh_dim_names != expected_dims:
             raise ValueError(
                 f"Device mesh dimensions {mesh_dim_names} do not match the expected dimensions {expected_dims}."
             )
-        
+
         # Check that dimension sizes match
         mesh_shape, mesh_names = self.get_mesh()
         for i, (dim_name, expected_size) in enumerate(zip(mesh_names, mesh_shape)):
@@ -2899,7 +3327,7 @@ class ParallelismConfig:
 
     def get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
         """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""
-        
+
         # Build mesh dimensions dictionary
         mesh_dims = {}
         if self.dp_replicate_size > 1:
@@ -2908,35 +3336,47 @@ class ParallelismConfig:
             mesh_dims["dp_shard"] = self.dp_shard_size
         if self.tp_size > 1:
             mesh_dims["tp"] = self.tp_size
-        
+
         # Apply canonical ordering
         mesh_order = ["dp_replicate", "dp_shard", "tp"]
         sorted_items = sorted(
-            mesh_dims.items(), 
-            key=lambda x: mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
+            mesh_dims.items(),
+            key=lambda x: (
+                mesh_order.index(x[0]) if x[0] in mesh_order else len(mesh_order)
+            ),
         )
-        
+
         # Extract names and values
         mesh_names = tuple(name for name, _ in sorted_items)
         mesh_values = tuple(value for _, value in sorted_items)
-        
+
         return mesh_values, mesh_names
 
     def __post_init__(self):
         # Basic size validation
         if self.dp_replicate_size < 1:
-            raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
+            raise ValueError(
+                f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}"
+            )
         if self.dp_shard_size < 1:
-            raise ValueError(f"dp_shard_size must be at least 1, but got {self.dp_shard_size}")
+            raise ValueError(
+                f"dp_shard_size must be at least 1, but got {self.dp_shard_size}"
+            )
         if self.tp_size < 1:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
-        
+
+        if self.tp_size > 1 and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
+            raise ValueError(
+                "Tensor parallelism (tp_size > 1) cannot be used with pure data parallelism (dp_replicate_size > 1 and dp_shard_size == 1). "
+                "Please set dp_shard_size > 1 and dp_replicate_size == 1 to compose FSDP + TP for 2D parallel, "
+                "or set dp_replicate_size == 1 and dp_shard_size > 1 to compose HSDP + TP for 3D parallel."
+            )
         self._sizes = {
             "dp_replicate": self.dp_replicate_size,
             "dp_shard": self.dp_shard_size,
             "tp": self.tp_size,
         }
-        
+
     def _init_from_kwargs(self, kwargs_handlers: list[KwargsHandler]):
         kwargs_handlers = kwargs_handlers or []
         for handler in kwargs_handlers:
@@ -2950,11 +3390,22 @@ class ParallelismConfig:
         self._is_fully_initialized = True
 
     def _set_size(self, parallelism: str, size: int):
-        assert parallelism in self._sizes.keys(), f"Parallelism must be one of {self._sizes.keys()}"
+        assert (
+            parallelism in self._sizes.keys()
+        ), f"Parallelism must be one of {self._sizes.keys()}"
         self._sizes[parallelism] = size
         setattr(self, f"{parallelism}_size", size)
 
     def validate_accelerator(self, accelerator: "Accelerator"):
+        # This is to make sure the original behavior is preserved
+        if accelerator.multi_device and self.total_size == 1:
+            _warnings.add(
+                "ParallelismConfig is configured with total_size=1, but accelerator is multi_device. " \
+                "Setting dp_replicate_size to num_processes. If this is unexpected, please ensure you " \
+                "provide a ParallelismConfig when constructing the accelerator."
+            )
+            self._set_size("dp", accelerator.num_processes)
+
         if not getattr(self, "_is_fully_initialized", False):
             raise ValueError(
                 "ParallelismConfig is not fully initialized. Please call `_init_from_kwargs` with kwargs handlers before validation."
@@ -2963,13 +3414,17 @@ class ParallelismConfig:
         if self.total_size != accelerator.num_processes:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
-                f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size, "
-                f"dp_shard_size, or tp_size."
+                f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
+                f"dp_shard_size/tp_size."
             )
 
         _warnings = set()
 
-        if self.total_size > 1 and (not accelerator.multi_device) and (not accelerator.is_fsdp2):
+        if (
+            self.total_size > 1
+            and (not accelerator.multi_device)
+            and (not accelerator.is_fsdp2)
+        ):
             raise ValueError(
                 f"ParallelismConfig is only compatible with DistributedType.MULTI_{{device_type}} or DistributedType.FSDP (version 2), but got {accelerator.distributed_type}."
             )
@@ -2987,9 +3442,6 @@ class ParallelismConfig:
                 )
                 self._set_size(parallelism, accelerator.num_processes)
 
-        # This is to make sure the original behavior is preserved
-        if accelerator.multi_device and self.total_size == 1:
-            self._set_size("dp", accelerator.num_processes)
 
         for parallelism, size in self._sizes.items():
             if size > 1 and getattr(self, f"{parallelism}_handler", None) is not None:
@@ -2997,13 +3449,16 @@ class ParallelismConfig:
                     f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is set to 1. This handler will be ignored."
                 )
 
-        if self.dp_shard_size and self.dp_handler:
-            raise ValueError("dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with"
-                             "FSDP.")
-        
+        if self.dp_shard_size and self.dp_handler and self.dp_replicate_size == 1:
+            raise ValueError(
+                "dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with"
+                "FSDP."
+            )
+
         if _warnings and accelerator.is_main_process:
             warnings.warn(
-                "ParallelismConfig has the following warnings:\n" + "\n".join(_warnings),
+                "ParallelismConfig has the following warnings:\n"
+                + "\n".join(_warnings),
                 UserWarning,
             )
 
