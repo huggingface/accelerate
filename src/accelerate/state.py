@@ -949,7 +949,11 @@ class AcceleratorState:
                     "before using any functionality from the `accelerate` library."
                 )
             # deepspeed handles mixed_precision using deepspeed_config
-            self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
+            self._mixed_precision = (
+                "no"
+                if (self.distributed_type == DistributedType.DEEPSPEED and mixed_precision != "fp8")
+                else mixed_precision
+            )
             if self.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_tpu=True):
                 if mixed_precision == "bf16":
                     if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
@@ -1037,7 +1041,7 @@ class AcceleratorState:
 
     @property
     def mixed_precision(self):
-        if self.distributed_type == DistributedType.DEEPSPEED:
+        if self.distributed_type == DistributedType.DEEPSPEED and self._mixed_precision != "fp8":
             config = self.deepspeed_plugin.deepspeed_config
             if config.get("fp16", {}).get("enabled", False):
                 mixed_precision = "fp16"
