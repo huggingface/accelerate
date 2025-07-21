@@ -110,7 +110,6 @@ class TestTransformerEngine(unittest.TestCase):
             command += ["-m", "tests.test_fp8", "--test_te", "--from_config"]
             run_command(command)
 
-
     @require_transformer_engine_mxfp8
     def test_can_prepare_model_with_mxfp8_block_scaling(self):
         with tempfile.TemporaryDirectory() as dir_name:

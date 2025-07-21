@@ -543,10 +543,13 @@ def require_transformer_engine(test_case):
 
 def require_transformer_engine_mxfp8(test_case):
     """
-    Decorator marking a test that requires transformers engine FP8 block scaling available. These tests are skipped when transformers
-    engine FP8 block scaling isn't available
+    Decorator marking a test that requires transformers engine FP8 block scaling available. These tests are skipped
+    when transformers engine FP8 block scaling isn't available
     """
-    return unittest.skipUnless(is_transformer_engine_mxfp8_available(), "test requires transformers engine FP8 block scaling")(test_case)
+    return unittest.skipUnless(
+        is_transformer_engine_mxfp8_available(), "test requires transformers engine FP8 block scaling"
+    )(test_case)
+
 
 def require_torchao(test_case):
     """
