@@ -3110,7 +3110,7 @@ class ParallelismConfig:
 
         if self.dp_shard_size and self.dp_handler and self.dp_replicate_size == 1:
             raise ValueError(
-                "dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured withFSDP."
+                "dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with _init_from_deprecatedFSDP."
             )
 
         if _warnings and accelerator.is_main_process:

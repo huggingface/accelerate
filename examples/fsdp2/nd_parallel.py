@@ -30,7 +30,7 @@ from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
 from utils import PerformanceTracker, create_collate_fn, get_dataset, setup_tokenizer
 
 
-MODEL_ID = "NousResearch/Hermes-3-Llama-3.1-8B"
+MODEL_ID = "NousResearch/Llama-3.2-1B"
 
 
 def parse_args():
@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument("--dp_replicate_size", type=int, default=1)
     parser.add_argument("--dp_shard_size", type=int, default=1)
     parser.add_argument("--tp-size", type=int, default=1)
-    parser.add_argument("--sequence-length", type=int, default=4096)
+    parser.add_argument("--sequence-length", type=int, default=128)
     return parser.parse_args()
 
 
@@ -66,7 +66,7 @@ def main():
             auto_wrap_policy="transformer_based_wrap",
             transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
             reshard_after_forward=True,
-            activation_checkpointing=True
+            activation_checkpointing=True,
         )
         accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
 
@@ -101,7 +101,7 @@ def main():
 
     model.train()
 
-    total_num_steps = min(1000, len(dataloader))
+    total_num_steps = min(100, len(dataloader))
     performance_tracker = PerformanceTracker(warmup_steps=10)
 
     for step, batch in enumerate(dataloader):
@@ -140,3 +140,30 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+accelerate launch --num_processes 8 nd_parallel.py --dp_shard_size 4 --dp_replicate_size 2
+Step 10/100, Loss: 6.5720 | Average steps/s: 3.31 | Average tokens/s: 423.49
+Step 20/100, Loss: 5.3464 | Average steps/s: 3.08 | Average tokens/s: 394.24
+Step 30/100, Loss: 5.1396 | Average steps/s: 3.16 | Average tokens/s: 404.93
+Step 40/100, Loss: 5.2014 | Average steps/s: 3.20 | Average tokens/s: 409.06
+Step 50/100, Loss: 4.7968 | Average steps/s: 3.21 | Average tokens/s: 411.40
+Step 60/100, Loss: 4.5652 | Average steps/s: 3.22 | Average tokens/s: 412.77
+Step 70/100, Loss: 4.8120 | Average steps/s: 3.23 | Average tokens/s: 413.79
+Step 80/100, Loss: 4.2034 | Average steps/s: 3.24 | Average tokens/s: 414.57
+Step 90/100, Loss: 4.5770 | Average steps/s: 3.24 | Average tokens/s: 415.17
+Step 99/100, Loss: 4.3255 | Average steps/s: 3.25 | Average tokens/s: 415.62
+
+accelerate launch --num_processes 8 nd_parallel.py --dp_shard_size 2 --dp_replicate_size 4
+Step 10/100, Loss: 6.5720 | Average steps/s: 3.29 | Average tokens/s: 421.75
+Step 20/100, Loss: 5.3464 | Average steps/s: 3.27 | Average tokens/s: 419.02
+Step 30/100, Loss: 5.1396 | Average steps/s: 3.28 | Average tokens/s: 419.80
+Step 40/100, Loss: 5.2014 | Average steps/s: 3.28 | Average tokens/s: 420.26
+Step 50/100, Loss: 4.7968 | Average steps/s: 3.28 | Average tokens/s: 420.48
+Step 60/100, Loss: 4.5652 | Average steps/s: 3.29 | Average tokens/s: 420.68
+Step 70/100, Loss: 4.8120 | Average steps/s: 3.29 | Average tokens/s: 420.68
+Step 80/100, Loss: 4.2034 | Average steps/s: 3.29 | Average tokens/s: 420.71
+Step 90/100, Loss: 4.5770 | Average steps/s: 3.29 | Average tokens/s: 420.77
+Step 99/100, Loss: 4.3255 | Average steps/s: 3.29 | Average tokens/s: 420.74
+
+"""

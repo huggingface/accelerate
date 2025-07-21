@@ -429,7 +429,7 @@ class Accelerator:
                     self.has_fp8_handler = True
 
         parallelism_config = parallelism_config or ParallelismConfig()
-        parallelism_config._init_from_kwargs(torch)
+        parallelism_config._init_from_deprecated(kwargs_handlers)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
