@@ -50,6 +50,8 @@ def can_convert_te_model(from_config=False):
         accelerator_kwargs = {}
 
     accelerator = Accelerator(**accelerator_kwargs)
+    assert accelerator.fp8_enabled, "FP8 is not enabled"
+
     dataloader = torch.utils.data.DataLoader(torch.randn(10, 32), batch_size=2)
     model = torch.nn.Sequential(torch.nn.Linear(32, 32), torch.nn.Linear(32, 16))
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -166,6 +168,35 @@ class TestTransformerEngine(unittest.TestCase):
                 num_processes=2, monitor_interval=0.1, use_deepspeed=True, deepspeed_config_file=ds_config
             )
             command += ["-m", "tests.test_fp8", "--test_te"]
+            run_command(command)
+
+    @require_deepspeed
+    @require_multi_device
+    def test_can_prepare_model_multigpu_deepspeed_from_config(self):
+        os.environ["ZERO_STAGE"] = str(1)
+        with tempfile.TemporaryDirectory() as dir_name:
+            config_file = Path(dir_name) / "config.yaml"
+            config_file.write_text(
+                textwrap.dedent(
+                    """
+                    distributed_type: "DEEPSPEED"
+                    deepspeed_config:
+                      gradient_clipping: 1.0
+                      gradient_accumulation_steps: 1
+                      offload_optimizer_device: none
+                      offload_param_device: none
+                      zero3_init_flag: false
+                      zero_stage: 1
+                      deepspeed_multinode_launcher: standard
+                    num_processes: 2
+                    mixed_precision: fp8
+                    fp8_config:
+                      backend: TE
+                    """
+                )
+            )
+            command = get_launch_command(config_file=str(config_file), monitor_interval=0.1)
+            command += ["-m", "tests.test_fp8", "--test_te", "--from_config"]
             run_command(command)
 
 
