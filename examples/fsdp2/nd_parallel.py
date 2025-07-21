@@ -59,34 +59,16 @@ def main():
         tp_size = args.tp_size,
     )
 
-    # print(f"Using parallelism config: {parallelism_config}")
     if parallelism_config.fsdp_enabled > 1:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
             cpu_ram_efficient_loading=False,
             auto_wrap_policy="transformer_based_wrap",
             transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
+            reshard_after_forward=True,
+            activation_checkpointing=True
         )
         accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
-
-        
-    # if args.apply_fsdp:
-    #     fsdp2_plugin = FullyShardedDataParallelPlugin(
-    #         fsdp_version=2,
-    #         cpu_ram_efficient_loading=False,
-    #         auto_wrap_policy="transformer_based_wrap",
-    #         transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
-    #     )
-    #     accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
-
-    # if args.tp_size > 1 and not args.apply_fsdp:
-    #     if args.tp_size != dist.get_world_size():
-    #         raise ValueError(
-    #             f"TP size {args.tp_size} does not match world size {dist.get_world_size()}. Either set TP size to {dist.get_world_size()} or apply FSDP2."
-    #         )
-
-    # if args.tp_size > 1:
-    #     accelerator_kwargs["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=args.tp_size)
 
     accelerator = Accelerator(
         # log_with=["wandb"],

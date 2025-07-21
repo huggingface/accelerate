@@ -3429,7 +3429,7 @@ class ParallelismConfig:
                 f"ParallelismConfig is only compatible with DistributedType.MULTI_{{device_type}} or DistributedType.FSDP (version 2), but got {accelerator.distributed_type}."
             )
 
-        if self.total_size > 1 and (not accelerator.is_composable_parallelism_enabled):
+        if self.total_size > 1 and not self.fsdp_enabled:
             if non_zero_parallelism := [
                 (parallelism, size)
                 for parallelism, size in self._sizes.items()
@@ -3437,7 +3437,7 @@ class ParallelismConfig:
             ]:
                 parallelism, size = non_zero_parallelism[0]
                 _warnings.add(
-                    f"You are configuring a single parallelism ({parallelism}), but the size is set to {size} which is less than the total number of processes {accelerator.num_processes}. "
+                    f"You are configuring a single parallelism ({non_zero_parallelism}), but the size is set to {size} which is less than the total number of processes {accelerator.num_processes}. "
                     f"Your choice of {size} will be ignored and total number of processes ({accelerator.num_processes}) will be used instead."
                 )
                 self._set_size(parallelism, accelerator.num_processes)

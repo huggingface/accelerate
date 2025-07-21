@@ -1633,7 +1633,7 @@ class Accelerator:
             model = model.to(self.device)
         if not evaluation_mode:
             if self.multi_device:
-                if self.parallelism_config.dp_enabled:
+                if self.parallelism_config.dp_enabled and not self.parallelism_config.fsdp_enabled:
                     if any(p.requires_grad for p in model.parameters()):
                         kwargs = (
                             self.parallelism_config.dp_handler.to_kwargs()
