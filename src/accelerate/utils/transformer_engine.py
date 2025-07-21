@@ -146,12 +146,14 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
 
     if is_hpu_available():
         import intel_transformer_engine.recipe as te_recipe
+
         is_fp8_block_scaling_available = False
         message = "MXFP8 block scaling is not available on HPU."
 
     else:
         import transformer_engine.common.recipe as te_recipe
         import transformer_engine.pytorch as te
+
         is_fp8_block_scaling_available, message = te.fp8.check_mxfp8_support()
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
