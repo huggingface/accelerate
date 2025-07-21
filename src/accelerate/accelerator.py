@@ -1798,7 +1798,7 @@ class Accelerator:
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
                 self._models[-1] = model
-            elif self.distributed_type == DistributedType.MULTI_CPU and self.parallelism_config.dp_enabled:
+            elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
                 if self.ddp_handler is not None:
