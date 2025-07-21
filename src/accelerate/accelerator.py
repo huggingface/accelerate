@@ -52,6 +52,7 @@ from .utils import (
     AutocastKwargs,
     DataLoaderConfiguration,
     DeepSpeedPlugin,
+    DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
     FP8RecipeKwargs,
@@ -70,6 +71,7 @@ from .utils import (
     RNGType,
     TERecipeKwargs,
     TorchDynamoPlugin,
+    TorchTensorParallelPlugin,
     apply_fp8_autowrap,
     check_os_kernel,
     clean_state_dict_for_safetensors,
@@ -118,8 +120,6 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import (
-    BETA_TP_AVAILABLE_PYTORCH_VERSION,
-    BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
@@ -205,6 +205,8 @@ class Accelerator:
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
+        torch_tp_plugin ([`~utils.TorchTensorParallelPlugin`], *optional*):
+            Deprecated: use `parallelism_config` with `TorchTensorParallelConfig` instead.
         megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -275,6 +277,7 @@ class Accelerator:
         dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
+        torch_tp_plugin: TorchTensorParallelPlugin | None = None,  # Deprecate later, warning in `post_init`
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
@@ -387,6 +390,7 @@ class Accelerator:
                 raise ImportError("Megatron is not installed. please build it from source.")
 
         # Kwargs handlers
+        self.ddp_handler = None
         self.scaler_handler = None
         self.init_handler = None
         self.fp8_recipe_handler = None
@@ -399,6 +403,7 @@ class Accelerator:
 
         found_handlers = set()
         handler_class_to_attr = {
+            DistributedDataParallelKwargs: "ddp_handler",
             GradScalerKwargs: "scaler_handler",
             InitProcessGroupKwargs: "init_handler",
             FP8RecipeKwargs: "fp8_recipe_handler",
@@ -424,7 +429,7 @@ class Accelerator:
                     self.has_fp8_handler = True
 
         parallelism_config = parallelism_config or ParallelismConfig()
-        parallelism_config._init_from_kwargs(kwargs_handlers)
+        parallelism_config._init_from_kwargs(torch)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -1817,20 +1822,17 @@ class Accelerator:
     def _build_device_mesh(self):
         """Build and validate device mesh based on parallelism configuration."""
         mesh_shape, mesh_dim_names = self.parallelism_config.get_mesh()
-    
+
         if (existing_mesh := PartialState().device_mesh) is not None:
             self.parallelism_config.validate_device_mesh(existing_mesh)
             self.state.device_mesh = existing_mesh
         else:
-                
             device_mesh = torch.distributed.init_device_mesh(
-                self.device.type, 
-                mesh_shape=mesh_shape, 
-                mesh_dim_names=mesh_dim_names
+                self.device.type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
             )
             if set(("dp_replicate", "dp_shard")).issubset(set(device_mesh.mesh_dim_names)):
                 device_mesh[("dp_replicate", "dp_shard")]._flatten("dp_fsdp")
-            
+
             self.state.device_mesh = device_mesh
 
     def _prepare_ao(self, *args):

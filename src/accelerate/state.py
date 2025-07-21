@@ -898,6 +898,7 @@ class AcceleratorState:
         dynamo_plugin=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
+        torch_tp_plugin=None,
         megatron_lm_plugin=None,
         parallelism_config: ParallelismConfig | None = None,
         _from_accelerator: bool = False,
@@ -914,6 +915,7 @@ class AcceleratorState:
             self.deepspeed_plugins = None
             self.parallelism_config = parallelism_config
             self.use_ipex = None
+            self.torch_tp_plugin = torch_tp_plugin
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
