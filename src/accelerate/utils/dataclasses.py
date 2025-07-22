@@ -2912,11 +2912,12 @@ class ParallelismConfig:
     tp_handler: Union[None, TorchTensorParallelConfig] = None
 
     def __repr__(self):
-        return f"ParallelismConfig(dp_replicate_size={self.dp_replicate_size}, dp_shard_size={self.dp_shard_size}, tp_size={self.tp_size}, total_size={self.total_size})"
-
-    @property
-    def valid_mesh_dims(self):
-        return set(("dp_replicate", "dp_shard", "tp", "cp"))
+        return "ParallelismConfig(\n " \
+               f"\tdp_replicate_size={self.dp_replicate_size},\n" \
+               f"\tdp_shard_size={self.dp_shard_size},\n" \
+               f"\ttp_size={self.tp_size},\n" \
+               f"\tcp_size={self.cp_size},\n" \
+               f"\ttotal_size={self.total_size}\n)"
 
     @property
     def dp_dim_names(self):

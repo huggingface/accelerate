@@ -428,11 +428,14 @@ class Accelerator:
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
 
-        if PartialState().parallelism_config is not None:
-
-            parallelism_config = PartialState().parallelism_config
-        elif parallelism_config is None:
-            parallelism_config = ParallelismConfig()
+        if parallelism_config is None:
+            logger.info("No parallelism_config provided! Attempting to load from PartialState.")
+            if PartialState().parallelism_config is not None:
+                logger.info(f"Found parallelism_config in PartialState: {PartialState().parallelism_config}")
+                parallelism_config = PartialState().parallelism_config
+            else:
+                logger.info("No parallelism_config found in PartialState, using default ParallelismConfig.")
+                parallelism_config = ParallelismConfig()
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -445,7 +448,7 @@ class Accelerator:
             parallelism_config=parallelism_config,
             _from_accelerator=True,
             **kwargs,
-        )
+        )        
 
         # Helper flag to check if we are in a composable parallelism setup
         # Later we can add DeepSpeed, etc
@@ -1821,9 +1824,9 @@ class Accelerator:
         """Build and validate device mesh based on parallelism configuration."""
         mesh_dim_names, mesh_shape = self.parallelism_config.get_mesh()
 
-        if (existing_mesh := PartialState().device_mesh) is not None:
-            self.parallelism_config.validate_device_mesh(existing_mesh)
-            device_mesh = existing_mesh
+        if PartialState().device_mesh is not None:
+            device_mesh =  PartialState().device_mesh
+            self.parallelism_config.validate_device_mesh(device_mesh)
         else:
             device_mesh = torch.distributed.init_device_mesh(
                 self.device.type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names

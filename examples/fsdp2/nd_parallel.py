@@ -34,8 +34,8 @@ MODEL_ID = "NousResearch/Llama-3.2-1B"
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dp_replicate_size", type=int, default=1)
-    parser.add_argument("--dp_shard_size", type=int, default=1)
+    parser.add_argument("--dp-replicate-size", type=int, default=1)
+    parser.add_argument("--dp-shard-size", type=int, default=1)
     parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=128)
     return parser.parse_args()
@@ -57,8 +57,7 @@ def main():
         dp_shard_size = args.dp_shard_size,
         tp_size = args.tp_size,
     )
-    print(parallelism_config)
-    print(parallelism_config.fsdp_enabled)
+    
     if parallelism_config.fsdp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
@@ -76,10 +75,7 @@ def main():
         parallelism_config=parallelism_config,
         **accelerator_kwargs,
     )
-    # accelerator.init_trackers(
-    #     project_name="fsdp2-tp",
-    #     config={"apply_fsdp": args.apply_fsdp, "tp_size": args.tp_size},
-    # )
+
 
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,

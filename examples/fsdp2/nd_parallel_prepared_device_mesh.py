@@ -70,6 +70,7 @@ def main():
         use_cache=False,
         device_map="auto" if args.tp_size > 1 else None,
         device_mesh=device_mesh,
+        tp_plan = "auto" if args.tp_size > 1 else None,
         **model_kwargs,
     )
 
