@@ -2890,6 +2890,8 @@ class ParallelismConfig:
             composing DDP + TP is currently not supported.
         tp_size (`int`, defaults to `1`):
             The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be used.
+        cp_size (`int`, defaults to `1`):
+            The size of the column parallel group. Currently not supported (will be added in the followup PR).
         tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
             The handler for the tensor parallel group.
 
@@ -2903,6 +2905,7 @@ class ParallelismConfig:
     dp_replicate_size: int = 1
     dp_shard_size: int = 1
     tp_size: int = 1
+    cp_size: int = 1
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
@@ -2912,14 +2915,41 @@ class ParallelismConfig:
 
     @property
     def valid_mesh_dims(self):
-        return set(("dp_replicate", "dp_shard", "tp"))
+        return set(("dp_replicate", "dp_shard", "tp", "cp"))
 
     @property
     def dp_dim_names(self):
         dims = []
-        if self.dp_replicate_size > 1:
+        if self.dp_enabled > 1:
             dims += ["dp_replicate"]
-        if self.dp_shard_size > 1:
+        if self.fsdp_enabled > 1:
+            dims += ["dp_shard"]
+        return dims
+
+    @property
+    def non_dp_dim_names(self):
+        dims = []
+        if self.tp_enabled:
+            dims += ["tp"]
+        if self.cp_enabled:
+            dims += ["cp"]
+        return dims
+
+    @property
+    def model_shard_dim_names(self):
+        dims = []
+        if self.fsdp_enabled:
+            dims += ["dp_shard"]
+        if self.cp_enabled:
+            dims += ["cp"]
+        return dims
+
+    @property
+    def data_replicate_dim_names(self):
+        dims = []
+        if self.dp_enabled:
+            dims += ["dp_replicate"]
+        if self.fsdp_enabled:
             dims += ["dp_shard"]
         return dims
 
@@ -2944,19 +2974,23 @@ class ParallelismConfig:
         return self.tp_size > 1
 
     @property
-    def active_mesh_dims(self):
-        return self.dp_dim_names + (["tp"] if self.tp_enabled else [])
+    def cp_enabled(self):
+        return self.cp_size > 1
 
-    def validate_device_mesh(self, device_mesh):
+    @property
+    def active_mesh_dims(self):
+        return self.dp_dim_names + self.non_dp_dim_names
+
+    def validate_device_mesh(self, existing_device_mesh):
         """Validate that a device mesh is compatible with this parallelism configuration."""
         # Check that the total size matches
-        if device_mesh.size() != self.total_size:
+        if existing_device_mesh.size() != self.total_size:
             raise ValueError(
-                f"Device mesh size {device_mesh.size()} does not match the total size of the parallelism config {self.total_size}."
+                f"Device mesh size {existing_device_mesh.size()} does not match the total size of the parallelism config {self.total_size}."
             )
 
         # Check that dimension names are valid
-        mesh_dim_names = set(device_mesh.mesh_dim_names)
+        mesh_dim_names = set(existing_device_mesh.mesh_dim_names)
         if not mesh_dim_names.issubset(self.valid_mesh_dims):
             raise ValueError(
                 f"Device mesh dimensions {mesh_dim_names} contain invalid dimensions. Valid dimensions are {self.valid_mesh_dims}."
@@ -2972,15 +3006,15 @@ class ParallelismConfig:
         # Check that dimension sizes match
         mesh_dim_names, mesh_shape = self.get_mesh()
         for i, (dim_name, expected_size) in enumerate(zip(mesh_dim_names, mesh_shape)):
-            if device_mesh.mesh_dim_names[i] != dim_name:
+            if existing_device_mesh.mesh_dim_names[i] != dim_name:
                 raise ValueError(
                     f"Device mesh dimension order mismatch. Expected {dim_name} at position {i}, "
-                    f"but got {device_mesh.mesh_dim_names[i]}."
+                    f"but got {existing_device_mesh.mesh_dim_names[i]}."
                 )
-            if device_mesh.shape[i] != expected_size:
+            if existing_device_mesh.shape[i] != expected_size:
                 raise ValueError(
                     f"Device mesh dimension size mismatch for {dim_name}. Expected {expected_size}, "
-                    f"but got {device_mesh.shape[i]}."
+                    f"but got {existing_device_mesh.shape[i]}."
                 )
 
     def get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
@@ -2990,12 +3024,11 @@ class ParallelismConfig:
         mesh_dims = {parallelism: self._sizes[parallelism] for parallelism in self.active_mesh_dims}
 
         # Apply canonical ordering
-        mesh_order = ["dp_replicate", "dp_shard", "tp"]
+        mesh_order = ["dp_replicate", "dp_shard", "cp", "tp"]
         sorted_items = sorted(
             mesh_dims.items(),
             key=lambda x: (mesh_order.index(x[0])),
         )
-
         return zip(*sorted_items)
 
     def __post_init__(self):
@@ -3006,17 +3039,20 @@ class ParallelismConfig:
             raise ValueError(f"dp_shard_size must be at least 1, but got {self.dp_shard_size}")
         if self.tp_size < 1:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
+        if self.cp_size < 1:
+            raise ValueError(f"cp_size must be at least 1, but got {self.cp_size}")
 
-        if self.tp_size > 1 and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
+        if (self.tp_size > 1 or self.cp_size > 1) and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
             raise ValueError(
-                "Tensor parallelism (tp_size > 1) cannot be used with pure data parallelism (dp_replicate_size > 1 and dp_shard_size == 1). "
-                "Please set dp_shard_size > 1 and dp_replicate_size == 1 to compose FSDP + TP for 2D parallel, "
-                "or set dp_replicate_size == 1 and dp_shard_size > 1 to compose HSDP + TP for 3D parallel."
+                "Tensor/Context parallelism (tp/cp_size > 1) cannot be used with pure data parallelism (dp_replicate_size > 1 and dp_shard_size == 1). "
+                "Please set dp_shard_size > 1 and dp_replicate_size == 1 to compose FSDP + TP/CP for 2D parallel, "
+                "or set dp_replicate_size == 1 and dp_shard_size > 1 to compose HSDP + TP/CP for 3D parallel."
             )
         self._sizes = {
             "dp_replicate": self.dp_replicate_size,
             "dp_shard": self.dp_shard_size,
             "tp": self.tp_size,
+            "cp": self.cp_size,
         }
 
     def _set_size(self, parallelism: str, size: int):
@@ -3034,12 +3070,12 @@ class ParallelismConfig:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
                 f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
-                f"dp_shard_size/tp_size."
+                f"dp_shard_size/tp_size/cp_size."
             )
 
-        if self.total_size > 1 and (not accelerator.multi_device) and (not accelerator.is_fsdp2):
+        if self.total_size > 1 and not accelerator.is_fsdp2:
             raise ValueError(
-                f"ParallelismConfig is only compatible with DistributedType.MULTI_{{device_type}} or DistributedType.FSDP (version 2), but got {accelerator.distributed_type}."
+                f"ParallelismConfig is only compatible DistributedType.FSDP (version 2), but got {accelerator.distributed_type}."
             )
 
         if self.total_size > 1 and not self.fsdp_enabled:
@@ -3061,14 +3097,6 @@ class ParallelismConfig:
                     f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is set to 1. This handler will be ignored."
                 )
 
-<<<<<<< Updated upstream
-        if self.dp_shard_size and self.dp_handler and self.dp_replicate_size == 1:
-            raise ValueError(
-                "dp_shard_size was provided alongside dp_handler. dp_shard_size may only configured with FSDP."
-            )
-
-=======
->>>>>>> Stashed changes
         if _warnings and accelerator.is_main_process:
             warnings.warn(
                 "ParallelismConfig has the following warnings:\n" + "\n".join(_warnings),

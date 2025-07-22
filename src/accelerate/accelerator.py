@@ -1822,15 +1822,21 @@ class Accelerator:
 
         if (existing_mesh := PartialState().device_mesh) is not None:
             self.parallelism_config.validate_device_mesh(existing_mesh)
-            self.state.device_mesh = existing_mesh
+            device_mesh = existing_mesh
         else:
             device_mesh = torch.distributed.init_device_mesh(
                 self.device.type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
             )
-            if set(("dp_replicate", "dp_shard")).issubset(set(device_mesh.mesh_dim_names)):
-                device_mesh[("dp_replicate", "dp_shard")]._flatten("dp_fsdp")
 
-            self.state.device_mesh = device_mesh
+        # Calling flattn on a device mesh which has already been flattened is a noop
+
+        # data is distributed across these ranks, batch to each
+        device_mesh[tuple(self.parallelism_config.data_replicate_dim_names)]._flatten("dp")
+        # model is sharded across these ranks, shard to each
+        device_mesh[tuple(self.parallelism_config.model_shard_dim_names)]._flatten("dp_shard_cp")
+        device_mesh
+
+        self.state.device_mesh = device_mesh
 
     def _prepare_ao(self, *args):
         if not is_torchao_available():
