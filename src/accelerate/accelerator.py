@@ -430,13 +430,12 @@ class Accelerator:
 
         if parallelism_config is None:
             logger.info("No parallelism_config provided! Attempting to load from PartialState.")
-            if PartialState().parallelism_config is not None:
+            if PartialState._shared_state != {} and PartialState().parallelism_config is not None:
                 logger.info(f"Found parallelism_config in PartialState: {PartialState().parallelism_config}")
                 parallelism_config = PartialState().parallelism_config
             else:
                 logger.info("No parallelism_config found in PartialState, using default ParallelismConfig.")
                 parallelism_config = ParallelismConfig()
-
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -448,15 +447,12 @@ class Accelerator:
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             **kwargs,
-        )        
+        )
 
-        # Helper flag to check if we are in a composable parallelism setup
-        # Later we can add DeepSpeed, etc
-        self._composable_parallelism_enabled = self.is_fsdp2
-
-        self.parallelism_config = parallelism_config
-        self.parallelism_config.validate_accelerator(self)
-        self.torch_device_mesh = self._build_device_mesh()
+        if self.is_composable_parallelism_enabled:
+            self.parallelism_config = parallelism_config
+            self.parallelism_config.validate_accelerator(self)
+            self.torch_device_mesh = self._build_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -1817,21 +1813,21 @@ class Accelerator:
         mesh_dim_names, mesh_shape = self.parallelism_config.get_mesh()
 
         if PartialState().device_mesh is not None:
-            device_mesh =  PartialState().device_mesh
+            device_mesh = PartialState().device_mesh
             self.parallelism_config.validate_device_mesh(device_mesh)
         else:
             device_mesh = torch.distributed.init_device_mesh(
                 self.device.type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
             )
-            
+
         # create a submesh which is only used for distributing data across data parallel dims (no comms)
         device_mesh[tuple(self.parallelism_config.dp_dim_names)]._flatten("dp")
 
-        # create a submesh which is used *just* for FSDP parameter gathering/scattering 
+        # create a submesh which is used *just* for FSDP parameter gathering/scattering
         # and gradients reduce-scattering
         device_mesh[tuple(self.parallelism_config.dp_shard_cp_dim_names)]._flatten("dp_shard_cp")
 
-        # create a submesh which is used for correctly reducing loss across data replica/context parallel 
+        # create a submesh which is used for correctly reducing loss across data replica/context parallel
         device_mesh[tuple(self.parallelism_config.dp_cp_dim_names)]._flatten("dp_cp")
 
         return device_mesh
@@ -2348,8 +2344,10 @@ class Accelerator:
         """
         if self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
+        elif self.is_composable_parallelism_enabled:
+            return self.torch_device_mesh
         else:
-            return self.state.device_mesh
+            return None
 
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
