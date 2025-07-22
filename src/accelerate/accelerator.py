@@ -429,6 +429,7 @@ class Accelerator:
                     self.has_fp8_handler = True
 
         if PartialState().parallelism_config is not None:
+
             parallelism_config = PartialState().parallelism_config
         elif parallelism_config is None:
             parallelism_config = ParallelismConfig()
@@ -1831,15 +1832,11 @@ class Accelerator:
         # create a submesh which is only used for distributing data across data parallel dims (no comms)
         device_mesh[tuple(self.parallelism_config.dp_dim_names)]._flatten("dp")
 
-        # create a submesh which is used for parameter/gradient/activation comms
-        # this is required for FSDP, which shards model parameters and gradients on dim 0
-        # and CP, which shards data across the context dim and must communicate gradients and activations
-        # across each group which recieves a portion of the context
+        # create a submesh which is used *just* for FSDP parameter gathering/scattering 
+        # and gradients reduce-scattering
         device_mesh[tuple(self.parallelism_config.dp_shard_cp_dim_names)]._flatten("dp_shard_cp")
 
-        # create a submesh which is used for distributing data across data parallel and context parallel dims
-        # in this case each data parallel sub-group will recieve a copy of the batch, and each context parallel dim
-        # will recieve a portion of this data split across the context dim
+        # create a submesh which is used for correctly reducing loss across data replica/context parallel 
         device_mesh[tuple(self.parallelism_config.dp_cp_dim_names)]._flatten("dp_cp")
 
         self.state.device_mesh = device_mesh

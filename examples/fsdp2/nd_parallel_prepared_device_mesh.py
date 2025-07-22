@@ -27,6 +27,7 @@ from transformers import AutoModelForCausalLM
 from accelerate import Accelerator
 from accelerate.utils.dataclasses import ParallelismConfig
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
+from accelerate.state import PartialState
 from utils import PerformanceTracker, create_collate_fn, get_dataset, setup_tokenizer, gpu_memory_usage_all
 
 
@@ -57,9 +58,25 @@ def main():
         dp_shard_size = args.dp_shard_size,
         tp_size = args.tp_size,
     )
+    mesh_dim_names, mesh_shape = parallelism_config.get_mesh()
+
+    device_mesh = torch.distributed.init_device_mesh(
+        "cuda", mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
+    )
+
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_ID,
+        torch_dtype=torch.bfloat16,
+        use_cache=False,
+        device_map="auto" if args.tp_size > 1 else None,
+        device_mesh=device_mesh,
+        **model_kwargs,
+    )
+
+    partial_state = PartialState()
+    partial_state.device_mesh = device_mesh
+    partial_state.parallelism_config = parallelism_config
     
-    print(parallelism_config)
-    print(parallelism_config.fsdp_enabled)
     if parallelism_config.fsdp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
@@ -72,24 +89,10 @@ def main():
         accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
 
     accelerator = Accelerator(
-        # log_with=["wandb"],
         mixed_precision="bf16",
-        parallelism_config=parallelism_config,
         **accelerator_kwargs,
     )
-    # accelerator.init_trackers(
-    #     project_name="fsdp2-tp",
-    #     config={"apply_fsdp": args.apply_fsdp, "tp_size": args.tp_size},
-    # )
 
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        torch_dtype=torch.bfloat16,
-        use_cache=False,
-        device_map="auto" if args.tp_size > 1 else None,
-        device_mesh=accelerator.torch_device_mesh if args.tp_size > 1 else None,
-        **model_kwargs,
-    )
     print("Memory usage after model load")
     print(gpu_memory_usage_all())
     tokenizer = setup_tokenizer(MODEL_ID)
