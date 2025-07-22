@@ -3062,6 +3062,10 @@ class ParallelismConfig:
     def validate_accelerator(self, accelerator: "Accelerator"):
         _warnings = set()
 
+        # We need this to ensure DDP works
+        if self.total_size == 1:
+            self._set_size("dp_replicate", accelerator.num_processes)
+
         if self.total_size != accelerator.num_processes:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
@@ -3069,9 +3073,9 @@ class ParallelismConfig:
                 f"dp_shard_size/tp_size/cp_size."
             )
 
-        if self.total_size > 1 and not accelerator.is_fsdp2:
+        if self.total_size > 1 and not (accelerator.is_fsdp2 or accelerator.multi_device):
             raise ValueError(
-                f"ParallelismConfig is only compatible DistributedType.FSDP (version 2), but got {accelerator.distributed_type}."
+                f"ParallelismConfig is only compatible DistributedType.FSDP (version 2) or DistributedType.Multi{{Device}}, but got {accelerator.distributed_type}."
             )
 
         for parallelism, size in self._sizes.items():

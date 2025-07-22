@@ -450,9 +450,8 @@ class Accelerator:
         )
 
         self.parallelism_config = parallelism_config
-        if self.is_composable_parallelism_enabled:
-            self.parallelism_config.validate_accelerator(self)
-            self.torch_device_mesh = self._build_device_mesh()
+        self.parallelism_config.validate_accelerator(self)
+        self.torch_device_mesh = self._build_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -1820,15 +1819,25 @@ class Accelerator:
                 self.device.type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
             )
 
-        # create a submesh which is only used for distributing data across data parallel dims (no comms)
-        device_mesh[tuple(self.parallelism_config.dp_dim_names)]._flatten("dp")
+        submeshes = [
+            tuple(self.parallelism_config.dp_dim_names),
+            tuple(self.parallelism_config.dp_shard_cp_dim_names),
+            tuple(self.parallelism_config.dp_cp_dim_names),
+        ]
+        submesh_names = [
+            # create a submesh which is only used for distributing data across data parallel dims (no comms)
+            "dp",
+            # create a submesh which is used *just* for FSDP parameter gathering/scattering
+            # and gradients reduce-scattering
+            "dp_shard_cp",
+            # create a submesh which is used for correctly reducing loss across data replica/context parallel
+            "dp_cp",
+        ]
 
-        # create a submesh which is used *just* for FSDP parameter gathering/scattering
-        # and gradients reduce-scattering
-        device_mesh[tuple(self.parallelism_config.dp_shard_cp_dim_names)]._flatten("dp_shard_cp")
-
-        # create a submesh which is used for correctly reducing loss across data replica/context parallel
-        device_mesh[tuple(self.parallelism_config.dp_cp_dim_names)]._flatten("dp_cp")
+        for submesh, submesh_name in zip(submeshes, submesh_names):
+            # if submesh is empty, it fails
+            if submesh:
+                device_mesh[submesh]._flatten(submesh_name)
 
         return device_mesh
 
@@ -2344,10 +2353,8 @@ class Accelerator:
         """
         if self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
-        elif self.is_composable_parallelism_enabled:
-            return self.torch_device_mesh
         else:
-            return None
+            return getattr(self, "torch_device_mesh", None)
 
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
