@@ -2912,12 +2912,14 @@ class ParallelismConfig:
     tp_handler: Union[None, TorchTensorParallelConfig] = None
 
     def __repr__(self):
-        return "ParallelismConfig(\n " \
-               f"\tdp_replicate_size={self.dp_replicate_size},\n" \
-               f"\tdp_shard_size={self.dp_shard_size},\n" \
-               f"\ttp_size={self.tp_size},\n" \
-               f"\tcp_size={self.cp_size},\n" \
-               f"\ttotal_size={self.total_size}\n)"
+        return (
+            "ParallelismConfig(\n "
+            f"\tdp_replicate_size={self.dp_replicate_size},\n"
+            f"\tdp_shard_size={self.dp_shard_size},\n"
+            f"\ttp_size={self.tp_size},\n"
+            f"\tcp_size={self.cp_size},\n"
+            f"\ttotal_size={self.total_size}\n)"
+        )
 
     @property
     def dp_dim_names(self):
@@ -2945,7 +2947,7 @@ class ParallelismConfig:
         if self.cp_enabled:
             dims += ["cp"]
         return dims
-    
+
     @property
     def dp_cp_dim_names(self):
         dims = []
@@ -2956,15 +2958,15 @@ class ParallelismConfig:
         if self.cp_enabled:
             dims += ["cp"]
         return dims
-    
+
     @property
     def model_shard_dim_names(self):
         dims = []
         if self.dp_enabled:
             dims += ["dp_replicate"]
         dims += ["dp_shard_cp"]
-        return dims            
-    
+        return dims
+
     @property
     def total_size(self):
         return self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size
@@ -3058,10 +3060,7 @@ class ParallelismConfig:
         setattr(self, f"{parallelism}_size", size)
 
     def validate_accelerator(self, accelerator: "Accelerator"):
-        # This is to make sure the original behavior is preserved
         _warnings = set()
-        if accelerator.multi_device and self.total_size == 1:
-            self._set_size("dp", accelerator.num_processes)
 
         if self.total_size != accelerator.num_processes:
             raise ValueError(
@@ -3074,19 +3073,6 @@ class ParallelismConfig:
             raise ValueError(
                 f"ParallelismConfig is only compatible DistributedType.FSDP (version 2), but got {accelerator.distributed_type}."
             )
-
-        if self.total_size > 1 and not self.fsdp_enabled:
-            if non_zero_parallelism := [
-                (parallelism, size)
-                for parallelism, size in self._sizes.items()
-                if size > 1 and size < accelerator.num_processes
-            ]:
-                parallelism, size = non_zero_parallelism[0]
-                _warnings.add(
-                    f"You are configuring a single parallelism ({non_zero_parallelism}), but the size is set to {size} which is less than the total number of processes {accelerator.num_processes}. "
-                    f"Your choice of {size} will be ignored and total number of processes ({accelerator.num_processes}) will be used instead."
-                )
-                self._set_size(parallelism, accelerator.num_processes)
 
         for parallelism, size in self._sizes.items():
             if size == 1 and getattr(self, f"{parallelism}_handler", None) is not None:
