@@ -449,8 +449,8 @@ class Accelerator:
             **kwargs,
         )
 
+        self.parallelism_config = parallelism_config
         if self.is_composable_parallelism_enabled:
-            self.parallelism_config = parallelism_config
             self.parallelism_config.validate_accelerator(self)
             self.torch_device_mesh = self._build_device_mesh()
 

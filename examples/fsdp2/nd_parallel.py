@@ -25,12 +25,13 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator
-from accelerate.utils.dataclasses import ParallelismConfig
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
-from utils import PerformanceTracker, create_collate_fn, get_dataset, setup_tokenizer, gpu_memory_usage_all
+from accelerate.utils.dataclasses import ParallelismConfig
+from utils import PerformanceTracker, create_collate_fn, get_dataset, gpu_memory_usage_all, setup_tokenizer
 
 
 MODEL_ID = "NousResearch/Llama-3.2-1B"
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -57,11 +58,11 @@ def main():
     accelerator_kwargs = {}
 
     parallelism_config = ParallelismConfig(
-        dp_replicate_size = args.dp_replicate_size,
-        dp_shard_size = args.dp_shard_size,
-        tp_size = args.tp_size,
+        dp_replicate_size=args.dp_replicate_size,
+        dp_shard_size=args.dp_shard_size,
+        tp_size=args.tp_size,
     )
-    
+
     if parallelism_config.fsdp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
@@ -87,13 +88,14 @@ def main():
         device_mesh=accelerator.torch_device_mesh if args.tp_size > 1 else None,
         **model_kwargs,
     )
+    accelerator.print("Memory usage after model load")
+    accelerator.print(gpu_memory_usage_all())
     tokenizer = setup_tokenizer(MODEL_ID)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 
     model, optimizer = accelerator.prepare(model, optimizer)
-    print_rank_zero("Memory usage after model prepare")
-    print_rank_zero(gpu_memory_usage_all())
-    exit()
+    accelerator.print("Memory usage after model prepare")
+    accelerator.print(gpu_memory_usage_all())
 
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
