@@ -329,7 +329,10 @@ class Accelerator:
 
         if deepspeed_plugins is None:
             # First check if we're creating another `Accelerator` w/o setting `deepspeed_plugin`
-            if AcceleratorState._shared_state != {} and AcceleratorState().distributed_type == DistributedType.DEEPSPEED:
+            if (
+                AcceleratorState._shared_state != {}
+                and AcceleratorState().distributed_type == DistributedType.DEEPSPEED
+            ):
                 deepspeed_plugins = AcceleratorState().deepspeed_plugins
             else:
                 # init from env variables
