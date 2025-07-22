@@ -437,6 +437,8 @@ class Accelerator:
                 logger.info("No parallelism_config found in PartialState, using default ParallelismConfig.")
                 parallelism_config = ParallelismConfig()
 
+        device_mesh = self._build_device_mesh(parallelism_config)
+
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
@@ -445,8 +447,9 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
-            parallelism_config=parallelism_config,
             _from_accelerator=True,
+            parallelism_config=parallelism_config,
+            device_mesh=device_mesh,
             **kwargs,
         )        
 
@@ -454,9 +457,7 @@ class Accelerator:
         # Later we can add DeepSpeed, etc
         self._composable_parallelism_enabled = self.is_fsdp2
 
-        # This is a bit clunky, as this needs to be called after `AcceleratorState` is initialized, but _init_from_kwargs has to be called before
         parallelism_config.validate_accelerator(self)
-        self._build_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -1820,29 +1821,29 @@ class Accelerator:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
-    def _build_device_mesh(self):
+    def _build_device_mesh(self, parallelism_config):
         """Build and validate device mesh based on parallelism configuration."""
-        mesh_dim_names, mesh_shape = self.parallelism_config.get_mesh()
+        mesh_dim_names, mesh_shape = parallelism_config.get_mesh()
 
         if PartialState().device_mesh is not None:
             device_mesh =  PartialState().device_mesh
-            self.parallelism_config.validate_device_mesh(device_mesh)
+            parallelism_config.validate_device_mesh(device_mesh)
         else:
             device_mesh = torch.distributed.init_device_mesh(
                 self.device.type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
             )
             
         # create a submesh which is only used for distributing data across data parallel dims (no comms)
-        device_mesh[tuple(self.parallelism_config.dp_dim_names)]._flatten("dp")
+        device_mesh[tuple(parallelism_config.dp_dim_names)]._flatten("dp")
 
         # create a submesh which is used *just* for FSDP parameter gathering/scattering 
         # and gradients reduce-scattering
-        device_mesh[tuple(self.parallelism_config.dp_shard_cp_dim_names)]._flatten("dp_shard_cp")
+        device_mesh[tuple(parallelism_config.dp_shard_cp_dim_names)]._flatten("dp_shard_cp")
 
         # create a submesh which is used for correctly reducing loss across data replica/context parallel 
-        device_mesh[tuple(self.parallelism_config.dp_cp_dim_names)]._flatten("dp_cp")
+        device_mesh[tuple(parallelism_config.dp_cp_dim_names)]._flatten("dp_cp")
 
-        self.state.device_mesh = device_mesh
+        return device_mesh
 
     def _prepare_ao(self, *args):
         if not is_torchao_available():

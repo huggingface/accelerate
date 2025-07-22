@@ -895,7 +895,7 @@ class AcceleratorState:
     def __init__(
         self,
         mixed_precision: str = None,
-        cpu: bool = False,
+        cpu: bool = False,,
         dynamo_plugin=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
