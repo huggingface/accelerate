@@ -447,7 +447,6 @@ class Accelerator:
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
-            parallelism_config=parallelism_config,
             **kwargs,
         )        
 
@@ -455,8 +454,9 @@ class Accelerator:
         # Later we can add DeepSpeed, etc
         self._composable_parallelism_enabled = self.is_fsdp2
 
+        self.parallelism_config = parallelism_config
         self.parallelism_config.validate_accelerator(self)
-        self._build_device_mesh()
+        self.torch_device_mesh = self._build_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -646,10 +646,6 @@ class Accelerator:
         return self.state.distributed_type
 
     @property
-    def parallelism_config(self):
-        return self.state.parallelism_config
-
-    @property
     def num_processes(self):
         return self.state.num_processes
 
@@ -732,10 +728,6 @@ class Accelerator:
     @property
     def is_composable_parallelism_enabled(self):
         return self.is_fsdp2
-
-    @property
-    def torch_device_mesh(self):
-        return self.state.device_mesh
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):

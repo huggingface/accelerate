@@ -70,12 +70,10 @@ def main():
         accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
 
     accelerator = Accelerator(
-        # log_with=["wandb"],
         mixed_precision="bf16",
         parallelism_config=parallelism_config,
         **accelerator_kwargs,
     )
-
 
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
