@@ -2880,7 +2880,8 @@ class BnbQuantizationConfig:
 @dataclass
 class ParallelismConfig:
     """
-    A dataclass to configure parallelisms applied to the model.
+    A dataclass to configure parallelisms applied to the model. Inspired by torchtitan's `ParallelDims`
+    https://github.com/pytorch/torchtitan/blob/main/torchtitan/distributed/parallel_dims.py
 
     Args:
         dp_replicate_size (`int`, defaults to `1`):
@@ -2891,7 +2892,7 @@ class ParallelismConfig:
         tp_size (`int`, defaults to `1`):
             The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be used.
         cp_size (`int`, defaults to `1`):
-            The size of the column parallel group. Currently not supported (will be added in the followup PR).
+            The size of the context parallel group. Currently not supported, but reserved for future use and enabled for downstream libraries.
         tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
             The handler for the tensor parallel group.
 
@@ -2920,9 +2921,9 @@ class ParallelismConfig:
     @property
     def dp_dim_names(self):
         dims = []
-        if self.dp_enabled > 1:
+        if self.dp_enabled:
             dims += ["dp_replicate"]
-        if self.fsdp_enabled > 1:
+        if self.fsdp_enabled:
             dims += ["dp_shard"]
         return dims
 
@@ -2936,34 +2937,40 @@ class ParallelismConfig:
         return dims
 
     @property
-    def model_shard_dim_names(self):
+    def dp_shard_cp_dim_names(self):
         dims = []
         if self.fsdp_enabled:
             dims += ["dp_shard"]
         if self.cp_enabled:
             dims += ["cp"]
         return dims
-
+    
     @property
-    def data_replicate_dim_names(self):
+    def dp_cp_dim_names(self):
         dims = []
         if self.dp_enabled:
             dims += ["dp_replicate"]
         if self.fsdp_enabled:
             dims += ["dp_shard"]
+        if self.cp_enabled:
+            dims += ["cp"]
         return dims
-
+    
+    @property
+    def model_shard_dim_names(self):
+        dims = []
+        if self.dp_enabled:
+            dims += ["dp_replicate"]
+        dims += ["dp_shard_cp"]
+        return dims            
+    
     @property
     def total_size(self):
-        return self.dp_replicate_size * self.dp_shard_size * self.tp_size
+        return self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size
 
     @property
     def dp_enabled(self):
         return self.dp_replicate_size > 1
-
-    @property
-    def hsdp_enabled(self):
-        return self.dp_shard_size > 1 and self.dp_replicate_size > 1
 
     @property
     def fsdp_enabled(self):
@@ -2981,40 +2988,29 @@ class ParallelismConfig:
     def active_mesh_dims(self):
         return self.dp_dim_names + self.non_dp_dim_names
 
-    def validate_device_mesh(self, existing_device_mesh):
-        """Validate that a device mesh is compatible with this parallelism configuration."""
+    def validate_device_mesh(self, device_mesh: "DeviceMesh"):
+        """
+        Validate that a device mesh is compatible with this parallelism configuration.
+        Note: This method should be called *before* performing any `_flatten` operations on the mesh.
+        """
         # Check that the total size matches
-        if existing_device_mesh.size() != self.total_size:
+        if device_mesh.size() != self.total_size:
             raise ValueError(
-                f"Device mesh size {existing_device_mesh.size()} does not match the total size of the parallelism config {self.total_size}."
-            )
-
-        # Check that dimension names are valid
-        mesh_dim_names = set(existing_device_mesh.mesh_dim_names)
-        if not mesh_dim_names.issubset(self.valid_mesh_dims):
-            raise ValueError(
-                f"Device mesh dimensions {mesh_dim_names} contain invalid dimensions. Valid dimensions are {self.valid_mesh_dims}."
-            )
-
-        # Check that dimension names match expected configuration
-        expected_dims = set(self.active_mesh_dims)
-        if mesh_dim_names != expected_dims:
-            raise ValueError(
-                f"Device mesh dimensions {mesh_dim_names} do not match the expected dimensions {expected_dims}."
+                f"Device mesh size {device_mesh.size()} does not match the total size of the parallelism config {self.total_size}."
             )
 
         # Check that dimension sizes match
         mesh_dim_names, mesh_shape = self.get_mesh()
         for i, (dim_name, expected_size) in enumerate(zip(mesh_dim_names, mesh_shape)):
-            if existing_device_mesh.mesh_dim_names[i] != dim_name:
+            if device_mesh.mesh_dim_names[i] != dim_name:
                 raise ValueError(
                     f"Device mesh dimension order mismatch. Expected {dim_name} at position {i}, "
-                    f"but got {existing_device_mesh.mesh_dim_names[i]}."
+                    f"but got {device_mesh.mesh_dim_names[i]}."
                 )
-            if existing_device_mesh.shape[i] != expected_size:
+            if device_mesh.shape[i] != expected_size:
                 raise ValueError(
                     f"Device mesh dimension size mismatch for {dim_name}. Expected {expected_size}, "
-                    f"but got {existing_device_mesh.shape[i]}."
+                    f"but got {device_mesh.shape[i]}."
                 )
 
     def get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:

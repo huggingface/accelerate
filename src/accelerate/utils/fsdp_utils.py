@@ -611,14 +611,12 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     original_sd = model.state_dict()
 
-    mesh_dims = ["dp_replicate", "dp_shard_cp"] if accelerator.parallelism_config.hsdp_enabled else ["dp_shard_cp"]
-
     fsdp2_kwargs = {
         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
         "offload_policy": fsdp2_plugin.cpu_offload,
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
-        "mesh": accelerator.device_mesh[tuple(mesh_dims)],
+        "mesh": accelerator.device_mesh[tuple(accelerator.parallelism_config.model_shard_dim_names)],
     }
 
     model_has_params4bit = False
