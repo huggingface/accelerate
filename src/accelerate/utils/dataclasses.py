@@ -2133,7 +2133,7 @@ class TorchTensorParallelPlugin:
         metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
     )
 
-    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
+    # torch_device_mesh is of type "torch.distributed.DeviceMesh"
     torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
 
     def __post_init__(self):
