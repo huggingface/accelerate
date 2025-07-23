@@ -429,6 +429,7 @@ class Accelerator:
                     self.has_fp8_handler = True
 
         parallelism_config = self._setup_parallelism_config(parallelism_config)
+        device_mesh = self._build_torch_device_mesh(parallelism_config)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -440,11 +441,11 @@ class Accelerator:
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             parallelism_config=parallelism_config,
+            device_mesh=device_mesh,
             **kwargs,
         )
 
         self.parallelism_config.validate_accelerator(self)
-        self._build_torch_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -739,14 +740,12 @@ class Accelerator:
 
         return parallelism_config
 
-    def _build_torch_device_mesh(self):
+    def _build_torch_device_mesh(self, parallelism_config):
         if PartialState._shared_state != {} and PartialState().device_mesh is not None:
             device_mesh = PartialState().device_mesh
         else:
-            device_mesh = self.parallelism_config.build_device_mesh(self.device.type)
-
-        self.state.device_mesh = device_mesh
-        PartialState().device_mesh = device_mesh
+            parallelism_config.build_device_mesh(self.device.type)
+        return device_mesh
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
@@ -2344,7 +2343,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
         else:
-            return getattr(self, "torch_device_mesh", None)
+            return self.torch_device_mesh
 
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
