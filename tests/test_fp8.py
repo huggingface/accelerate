@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import json
 import os
+import tempfile
+import textwrap
 import unittest
+from pathlib import Path
 
 import torch
 
@@ -32,16 +36,18 @@ from accelerate.test_utils import (
 from accelerate.test_utils.testing import require_deepspeed, run_command
 from accelerate.utils import (
     AORecipeKwargs,
-    FP8RecipeKwargs,
+    TERecipeKwargs,
     has_ao_layers,
     has_transformer_engine_layers,
-    is_torchao_available,
-    is_transformer_engine_available,
 )
 
 
-def can_convert_te_model():
-    accelerator_kwargs = {"mixed_precision": "fp8", "kwargs_handlers": [FP8RecipeKwargs(backend="TE")]}
+def can_convert_te_model(from_config=False):
+    if not from_config:
+        accelerator_kwargs = {"mixed_precision": "fp8", "kwargs_handlers": [TERecipeKwargs()]}
+    else:
+        accelerator_kwargs = {}
+
     accelerator = Accelerator(**accelerator_kwargs)
     dataloader = torch.utils.data.DataLoader(torch.randn(10, 32), batch_size=2)
     model = torch.nn.Sequential(torch.nn.Linear(32, 32), torch.nn.Linear(32, 16))
@@ -58,10 +64,14 @@ def maintain_proper_deepspeed_config(expected_version):
     )
 
 
-def can_convert_ao_model():
+def can_convert_ao_model(from_config=False):
     from transformers import AutoModelForSequenceClassification
 
-    accelerator_kwargs = {"mixed_precision": "fp8", "kwargs_handlers": [AORecipeKwargs()]}
+    if not from_config:
+        accelerator_kwargs = {"mixed_precision": "fp8", "kwargs_handlers": [AORecipeKwargs()]}
+    else:
+        accelerator_kwargs = {}
+
     accelerator = Accelerator(**accelerator_kwargs)
     dataloader = torch.utils.data.DataLoader(torch.randn(10, 32), batch_size=2)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased")
@@ -78,13 +88,31 @@ def can_convert_ao_model():
 class TestTransformerEngine(unittest.TestCase):
     def test_can_prepare_model_single_gpu(self):
         command = get_launch_command(num_processes=1, monitor_interval=0.1)
-        command += ["-m", "tests.test_fp8"]
+        command += ["-m", "tests.test_fp8", "--test_te"]
         run_command(command)
+
+    def test_can_prepare_model_single_gpu_from_config(self):
+        with tempfile.TemporaryDirectory() as dir_name:
+            config_file = Path(dir_name) / "config.yaml"
+            config_file.write_text(
+                textwrap.dedent(
+                    """
+                    distributed_type: "NO"
+                    num_processes: 1
+                    mixed_precision: fp8
+                    fp8_config:
+                      backend: TE
+                    """
+                )
+            )
+            command = get_launch_command(config_file=str(config_file), monitor_interval=0.1)
+            command += ["-m", "tests.test_fp8", "--test_te", "--from_config"]
+            run_command(command)
 
     @require_multi_device
     def test_can_prepare_model_multi_gpu(self):
         command = get_launch_command(num_processes=2, monitor_interval=0.1)
-        command += ["-m", "tests.test_fp8"]
+        command += ["-m", "tests.test_fp8", "--test_te"]
         run_command(command)
 
     @require_deepspeed
@@ -116,7 +144,7 @@ class TestTransformerEngine(unittest.TestCase):
             command = get_launch_command(
                 num_processes=2, monitor_interval=0.1, use_deepspeed=True, deepspeed_config_file=ds_config
             )
-            command += ["-m", "tests.test_fp8"]
+            command += ["-m", "tests.test_fp8", "--test_te"]
             run_command(command)
 
 
@@ -125,13 +153,31 @@ class TestTransformerEngine(unittest.TestCase):
 class TestTorchAO(unittest.TestCase):
     def test_can_prepare_model_single_accelerator(self):
         command = get_launch_command(num_processes=1, monitor_interval=0.1)
-        command += ["-m", "tests.test_fp8"]
+        command += ["-m", "tests.test_fp8", "--test_ao"]
         run_command(command)
+
+    def test_can_prepare_model_single_gpu_from_config(self):
+        with tempfile.TemporaryDirectory() as dir_name:
+            config_file = Path(dir_name) / "config.yaml"
+            config_file.write_text(
+                textwrap.dedent(
+                    """
+                    distributed_type: "NO"
+                    num_processes: 1
+                    mixed_precision: fp8
+                    fp8_config:
+                      backend: AO
+                    """
+                )
+            )
+            command = get_launch_command(config_file=str(config_file), monitor_interval=0.1)
+            command += ["-m", "tests.test_fp8", "--test_ao", "--from_config"]
+            run_command(command)
 
     @require_multi_device
     def test_can_prepare_model_multi_accelerator(self):
         command = get_launch_command(num_processes=2, monitor_interval=0.1)
-        command += ["-m", "tests.test_fp8"]
+        command += ["-m", "tests.test_fp8", "--test_ao"]
         run_command(command)
 
     @require_deepspeed
@@ -163,16 +209,26 @@ class TestTorchAO(unittest.TestCase):
             command = get_launch_command(
                 num_processes=2, monitor_interval=0.1, use_deepspeed=True, deepspeed_config_file=ds_config
             )
-            command += ["-m", "tests.test_fp8"]
+            command += ["-m", "tests.test_fp8", "--test_ao"]
             run_command(command)
 
 
 if __name__ == "__main__":
     # TE suite
-    if is_transformer_engine_available():
-        can_convert_te_model()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test_te", action="store_true", default=False)
+    parser.add_argument("--test_ao", action="store_true", default=False)
+    parser.add_argument("--from_config", action="store_true", default=False)
+    args = parser.parse_args()
+
+    if not args.test_te and not args.test_ao:
+        raise ValueError("Must specify at least one of --test_te or --test_ao")
+
+    if args.test_te:
+        can_convert_te_model(args.from_config)
         if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
             maintain_proper_deepspeed_config(int(os.environ.get("ZERO_STAGE")))
+
     # AO suite
-    if is_torchao_available():
-        can_convert_ao_model()
+    if args.test_ao:
+        can_convert_ao_model(args.from_config)

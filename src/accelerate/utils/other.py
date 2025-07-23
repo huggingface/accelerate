@@ -194,6 +194,26 @@ def compile_regions_deepspeed(module: torch.nn.Module, **compile_kwargs):
         module.compile(**compile_kwargs)
 
 
+def model_has_dtensor(model: torch.nn.Module) -> bool:
+    """
+    Check if the model has DTensor parameters.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to check.
+
+    Returns:
+        `bool`: Whether the model has DTensor parameters.
+    """
+    if is_torch_version(">=", "2.5.0"):
+        from torch.distributed.tensor import DTensor
+    else:
+        # from torch 2.0.0 (oldest supported accelerate torch version), DTensor is in torch.distributed._tensor
+        from torch.distributed._tensor import DTensor
+
+    return any(isinstance(p, DTensor) for p in model.parameters())
+
+
 def extract_model_from_parallel(
     model, keep_fp32_wrapper: bool = True, keep_torch_compile: bool = True, recursive: bool = False
 ):
