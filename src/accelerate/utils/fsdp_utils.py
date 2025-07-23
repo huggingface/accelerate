@@ -547,6 +547,10 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
             indicates a bug. If we kept the original params instead of raising, the training wouldn't be numerically
             correct and weights wouldn't get updated.
     """
+    from torch.distributed.tensor import DTensor
+    accessor_mapping = {}
+
+    accessor_mapping[DTensor] = "_local_tensor"
     try:
         for param_group in optimizer.param_groups:
             param_group["params"] = [mapping[p.data_ptr] for p in param_group["params"]]

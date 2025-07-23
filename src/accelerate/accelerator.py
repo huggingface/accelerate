@@ -434,7 +434,6 @@ class Accelerator:
                     self.has_fp8_handler = True
 
         parallelism_config = self._setup_parallelism_config(parallelism_config)
-        device_mesh = self._build_torch_device_mesh(parallelism_config)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -446,10 +445,11 @@ class Accelerator:
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             parallelism_config=parallelism_config,
-            device_mesh=device_mesh,
             **kwargs,
         )
 
+        device_mesh = self._build_torch_device_mesh(parallelism_config)
+        self.state.device_mesh = device_mesh
         self.parallelism_config.validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
@@ -757,10 +757,10 @@ class Accelerator:
         return parallelism_config
 
     def _build_torch_device_mesh(self, parallelism_config):
-        if PartialState._shared_state != {} and PartialState().device_mesh is not None:
+        if PartialState._shared_state != {} and getattr(PartialState(), "device_mesh", None) is not None:
             device_mesh = PartialState().device_mesh
         else:
-            parallelism_config.build_device_mesh(self.device.type)
+            device_mesh = parallelism_config.build_device_mesh(self.device.type)
         return device_mesh
 
     @contextmanager
@@ -1539,6 +1539,8 @@ class Accelerator:
         old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
 
         # Swap the optimizer parameters with empty, so `fully_shard` after will not allocate too much memory
+        from torch.distributed.tensor import DTensor
+
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
@@ -1546,7 +1548,9 @@ class Accelerator:
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
                         # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
                         param_group["params"][i] = torch.empty_like(p)
-                        param_group["params"][i].data_ptr = p.data_ptr()
+                        param_group["params"][i].data_ptr = (
+                            p._local_tensor.data_ptr() if isinstance(p, DTensor) else p.data_ptr()
+                        )
 
         self._models.append(model)
 
@@ -3699,6 +3703,11 @@ class Accelerator:
                     from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
                     accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
+                # we know we're in FSDP2 so DTensor is available
+                if self.is_fsdp2:
+                    from torch.distributed.tensor import DTensor
+
+                    accessor_mapping[DTensor] = "_local_tensor"
 
                 named_parameters.update(
                     {
