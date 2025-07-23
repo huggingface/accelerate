@@ -111,7 +111,7 @@ def main():
     accelerator.print(gpu_memory_usage_all())
     accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
     accelerator.print("="* 20)
-    
+
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
     dataloader = accelerator.prepare(dataloader)
