@@ -20,7 +20,7 @@ This unlocks the ability to perform machine learning workflows like prototyping 
 Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this and can be used via the new `"mps"` device. 
 This will map computational graphs and primitives on the MPS Graph framework and tuned kernels provided by MPS.
 For more information please refer official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
-and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html).
+and [MPS BACKEND](https://docs.pytorch.org/docs/stable/notes/mps.html).
 
 ### Benefits of Training and Inference using Apple Silicon Chips
 
