@@ -35,10 +35,13 @@ MODEL_ID = "NousResearch/Llama-3.2-1B"
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str)
+    parser.add_argument("--fsdp2-cls-name-to-wrap", type=str, default="LlamaDecoderLayer")
     parser.add_argument("--dp-replicate-size", type=int, default=1)
     parser.add_argument("--dp-shard-size", type=int, default=1)
     parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=128)
+    parser.add_argument("--model-save-dir", type=str, default="./outputs")
     return parser.parse_args()
 
 def print_rank_zero(str):
@@ -54,6 +57,11 @@ def main():
 
     set_seed(42)
 
+    if args.model:
+        model_id = args.model
+    else:
+        model_id = MODEL_ID
+
     model_kwargs = {}
     accelerator_kwargs = {}
 
@@ -68,7 +76,7 @@ def main():
             fsdp_version=2,
             cpu_ram_efficient_loading=False,
             auto_wrap_policy="transformer_based_wrap",
-            transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
+            transformer_cls_names_to_wrap=[args.fsdp2_cls_name_to_wrap],
             reshard_after_forward=True,
             activation_checkpointing=True,
         )
@@ -80,23 +88,30 @@ def main():
         **accelerator_kwargs,
     )
 
+    if args.tp_size > 1:
+        model_kwargs["tp_size"] = args.tp_size
+        model_kwargs["tp_plan"] = "auto"
+        model_kwargs["device_mesh"] = accelerator.torch_device_mesh
+
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
+        model_id,
         torch_dtype=torch.bfloat16,
         use_cache=False,
-        device_map="auto" if args.tp_size > 1 else None,
-        device_mesh=accelerator.torch_device_mesh if args.tp_size > 1 else None,
         **model_kwargs,
     )
     accelerator.print("Memory usage after model load")
     accelerator.print(gpu_memory_usage_all())
-    tokenizer = setup_tokenizer(MODEL_ID)
+    accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
+    accelerator.print("="* 20)
+    tokenizer = setup_tokenizer(model_id)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 
     model, optimizer = accelerator.prepare(model, optimizer)
     accelerator.print("Memory usage after model prepare")
     accelerator.print(gpu_memory_usage_all())
-
+    accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
+    accelerator.print("="* 20)
+    
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
     dataloader = accelerator.prepare(dataloader)
@@ -143,6 +158,9 @@ def main():
     accelerator.end_training()
     accelerator.print("Training completed!")
 
+    model.save_pretrained(args.model_save_dir)
+    accelerator.print(f"Model saved to {args.model_save_dir}")
+
 
 if __name__ == "__main__":
     main()
@@ -176,5 +194,14 @@ Memory usage after model prepare
 ###############################################################################################
 # FSDP with TP
 accelerate launch --num_processes 8 nd_parallel.py --dp-shard-size 4 --dp-replicate-size 1 --tp-size 2
+
+
+################################################################################################
+# Pure TP
+accelerate launch --num_processes 8 nd_parallel.py --dp-shard-size 1 --dp-replicate-size 1 --tp-size 8
+Memory usage after model load
+{'peak_memory_active': 3.93613862991333, 'peak_memory_alloc': 3.93613862991333, 'peak_memory_reserved': 4.009765625}
+Memory usage after model prepare
+{'peak_memory_active': 3.93613862991333, 'peak_memory_alloc': 3.93613862991333, 'peak_memory_reserved': 4.009765625}
 
 """
