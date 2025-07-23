@@ -740,7 +740,7 @@ class Accelerator:
         return parallelism_config
 
     def _build_torch_device_mesh(self):
-        if PartialState().device_mesh is not None:
+        if PartialState._shared_state != {} and PartialState().device_mesh is not None:
             device_mesh = PartialState().device_mesh
         else:
             device_mesh = self.parallelism_config.build_device_mesh(self.device.type)
