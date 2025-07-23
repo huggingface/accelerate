@@ -599,7 +599,7 @@ def slice_tensors(data, tensor_slice, process_index=None, num_processes=None):
 
 def concatenate(data, dim=0):
     """
-    Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors, or str with the same shape.
+    Recursively concatenates elements in a nested structure of tensors or strings.
 
     Supports nested lists, tuples, or dictionaries that contain either:
     - torch.Tensors (with the same shape except along `dim`)

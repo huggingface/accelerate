@@ -420,6 +420,49 @@ class UtilsTester(unittest.TestCase):
         assert batch["x"].shape == (8, 1)
         assert batch["animals"] == batch1["animals"] + batch2["animals"]
 
+        # dict test
+        batch1 = {
+            "dict": {
+                "a": torch.rand(4, 4),
+                "b": torch.tensor([1, 2, 3, 4]),
+                "c": ["bit", "byte", "gigabyte", "terabyte"]
+            }
+        }
+
+        batch2 = {
+            "dict": {
+                "a": torch.rand(4, 4),
+                "b": torch.tensor([5, 6, 7, 8]),
+                "c": ["kilobyte", "megabyte", "gigabit", "terabit"]
+            }
+        }
+
+        batch = concatenate([batch1, batch2], dim=0)
+
+        assert batch["dict"]["a"].shape == (8, 4)
+        assert batch["dict"]["b"].shape == (8,)
+        assert batch["dict"]["c"] == batch1["dict"]["c"] + batch2["dict"]["c"]
+
+        # tuples test
+        batch1 = {
+            "tuple_key": (torch.rand(4, 2), ["Blackbeard", "Captain Kidd", "Anne Bonny", "Calico Jack"])
+        }
+        batch2 = {
+            "tuple_key": (torch.rand(4, 2), ["Bartholomew Roberts", "Stede Bonnet", "Calico Jack", "Captain Kidd"])
+        }
+
+        batch = concatenate([batch1, batch2], dim=0)
+
+        assert batch["tuple_key"][0].shape == (8, 2)
+        assert  batch["tuple_key"][1] == batch1["tuple_key"][1] + batch2["tuple_key"][1]
+
+        batch1 = {"mix": torch.rand(4, 1)}
+        batch2 = {"mix": ["Basketball", "Baseball", "Surf", "Bilboquet"]}
+
+        with pytest.raises(TypeError):
+            concatenate([batch1, batch2], dim=0)
+
+
     def test_send_to_device_compiles(self):
         compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
         compiled_send_to_device(torch.zeros([1], dtype=torch.bfloat16), "cpu")
