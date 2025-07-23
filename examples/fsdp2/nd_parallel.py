@@ -27,6 +27,8 @@ from transformers import AutoModelForCausalLM
 from accelerate import Accelerator
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
 from accelerate.utils.dataclasses import ParallelismConfig
+from accelerate.utils.fsdp_utils import save_fsdp_optimizer
+
 from utils import PerformanceTracker, create_collate_fn, get_dataset, gpu_memory_usage_all, setup_tokenizer
 
 
@@ -42,6 +44,8 @@ def parse_args():
     parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=128)
     parser.add_argument("--model-save-dir", type=str, default="./outputs")
+    parser.add_argument("--save-model", action="store_true", default=False, help="Whether to save the model after training.")
+    parser.add_argument("--save-optimizer", action="store_true", default=False, help="Whether to save the optimizer state after training.")
     return parser.parse_args()
 
 def print_rank_zero(str):
@@ -79,11 +83,12 @@ def main():
             transformer_cls_names_to_wrap=[args.fsdp2_cls_name_to_wrap],
             reshard_after_forward=True,
             activation_checkpointing=True,
+            state_dict_type="FULL_STATE_DICT",
         )
         accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
 
     accelerator = Accelerator(
-        mixed_precision="bf16",
+        mixed_precision="no",
         parallelism_config=parallelism_config,
         **accelerator_kwargs,
     )
@@ -104,7 +109,7 @@ def main():
     accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
     accelerator.print("="* 20)
     tokenizer = setup_tokenizer(model_id)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
 
     model, optimizer = accelerator.prepare(model, optimizer)
     accelerator.print("Memory usage after model prepare")
@@ -118,9 +123,10 @@ def main():
 
     model.train()
 
-    total_num_steps = min(100, len(dataloader))
-    performance_tracker = PerformanceTracker(warmup_steps=10)
+    total_num_steps = min(10, len(dataloader))
+    performance_tracker = PerformanceTracker(warmup_steps=2)
 
+    accelerator.print("Starting training...")
     for step, batch in enumerate(dataloader):
         if step >= total_num_steps:
             break
@@ -149,7 +155,7 @@ def main():
                 f"alloc={metrics['peak_memory_alloc']:.1f}, "
                 f"reserved={metrics['peak_memory_reserved']:.1f}"
             )
-        if step % 10 == 0 or step == total_num_steps - 1:
+        if step % 2 == 0 or step == total_num_steps - 1:
             accelerator.print(print_msg)
 
         accelerator.log(log_metrics)
@@ -157,9 +163,14 @@ def main():
     accelerator.wait_for_everyone()
     accelerator.end_training()
     accelerator.print("Training completed!")
-
-    model.save_pretrained(args.model_save_dir)
-    accelerator.print(f"Model saved to {args.model_save_dir}")
+    if parallelism_config.fsdp_enabled and args.save_optimizer:
+        accelerator.print("Saving optimizer state...")
+        save_fsdp_optimizer(fsdp2_plugin, accelerator, optimizer, model, args.model_save_dir + "/opt", )
+        accelerator.print("Optimizer state saved.")
+    accelerator.print("Saving model state...")
+    if args.save_model:
+        model.save_pretrained(args.model_save_dir)
+        accelerator.print(f"Model saved to {args.model_save_dir}")
 
 
 if __name__ == "__main__":
@@ -170,38 +181,49 @@ if __name__ == "__main__":
 MODEL_ID = "NousResearch/Llama-3.2-1B"
 
 ###############################################################################################
-# baseline FSDP
-accelerate launch --num_processes 8 nd_parallel.py --dp-shard-size 8 --dp-replicate-size 1
-...
-Memory usage after model prepare
-{'peak_memory_active': 0.7779741287231445, 'peak_memory_alloc': 0.7779741287231445, 'peak_memory_reserved': 0.90234375}
+FSDP 2 DP 1 TP 4
+Step 0/10, Loss: 12.3160
+Warm up completed! Starting performance tracking...
+Step 2/10, Loss: 12.0180 | Average steps/s: 0.24 | Average tokens/s: 30.23
+        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
+Step 4/10, Loss: 10.8536 | Average steps/s: 0.24 | Average tokens/s: 30.25
+        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
+Step 6/10, Loss: 12.1989 | Average steps/s: 0.24 | Average tokens/s: 30.26
+        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
+Step 8/10, Loss: 13.1396 | Average steps/s: 0.24 | Average tokens/s: 30.17
+        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
+Step 9/10, Loss: 12.6244 | Average steps/s: 0.24 | Average tokens/s: 30.16
+        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
+
+#################################################################################################
+FSDP 2 DP 2 TP 2
+Step 0/10, Loss: 11.9605
+Warm up completed! Starting performance tracking...
+qStep 2/10, Loss: 11.0005 | Average steps/s: 0.13 | Average tokens/s: 16.97
+        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
+Step 4/10, Loss: 12.8962 | Average steps/s: 0.13 | Average tokens/s: 16.91
+        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
+Step 6/10, Loss: 11.6681 | Average steps/s: 0.13 | Average tokens/s: 16.91
+        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
+Step 8/10, Loss: 11.6809 | Average steps/s: 0.13 | Average tokens/s: 16.92
+        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
+Step 9/10, Loss: 12.1798 | Average steps/s: 0.13 | Average tokens/s: 16.93
+        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
 
 
-###############################################################################################
-# HSDP
-accelerate launch --num_processes 8 nd_parallel.py --dp_shard_size 2 --dp_replicate_size 4
-...
-Memory usage after model prepare
-{'peak_memory_active': 1.6411805152893066, 'peak_memory_alloc': 1.6411805152893066, 'peak_memory_reserved': 1.76953125}
-
-###############################################################################################
-# HSDP
-accelerate launch --num_processes 8 nd_parallel.py --dp_shard_size 4 --dp_replicate_size 2
-...
-Memory usage after model prepare
-{'peak_memory_active': 1.0664420127868652, 'peak_memory_alloc': 1.0664420127868652, 'peak_memory_reserved': 1.212890625}
-
-###############################################################################################
-# FSDP with TP
-accelerate launch --num_processes 8 nd_parallel.py --dp-shard-size 4 --dp-replicate-size 1 --tp-size 2
-
-
-################################################################################################
-# Pure TP
-accelerate launch --num_processes 8 nd_parallel.py --dp-shard-size 1 --dp-replicate-size 1 --tp-size 8
-Memory usage after model load
-{'peak_memory_active': 3.93613862991333, 'peak_memory_alloc': 3.93613862991333, 'peak_memory_reserved': 4.009765625}
-Memory usage after model prepare
-{'peak_memory_active': 3.93613862991333, 'peak_memory_alloc': 3.93613862991333, 'peak_memory_reserved': 4.009765625}
-
+#################################################################################################
+FSDP 4 DP 2
+Step 0/10, Loss: 11.8716
+Warm up completed! Starting performance tracking...
+Step 2/10, Loss: 12.1762 | Average steps/s: 0.07 | Average tokens/s: 9.42
+        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
+Step 4/10, Loss: 11.6766 | Average steps/s: 0.07 | Average tokens/s: 9.42
+        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
+Step 6/10, Loss: 11.9396 | Average steps/s: 0.07 | Average tokens/s: 9.39
+        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
+Step 8/10, Loss: 10.9308 | Average steps/s: 0.07 | Average tokens/s: 9.41
+        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
+Step 9/10, Loss: 11.7324 | Average steps/s: 0.07 | Average tokens/s: 9.42
+        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
+Training completed!
 """

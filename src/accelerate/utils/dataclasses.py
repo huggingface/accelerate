@@ -2991,6 +2991,24 @@ class ParallelismConfig:
     def active_mesh_dims(self):
         return self.dp_dim_names + self.non_dp_dim_names
 
+
+    def build_device_mesh(self, device_type):
+        mesh_dim_names, mesh_shape = self.get_mesh()
+        device_mesh = torch.distributed.init_device_mesh(
+            device_type,
+            mesh_shape,
+            mesh_dim_names=mesh_dim_names,
+        )
+        if self.dp_dim_names:
+            device_mesh[self.dp_dim_names]._flatten("dp")
+        if self.dp_shard_cp_dim_names:
+            device_mesh[self.dp_shard_cp_dim_names]._flatten("dp_shard_cp")
+        if self.dp_cp_dim_names:
+            device_mesh[self.dp_cp_dim_names]._flatten("dp_cp")
+        
+        return device_mesh
+
+
     def validate_device_mesh(self, device_mesh: "DeviceMesh"):
         """
         Validate that a device mesh is compatible with this parallelism configuration.
