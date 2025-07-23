@@ -1,3 +1,16 @@
+# Copyright 2021 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import argparse
 
@@ -7,9 +20,9 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator
+from accelerate.state import PartialState
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
 from accelerate.utils.dataclasses import ParallelismConfig
-from accelerate.state import PartialState
 from accelerate.utils.fsdp_utils import save_fsdp_optimizer
 from utils import PerformanceTracker, create_collate_fn, get_dataset, gpu_memory_usage_all, setup_tokenizer
 
@@ -26,9 +39,17 @@ def parse_args():
     parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=128)
     parser.add_argument("--model-save-dir", type=str, default="./outputs")
-    parser.add_argument("--save-model", action="store_true", default=False, help="Whether to save the model after training.")
-    parser.add_argument("--save-optimizer", action="store_true", default=False, help="Whether to save the optimizer state after training.")
+    parser.add_argument(
+        "--save-model", action="store_true", default=False, help="Whether to save the model after training."
+    )
+    parser.add_argument(
+        "--save-optimizer",
+        action="store_true",
+        default=False,
+        help="Whether to save the optimizer state after training.",
+    )
     return parser.parse_args()
+
 
 def print_rank_zero(str):
     if dist.get_rank() == 0:
@@ -52,9 +73,9 @@ def main():
     accelerator_kwargs = {}
 
     parallelism_config = ParallelismConfig(
-        dp_replicate_size = args.dp_replicate_size,
-        dp_shard_size = args.dp_shard_size,
-        tp_size = args.tp_size,
+        dp_replicate_size=args.dp_replicate_size,
+        dp_shard_size=args.dp_shard_size,
+        tp_size=args.tp_size,
     )
 
     device_mesh = parallelism_config.build_device_mesh("cuda")
@@ -74,7 +95,7 @@ def main():
     partial_state = PartialState()
     partial_state.device_mesh = device_mesh
     partial_state.parallelism_config = parallelism_config
-    
+
     if parallelism_config.fsdp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
@@ -95,7 +116,7 @@ def main():
     accelerator.print("Memory usage after model load")
     accelerator.print(gpu_memory_usage_all())
     accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
-    accelerator.print("="* 20)
+    accelerator.print("=" * 20)
     tokenizer = setup_tokenizer(model_id)
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
 
@@ -103,7 +124,7 @@ def main():
     accelerator.print("Memory usage after model prepare")
     accelerator.print(gpu_memory_usage_all())
     accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
-    accelerator.print("="* 20)
+    accelerator.print("=" * 20)
 
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
@@ -153,7 +174,13 @@ def main():
     accelerator.print("Training completed!")
     if parallelism_config.fsdp_enabled and args.save_optimizer:
         accelerator.print("Saving optimizer state...")
-        save_fsdp_optimizer(fsdp2_plugin, accelerator, optimizer, model, args.model_save_dir + "/opt", )
+        save_fsdp_optimizer(
+            fsdp2_plugin,
+            accelerator,
+            optimizer,
+            model,
+            args.model_save_dir + "/opt",
+        )
         accelerator.print("Optimizer state saved.")
     accelerator.print("Saving model state...")
     if args.save_model:

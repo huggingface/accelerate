@@ -29,7 +29,6 @@ from .utils import (
     DistributedType,
     DynamoBackend,
     GradientAccumulationPlugin,
-    ParallelismConfig,
     check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
     deepspeed_required,
@@ -869,8 +868,8 @@ class AcceleratorState:
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
           in use.
-        - **parallelism_config** ([`~accelerate.utils.ParallelismConfig`]) -- The parallelism configuration
-          for the current training environment. This is used to configure the distributed training environment.
+        - **parallelism_config** ([`~accelerate.utils.ParallelismConfig`]) -- The parallelism configuration for the
+          current training environment. This is used to configure the distributed training environment.
         - **initialized** (`bool`) -- Whether or not the `AcceleratorState` has been initialized from `Accelerator`.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type

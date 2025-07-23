@@ -2885,21 +2885,26 @@ class ParallelismConfig:
 
     Args:
         dp_replicate_size (`int`, defaults to `1`):
-            The size of the data parallel group. If `dp_replicate_size` is set to 1, the data parallel replication group will not be used.
+            The size of the data parallel group. If `dp_replicate_size` is set to 1, the data parallel replication
+            group will not be used.
         dp_shard_size (`int`, defaults to `1`):
-            The size of the model shard group. If `dp_replicate_size > 1` and `tp_size > 1`, `dp_shard_size` must also be greater than 1, as
-            composing DDP + TP is currently not supported.
+            The size of the model shard group. If `dp_replicate_size > 1` and `tp_size > 1`, `dp_shard_size` must also
+            be greater than 1, as composing DDP + TP is currently not supported.
         tp_size (`int`, defaults to `1`):
-            The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be used.
+            The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be
+            used.
         cp_size (`int`, defaults to `1`):
-            The size of the context parallel group. Currently not supported, but reserved for future use and enabled for downstream libraries.
+            The size of the context parallel group. Currently not supported, but reserved for future use and enabled
+            for downstream libraries.
         tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
             The handler for the tensor parallel group.
 
-    You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size` together:
+    You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
+    together:
         - `dp_replicate_size == 1` and `dp_shard_size > 1`, we obtain Fully Sharded Data Parallel (FSDP).
         - `dp_replicate_size > 1` and `dp_shard_size > 1`, we obtain Hybrid Sharded Data Parallel (HSDP).
-        - `dp_replicate_size > 1` and `dp_shard_size == 1` is an invalid configuration, to use pure DP, use `DistributedDataParallelKwargs` instead.
+        - `dp_replicate_size > 1` and `dp_shard_size == 1` is an invalid configuration, to use pure DP, use
+          `DistributedDataParallelKwargs` instead.
 
     """
 
@@ -2991,7 +2996,6 @@ class ParallelismConfig:
     def active_mesh_dims(self):
         return self.dp_dim_names + self.non_dp_dim_names
 
-
     def build_device_mesh(self, device_type: str):
         mesh_dim_names, mesh_shape = self.get_mesh()
         device_mesh = torch.distributed.init_device_mesh(
@@ -3005,34 +3009,8 @@ class ParallelismConfig:
             device_mesh[self.dp_shard_cp_dim_names]._flatten("dp_shard_cp")
         if self.dp_cp_dim_names:
             device_mesh[self.dp_cp_dim_names]._flatten("dp_cp")
-        
+
         return device_mesh
-
-
-    def validate_device_mesh(self, device_mesh: "DeviceMesh"):
-        """
-        Validate that a device mesh is compatible with this parallelism configuration.
-        Note: This method should be called *before* performing any `_flatten` operations on the mesh.
-        """
-        # Check that the total size matches
-        if device_mesh.size() != self.total_size:
-            raise ValueError(
-                f"Device mesh size {device_mesh.size()} does not match the total size of the parallelism config {self.total_size}."
-            )
-
-        # Check that dimension sizes match
-        mesh_dim_names, mesh_shape = self.get_mesh()
-        for i, (dim_name, expected_size) in enumerate(zip(mesh_dim_names, mesh_shape)):
-            if device_mesh.mesh_dim_names[i] != dim_name:
-                raise ValueError(
-                    f"Device mesh dimension order mismatch. Expected {dim_name} at position {i}, "
-                    f"but got {device_mesh.mesh_dim_names[i]}."
-                )
-            if device_mesh.shape[i] != expected_size:
-                raise ValueError(
-                    f"Device mesh dimension size mismatch for {dim_name}. Expected {expected_size}, "
-                    f"but got {device_mesh.shape[i]}."
-                )
 
     def get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
         """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""

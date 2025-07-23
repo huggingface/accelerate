@@ -28,8 +28,13 @@ from accelerate import Accelerator
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
 from accelerate.utils.dataclasses import ParallelismConfig
 from accelerate.utils.fsdp_utils import save_fsdp_optimizer
-
-from utils import PerformanceTracker, create_collate_fn, get_dataset, gpu_memory_usage_all, setup_tokenizer
+from utils import (
+    PerformanceTracker,
+    create_collate_fn,
+    get_dataset,
+    gpu_memory_usage_all,
+    setup_tokenizer,
+)
 
 
 MODEL_ID = "NousResearch/Llama-3.2-1B"
@@ -44,9 +49,20 @@ def parse_args():
     parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=128)
     parser.add_argument("--model-save-dir", type=str, default="./outputs")
-    parser.add_argument("--save-model", action="store_true", default=False, help="Whether to save the model after training.")
-    parser.add_argument("--save-optimizer", action="store_true", default=False, help="Whether to save the optimizer state after training.")
+    parser.add_argument(
+        "--save-model",
+        action="store_true",
+        default=False,
+        help="Whether to save the model after training.",
+    )
+    parser.add_argument(
+        "--save-optimizer",
+        action="store_true",
+        default=False,
+        help="Whether to save the optimizer state after training.",
+    )
     return parser.parse_args()
+
 
 def print_rank_zero(str):
     if dist.get_rank() == 0:
@@ -107,7 +123,7 @@ def main():
     accelerator.print("Memory usage after model load")
     accelerator.print(gpu_memory_usage_all())
     accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
-    accelerator.print("="* 20)
+    accelerator.print("=" * 20)
     tokenizer = setup_tokenizer(model_id)
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
 
@@ -115,7 +131,7 @@ def main():
     accelerator.print("Memory usage after model prepare")
     accelerator.print(gpu_memory_usage_all())
     accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
-    accelerator.print("="* 20)
+    accelerator.print("=" * 20)
 
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
@@ -165,7 +181,13 @@ def main():
     accelerator.print("Training completed!")
     if parallelism_config.fsdp_enabled and args.save_optimizer:
         accelerator.print("Saving optimizer state...")
-        save_fsdp_optimizer(fsdp2_plugin, accelerator, optimizer, model, args.model_save_dir + "/opt", )
+        save_fsdp_optimizer(
+            fsdp2_plugin,
+            accelerator,
+            optimizer,
+            model,
+            args.model_save_dir + "/opt",
+        )
         accelerator.print("Optimizer state saved.")
     accelerator.print("Saving model state...")
     if args.save_model:

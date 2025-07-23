@@ -720,11 +720,11 @@ class Accelerator:
     @property
     def parallelism_config(self):
         return self.state.parallelism_config
-    
+
     @property
     def torch_device_mesh(self):
         return self.state.device_mesh
-    
+
     def _setup_parallelism_config(self, parallelism_config):
         if parallelism_config is None:
             logger.info("No parallelism_config provided! Attempting to load from PartialState.")
@@ -735,7 +735,7 @@ class Accelerator:
                 logger.info("No parallelism_config found in PartialState, using default ParallelismConfig.")
                 parallelism_config = ParallelismConfig()
 
-        PartialState().parallelism_config = parallelism_config 
+        PartialState().parallelism_config = parallelism_config
 
         return parallelism_config
 
@@ -744,7 +744,7 @@ class Accelerator:
             device_mesh = PartialState().device_mesh
         else:
             device_mesh = self.parallelism_config.build_device_mesh(self.device.type)
-            
+
         self.state.device_mesh = device_mesh
         PartialState().device_mesh = device_mesh
 

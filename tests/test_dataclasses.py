@@ -12,26 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from accelerate.utils import ParallelismConfig
-from accelerate.test_utils.testing import AccelerateTestCase
-from accelerate import Accelerator
-import pytest
 from unittest.mock import Mock, patch
-import torch
-import torch.distributed as dist
 
-from accelerate.test_utils import (
-    execute_subprocess_async,
-    get_torch_dist_unique_port,
-    require_multi_device,
-    run_first,
-    torch_device,
-)
+import pytest
+
+from accelerate.utils import ParallelismConfig
 
 
-
-class TestParallelismConfig():
-
+class TestParallelismConfig:
     @pytest.fixture(autouse=True)
     def mock_init_device_mesh(self):
         def mock_init_mesh(device_type, mesh_shape, mesh_dim_names):
@@ -41,95 +29,98 @@ class TestParallelismConfig():
                 mesh.size.return_value *= dim
             mesh.shape = mesh_shape
             mesh.mesh_dim_names = mesh_dim_names
+
+            # mock device_mesh._flatten
+            mesh.flattened_dims = []
+
+            def mock_getitem(key):
+                submesh = Mock()
+
+                def mock_flatten(name):
+                    mesh.flattened_dims.append((key, name))
+
+                submesh._flatten = Mock(side_effect=mock_flatten)
+                return submesh
+
+            mesh.__getitem__ = Mock(side_effect=mock_getitem)
+
             return mesh
-        
-        with patch('torch.distributed.init_device_mesh', side_effect=mock_init_mesh):
+
+        with patch("torch.distributed.init_device_mesh", side_effect=mock_init_mesh):
             yield mock_init_mesh
 
-
     @pytest.mark.parametrize(
-        "dp_replicate_size, dp_shard_size, tp_size, expected_shape, expected_dim_names",
+        "dp_replicate_size, dp_shard_size, tp_size, cp_size, expected_shape, expected_dim_names",
         [
-            (1, 1, 1, (), ()),
-            (8, 1, 1, (8,), ("dp_replicate",)), # DDP
-            (1, 8, 1, (8,), ("dp_shard",)), # FSDP
-            (2, 4, 1, (2, 4), ("dp_replicate", "dp_shard")), # HSDP
-            (1, 4, 2, (4, 2), ("dp_shard", "tp")), # FSDP + TP
-            (2, 2, 2, (2, 2, 2), ("dp_replicate", "dp_shard", "tp")), # HSDP + TP
-            (1, 1, 8, (8,), ("tp",)), # TP only
-        ]
+            (8, 1, 1, 1, (8,), ("dp_replicate",)),  # DDP
+            (1, 8, 1, 1, (8,), ("dp_shard",)),  # FSDP
+            (2, 4, 1, 1, (2, 4), ("dp_replicate", "dp_shard")),  # HSDP
+            (1, 4, 2, 1, (4, 2), ("dp_shard", "tp")),  # FSDP + TP
+            (2, 2, 2, 1, (2, 2, 2), ("dp_replicate", "dp_shard", "tp")),  # HSDP + TP
+            (1, 1, 8, 1, (8,), ("tp",)),  # TP only
+            (1, 1, 1, 4, (4,), ("cp",)),  # CP only
+            (1, 4, 1, 2, (4, 2), ("dp_shard", "cp")),  # FSDP + CP
+            (1, 2, 2, 2, (2, 2, 2), ("dp_shard", "cp", "tp")),  # FSDP + CP + TP
+            (2, 2, 2, 2, (2, 2, 2, 2), ("dp_replicate", "dp_shard", "cp", "tp")),  # HSDP + CP + TP
+        ],
     )
     def test_get_mesh(
-        self, 
-        dp_replicate_size, 
-        dp_shard_size, 
-        tp_size, 
-        expected_shape, 
+        self,
+        dp_replicate_size,
+        dp_shard_size,
+        tp_size,
+        cp_size,
+        expected_shape,
         expected_dim_names,
     ):
         config = ParallelismConfig(
-            dp_replicate_size=dp_replicate_size, 
-            dp_shard_size=dp_shard_size, 
-            tp_size=tp_size
+            dp_replicate_size=dp_replicate_size, dp_shard_size=dp_shard_size, tp_size=tp_size, cp_size=cp_size
         )
         mesh_dim_names, mesh_shape = config.get_mesh()
-        assert mesh_shape ==  expected_shape
-        assert mesh_dim_names ==  expected_dim_names
-
-
-    @pytest.mark.parametrize(
-        "dp_replicate_size, dp_shard_size, tp_size, device_mesh_dims, device_mesh_dim_names",
-        [
-            (8, 1, 1, (8,), ("dp_replicate",)),
-            (1, 8, 1, (8,), ("dp_shard",)),
-            (2, 4, 1, (2, 4), ("dp_replicate", "dp_shard")),
-            (1, 4, 2, (4, 2), ("dp_shard", "tp")),
-            (2, 2, 2, (2, 2, 2), ("dp_replicate", "dp_shard", "tp")),
-            (1, 1, 8, (8,), ("tp",)),
-        ]
-    )
-    def test_validate_device_mesh_valid_configurations(
-        self, 
-        dp_replicate_size, 
-        dp_shard_size, 
-        tp_size, 
-        device_mesh_dims, 
-        device_mesh_dim_names,
-    ):
-        """Test validate_device_mesh with valid configurations."""        
-        config = ParallelismConfig(
-            dp_replicate_size=dp_replicate_size, 
-            dp_shard_size=dp_shard_size, 
-            tp_size=tp_size
-        )  
-        device_mesh = dist.init_device_mesh("cpu", mesh_shape=device_mesh_dims, mesh_dim_names=device_mesh_dim_names)
-        config.validate_device_mesh(device_mesh)
-
+        assert mesh_shape == expected_shape
+        assert mesh_dim_names == expected_dim_names
 
     @pytest.mark.parametrize(
-        "dp_replicate_size, dp_shard_size, tp_size, device_mesh_dims, device_mesh_dim_names",
+        "dp_replicate_size, dp_shard_size, tp_size, cp_size, expected_shape, expected_dim_names",
         [
-            (8, 1, 1, (4,), ("dp_replicate",)), # invalid size
-            (1, 4, 1, (4,), ("tp",)), # valid size, invalid mesh name
-            (2, 4, 1, (2, 3), ("dp_replicate", "dp_shard")), # invalid total world size
-            (4, 4, 2, (4, 4), ("dp_shard", "dp_replicate")), # valid size, invalid ordering
-        ]
+            (8, 1, 1, 1, (8,), ("dp_replicate",)),
+            (1, 8, 1, 1, (8,), ("dp_shard",)),
+            (2, 4, 1, 1, (2, 4), ("dp_replicate", "dp_shard")),
+            (1, 4, 2, 1, (4, 2), ("dp_shard", "tp")),
+            (2, 2, 2, 1, (2, 2, 2), ("dp_replicate", "dp_shard", "tp")),
+            (1, 1, 8, 1, (8,), ("tp",)),
+            (1, 1, 1, 4, (4,), ("cp",)),
+            (1, 4, 1, 2, (4, 2), ("dp_shard", "cp")),
+            (1, 2, 2, 2, (2, 2, 2), ("dp_shard", "cp", "tp")),
+            (2, 2, 2, 2, (2, 2, 2, 2), ("dp_replicate", "dp_shard", "cp", "tp")),
+        ],
     )
-    def test_validate_device_mesh_invalid_configurations(
-        self, 
-        dp_replicate_size, 
-        dp_shard_size, 
-        tp_size, 
-        device_mesh_dims, 
-        device_mesh_dim_names,
+    def test_build_device_mesh(
+        self,
+        dp_replicate_size,
+        dp_shard_size,
+        tp_size,
+        cp_size,
+        expected_shape,
+        expected_dim_names,
     ):
-        """Test validate_device_mesh with invalid configurations."""        
+        """Test build_device_mesh creates correct mesh and applies flattening."""
         config = ParallelismConfig(
-            dp_replicate_size=dp_replicate_size, 
-            dp_shard_size=dp_shard_size, 
-            tp_size=tp_size
-        )  
-        device_mesh = dist.init_device_mesh("cpu", mesh_shape=device_mesh_dims, mesh_dim_names=device_mesh_dim_names)
-        with pytest.raises(ValueError):
-            config.validate_device_mesh(device_mesh)
+            dp_replicate_size=dp_replicate_size, dp_shard_size=dp_shard_size, tp_size=tp_size, cp_size=cp_size
+        )
+        device_mesh = config.build_device_mesh("cpu")
 
+        # Check mesh shape and dimension names match expected
+        assert device_mesh.shape == expected_shape
+        assert device_mesh.mesh_dim_names == expected_dim_names
+
+        # Check that correct flattening operations were called
+        expected_flattened = []
+        if config.dp_dim_names:
+            expected_flattened.append((config.dp_dim_names, "dp"))
+        if config.dp_shard_cp_dim_names:
+            expected_flattened.append((config.dp_shard_cp_dim_names, "dp_shard_cp"))
+        if config.dp_cp_dim_names:
+            expected_flattened.append((config.dp_cp_dim_names, "dp_cp"))
+
+        assert device_mesh.flattened_dims == expected_flattened

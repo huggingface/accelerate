@@ -161,7 +161,7 @@ class PerformanceTracker:
                     "steps_per_second": steps_from_warmup / total_time,
                     "total_tokens": self.num_tokens,
                     "total_time": total_time,
-                    **memory_stats, 
+                    **memory_stats,
                 }
 
         return {}
@@ -178,9 +178,7 @@ def setup_tokenizer(model_id: str) -> AutoTokenizer:
 def gpu_memory_usage_all(device=0):
     device = torch.device(f"cuda:{device}")
     _BYTES_IN_GIB = 1024**3
-    peak_memory_active = (
-        torch.cuda.memory_stats().get("active_bytes.all.peak", 0) / _BYTES_IN_GIB
-    )
+    peak_memory_active = torch.cuda.memory_stats().get("active_bytes.all.peak", 0) / _BYTES_IN_GIB
     peak_memory_alloc = torch.cuda.max_memory_allocated(device) / _BYTES_IN_GIB
     peak_memory_reserved = torch.cuda.max_memory_reserved(device) / _BYTES_IN_GIB
     memory_stats = {
