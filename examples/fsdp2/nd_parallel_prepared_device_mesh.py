@@ -56,11 +56,8 @@ def main():
         dp_shard_size = args.dp_shard_size,
         tp_size = args.tp_size,
     )
-    mesh_dim_names, mesh_shape = parallelism_config.get_mesh()
 
-    device_mesh = torch.distributed.init_device_mesh(
-        "cuda", mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
-    )
+    device_mesh = parallelism_config.build_device_mesh("cuda")
 
     if args.tp_size > 1:
         model_kwargs["tp_size"] = args.tp_size
@@ -83,7 +80,7 @@ def main():
             fsdp_version=2,
             cpu_ram_efficient_loading=False,
             auto_wrap_policy="transformer_based_wrap",
-            transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
+            transformer_cls_names_to_wrap=[args.fsdp2_cls_name_to_wrap],
             reshard_after_forward=True,
             activation_checkpointing=True,
             state_dict_type="FULL_STATE_DICT",
@@ -166,24 +163,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-"""
-###############################################################################################
-# baseline FSDP
-accelerate launch --num_processes 8 nd_parallel.py --dp-shard-size 8 --dp-replicate-size 1
-Memory usage after model load
-{'peak_memory_active': 0.0, 'peak_memory_alloc': 0.0, 'peak_memory_reserved': 0.0}
-Memory usage after model prepare
-{'peak_memory_active': 0.7779741287231445, 'peak_memory_alloc': 0.7779741287231445, 'peak_memory_reserved': 0.90234375}
-
-###############################################################################################
-
-accelerate launch --num_processes 8 nd_parallel.py --dp-shard-size 1 --dp-replicate-size 8
-
-
-###############################################################################################
-
-accelerate launch --num_processes 8 nd_parallel.py --dp_shard_size 2 --dp_replicate_size 4
-
-
-"""

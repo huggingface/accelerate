@@ -428,8 +428,7 @@ class Accelerator:
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
 
-        parallelism_config = self._setup_parallelism_config()
-        self.torch_device_mesh = self.parallelism_config.build_device_mesh(self.device_type)
+        parallelism_config = self._setup_parallelism_config(parallelism_config)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -444,6 +443,8 @@ class Accelerator:
             **kwargs,
         )
 
+        self.parallelism_config.validate_accelerator(self)
+        self._build_torch_device_mesh()
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -720,6 +721,10 @@ class Accelerator:
     def parallelism_config(self):
         return self.state.parallelism_config
     
+    @property
+    def torch_device_mesh(self):
+        return self.state.device_mesh
+    
     def _setup_parallelism_config(self, parallelism_config):
         if parallelism_config is None:
             logger.info("No parallelism_config provided! Attempting to load from PartialState.")
@@ -729,17 +734,16 @@ class Accelerator:
             else:
                 logger.info("No parallelism_config found in PartialState, using default ParallelismConfig.")
                 parallelism_config = ParallelismConfig()
-                
+
         PartialState().parallelism_config = parallelism_config 
 
-        parallelism_config.validate_accelerator(self)
         return parallelism_config
 
     def _build_torch_device_mesh(self):
         if PartialState().device_mesh is not None:
             device_mesh = PartialState().device_mesh
         else:
-            device_mesh = self.parallelism_config.build_device_mesh(self.device_type)
+            device_mesh = self.parallelism_config.build_device_mesh(self.device.type)
             
         self.state.device_mesh = device_mesh
         PartialState().device_mesh = device_mesh
