@@ -51,11 +51,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def print_rank_zero(str):
-    if dist.get_rank() == 0:
-        print(str)
-
-
 def main():
     """
     Main function to train the model.
