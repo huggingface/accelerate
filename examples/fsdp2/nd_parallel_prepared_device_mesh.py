@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Example of training with ND parallel using accelerate's ParallelismConfig
+"""
+
 import argparse
 
 import torch
@@ -87,9 +91,7 @@ def main():
         **model_kwargs,
     )
 
-    partial_state = PartialState()
-    partial_state.device_mesh = device_mesh
-    partial_state.parallelism_config = parallelism_config
+    PartialState(device_mesh=device_mesh, parallelism_config=parallelism_config)
 
     if parallelism_config.fsdp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
@@ -110,7 +112,6 @@ def main():
 
     accelerator.print("Memory usage after model load")
     accelerator.print(gpu_memory_usage_all())
-    accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
     accelerator.print("=" * 20)
     tokenizer = setup_tokenizer(model_id)
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
@@ -118,7 +119,6 @@ def main():
     model, optimizer = accelerator.prepare(model, optimizer)
     accelerator.print("Memory usage after model prepare")
     accelerator.print(gpu_memory_usage_all())
-    accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
     accelerator.print("=" * 20)
 
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)

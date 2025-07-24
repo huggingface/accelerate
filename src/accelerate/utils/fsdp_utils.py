@@ -548,6 +548,7 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
             correct and weights wouldn't get updated.
     """
     from torch.distributed.tensor import DTensor
+
     accessor_mapping = {}
 
     accessor_mapping[DTensor] = "_local_tensor"

@@ -210,7 +210,7 @@ class Accelerator:
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
         torch_tp_plugin ([`~utils.TorchTensorParallelPlugin`], *optional*):
-            Deprecated: use `parallelism_config` with `TorchTensorParallelConfig` instead.
+            Deprecated: use `parallelism_config` with `tp_size` instead.
         megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -421,9 +421,9 @@ class Accelerator:
         self.has_fp8_handler = False
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(handler, KwargsHandler), (
-                    f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
-                )
+                assert isinstance(
+                    handler, KwargsHandler
+                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
                 # Add the handler class to the set of found handlers
                 if handler.__class__ in found_handlers:
                     raise ValueError(f"You can only pass one {handler.__class__} in `kwargs_handlers`.")
@@ -433,9 +433,10 @@ class Accelerator:
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
 
-        parallelism_config = self._setup_parallelism_config(parallelism_config)
+        parallelism_config = self._setup_parallelism_config(parallelism_config, torch_tp_plugin)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
+        kwargs["parallelism_config"] = parallelism_config
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
@@ -444,12 +445,10 @@ class Accelerator:
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
-            parallelism_config=parallelism_config,
             **kwargs,
         )
 
-        device_mesh = self._build_torch_device_mesh(parallelism_config)
-        self.state.device_mesh = device_mesh
+        self._build_torch_device_mesh(self.parallelism_config)
         self.parallelism_config.validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
@@ -742,17 +741,17 @@ class Accelerator:
     def torch_device_mesh(self):
         return self.state.device_mesh
 
-    def _setup_parallelism_config(self, parallelism_config):
+    def _setup_parallelism_config(
+        self, parallelism_config: ParallelismConfig | None, torch_tp_plugin: TorchTensorParallelPlugin | None
+    ):
         if parallelism_config is None:
-            logger.info("No parallelism_config provided! Attempting to load from PartialState.")
+            warnings.warn("No parallelism_config provided! Attempting to load from PartialState.")
             if PartialState._shared_state != {} and PartialState().parallelism_config is not None:
-                logger.info(f"Found parallelism_config in PartialState: {PartialState().parallelism_config}")
                 parallelism_config = PartialState().parallelism_config
             else:
-                logger.info("No parallelism_config found in PartialState, using default ParallelismConfig.")
-                parallelism_config = ParallelismConfig()
-
-        PartialState().parallelism_config = parallelism_config
+                warnings.warn("No parallelism_config found in PartialState, using default ParallelismConfig.")
+                tp_size = 1 if torch_tp_plugin is None else torch_tp_plugin.tp_size
+                parallelism_config = ParallelismConfig(tp_size=tp_size)
 
         return parallelism_config
 
@@ -761,6 +760,8 @@ class Accelerator:
             device_mesh = PartialState().device_mesh
         else:
             device_mesh = parallelism_config.build_device_mesh(self.device.type)
+        self.state.device_mesh = device_mesh
+        PartialState().device_mesh = device_mesh
         return device_mesh
 
     @contextmanager

@@ -1638,14 +1638,14 @@ class FullyShardedDataParallelPlugin:
             "Can also be an instance of `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2."
         },
     )
-    auto_wrap_policy: Optional[Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]] = (
-        field(
-            default=None,
-            metadata={
-                "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
-                "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
-            },
-        )
+    auto_wrap_policy: Optional[
+        Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]
+    ] = field(
+        default=None,
+        metadata={
+            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
+            "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
+        },
     )
     cpu_offload: Union[
         bool,
@@ -2141,10 +2141,9 @@ class TorchTensorParallelPlugin:
     def __post_init__(self):
         warnings.warn(
             "`TorchTensorParallelPlugin` is deprecated and will be removed in a future version of Accelerate. "
-            "Please use the `ParallelismConfig` with `TorchTensorParallelConfig` instead.",
+            "Please use the `ParallelismConfig` with `tp_size` instead.",
             FutureWarning,
         )
-        pass
 
 
 @dataclass

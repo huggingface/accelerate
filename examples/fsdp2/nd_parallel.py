@@ -13,8 +13,7 @@
 # limitations under the License.
 
 """
-Example of training with Context Parallel using FSDP2 via Accelerate.
-This example demonstrates how to use Accelerate's context_parallel feature for efficient long sequence training.
+Example of training with ND parallel using accelerate's ParallelismConfig
 """
 
 import argparse
@@ -117,7 +116,6 @@ def main():
     )
     accelerator.print("Memory usage after model load")
     accelerator.print(gpu_memory_usage_all())
-    accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
     accelerator.print("=" * 20)
     tokenizer = setup_tokenizer(model_id)
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
@@ -125,7 +123,6 @@ def main():
     model, optimizer = accelerator.prepare(model, optimizer)
     accelerator.print("Memory usage after model prepare")
     accelerator.print(gpu_memory_usage_all())
-    accelerator.print(model.model.layers[0].self_attn.q_proj.weight)
     accelerator.print("=" * 20)
 
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
@@ -192,55 +189,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-"""
-
-MODEL_ID = "NousResearch/Llama-3.2-1B"
-
-###############################################################################################
-FSDP 2 DP 1 TP 4
-Step 0/10, Loss: 12.3160
-Warm up completed! Starting performance tracking...
-Step 2/10, Loss: 12.0180 | Average steps/s: 0.24 | Average tokens/s: 30.23
-        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
-Step 4/10, Loss: 10.8536 | Average steps/s: 0.24 | Average tokens/s: 30.25
-        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
-Step 6/10, Loss: 12.1989 | Average steps/s: 0.24 | Average tokens/s: 30.26
-        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
-Step 8/10, Loss: 13.1396 | Average steps/s: 0.24 | Average tokens/s: 30.17
-        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
-Step 9/10, Loss: 12.6244 | Average steps/s: 0.24 | Average tokens/s: 30.16
-        Memory (GB): active=10.4, alloc=10.4, reserved=22.8
-
-#################################################################################################
-FSDP 2 DP 2 TP 2
-Step 0/10, Loss: 11.9605
-Warm up completed! Starting performance tracking...
-qStep 2/10, Loss: 11.0005 | Average steps/s: 0.13 | Average tokens/s: 16.97
-        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
-Step 4/10, Loss: 12.8962 | Average steps/s: 0.13 | Average tokens/s: 16.91
-        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
-Step 6/10, Loss: 11.6681 | Average steps/s: 0.13 | Average tokens/s: 16.91
-        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
-Step 8/10, Loss: 11.6809 | Average steps/s: 0.13 | Average tokens/s: 16.92
-        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
-Step 9/10, Loss: 12.1798 | Average steps/s: 0.13 | Average tokens/s: 16.93
-        Memory (GB): active=16.9, alloc=16.9, reserved=35.9
-
-
-#################################################################################################
-FSDP 4 DP 2
-Step 0/10, Loss: 11.8716
-Warm up completed! Starting performance tracking...
-Step 2/10, Loss: 12.1762 | Average steps/s: 0.07 | Average tokens/s: 9.42
-        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
-Step 4/10, Loss: 11.6766 | Average steps/s: 0.07 | Average tokens/s: 9.42
-        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
-Step 6/10, Loss: 11.9396 | Average steps/s: 0.07 | Average tokens/s: 9.39
-        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
-Step 8/10, Loss: 10.9308 | Average steps/s: 0.07 | Average tokens/s: 9.41
-        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
-Step 9/10, Loss: 11.7324 | Average steps/s: 0.07 | Average tokens/s: 9.42
-        Memory (GB): active=12.1, alloc=12.1, reserved=18.7
-Training completed!
-"""
