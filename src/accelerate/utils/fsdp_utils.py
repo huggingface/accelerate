@@ -15,6 +15,7 @@ import copy
 import functools
 import os
 import shutil
+import warnings
 from collections import defaultdict
 from contextlib import nullcontext
 from pathlib import Path
@@ -693,6 +694,18 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
+    # There is no `dtype` attribution for nn.Module
+    # Set it to None if it doesn't exist and do the upcast always
+    model_dtype = getattr(model, "dtype", None)
+    if accelerator.mixed_precision != "no" and (model_dtype is None or model_dtype != torch.float32):
+        # We upcast the model according to `deepspeed`'s implementation
+        # More info about this can be found in `accelerator.py:prepare_model`s FSDP1 section
+        model = model.to(torch.float32)
+        if accelerator.is_main_process:
+            # TODO(siro1): Add a warning for each parameter that was upcasted
+            warnings.warn(
+                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints."
+            )
     return model
 
 
