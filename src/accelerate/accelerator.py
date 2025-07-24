@@ -762,7 +762,6 @@ class Accelerator:
             device_mesh = parallelism_config.build_device_mesh(self.device.type)
         self.state.device_mesh = device_mesh
         PartialState().device_mesh = device_mesh
-        return device_mesh
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
