@@ -448,8 +448,9 @@ class Accelerator:
             **kwargs,
         )
 
-        self._build_torch_device_mesh(self.parallelism_config)
-        self.parallelism_config.validate_accelerator(self)
+        if self.parallelism_config:
+            self._build_torch_device_mesh(self.parallelism_config)
+            self.parallelism_config.validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 

@@ -2998,7 +2998,10 @@ class ParallelismConfig:
         return self.dp_dim_names + self.non_dp_dim_names
 
     def build_device_mesh(self, device_type: str):
-        mesh_dim_names, mesh_shape = self.get_mesh()
+        mesh = self.get_mesh()
+        if not mesh:
+            return
+        mesh_dim_names, mesh_shape = mesh
         device_mesh = torch.distributed.init_device_mesh(
             device_type,
             mesh_shape,
