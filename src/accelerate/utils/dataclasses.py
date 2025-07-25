@@ -2999,7 +2999,7 @@ class ParallelismConfig:
 
     def build_device_mesh(self, device_type: str):
         mesh = self.get_mesh()
-        if not mesh:
+        if len(mesh) == 0:
             return
         mesh_dim_names, mesh_shape = mesh
         device_mesh = torch.distributed.init_device_mesh(
@@ -3028,7 +3028,7 @@ class ParallelismConfig:
             mesh_dims.items(),
             key=lambda x: (mesh_order.index(x[0])),
         )
-        return zip(*sorted_items)
+        return tuple(zip(*sorted_items))
 
     def __post_init__(self):
         # Basic size validation
