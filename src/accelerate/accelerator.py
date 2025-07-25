@@ -1675,7 +1675,7 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
-            if self.multi_device and not self.parallelism_config.tp_enabled:
+            if self.multi_device and not (self.parallelism_config and self.parallelism_config.tp_enabled):
                 if model_has_dtensor(model):
                     raise ValueError(
                         "Your model contains `DTensor` parameters, which is incompatible with DDP. Maybe you loaded your model with `device_map='auto'`? Specify `device_map='cuda'` or 'cpu' instead."
@@ -1695,7 +1695,7 @@ class Accelerator:
                     )
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
-            elif self.parallelism_config.tp_enabled:
+            elif self.parallelism_config and self.parallelism_config.tp_enabled:
                 if not hasattr(model, "tp_size"):
                     raise NotImplementedError(
                         "Model should undergo tensor parallel before passing it to accelerate."
