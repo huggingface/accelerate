@@ -33,6 +33,7 @@ import torch
 
 from .constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
+    BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
@@ -57,6 +58,8 @@ from .versions import compare_versions, is_torch_version
 if TYPE_CHECKING:
     # Mock imports for type checking
     from torchao.float8 import Float8LinearConfig
+
+    from accelerate import Accelerator
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +187,9 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
     comm_hook: DDPCommunicationHookType = DDPCommunicationHookType.NO
     comm_wrapper: Literal[
-        DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16
+        DDPCommunicationHookType.NO,
+        DDPCommunicationHookType.FP16,
+        DDPCommunicationHookType.BF16,
     ] = DDPCommunicationHookType.NO
     comm_state_option: dict = field(default_factory=dict)
 
@@ -192,7 +197,10 @@ class DistributedDataParallelKwargs(KwargsHandler):
         return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
 
     def register_comm_hook(self, model):
-        from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
+        from torch.distributed.algorithms.ddp_comm_hooks import (
+            default_hooks,
+            powerSGD_hook,
+        )
 
         hook_map: dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
@@ -215,7 +223,11 @@ class DistributedDataParallelKwargs(KwargsHandler):
         if hook:
             state = (
                 powerSGD_hook.PowerSGDState(None, **self.comm_state_option)
-                if self.comm_hook in (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD)
+                if self.comm_hook
+                in (
+                    DDPCommunicationHookType.POWER_SGD,
+                    DDPCommunicationHookType.BATCHED_POWER_SGD,
+                )
                 else None
             )
             model.register_comm_hook(
@@ -582,7 +594,6 @@ class DistributedType(str, enum.Enum):
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
-    TP = "TP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
     MULTI_HPU = "MULTI_HPU"
@@ -955,7 +966,10 @@ class GradientAccumulationPlugin(KwargsHandler):
     ```
     """
 
-    num_steps: int = field(default=None, metadata={"help": "The number of steps to accumulate gradients for."})
+    num_steps: int = field(
+        default=None,
+        metadata={"help": "The number of steps to accumulate gradients for."},
+    )
     adjust_scheduler: bool = field(
         default=True,
         metadata={
@@ -1006,12 +1020,22 @@ class TorchDynamoPlugin(KwargsHandler):
         metadata={"help": f"Possible options are {[b.value.lower() for b in DynamoBackend]}"},
     )
     mode: str = field(
-        default=None, metadata={"help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"}
+        default=None,
+        metadata={"help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"},
     )
-    fullgraph: bool = field(default=None, metadata={"help": "Whether it is ok to break model into several subgraphs"})
+    fullgraph: bool = field(
+        default=None,
+        metadata={"help": "Whether it is ok to break model into several subgraphs"},
+    )
     dynamic: bool = field(default=None, metadata={"help": "Whether to use dynamic shape for tracing"})
-    options: Any = field(default=None, metadata={"help": "A dictionary of options to pass to the backend."})
-    disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
+    options: Any = field(
+        default=None,
+        metadata={"help": "A dictionary of options to pass to the backend."},
+    )
+    disable: bool = field(
+        default=False,
+        metadata={"help": "Turn torch.compile() into a no-op for testing"},
+    )
 
     use_regional_compilation: bool = field(
         default=None,
@@ -1243,13 +1267,13 @@ class DeepSpeedPlugin:
                     "stage": self.zero_stage,
                     "offload_optimizer": {
                         "device": self.offload_optimizer_device,
-                        "nvme_path": self.offload_optimizer_nvme_path
-                        if self.offload_optimizer_device == "nvme"
-                        else None,
+                        "nvme_path": (
+                            self.offload_optimizer_nvme_path if self.offload_optimizer_device == "nvme" else None
+                        ),
                     },
                     "offload_param": {
                         "device": self.offload_param_device,
-                        "nvme_path": self.offload_param_nvme_path if self.offload_param_device == "nvme" else None,
+                        "nvme_path": (self.offload_param_nvme_path if self.offload_param_device == "nvme" else None),
                     },
                     "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
@@ -1262,7 +1286,13 @@ class DeepSpeedPlugin:
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
             self.zero3_init_flag = (
-                str_to_bool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
+                str_to_bool(
+                    os.environ.get(
+                        "ACCELERATE_DEEPSPEED_ZERO3_INIT",
+                        str(self.hf_ds_config.is_zero3()),
+                    )
+                )
+                == 1
             )
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
@@ -1279,7 +1309,10 @@ class DeepSpeedPlugin:
                 )
             if self.msamp_opt_level not in ["O1", "O2"]:
                 raise ValueError("Invalid optimization level for MS-AMP. Please use one of ['O1' or'O2'].")
-            self.deepspeed_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
+            self.deepspeed_config["msamp"] = {
+                "enabled": True,
+                "opt_level": self.msamp_opt_level,
+            }
 
     def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
         mismatches = [] if mismatches is None else mismatches
@@ -1324,7 +1357,11 @@ class DeepSpeedPlugin:
         for key, value in config.items():
             if isinstance(value, dict):
                 self.deepspeed_config_process(
-                    prefix=prefix + key + ".", mismatches=mismatches, config=value, must_match=must_match, **kwargs
+                    prefix=prefix + key + ".",
+                    mismatches=mismatches,
+                    config=value,
+                    must_match=must_match,
+                    **kwargs,
                 )
             else:
                 self.fill_match(prefix + key, mismatches, must_match=must_match, **kwargs)
@@ -1351,7 +1388,10 @@ class DeepSpeedPlugin:
 
         if mixed_precision == "fp8" and self.enable_msamp:
             if "msamp" not in ds_config:
-                ds_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
+                ds_config["msamp"] = {
+                    "enabled": True,
+                    "opt_level": self.msamp_opt_level,
+                }
 
         if mixed_precision != "no":
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
@@ -1383,9 +1423,15 @@ class DeepSpeedPlugin:
             del ds_config["train_batch_size"]
 
         if compare_versions("transformers", "<", "4.46"):
-            from transformers.deepspeed import HfDeepSpeedConfig, unset_hf_deepspeed_config
+            from transformers.deepspeed import (
+                HfDeepSpeedConfig,
+                unset_hf_deepspeed_config,
+            )
         else:
-            from transformers.integrations import HfDeepSpeedConfig, unset_hf_deepspeed_config
+            from transformers.integrations import (
+                HfDeepSpeedConfig,
+                unset_hf_deepspeed_config,
+            )
 
         unset_hf_deepspeed_config()
         self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
@@ -1583,7 +1629,11 @@ class FullyShardedDataParallelPlugin:
         },
     )
     mixed_precision_policy: Optional[
-        Union[dict, "torch.distributed.fsdp.MixedPrecision", "torch.distributed.fsdp.MixedPrecisionPolicy"]
+        Union[
+            dict,
+            "torch.distributed.fsdp.MixedPrecision",
+            "torch.distributed.fsdp.MixedPrecisionPolicy",
+        ]
     ] = field(
         default=None,
         metadata={
@@ -1592,16 +1642,20 @@ class FullyShardedDataParallelPlugin:
             "Can also be an instance of `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2."
         },
     )
-    auto_wrap_policy: Optional[Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]] = (
-        field(
-            default=None,
-            metadata={
-                "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
-                "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
-            },
-        )
+    auto_wrap_policy: Optional[
+        Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]
+    ] = field(
+        default=None,
+        metadata={
+            "help": "A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. "
+            "Defaults to `NO_WRAP`. See `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like"
+        },
     )
-    cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload", "torch.distributed.fsdp.CPUOffloadPolicy"] = field(
+    cpu_offload: Union[
+        bool,
+        "torch.distributed.fsdp.CPUOffload",
+        "torch.distributed.fsdp.CPUOffloadPolicy",
+    ] = field(
         default=None,
         metadata={
             "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2. Defaults to `False`"
@@ -1628,7 +1682,10 @@ class FullyShardedDataParallelPlugin:
         metadata={"help": "State dict config to use. Is determined based on the `state_dict_type` if not passed in."},
     )
     optim_state_dict_config: Optional[
-        Union["torch.distributed.fsdp.FullOptimStateDictConfig", "torch.distributed.fsdp.ShardedOptimStateDictConfig"]
+        Union[
+            "torch.distributed.fsdp.FullOptimStateDictConfig",
+            "torch.distributed.fsdp.ShardedOptimStateDictConfig",
+        ]
     ] = field(
         default=None,
         metadata={
@@ -1701,10 +1758,7 @@ class FullyShardedDataParallelPlugin:
     )
 
     def __post_init__(self):
-        from torch.distributed.fsdp import (
-            BackwardPrefetch,
-            ShardingStrategy,
-        )
+        from torch.distributed.fsdp import BackwardPrefetch, ShardingStrategy
 
         _fsdp2_warnings = set()
 
@@ -1738,7 +1792,8 @@ class FullyShardedDataParallelPlugin:
         # Fallback to `reshard_after_forward` in FSDP1 if `sharding_strategy` is not set
         if self.reshard_after_forward is None and self.sharding_strategy is None:
             reshard_after_forward = os.environ.get(
-                env_prefix + "RESHARD_AFTER_FORWARD", "true" if self.fsdp_version == 2 else "FULL_SHARD"
+                env_prefix + "RESHARD_AFTER_FORWARD",
+                "true" if self.fsdp_version == 2 else "FULL_SHARD",
             )
             if self.fsdp_version == 2:
                 self.reshard_after_forward = str_to_bool(reshard_after_forward.lower(), to_bool=True)
@@ -1795,7 +1850,10 @@ class FullyShardedDataParallelPlugin:
                 raise ValueError(
                     f"Invalid auto wrap policy: {self.auto_wrap_policy}. Must be one of {FSDP_AUTO_WRAP_POLICY}"
                 )
-            from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+            from torch.distributed.fsdp.wrap import (
+                size_based_auto_wrap_policy,
+                transformer_auto_wrap_policy,
+            )
 
             if self.auto_wrap_policy.upper() == "TRANSFORMER_BASED_WRAP":
                 self.auto_wrap_policy = transformer_auto_wrap_policy
@@ -1910,7 +1968,8 @@ class FullyShardedDataParallelPlugin:
 
         if self.state_dict_type is None:
             self.state_dict_type = os.environ.get(
-                "FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT" if self.fsdp_version == 1 else "SHARDED_STATE_DICT"
+                "FSDP_STATE_DICT_TYPE",
+                "FULL_STATE_DICT" if self.fsdp_version == 1 else "SHARDED_STATE_DICT",
             )
         if isinstance(self.state_dict_type, str):
             if self.state_dict_type.isdigit():
@@ -1940,7 +1999,10 @@ class FullyShardedDataParallelPlugin:
         Given `model`, creates an `auto_wrap_policy` baesd on the passed in policy and if we can use the
         `transformer_cls_to_wrap`
         """
-        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+        from torch.distributed.fsdp.wrap import (
+            size_based_auto_wrap_policy,
+            transformer_auto_wrap_policy,
+        )
 
         # First base off of `_no_split_modules`
         no_split_modules = getattr(model, "_no_split_modules", None)
@@ -2077,35 +2139,37 @@ class TorchTensorParallelPlugin:
         metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
     )
 
-    # torch_device_mesh is fo type "torch.distributed.DeviceMesh"
+    # torch_device_mesh is of type "torch.distributed.DeviceMesh"
     torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
 
     def __post_init__(self):
-        if not isinstance(self.tp_size, int):
-            raise ValueError(f"`tp_size` set to {self.tp_size}, please set to an `int`.")
+        warnings.warn(
+            "`TorchTensorParallelPlugin` is deprecated and will be removed in a future version of Accelerate. "
+            "Please use the `ParallelismConfig` with `tp_size` instead.",
+            FutureWarning,
+        )
 
-        if self.tp_size <= 1:
-            raise ValueError("`tp_size` must be greater than 1.")
 
-        if is_torch_version("<", BETA_TP_AVAILABLE_PYTORCH_VERSION):
+@dataclass
+class TorchTensorParallelConfig:
+    """
+    Use this object in your [`Accelerator`] to customize your torch tensor parallelism.
+    """
+
+    enable_async_tp: bool = False
+
+    def __post_init__(self):
+        if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
             raise ValueError(
-                f"Minimum PyTorch version {BETA_TP_AVAILABLE_PYTORCH_VERSION} needed to use tensor parallel."
+                f"Torch tensor parallelism is only available in PyTorch {BETA_TP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                "Please upgrade your PyTorch version."
             )
-        from torch.distributed.device_mesh import init_device_mesh
 
-        # support for other devices has to be investigated
-        if is_hpu_available(init_hccl=True):
-            device = "hpu"
-        elif is_xpu_available():
-            device = "xpu"
-        else:
-            device = "cuda"
+        if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
+            raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
 
-        mesh_dim_name = "tp"
-
-        # device mesh is not used for model sharding
-        # it is only used for preparing data loader
-        self.torch_device_mesh = init_device_mesh(device, (self.tp_size,), mesh_dim_names=(mesh_dim_name,))
+        if self.enable_async_tp:
+            warnings.warn("Async tensor parallelism is currently not supported, ignoring this option.")
 
 
 @dataclass
@@ -2209,7 +2273,8 @@ class MegatronLMPlugin:
     pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
     num_micro_batches: int = field(default=None, metadata={"help": "number of micro-batches."})
     gradient_clipping: float = field(
-        default=None, metadata={"help": "gradient clipping value based on global L2 Norm (0 to disable)"}
+        default=None,
+        metadata={"help": "gradient clipping value based on global L2 Norm (0 to disable)"},
     )
     sequence_parallelism: bool = field(
         default=None,
@@ -2224,7 +2289,8 @@ class MegatronLMPlugin:
         metadata={"help": "enable distributed optimizer"},
     )
     pipeline_model_parallel_split_rank: int = field(
-        default=None, metadata={"help": "Rank where encoder and decoder should be split."}
+        default=None,
+        metadata={"help": "Rank where encoder and decoder should be split."},
     )
     num_layers_per_virtual_pipeline_stage: int = field(
         default=None, metadata={"help": "Number of layers per virtual pipeline stage."}
@@ -2321,10 +2387,12 @@ class MegatronLMPlugin:
         metadata={"help": "Whether to set all logging options."},
     )
     eval_iters: int = field(
-        default=100, metadata={"help": "Number of iterations to run for evaluation validation/test for."}
+        default=100,
+        metadata={"help": "Number of iterations to run for evaluation validation/test for."},
     )
     eval_interval: int = field(
-        default=1000, metadata={"help": "Interval between running evaluation on validation set."}
+        default=1000,
+        metadata={"help": "Interval between running evaluation on validation set."},
     )
     return_logits: bool = field(
         default=False,
@@ -2691,7 +2759,8 @@ class BnbQuantizationConfig:
     load_in_8bit: bool = field(default=False, metadata={"help": "enable 8bit quantization."})
 
     llm_int8_threshold: float = field(
-        default=6.0, metadata={"help": "value of the outliner threshold. only relevant when load_in_8bit=True"}
+        default=6.0,
+        metadata={"help": "value of the outliner threshold. only relevant when load_in_8bit=True"},
     )
 
     load_in_4bit: bool = field(default=False, metadata={"help": "enable 4bit quantization."})
@@ -2811,6 +2880,226 @@ class BnbQuantizationConfig:
 
         if not isinstance(self.torch_dtype, torch.dtype):
             raise ValueError("torch_dtype must be a torch.dtype")
+
+
+@dataclass
+class ParallelismConfig:
+    """
+    A dataclass to configure parallelisms applied to the model. Inspired by torchtitan's `ParallelDims`
+    https://github.com/pytorch/torchtitan/blob/main/torchtitan/distributed/parallel_dims.py
+
+    Args:
+        dp_replicate_size (`int`, defaults to `1`):
+            The size of the data parallel group. If `dp_replicate_size` is set to 1, the data parallel replication
+            group will not be used.
+        dp_shard_size (`int`, defaults to `1`):
+            The size of the model shard group. If `dp_replicate_size > 1` and `tp_size > 1`, `dp_shard_size` must also
+            be greater than 1, as composing DDP + TP is currently not supported.
+        tp_size (`int`, defaults to `1`):
+            The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be
+            used.
+        cp_size (`int`, defaults to `1`):
+            The size of the context parallel group. Currently not supported, but reserved for future use and enabled
+            for downstream libraries.
+        tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
+            The handler for the tensor parallel group.
+
+    You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
+    together:
+        - `dp_replicate_size == 1` and `dp_shard_size > 1`, we obtain Fully Sharded Data Parallel (FSDP).
+        - `dp_replicate_size > 1` and `dp_shard_size > 1`, we obtain Hybrid Sharded Data Parallel (HSDP).
+        - `dp_replicate_size > 1` and `dp_shard_size == 1` is an invalid configuration, to use pure DP, use
+          `DistributedDataParallelKwargs` instead.
+
+    """
+
+    dp_replicate_size: int = 1
+    dp_shard_size: int = 1
+    tp_size: int = 1
+    cp_size: int = 1
+
+    # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
+    tp_handler: Union[None, TorchTensorParallelConfig] = None
+
+    def __repr__(self):
+        return (
+            "ParallelismConfig(\n "
+            f"\tdp_replicate_size={self.dp_replicate_size},\n"
+            f"\tdp_shard_size={self.dp_shard_size},\n"
+            f"\ttp_size={self.tp_size},\n"
+            f"\tcp_size={self.cp_size},\n"
+            f"\ttotal_size={self.total_size}\n)"
+        )
+
+    @property
+    def dp_dim_names(self):
+        dims = []
+        if self.dp_enabled:
+            dims += ["dp_replicate"]
+        if self.fsdp_enabled:
+            dims += ["dp_shard"]
+        return dims
+
+    @property
+    def non_dp_dim_names(self):
+        dims = []
+        if self.tp_enabled:
+            dims += ["tp"]
+        if self.cp_enabled:
+            dims += ["cp"]
+        return dims
+
+    @property
+    def dp_shard_cp_dim_names(self):
+        dims = []
+        if self.fsdp_enabled:
+            dims += ["dp_shard"]
+        if self.cp_enabled:
+            dims += ["cp"]
+        return dims
+
+    @property
+    def dp_cp_dim_names(self):
+        dims = []
+        if self.dp_enabled:
+            dims += ["dp_replicate"]
+        if self.fsdp_enabled:
+            dims += ["dp_shard"]
+        if self.cp_enabled:
+            dims += ["cp"]
+        return dims
+
+    @property
+    def model_shard_dim_names(self):
+        dims = []
+        if self.dp_enabled:
+            dims += ["dp_replicate"]
+        dims += ["dp_shard_cp"]
+        return dims
+
+    @property
+    def total_size(self):
+        return self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size
+
+    @property
+    def non_data_parallel_size(self):
+        return self.tp_size * self.cp_size
+
+    def data_parallel_size(self):
+        return self.dp_replicate_size * self.dp_shard_size
+
+    @property
+    def dp_enabled(self):
+        return self.dp_replicate_size > 1
+
+    @property
+    def fsdp_enabled(self):
+        return self.dp_shard_size > 1
+
+    @property
+    def tp_enabled(self):
+        return self.tp_size > 1
+
+    @property
+    def cp_enabled(self):
+        return self.cp_size > 1
+
+    @property
+    def active_mesh_dims(self):
+        return self.dp_dim_names + self.non_dp_dim_names
+
+    def build_device_mesh(self, device_type: str):
+        mesh = self.get_mesh()
+        if len(mesh) == 0:
+            return
+        mesh_dim_names, mesh_shape = mesh
+        device_mesh = torch.distributed.init_device_mesh(
+            device_type,
+            mesh_shape,
+            mesh_dim_names=mesh_dim_names,
+        )
+        if self.dp_dim_names:
+            device_mesh[self.dp_dim_names]._flatten("dp")
+        if self.dp_shard_cp_dim_names:
+            device_mesh[self.dp_shard_cp_dim_names]._flatten("dp_shard_cp")
+        if self.dp_cp_dim_names:
+            device_mesh[self.dp_cp_dim_names]._flatten("dp_cp")
+
+        return device_mesh
+
+    def get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
+        """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""
+
+        # Build mesh dimensions dictionary
+        mesh_dims = {parallelism: self._sizes[parallelism] for parallelism in self.active_mesh_dims}
+
+        # Apply canonical ordering
+        mesh_order = ["dp_replicate", "dp_shard", "cp", "tp"]
+        sorted_items = sorted(
+            mesh_dims.items(),
+            key=lambda x: (mesh_order.index(x[0])),
+        )
+        return tuple(zip(*sorted_items))
+
+    def __post_init__(self):
+        # Basic size validation
+        if self.dp_replicate_size < 1:
+            raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
+        if self.dp_shard_size < 1:
+            raise ValueError(f"dp_shard_size must be at least 1, but got {self.dp_shard_size}")
+        if self.tp_size < 1:
+            raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
+        if self.cp_size < 1:
+            raise ValueError(f"cp_size must be at least 1, but got {self.cp_size}")
+
+        if (self.tp_size > 1 or self.cp_size > 1) and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
+            raise ValueError(
+                "Tensor/Context parallelism (tp/cp_size > 1) cannot be used with pure data parallelism (dp_replicate_size > 1 and dp_shard_size == 1). "
+                "Please set dp_shard_size > 1 and dp_replicate_size == 1 to compose FSDP + TP/CP for 2D parallel, "
+                "or set dp_replicate_size == 1 and dp_shard_size > 1 to compose HSDP + TP/CP for 3D parallel."
+            )
+        self._sizes = {
+            "dp_replicate": self.dp_replicate_size,
+            "dp_shard": self.dp_shard_size,
+            "tp": self.tp_size,
+            "cp": self.cp_size,
+        }
+
+    def _set_size(self, parallelism: str, size: int):
+        assert parallelism in self._sizes.keys(), f"Parallelism must be one of {self._sizes.keys()}"
+        self._sizes[parallelism] = size
+        setattr(self, f"{parallelism}_size", size)
+
+    def validate_accelerator(self, accelerator: "Accelerator"):
+        _warnings = set()
+
+        # We need this to ensure DDP works
+        if self.total_size == 1:
+            self._set_size("dp_replicate", accelerator.num_processes)
+
+        if self.total_size != accelerator.num_processes:
+            raise ValueError(
+                f"ParallelismConfig total_size ({self.total_size}) does not match "
+                f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
+                f"dp_shard_size/tp_size/cp_size."
+            )
+
+        if self.total_size > 1 and not (accelerator.is_fsdp2 or accelerator.multi_device):
+            raise ValueError(
+                f"ParallelismConfig is only compatible DistributedType.FSDP (version 2) or DistributedType.Multi{{Device}}, but got {accelerator.distributed_type}."
+            )
+
+        for parallelism, size in self._sizes.items():
+            if size == 1 and getattr(self, f"{parallelism}_handler", None) is not None:
+                _warnings.add(
+                    f"ParallelismConfig.{parallelism}_handler is set, but {parallelism}_size is set to 1. This handler will be ignored."
+                )
+
+        if _warnings and accelerator.is_main_process:
+            warnings.warn(
+                "ParallelismConfig has the following warnings:\n" + "\n".join(_warnings),
+                UserWarning,
+            )
 
 
 def get_module_class_from_name(module, name):

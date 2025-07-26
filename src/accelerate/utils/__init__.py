@@ -53,6 +53,7 @@ from .dataclasses import (
     LoggerType,
     MegatronLMPlugin,
     MSAMPRecipeKwargs,
+    ParallelismConfig,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
@@ -61,6 +62,7 @@ from .dataclasses import (
     TensorInformation,
     TERecipeKwargs,
     TorchDynamoPlugin,
+    TorchTensorParallelConfig,
     TorchTensorParallelPlugin,
     add_model_config_to_megatron_parser,
 )

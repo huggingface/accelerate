@@ -27,7 +27,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
-from typing import Any, Callable, Union
+from typing import Any, Callable, Union, cast
 
 import torch
 import torch.utils.hooks as hooks
@@ -66,6 +66,7 @@ from .utils import (
     LoggerType,
     MegatronLMPlugin,
     MSAMPRecipeKwargs,
+    ParallelismConfig,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
@@ -122,8 +123,6 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import (
-    BETA_TP_AVAILABLE_PYTORCH_VERSION,
-    BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
@@ -211,8 +210,7 @@ class Accelerator:
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
         torch_tp_plugin ([`~utils.TorchTensorParallelPlugin`], *optional*):
-            Tweak your torch tensor parallel. This argument is optional and can be configured directly using
-            *accelerate config*
+            Deprecated: use `parallelism_config` with `tp_size` instead.
         megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -287,7 +285,7 @@ class Accelerator:
         dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
-        torch_tp_plugin: TorchTensorParallelPlugin | None = None,
+        torch_tp_plugin: TorchTensorParallelPlugin | None = None,  # Deprecate later, warning in `post_init`
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
@@ -299,6 +297,7 @@ class Accelerator:
         dynamo_backend: DynamoBackend | str | None = None,
         dynamo_plugin: TorchDynamoPlugin | None = None,
         deepspeed_plugins: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
+        parallelism_config: ParallelismConfig | None = None,
     ):
         self.trackers = []
         if project_config is not None:
@@ -376,13 +375,6 @@ class Accelerator:
             if not is_torch_version(">=", FSDP_PYTORCH_VERSION):
                 raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
 
-        if isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
-            if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
-                raise ValueError(f"TP requires PyTorch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}")
-
-            if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
-                raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
-
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
                 FullyShardedDataParallelPlugin() if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" else None
@@ -395,9 +387,6 @@ class Accelerator:
         if fsdp_plugin is not None and fsdp_plugin.fsdp_version == 2:
             if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
                 raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
-
-        if torch_tp_plugin is not None and not isinstance(torch_tp_plugin, TorchTensorParallelPlugin):
-            raise TypeError("`torch_tp_plugin` must be a TorchTensorParallelPlugin object.")
 
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
@@ -439,9 +428,9 @@ class Accelerator:
         self.has_fp8_handler = False
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(handler, KwargsHandler), (
-                    f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
-                )
+                assert isinstance(
+                    handler, KwargsHandler
+                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
                 # Add the handler class to the set of found handlers
                 if handler.__class__ in found_handlers:
                     raise ValueError(f"You can only pass one {handler.__class__} in `kwargs_handlers`.")
@@ -451,18 +440,24 @@ class Accelerator:
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
 
+        parallelism_config = self._setup_parallelism_config(parallelism_config, torch_tp_plugin)
+
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
+        kwargs["parallelism_config"] = parallelism_config
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
             dynamo_plugin=dynamo_plugin,
             deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
-            torch_tp_plugin=torch_tp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             **kwargs,
         )
+
+        if self.parallelism_config:
+            self._build_torch_device_mesh(self.parallelism_config)
+            self.parallelism_config.validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -647,6 +642,18 @@ class Accelerator:
         return self.state.use_distributed
 
     @property
+    def multi_device(self):
+        return self.use_distributed and self.distributed_type in (
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
+            DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
+        )
+
+    @property
     def distributed_type(self):
         return self.state.distributed_type
 
@@ -729,6 +736,40 @@ class Accelerator:
     @property
     def is_fsdp2(self):
         return self.state.is_fsdp2
+
+    @property
+    def is_composable_parallelism_enabled(self):
+        return self.is_fsdp2
+
+    @property
+    def parallelism_config(self):
+        return cast(ParallelismConfig, self.state.parallelism_config)
+
+    @property
+    def torch_device_mesh(self):
+        return self.state.device_mesh
+
+    def _setup_parallelism_config(
+        self, parallelism_config: ParallelismConfig | None, torch_tp_plugin: TorchTensorParallelPlugin | None
+    ):
+        if parallelism_config is None:
+            warnings.warn("No parallelism_config provided! Attempting to load from PartialState.")
+            if PartialState._shared_state != {} and PartialState().parallelism_config is not None:
+                parallelism_config = PartialState().parallelism_config
+            else:
+                warnings.warn("No parallelism_config found in PartialState, using default ParallelismConfig.")
+                tp_size = 1 if torch_tp_plugin is None else torch_tp_plugin.tp_size
+                parallelism_config = ParallelismConfig(tp_size=tp_size)
+
+        return parallelism_config
+
+    def _build_torch_device_mesh(self, parallelism_config):
+        if PartialState._shared_state != {} and getattr(PartialState(), "device_mesh", None) is not None:
+            device_mesh = PartialState().device_mesh
+        else:
+            device_mesh = parallelism_config.build_device_mesh(self.device.type)
+        self.state.device_mesh = device_mesh
+        PartialState().device_mesh = device_mesh
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
@@ -1235,15 +1276,7 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        if self.distributed_type in (
-            DistributedType.MULTI_GPU,
-            DistributedType.MULTI_NPU,
-            DistributedType.MULTI_MLU,
-            DistributedType.MULTI_SDAA,
-            DistributedType.MULTI_MUSA,
-            DistributedType.MULTI_XPU,
-            DistributedType.MULTI_HPU,
-        ):
+        if self.multi_device:
             dl_even_batches_values = []
 
             if even_batches is not None:
@@ -1514,6 +1547,8 @@ class Accelerator:
         old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
 
         # Swap the optimizer parameters with empty, so `fully_shard` after will not allocate too much memory
+        from torch.distributed.tensor import DTensor
+
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
@@ -1521,7 +1556,9 @@ class Accelerator:
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
                         # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
                         param_group["params"][i] = torch.empty_like(p)
-                        param_group["params"][i].data_ptr = p.data_ptr()
+                        param_group["params"][i].data_ptr = (
+                            p._local_tensor.data_ptr() if isinstance(p, DTensor) else p.data_ptr()
+                        )
 
         self._models.append(model)
 
@@ -1645,15 +1682,7 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
-            if self.distributed_type in (
-                DistributedType.MULTI_GPU,
-                DistributedType.MULTI_MLU,
-                DistributedType.MULTI_SDAA,
-                DistributedType.MULTI_MUSA,
-                DistributedType.MULTI_NPU,
-                DistributedType.MULTI_XPU,
-                DistributedType.MULTI_HPU,
-            ):
+            if self.multi_device and not (self.parallelism_config and self.parallelism_config.tp_enabled):
                 if model_has_dtensor(model):
                     raise ValueError(
                         "Your model contains `DTensor` parameters, which is incompatible with DDP. Maybe you loaded your model with `device_map='auto'`? Specify `device_map='cuda'` or 'cpu' instead."
@@ -1668,23 +1697,20 @@ class Accelerator:
                             device_ids, output_device = [self.local_process_index], self.local_process_index
                     else:
                         device_ids, output_device = None, None
-
                     model = torch.nn.parallel.DistributedDataParallel(
                         model, device_ids=device_ids, output_device=output_device, **kwargs
                     )
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
-            elif self.distributed_type == DistributedType.TP:
-                if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
-                    raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+            elif self.parallelism_config and self.parallelism_config.tp_enabled:
                 if not hasattr(model, "tp_size"):
                     raise NotImplementedError(
                         "Model should undergo tensor parallel before passing it to accelerate."
                         "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
                     )
-                if model.tp_size != self.state.torch_tp_plugin.tp_size:
+                if model.tp_size != self.parallelism_config.tp_size:
                     raise ValueError(
-                        f"tp_size in the plugin {self.state.torch_tp_plugin.tp_size} should be same as model's tp size {model.tp_size}"
+                        f"tp_size in the plugin {self.parallelism_config.tp_size} should be same as model's tp size {model.tp_size}"
                     )
             elif self.is_fsdp2:
                 raise ValueError(
@@ -1820,7 +1846,7 @@ class Accelerator:
                     del self._models[-2]
                 self._models[-1] = model
             elif self.distributed_type == DistributedType.MULTI_CPU:
-                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
                 if self.ddp_handler is not None:
                     self.ddp_handler.register_comm_hook(model)
@@ -2347,11 +2373,10 @@ class Accelerator:
         Prepare the device mesh for distributed training. The dataloader will determine how to load data based on the
         device mesh.
         """
-        if self.state.torch_tp_plugin:
-            return self.state.torch_tp_plugin.torch_device_mesh
-        elif self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
+        if self.distributed_type == DistributedType.DEEPSPEED and hasattr(self.state, "ds_device_mesh"):
             return self.state.ds_device_mesh
-        return None
+        else:
+            return self.torch_device_mesh
 
     def _prepare_msamp(self, *args, device_placement):
         if not is_msamp_available():
@@ -3587,14 +3612,7 @@ class Accelerator:
 
         map_location = load_model_func_kwargs.pop("map_location", None)
         if map_location is None:
-            if self.num_processes > 1 and self.distributed_type in (
-                DistributedType.MULTI_GPU,
-                DistributedType.MULTI_MLU,
-                DistributedType.MULTI_SDAA,
-                DistributedType.MULTI_MUSA,
-                DistributedType.MULTI_NPU,
-                DistributedType.MULTI_HPU,
-            ):
+            if self.num_processes > 1 and self.multi_device and self.distributed_type != DistributedType.MULTI_XPU:
                 map_location = "on_device"
             else:
                 map_location = "cpu"
@@ -3693,6 +3711,11 @@ class Accelerator:
                     from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
                     accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
+                # we know we're in FSDP2 so DTensor is available
+                if self.is_fsdp2:
+                    from torch.distributed.tensor import DTensor
+
+                    accessor_mapping[DTensor] = "_local_tensor"
 
                 named_parameters.update(
                     {
