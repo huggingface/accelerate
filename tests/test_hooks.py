@@ -24,8 +24,10 @@ from torch.fx import symbolic_trace
 from accelerate.big_modeling import attach_layerwise_casting_hooks
 from accelerate.hooks import (
     AlignDevicesHook,
+    CpuOffload,
     ModelHook,
     SequentialHook,
+    UserCpuOffloadHook,
     add_hook_to_module,
     attach_align_device_hook,
     remove_hook_from_module,
@@ -80,7 +82,9 @@ class HooksModelTester(unittest.TestCase):
                         self.assertEqual(tensor.dtype, loading_type)
                 continue
 
-            if patterns_to_check and any(re.search(pat, name) for pat in patterns_to_check):
+            if patterns_to_check and any(
+                re.search(pat, name) for pat in patterns_to_check
+            ):
                 expected = loading_type
             else:
                 expected = storage_dtype
@@ -202,7 +206,9 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device(torch_device)
         assert model.batchnorm.running_mean.device == torch.device(torch_device)
-        assert model.linear2.weight.device == torch.device(torch_device.replace(":0", ":1"))
+        assert model.linear2.weight.device == torch.device(
+            torch_device.replace(":0", ":1")
+        )
 
         # We can still make a forward pass. The input does not need to be on any particular device
         x = torch.randn(2, 3)
@@ -310,7 +316,9 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear2.weight.device == torch.device("cpu")
 
         # Now test with buffers included in the offload
-        attach_align_device_hook(model, execution_device=execution_device, offload=True, offload_buffers=True)
+        attach_align_device_hook(
+            model, execution_device=execution_device, offload=True, offload_buffers=True
+        )
 
         # Parameters have been offloaded, so on the meta device, buffers included
         assert model.linear1.weight.device == torch.device("meta")
@@ -339,7 +347,10 @@ class HooksModelTester(unittest.TestCase):
         # This will move each submodule on different devices
         execution_device = torch_device
         attach_align_device_hook(
-            model, execution_device=execution_device, offload=True, weights_map=model.state_dict()
+            model,
+            execution_device=execution_device,
+            offload=True,
+            weights_map=model.state_dict(),
         )
 
         # Parameters have been offloaded, so on the meta device
@@ -414,7 +425,10 @@ class HooksModelTester(unittest.TestCase):
 
             graph_model.graph.inserting_after(linear2_node)
             new_node = graph_model.graph.create_node(
-                op="call_function", target=torch.sigmoid, args=(linear2_node,), name="relu"
+                op="call_function",
+                target=torch.sigmoid,
+                args=(linear2_node,),
+                name="relu",
             )
 
             output_node = None
@@ -440,7 +454,9 @@ class HooksModelTester(unittest.TestCase):
             (torch.float8_e4m3fn, torch.float32, ["batchnorm"]),
         ]
     )
-    def test_layerwise_upcasting_inference(self, storage_dtype, compute_dtype, skip_modules_pattern=None):
+    def test_layerwise_upcasting_inference(
+        self, storage_dtype, compute_dtype, skip_modules_pattern=None
+    ):
         test_model = ModelForTest()
         loading_dtype = next(test_model.parameters()).data.dtype
         inputs = torch.randn(2, 3)
@@ -453,7 +469,66 @@ class HooksModelTester(unittest.TestCase):
             skip_modules_pattern=skip_modules_pattern,
         )
         patterns_to_check = skip_modules_pattern if skip_modules_pattern else None
-        self.check_dtype_for_layerwise_upcasting(test_model, storage_dtype, loading_dtype, patterns_to_check)
+        self.check_dtype_for_layerwise_upcasting(
+            test_model, storage_dtype, loading_dtype, patterns_to_check
+        )
 
         with torch.no_grad():
             _ = test_model(inputs)
+
+    def test_cpu_offload_hook_moves_model(self):
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA not available for offload test.")
+
+        model = ModelForTest()
+        gpu_device = torch.device("cuda:0")
+        hook = CpuOffload(execution_device=gpu_device)
+        add_hook_to_module(model, hook)
+
+        x = torch.randn(2, 3).to(gpu_device)
+        output = model(x)
+        self.assertEqual(output.device, gpu_device)
+
+        remove_hook_from_module(model)
+        output2 = model(x)
+        self.assertEqual(output2.device, gpu_device)
+
+        # should be on the gpu
+        assert model.linear1.weight.device == gpu_device
+        assert model.batchnorm.weight.device == gpu_device
+        assert model.linear2.weight.device == gpu_device
+
+
+    def test_cpu_offload_hook_with_prev_module(self):
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA not available for offload test.")
+
+        model1 = ModelForTest()
+        model2 = ModelForTest()
+        gpu_device = torch.device("cuda:0")
+        cpu_device = torch.device("cpu")
+
+        hook1 = CpuOffload(execution_device=gpu_device)
+        add_hook_to_module(model1, hook1)
+        user_hook1 = UserCpuOffloadHook(model1, hook1) 
+
+        hook2 = CpuOffload(execution_device=gpu_device, prev_module_hook=user_hook1)
+        add_hook_to_module(model2, hook2)
+
+        x = torch.randn(2, 3).to(gpu_device)
+        output1 = model1(x)
+        self.assertEqual(output1.device, gpu_device)
+
+        output2 = model2(x)
+        self.assertEqual(output2.device, gpu_device)
+
+        # should be on the cpu
+        assert model1.linear1.weight.device == cpu_device
+        assert model1.batchnorm.weight.device == cpu_device
+        assert model1.linear2.weight.device == cpu_device
+
+        # should be on the gpu still
+        assert model2.linear1.weight.device == gpu_device
+        assert model2.batchnorm.weight.device == gpu_device
+        assert model2.linear2.weight.device == gpu_device
+
