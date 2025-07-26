@@ -26,58 +26,42 @@ from transformers import AutoModelForCausalLM
 from accelerate import Accelerator
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
 from accelerate.utils.dataclasses import ParallelismConfig
-from accelerate.utils.fsdp_utils import save_fsdp_optimizer
 from utils import (
     PerformanceTracker,
     create_collate_fn,
     get_dataset,
-    gpu_memory_usage_all,
     setup_tokenizer,
 )
 
 
-MODEL_ID = "NousResearch/Llama-3.2-1B"
+MODEL_ID = "NousResearch/Hermes-3-Llama-3.1-8B"
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str)
-    parser.add_argument("--fsdp2-cls-name-to-wrap", type=str, default="LlamaDecoderLayer")
     parser.add_argument("--dp-replicate-size", type=int, default=1)
     parser.add_argument("--dp-shard-size", type=int, default=1)
     parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=128)
-    parser.add_argument("--model-save-dir", type=str, default="./outputs")
-    parser.add_argument(
-        "--save-model",
-        action="store_true",
-        default=False,
-        help="Whether to save the model after training.",
-    )
-    parser.add_argument(
-        "--save-optimizer",
-        action="store_true",
-        default=False,
-        help="Whether to save the optimizer state after training.",
-    )
+    parser.add_argument("--save-dir", type=str, default="./outputs")
+    parser.add_argument("--checkpoint-frequency", type=int, default=100)
     return parser.parse_args()
+
+
+def init_torch_dist():
+    dist.init_process_group(backend="nccl", init_method="env://")
 
 
 def main():
     """
     Main function to train the model.
     """
+    init_torch_dist()
     args = parse_args()
 
     set_seed(42)
 
-    if args.model:
-        model_id = args.model
-    else:
-        model_id = MODEL_ID
-
     model_kwargs = {}
-    accelerator_kwargs = {}
 
     parallelism_config = ParallelismConfig(
         dp_replicate_size=args.dp_replicate_size,
@@ -90,17 +74,14 @@ def main():
             fsdp_version=2,
             cpu_ram_efficient_loading=False,
             auto_wrap_policy="transformer_based_wrap",
-            transformer_cls_names_to_wrap=[args.fsdp2_cls_name_to_wrap],
+            transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
             reshard_after_forward=True,
-            activation_checkpointing=True,
-            state_dict_type="FULL_STATE_DICT",
         )
-        accelerator_kwargs["fsdp_plugin"] = fsdp2_plugin
 
     accelerator = Accelerator(
         mixed_precision="no",
         parallelism_config=parallelism_config,
-        **accelerator_kwargs,
+        fsdp_plugin=fsdp2_plugin if parallelism_config.fsdp_enabled else None,
     )
 
     if args.tp_size > 1:
@@ -109,30 +90,27 @@ def main():
         model_kwargs["device_mesh"] = accelerator.torch_device_mesh
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_id,
+        MODEL_ID,
         torch_dtype=torch.bfloat16,
         use_cache=False,
         **model_kwargs,
     )
-    accelerator.print("Memory usage after model load")
-    accelerator.print(gpu_memory_usage_all())
-    accelerator.print("=" * 20)
-    tokenizer = setup_tokenizer(model_id)
+    tokenizer = setup_tokenizer(MODEL_ID)
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
 
     model, optimizer = accelerator.prepare(model, optimizer)
-    accelerator.print("Memory usage after model prepare")
-    accelerator.print(gpu_memory_usage_all())
-    accelerator.print("=" * 20)
 
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
     dataloader = accelerator.prepare(dataloader)
+    loss_reduce_grp = (
+        accelerator.torch_device_mesh["dp_cp"].get_group() if parallelism_config.dp_cp_dim_names else None
+    )
 
     model.train()
 
     total_num_steps = min(10, len(dataloader))
-    performance_tracker = PerformanceTracker(warmup_steps=2)
+    performance_tracker = PerformanceTracker(warmup_steps=5)
 
     accelerator.print("Starting training...")
     for step, batch in enumerate(dataloader):
@@ -145,46 +123,32 @@ def main():
         accelerator.backward(loss)
         optimizer.step()
         optimizer.zero_grad()
+        dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
 
-        dist.all_reduce(loss, op=dist.ReduceOp.AVG)
-
-        batch_tokens = batch["input_ids"].shape[1]
-        metrics = performance_tracker.step(batch_tokens)
+        # We report TPS per device, so we divide by the number of devices in the non-data parallel dimension
+        metrics = performance_tracker.step(batch["input_ids"].shape[1] / parallelism_config.non_data_parallel_size)
 
         print_msg = f"Step {step}/{total_num_steps}, Loss: {loss.item():.4f}"
-        log_metrics = {"loss": loss.item()}
-
         if "warmup_completed" in metrics:
             accelerator.print("Warm up completed! Starting performance tracking...")
         elif metrics:
-            print_msg += f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f}\n"
-            print_msg += (
-                f"\tMemory (GB): active={metrics['peak_memory_active']:.1f}, "
-                f"alloc={metrics['peak_memory_alloc']:.1f}, "
-                f"reserved={metrics['peak_memory_reserved']:.1f}"
-            )
-        if step % 2 == 0 or step == total_num_steps - 1:
+            print_msg += performance_tracker.get_print_message(metrics, with_memory=True)
+
+        if step % 10 == 0 or step == total_num_steps - 1:
             accelerator.print(print_msg)
 
-        accelerator.log(log_metrics)
+        if step % args.checkpoint_frequency == 0 and step > 0:
+            accelerator.print(f"Saving checkpoint at step {step}...")
+            accelerator.save_state(args.save_dir + f"/checkpoint-{step}")
+
+        accelerator.log({"loss": loss.item()})
 
     accelerator.wait_for_everyone()
-    accelerator.end_training()
     accelerator.print("Training completed!")
-    if parallelism_config.fsdp_enabled and args.save_optimizer:
-        accelerator.print("Saving optimizer state...")
-        save_fsdp_optimizer(
-            fsdp2_plugin,
-            accelerator,
-            optimizer,
-            model,
-            args.model_save_dir + "/opt",
-        )
-        accelerator.print("Optimizer state saved.")
-    accelerator.print("Saving model state...")
-    if args.save_model:
-        model.save_pretrained(args.model_save_dir)
-        accelerator.print(f"Model saved to {args.model_save_dir}")
+
+    model.save_pretrained(args.save_dir + f"/{MODEL_ID}")
+    accelerator.print(f"Model saved to {args.save_dir}/{MODEL_ID}")
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

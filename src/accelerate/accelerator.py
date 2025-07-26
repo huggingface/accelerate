@@ -27,7 +27,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
-from typing import Any, Callable, Union
+from typing import Any, Callable, Union, cast
 
 import torch
 import torch.utils.hooks as hooks
@@ -736,7 +736,7 @@ class Accelerator:
 
     @property
     def parallelism_config(self):
-        return self.state.parallelism_config
+        return cast(ParallelismConfig, self.state.parallelism_config)
 
     @property
     def torch_device_mesh(self):

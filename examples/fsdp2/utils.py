@@ -166,6 +166,16 @@ class PerformanceTracker:
 
         return {}
 
+    def get_print_message(self, metrics: dict, with_memory: bool = False) -> str:
+        print_msg = f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f}\n"
+        if with_memory:
+            print_msg += (
+                f"\tMemory (GB): active={metrics['peak_memory_active']:.1f}, "
+                f"alloc={metrics['peak_memory_alloc']:.1f}, "
+                f"reserved={metrics['peak_memory_reserved']:.1f}"
+            )
+        return print_msg
+
 
 def setup_tokenizer(model_id: str) -> AutoTokenizer:
     """Setup tokenizer with proper padding token."""
