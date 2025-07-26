@@ -82,9 +82,7 @@ class HooksModelTester(unittest.TestCase):
                         self.assertEqual(tensor.dtype, loading_type)
                 continue
 
-            if patterns_to_check and any(
-                re.search(pat, name) for pat in patterns_to_check
-            ):
+            if patterns_to_check and any(re.search(pat, name) for pat in patterns_to_check):
                 expected = loading_type
             else:
                 expected = storage_dtype
@@ -206,9 +204,7 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear1.weight.device == torch.device(torch_device)
         assert model.batchnorm.weight.device == torch.device(torch_device)
         assert model.batchnorm.running_mean.device == torch.device(torch_device)
-        assert model.linear2.weight.device == torch.device(
-            torch_device.replace(":0", ":1")
-        )
+        assert model.linear2.weight.device == torch.device(torch_device.replace(":0", ":1"))
 
         # We can still make a forward pass. The input does not need to be on any particular device
         x = torch.randn(2, 3)
@@ -316,9 +312,7 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear2.weight.device == torch.device("cpu")
 
         # Now test with buffers included in the offload
-        attach_align_device_hook(
-            model, execution_device=execution_device, offload=True, offload_buffers=True
-        )
+        attach_align_device_hook(model, execution_device=execution_device, offload=True, offload_buffers=True)
 
         # Parameters have been offloaded, so on the meta device, buffers included
         assert model.linear1.weight.device == torch.device("meta")
@@ -347,10 +341,7 @@ class HooksModelTester(unittest.TestCase):
         # This will move each submodule on different devices
         execution_device = torch_device
         attach_align_device_hook(
-            model,
-            execution_device=execution_device,
-            offload=True,
-            weights_map=model.state_dict(),
+            model, execution_device=execution_device, offload=True, weights_map=model.state_dict()
         )
 
         # Parameters have been offloaded, so on the meta device
@@ -425,10 +416,7 @@ class HooksModelTester(unittest.TestCase):
 
             graph_model.graph.inserting_after(linear2_node)
             new_node = graph_model.graph.create_node(
-                op="call_function",
-                target=torch.sigmoid,
-                args=(linear2_node,),
-                name="relu",
+                op="call_function", target=torch.sigmoid, args=(linear2_node,), name="relu"
             )
 
             output_node = None
@@ -454,9 +442,7 @@ class HooksModelTester(unittest.TestCase):
             (torch.float8_e4m3fn, torch.float32, ["batchnorm"]),
         ]
     )
-    def test_layerwise_upcasting_inference(
-        self, storage_dtype, compute_dtype, skip_modules_pattern=None
-    ):
+    def test_layerwise_upcasting_inference(self, storage_dtype, compute_dtype, skip_modules_pattern=None):
         test_model = ModelForTest()
         loading_dtype = next(test_model.parameters()).data.dtype
         inputs = torch.randn(2, 3)
@@ -469,9 +455,7 @@ class HooksModelTester(unittest.TestCase):
             skip_modules_pattern=skip_modules_pattern,
         )
         patterns_to_check = skip_modules_pattern if skip_modules_pattern else None
-        self.check_dtype_for_layerwise_upcasting(
-            test_model, storage_dtype, loading_dtype, patterns_to_check
-        )
+        self.check_dtype_for_layerwise_upcasting(test_model, storage_dtype, loading_dtype, patterns_to_check)
 
         with torch.no_grad():
             _ = test_model(inputs)
