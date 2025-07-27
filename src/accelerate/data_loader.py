@@ -566,7 +566,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         try:
             current_batch = next(dataloader_iter)
         except StopIteration:
-            yield
+            self.end()
+            return
 
         batch_index = 0
         while True:
@@ -1112,6 +1113,7 @@ def prepare_data_loader(
             # Given a device mesh (dp, tp) = (2, 3):
             # - From the data parallel perspective, ranks should be structured as: 0 0 0 1 1 1
             # - Processes with the same DP rank will receive the same batch.
+            submesh_tp_size = 1
             if "tp" in torch_device_mesh.mesh_dim_names:
                 submesh_tp_size = torch_device_mesh["tp"].size()
             process_index = process_index // submesh_tp_size

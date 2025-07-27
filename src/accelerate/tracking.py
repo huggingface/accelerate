@@ -36,6 +36,7 @@ from .utils import (
     is_mlflow_available,
     is_swanlab_available,
     is_tensorboard_available,
+    is_trackio_available,
     is_wandb_available,
     listify,
 )
@@ -66,6 +67,9 @@ if is_dvclive_available():
 
 if is_swanlab_available():
     _available_trackers.append(LoggerType.SWANLAB)
+
+if is_trackio_available():
+    _available_trackers.append(LoggerType.TRACKIO)
 
 logger = get_logger(__name__)
 
@@ -336,7 +340,16 @@ class WandBTracker(GeneralTracker):
         """
         import wandb
 
-        wandb.config.update(values, allow_val_change=True)
+        if os.environ.get("WANDB_MODE") == "offline":
+            # In offline mode, restart wandb with config included
+            if hasattr(self, "run") and self.run:
+                self.run.finish()
+
+            init_kwargs = self.init_kwargs.copy()
+            init_kwargs["config"] = values
+            self.run = wandb.init(project=self.run_name, **init_kwargs)
+        else:
+            wandb.config.update(values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to WandB")
 
     @on_main_process
@@ -413,6 +426,83 @@ class WandBTracker(GeneralTracker):
         """
         self.run.finish()
         logger.debug("WandB run closed")
+
+
+class TrackioTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports `trackio`. Should be initialized at the start of your script.
+
+    Args:
+        run_name (`str`):
+            The name of the experiment run. Will be used as the `project` name when instantiating trackio.
+        **kwargs (additional keyword arguments, *optional*):
+            Additional key word arguments passed along to the `trackio.init` method. Refer to this
+            [init](https://github.com/gradio-app/trackio/blob/814809552310468b13f84f33764f1369b4e5136c/trackio/__init__.py#L22)
+            to see all supported key word arguments.
+    """
+
+    name = "trackio"
+    requires_logging_directory = False
+    main_process_only = False
+
+    def __init__(self, run_name: str, **kwargs):
+        super().__init__()
+        self.run_name = run_name
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
+        import trackio
+
+        self.run = trackio.init(project=self.run_name, **self.init_kwargs)
+        logger.debug(f"Initialized trackio project {self.run_name}")
+        logger.debug(
+            "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
+        )
+
+    @property
+    def tracker(self):
+        return self.run
+
+    @on_main_process
+    def store_init_configuration(self, values: dict):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+
+        Args:
+            values (Dictionary `str` to `bool`, `str`, `float` or `int`):
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
+                `str`, `float`, `int`, or `None`.
+        """
+        import trackio
+
+        trackio.config.update(values, allow_val_change=True)
+        logger.debug("Stored initial configuration hyperparameters to trackio")
+
+    @on_main_process
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `values` to the current run.
+
+        Args:
+            values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int` or `dict` of
+                `str` to `float`/`int`.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `trackio.log` method.
+        """
+        self.run.log(values, **kwargs)
+        logger.debug("Successfully logged to trackio")
+
+    @on_main_process
+    def finish(self):
+        """
+        Closes `trackio` run
+        """
+        self.run.finish()
+        logger.debug("trackio run closed")
 
 
 class CometMLTracker(GeneralTracker):
@@ -1174,6 +1264,7 @@ LOGGER_TYPE_TO_CLASS = {
     "clearml": ClearMLTracker,
     "dvclive": DVCLiveTracker,
     "swanlab": SwanLabTracker,
+    "trackio": TrackioTracker,
 }
 
 
@@ -1195,6 +1286,8 @@ def filter_trackers(
             - `"all"`
             - `"tensorboard"`
             - `"wandb"`
+            - `"trackio"`
+            - `"aim"`
             - `"comet_ml"`
             - `"mlflow"`
             - `"dvclive"`

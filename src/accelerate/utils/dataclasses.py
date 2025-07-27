@@ -712,7 +712,10 @@ class LoggerType(BaseEnum):
         - **ALL** -- all available trackers in the environment that are supported
         - **TENSORBOARD** -- TensorBoard as an experiment tracker
         - **WANDB** -- wandb as an experiment tracker
+        - **TRACKIO** -- trackio as an experiment tracker
         - **COMETML** -- comet_ml as an experiment tracker
+        - **MLFLOW** -- mlflow as an experiment tracker
+        - **CLEARML** -- clearml as an experiment tracker
         - **DVCLIVE** -- dvclive as an experiment tracker
         - **SWANLAB** -- swanlab as an experiment tracker
     """
@@ -721,6 +724,7 @@ class LoggerType(BaseEnum):
     AIM = "aim"
     TENSORBOARD = "tensorboard"
     WANDB = "wandb"
+    TRACKIO = "trackio"
     COMETML = "comet_ml"
     MLFLOW = "mlflow"
     CLEARML = "clearml"
