@@ -17,6 +17,7 @@ Example of training with ND parallel using accelerate's ParallelismConfig
 """
 
 import argparse
+import warnings
 
 import torch
 import torch.distributed as dist
@@ -67,6 +68,11 @@ def forward(model, batch, optimizer, accelerator):
 def main():
     set_seed(42)
     args = parse_args()
+
+    if args.dp_replicate_size == 1:
+        warnings.warn(
+            "Accelerator.save_state() is not yet supported with pure tensor parallel training."
+        )
 
     parallelism_config = ParallelismConfig(
         dp_replicate_size=args.dp_replicate_size,
@@ -140,7 +146,7 @@ def main():
         if step % 10 == 0 or step == total_num_steps - 1:
             accelerator.print(print_msg)
 
-        if step % args.checkpoint_frequency == 0 and step > 0:
+        if step % args.checkpoint_frequency == 0 and step > 0 and args.dp_replicate_size > 1:
             accelerator.print(f"Saving checkpoint at step {step}...")
             accelerator.save_state(args.save_dir + f"/checkpoint-{step}")
 
