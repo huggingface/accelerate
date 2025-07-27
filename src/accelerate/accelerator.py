@@ -1555,7 +1555,7 @@ class Accelerator:
                     for i, p in enumerate(param_group["params"]):
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
                         # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
-                        param_group["params"][i] = torch.empty_like(p)
+                        param_group["params"][i] = torch.empty(1, dtype=p.dtype, device=p.device)
                         param_group["params"][i].data_ptr = (
                             p._local_tensor.data_ptr() if isinstance(p, DTensor) else p.data_ptr()
                         )
