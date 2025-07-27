@@ -81,9 +81,19 @@ def main():
         )
 
     accelerator = Accelerator(
-        mixed_precision="no",
+        log_with=["trackio"],
+        mixed_precision="bf16",
         parallelism_config=parallelism_config,
         fsdp_plugin=fsdp2_plugin if parallelism_config.fsdp_enabled else None,
+    )
+    accelerator.init_trackers(
+        project_name="nd_parallel_training",
+        config={
+            "dp_replicate_size": args.dp_replicate_size,
+            "dp_shard_size": args.dp_shard_size,
+            "tp_size": args.tp_size,
+        },
+        init_kwargs={"space_id": "siro1/nd_parallel_training"},
     )
     model_kwargs = (
         {"tp_size": args.tp_size, "tp_plan": "auto", "device_mesh": accelerator.torch_device_mesh}
