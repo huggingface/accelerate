@@ -46,6 +46,7 @@ def parse_args():
     parser.add_argument("--num-steps", type=int, default=1000)
     parser.add_argument("--save-dir", type=str, default="./outputs")
     parser.add_argument("--checkpoint-frequency", type=int, default=100)
+    parser.add_argument("--trackio-space-id", type=str, default=None)
     return parser.parse_args()
 
 
@@ -87,13 +88,13 @@ def main():
         fsdp_plugin=fsdp2_plugin if parallelism_config.fsdp_enabled else None,
     )
     accelerator.init_trackers(
-        project_name="nd_parallel_training",
+        project_name="nd_parallel",
         config={
             "dp_replicate_size": args.dp_replicate_size,
             "dp_shard_size": args.dp_shard_size,
             "tp_size": args.tp_size,
         },
-        init_kwargs={"space_id": "siro1/nd_parallel_training"},
+        init_kwargs={"trackio": {"space_id": args.trackio_space_id}} if args.trackio_space_id else {},
     )
     model_kwargs = (
         {"tp_size": args.tp_size, "tp_plan": "auto", "device_mesh": accelerator.torch_device_mesh}
