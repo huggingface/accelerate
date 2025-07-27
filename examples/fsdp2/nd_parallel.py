@@ -42,26 +42,30 @@ def parse_args():
     parser.add_argument("--dp-replicate-size", type=int, default=1)
     parser.add_argument("--dp-shard-size", type=int, default=1)
     parser.add_argument("--tp-size", type=int, default=1)
-    parser.add_argument("--sequence-length", type=int, default=128)
+    parser.add_argument("--sequence-length", type=int, default=1024)
+    parser.add_argument("--num-steps", type=int, default=1000)
     parser.add_argument("--save-dir", type=str, default="./outputs")
     parser.add_argument("--checkpoint-frequency", type=int, default=100)
     return parser.parse_args()
 
 
-def init_torch_dist():
-    dist.init_process_group(backend="nccl", init_method="env://")
+def forward(model, batch, optimizer, accelerator):
+    loss_reduce_grp = (
+        accelerator.torch_device_mesh["dp_cp"].get_group() if accelerator.parallelism_config.dp_cp_dim_names else None
+    )
+    outputs = model(**batch)
+    loss = outputs.loss
+
+    accelerator.backward(loss)
+    optimizer.step()
+    optimizer.zero_grad()
+    dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
+    return loss
 
 
 def main():
-    """
-    Main function to train the model.
-    """
-    init_torch_dist()
-    args = parse_args()
-
     set_seed(42)
-
-    model_kwargs = {}
+    args = parse_args()
 
     parallelism_config = ParallelismConfig(
         dp_replicate_size=args.dp_replicate_size,
@@ -72,10 +76,8 @@ def main():
     if parallelism_config.fsdp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
-            cpu_ram_efficient_loading=False,
             auto_wrap_policy="transformer_based_wrap",
             transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
-            reshard_after_forward=True,
         )
 
     accelerator = Accelerator(
@@ -83,12 +85,11 @@ def main():
         parallelism_config=parallelism_config,
         fsdp_plugin=fsdp2_plugin if parallelism_config.fsdp_enabled else None,
     )
-
-    if args.tp_size > 1:
-        model_kwargs["tp_size"] = args.tp_size
-        model_kwargs["tp_plan"] = "auto"
-        model_kwargs["device_mesh"] = accelerator.torch_device_mesh
-
+    model_kwargs = (
+        {"tp_size": args.tp_size, "tp_plan": "auto", "device_mesh": accelerator.torch_device_mesh}
+        if args.tp_size > 1
+        else {}
+    )
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         torch_dtype=torch.bfloat16,
@@ -103,13 +104,10 @@ def main():
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
     dataloader = accelerator.prepare(dataloader)
-    loss_reduce_grp = (
-        accelerator.torch_device_mesh["dp_cp"].get_group() if parallelism_config.dp_cp_dim_names else None
-    )
 
     model.train()
 
-    total_num_steps = min(10, len(dataloader))
+    total_num_steps = min(args.num_steps, len(dataloader))
     performance_tracker = PerformanceTracker(warmup_steps=5)
 
     accelerator.print("Starting training...")
@@ -117,13 +115,7 @@ def main():
         if step >= total_num_steps:
             break
 
-        outputs = model(**batch)
-        loss = outputs.loss
-
-        accelerator.backward(loss)
-        optimizer.step()
-        optimizer.zero_grad()
-        dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
+        loss = forward(model, batch, optimizer, accelerator)
 
         # We report TPS per device, so we divide by the number of devices in the non-data parallel dimension
         metrics = performance_tracker.step(batch["input_ids"].shape[1] / parallelism_config.non_data_parallel_size)

@@ -2,6 +2,23 @@
 
 This folder contains examples of using FSDP2 with Accelerate, utilizing extra methods to improve training speed, performance or accuracy.
 
+### FSDP2 + ND Parallelism
+
+With `AccelerateDistributedConfig`, you can use 🤗 accelerate to train with n-dimensional parallelism. Script `nd_parallel.py` showcases just how you can do it. We enable you to configure 3 different parallel dimensions:
+- dp_replicate_size: how many replicas of the model to create, each replica is trained on a different subset of the data and averaged at the end of each step, same as DDP in Torch
+- dp_shard_size: across how many devices is the model sharded, this is utilizing FSDP2 to shard the model across devices, so each device has a different part of the model
+- tp_size: how many devices to use for tensor parallelism
+
+For example, with 8 nodes, you can run the script as such:
+```bash
+accelerate launch --num-processes 8 nd_parallel.py \
+    --dp-replicate-size 2 \
+    --dp-shard-size 2 \
+    --tp-size 2 \
+```
+
+We plan to add more parallelisms in the future, with context parallelism coming soon and pipeline parallelism being planned.
+
 ### FSDP2 + ao Float8Linear
 
 In file `fsdp2_fp8.py` we use `Float8Linear` from `ao` to train a model partially in FP8 precision. We utilize `AORecipeKwargs` to pass the `Float8LinearConfig` to the accelerator, 
@@ -34,3 +51,4 @@ The figures above were generated on 8x H100 SXM GPUs, with 8192 sequence length 
 ```bash
 accelerate launch fsdp2_fp8.py --sequence-length 8192 --num-steps 1000 --log_with wandb --precision [fp8 | bf16]
 ```
+
