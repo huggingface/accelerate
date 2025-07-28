@@ -59,7 +59,10 @@ def forward(model, batch, optimizer, accelerator):
     loss = outputs.loss
 
     accelerator.backward(loss)
-    optimizer.step()
+    from torch.distributed.tensor.experimental import implicit_replication
+
+    with implicit_replication():
+        optimizer.step()
     optimizer.zero_grad()
     dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
     return loss
@@ -69,10 +72,8 @@ def main():
     set_seed(42)
     args = parse_args()
 
-    if args.dp_replicate_size == 1:
-        warnings.warn(
-            "Accelerator.save_state() is not yet supported with pure tensor parallel training."
-        )
+    if args.dp_shard_size == 1:
+        warnings.warn("Accelerator.save_state() is not yet supported with pure tensor parallel training.")
 
     parallelism_config = ParallelismConfig(
         dp_replicate_size=args.dp_replicate_size,

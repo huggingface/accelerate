@@ -2985,6 +2985,7 @@ class ParallelismConfig:
     def non_data_parallel_size(self):
         return self.tp_size * self.cp_size
 
+    @property
     def data_parallel_size(self):
         return self.dp_replicate_size * self.dp_shard_size
 
