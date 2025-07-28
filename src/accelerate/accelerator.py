@@ -749,6 +749,18 @@ class Accelerator:
     def torch_device_mesh(self):
         return self.state.device_mesh
 
+    @property
+    def should_save_model(self):
+        if (pc := self.parallelism_config) is None:
+            # shouldn't even happen
+            return self.state.is_local_main_process
+        non_model_shard_dims = {
+            pc.dp_enabled: "dp_replicate",
+            pc.cp_enabled: "cp",
+        }
+
+        return all(self.torch_device_mesh[dim].get_local_rank() == 0 for key, dim in non_model_shard_dims.items() if key)
+
     def _setup_parallelism_config(
         self, parallelism_config: ParallelismConfig | None, torch_tp_plugin: TorchTensorParallelPlugin | None
     ):
