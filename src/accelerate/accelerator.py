@@ -32,9 +32,9 @@ from typing import Any, Callable, Union, cast
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
+from torch.distributed.tensor.experimental import implicit_replication
 
 from accelerate.utils.dataclasses import FP8BackendType
-from torch.distributed.tensor.experimental import implicit_replication
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -429,9 +429,9 @@ class Accelerator:
         self.has_fp8_handler = False
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(
-                    handler, KwargsHandler
-                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
+                assert isinstance(handler, KwargsHandler), (
+                    f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
+                )
                 # Add the handler class to the set of found handlers
                 if handler.__class__ in found_handlers:
                     raise ValueError(f"You can only pass one {handler.__class__} in `kwargs_handlers`.")
@@ -760,7 +760,9 @@ class Accelerator:
             pc.cp_enabled: "cp",
         }
 
-        return all(self.torch_device_mesh[dim].get_local_rank() == 0 for key, dim in non_model_shard_dims.items() if key)
+        return all(
+            self.torch_device_mesh[dim].get_local_rank() == 0 for key, dim in non_model_shard_dims.items() if key
+        )
 
     def _setup_parallelism_config(
         self, parallelism_config: ParallelismConfig | None, torch_tp_plugin: TorchTensorParallelPlugin | None
@@ -1486,6 +1488,9 @@ class Accelerator:
                     "You are using lower version of PyTorch(< 2.7.0) with ipex acceleration on Intel CPU or XPU, Intel has upstreamed most of the optimizations into stock PyTorch from 2.7.0, we enourage you to install the latest stock PyTorch and enjoy the out-of-experience on Intel CPU/XPU."
                 )
                 args = self._prepare_ipex(*args)
+        if self.parallelism_config.tp_enabled:
+            args = self._prepare_tp(*args)
+
         if self.fp8_backend == FP8BackendType.TE:
             args = self._prepare_te(*args)
         elif self.fp8_backend == FP8BackendType.AO:
@@ -1521,6 +1526,34 @@ class Accelerator:
                 item._is_accelerate_prepared = True
 
         return result if len(result) > 1 else result[0]
+
+    def _prepare_tp(self, *args):
+        device_mesh = self.torch_device_mesh
+
+        for arg in args:
+            if not isinstance(arg, torch.nn.Module):
+                continue
+
+            from torch.distributed.tensor import DTensor, Replicate
+            from transformers.integrations.tensor_parallel import ReplicateParallel
+
+            model: torch.nn.Module = arg
+            tp_plan = ReplicateParallel
+
+            for name, param in model.named_parameters():
+                if isinstance(param, DTensor):
+                    continue
+
+                dp = DTensor.from_local(param, device_mesh=device_mesh["tp"], placements=[Replicate()])
+                param_name, param_type = name.rsplit(".", 1)
+                module_to_tp = model.get_submodule(param_name)
+
+                tp_plan().prepare_module_tp(module_to_tp, device_mesh["tp"])
+                if not isinstance(dp, torch.nn.Parameter):
+                    dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
+                setattr(module_to_tp, param_type, dp)
+
+        return args
 
     def _prepare_fsdp2(self, *args):
         # First pass: prepare everything except schedulers (and model, which is prepared separately below)

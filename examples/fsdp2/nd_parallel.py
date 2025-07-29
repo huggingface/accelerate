@@ -59,10 +59,7 @@ def forward(model, batch, optimizer, accelerator):
     loss = outputs.loss
 
     accelerator.backward(loss)
-    from torch.distributed.tensor.experimental import implicit_replication
-
-    with implicit_replication():
-        optimizer.step()
+    optimizer.step()
     optimizer.zero_grad()
     dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
     return loss
