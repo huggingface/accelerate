@@ -1516,7 +1516,7 @@ class FullyShardedDataParallelPlugin:
             Whether to offload parameters to CPU. Should be either a `bool` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or
             `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2.
-        ignored_modules (`Optional[Union[Iterable[torch.nn.Module]], str]`, defaults to `None`):
+        ignored_modules (`Optional[Union[Iterable[torch.nn.Module], str]]`, defaults to `None`):
             A list of modules to ignore when wrapping with FSDP. When passing a string, will match the modules by name
             using regex fullmatch.
         state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
@@ -1608,7 +1608,7 @@ class FullyShardedDataParallelPlugin:
             "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2. Defaults to `False`"
         },
     )
-    ignored_modules: Optional[Union[Iterable[torch.nn.Module]], str] = field(
+    ignored_modules: Optional[Union[Iterable[torch.nn.Module], str]] = field(
         default=None,
         metadata={"help": "A list of modules to ignore when wrapping with FSDP."},
     )
