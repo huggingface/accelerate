@@ -34,6 +34,7 @@ import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
 from accelerate.utils.dataclasses import FP8BackendType
+from torch.distributed.tensor.experimental import implicit_replication
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -2737,6 +2738,10 @@ class Accelerator:
         ```
         """
         if self.distributed_type == DistributedType.FSDP:
+            if self.is_fsdp2 and self.parallelism_config.tp_enabled:
+                clip_context_manager = implicit_replication
+            else:
+                clip_context_manager = contextlib.nullcontext
             self.unscale_gradients()
             parameters = [p for p in parameters]
             for model in self._models:
@@ -2744,9 +2749,10 @@ class Accelerator:
                     if not self.is_fsdp2:
                         return model.clip_grad_norm_(max_norm, norm_type)
                     else:
-                        return torch.nn.utils.clip_grad_norm_(
-                            parameters, max_norm, norm_type=norm_type
-                        )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
+                        with clip_context_manager():
+                            return torch.nn.utils.clip_grad_norm_(
+                                parameters, max_norm, norm_type=norm_type
+                            )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # DeepSpeed handles gradient clipping internally, but we can retrieve the gradient norm
             if self.deepspeed_engine_wrapped is not None:
