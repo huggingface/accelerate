@@ -766,9 +766,11 @@ class Accelerator:
             pc.cp_enabled: "cp",
         }
 
-        return all(
-            self.torch_device_mesh[dim].get_local_rank() == 0 for key, dim in non_model_shard_dims.items() if key
-        )
+        # return all(
+        #     self.torch_device_mesh[dim].get_local_rank() == 0 for key, dim in non_model_shard_dims.items() if key
+        # )
+        # TODO: S1ro - this is a temporary solution until we figure out why `save_safe_file` is slow when not all processes
+        return True
 
     def _setup_parallelism_config(
         self, parallelism_config: ParallelismConfig | None, torch_tp_plugin: TorchTensorParallelPlugin | None
