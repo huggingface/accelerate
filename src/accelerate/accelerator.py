@@ -1732,6 +1732,17 @@ class Accelerator:
                         "limit_all_gathers": fsdp_plugin.limit_all_gathers,
                         "device_id": self.device,
                     }
+
+                    if isinstance(kwargs["ignored_modules"], str):
+                        reg = re.compile(kwargs["ignored_modules"])
+                        ignored = []
+                        for name, module in model.named_modules():
+                            if reg.fullmatch(name):
+                                # ensure that the device for these modules is still set correctly
+                                module.to(self.device)
+                                ignored.append(module)
+                        kwargs["ignored_modules"] = ignored
+
                     model = FSDP(model, **kwargs)
                     if fsdp_plugin.activation_checkpointing:
                         from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
