@@ -4,10 +4,12 @@ This folder contains examples of using FSDP2 with Accelerate, utilizing extra me
 
 ### FSDP2 + ND Parallelism
 
-With `AccelerateDistributedConfig`, you can use 🤗 accelerate to train with n-dimensional parallelism. Script `nd_parallel.py` showcases just how you can do it. We enable you to configure 3 different parallel dimensions:
+With `ParallelismConfig`, you can use 🤗 accelerate to train models with n-dimensional parallelism. This builds on top of 🤗 transformers, which we utilize for tensor parallelism sharding.
+Accelerate then takes care of everything else, such as data parallelism, FSDP, and more to come.
+Script `nd_parallel.py` showcases just how you can do it. We enable you to configure 3 different parallel dimensions (for now 👀):
 - dp_replicate_size: how many replicas of the model to create, each replica is trained on a different subset of the data and averaged at the end of each step, same as DDP in Torch
 - dp_shard_size: across how many devices is the model sharded, this is utilizing FSDP2 to shard the model across devices, so each device has a different part of the model
-- tp_size: how many devices to use for tensor parallelism
+- tp_size: how many devices to use for tensor parallelism, this is utilizing the tensor parallelism from 🤗 transformers
 
 For example, with 8 nodes, you can run the script as such:
 ```bash
@@ -16,6 +18,12 @@ accelerate launch --num-processes 8 nd_parallel.py \
     --dp-shard-size 2 \
     --tp-size 2 \
 ```
+
+<Tip>
+  Only use TP intra-node - therefore max TP size you should need is 8, you can also lower this as FSDP (`--dp-shard-size`) can be faster on smaller models with
+  shorter sequence lengths. If you still cannot fit into memory, utilize `--dp-shard-size` as much as you can. Then to scale up to utilize all your GPUs, fill the rest
+  with `--dp-replicate-size`. This is only a general guideline, you can (and should) experiment with different parallelism configurations to find the best one for your model and hardware.
+</Tip>
 
 We plan to add more parallelisms in the future, with context parallelism coming soon and pipeline parallelism being planned.
 
