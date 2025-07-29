@@ -47,7 +47,6 @@ def parse_args():
     parser.add_argument("--num-steps", type=int, default=1000)
     parser.add_argument("--save-dir", type=str, default="./outputs")
     parser.add_argument("--checkpoint-frequency", type=int, default=100)
-    parser.add_argument("--trackio-space-id", type=str, default=None)
     parser.add_argument("--model-name", type=str, default=MODEL_ID)
 
     return parser.parse_args()
