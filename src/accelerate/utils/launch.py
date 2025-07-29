@@ -328,7 +328,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
-        if args.fsdp_ignored_modules is not None:
+        if getattr(args, "fsdp_ignored_modules", None) is not None:
             current_env["FSDP_IGNORED_MODULES"] = str(args.fsdp_ignored_modules)
 
     if args.use_megatron_lm:
