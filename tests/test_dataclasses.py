@@ -16,7 +16,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from accelerate.utils import ParallelismConfig
+from accelerate.parallelism_config import ParallelismConfig
 
 
 class TestParallelismConfig:
@@ -76,7 +76,7 @@ class TestParallelismConfig:
         config = ParallelismConfig(
             dp_replicate_size=dp_replicate_size, dp_shard_size=dp_shard_size, tp_size=tp_size, cp_size=cp_size
         )
-        mesh_dim_names, mesh_shape = config.get_mesh()
+        mesh_dim_names, mesh_shape = config._get_mesh()
         assert mesh_shape == expected_shape
         assert mesh_dim_names == expected_dim_names
 

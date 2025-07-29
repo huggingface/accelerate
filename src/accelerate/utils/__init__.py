@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ..parallelism_config import ParallelismConfig
 from .ao import convert_model_to_fp8_ao, filter_first_and_last_linear_layers, has_ao_layers
 from .constants import (
     MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
@@ -53,7 +54,6 @@ from .dataclasses import (
     LoggerType,
     MegatronLMPlugin,
     MSAMPRecipeKwargs,
-    ParallelismConfig,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,

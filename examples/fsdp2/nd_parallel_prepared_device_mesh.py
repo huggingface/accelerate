@@ -24,9 +24,9 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator
+from accelerate.parallelism_config import ParallelismConfig
 from accelerate.state import PartialState
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
-from accelerate.utils.dataclasses import ParallelismConfig
 from accelerate.utils.fsdp_utils import save_fsdp_optimizer
 from utils import PerformanceTracker, create_collate_fn, get_dataset, gpu_memory_usage_all, setup_tokenizer
 
@@ -93,7 +93,7 @@ def main():
 
     PartialState(device_mesh=device_mesh, parallelism_config=parallelism_config)
 
-    if parallelism_config.fsdp_enabled:
+    if parallelism_config.dp_shard_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
             cpu_ram_efficient_loading=False,
@@ -167,7 +167,7 @@ def main():
     accelerator.wait_for_everyone()
     accelerator.end_training()
     accelerator.print("Training completed!")
-    if parallelism_config.fsdp_enabled and args.save_optimizer:
+    if parallelism_config.dp_shard_enabled and args.save_optimizer:
         accelerator.print("Saving optimizer state...")
         save_fsdp_optimizer(
             fsdp2_plugin,

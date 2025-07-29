@@ -25,8 +25,8 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator
+from accelerate.parallelism_config import ParallelismConfig
 from accelerate.utils import FullyShardedDataParallelPlugin, set_seed
-from accelerate.utils.dataclasses import ParallelismConfig
 from utils import (
     PerformanceTracker,
     create_collate_fn,
@@ -48,16 +48,18 @@ def parse_args():
     parser.add_argument("--save-dir", type=str, default="./outputs")
     parser.add_argument("--checkpoint-frequency", type=int, default=100)
     parser.add_argument("--trackio-space-id", type=str, default=None)
+    parser.add_argument("--model-name", type=str, default=MODEL_ID)
+
     return parser.parse_args()
 
 
 def forward(model, batch, optimizer, accelerator):
+    # To get the proper loss value, we need to average across devices that are participating in data parallel/context parallel training
     loss_reduce_grp = (
         accelerator.torch_device_mesh["dp_cp"].get_group() if accelerator.parallelism_config.dp_cp_dim_names else None
     )
     outputs = model(**batch)
     loss = outputs.loss
-
     accelerator.backward(loss)
     optimizer.step()
     optimizer.zero_grad()
@@ -65,20 +67,15 @@ def forward(model, batch, optimizer, accelerator):
     return loss
 
 
-def main():
-    set_seed(42)
-    args = parse_args()
-
-    if args.dp_shard_size == 1:
-        warnings.warn("Accelerator.save_state() is not yet supported with pure tensor parallel training.")
-
+def train(args):
     parallelism_config = ParallelismConfig(
         dp_replicate_size=args.dp_replicate_size,
         dp_shard_size=args.dp_shard_size,
         tp_size=args.tp_size,
     )
 
-    if parallelism_config.fsdp_enabled:
+    # FSDP needs extra configuration, so we properly shard the model
+    if parallelism_config.dp_shard_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
             auto_wrap_policy="transformer_based_wrap",
@@ -86,41 +83,31 @@ def main():
         )
 
     accelerator = Accelerator(
-        log_with=["trackio"],
+        log_with=["wandb"],
         mixed_precision="bf16",
         parallelism_config=parallelism_config,
-        fsdp_plugin=fsdp2_plugin if parallelism_config.fsdp_enabled else None,
+        fsdp_plugin=fsdp2_plugin if parallelism_config.dp_shard_enabled else None,
     )
-    accelerator.init_trackers(
-        project_name="nd_parallel",
-        config={
-            "dp_replicate_size": args.dp_replicate_size,
-            "dp_shard_size": args.dp_shard_size,
-            "tp_size": args.tp_size,
-        },
-        init_kwargs={"trackio": {"space_id": args.trackio_space_id}} if args.trackio_space_id else {},
-    )
+    accelerator.init_trackers("nd_parallel_training")
+
+    # If TP was enabled, we need to tell transformers to prepare the model for us
     model_kwargs = (
         {"tp_size": args.tp_size, "tp_plan": "auto", "device_mesh": accelerator.torch_device_mesh}
         if args.tp_size > 1
         else {}
     )
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
+        args.model_name,
         torch_dtype=torch.bfloat16,
         use_cache=False,
         **model_kwargs,
     )
-    tokenizer = setup_tokenizer(MODEL_ID)
+    tokenizer = setup_tokenizer(args.model_name)
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
-
-    model, optimizer = accelerator.prepare(model, optimizer)
-
     dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
-    dataloader = accelerator.prepare(dataloader)
 
-    model.train()
+    model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
     total_num_steps = min(args.num_steps, len(dataloader))
     performance_tracker = PerformanceTracker(warmup_steps=5)
@@ -144,19 +131,26 @@ def main():
         if step % 10 == 0 or step == total_num_steps - 1:
             accelerator.print(print_msg)
 
-        if step % args.checkpoint_frequency == 0 and step > 0 and args.dp_replicate_size > 1:
+        if step % args.checkpoint_frequency == 0 and step > 0 and parallelism_config.dp_shard_enabled:
             accelerator.print(f"Saving checkpoint at step {step}...")
             accelerator.save_state(args.save_dir + f"/checkpoint-{step}")
 
         accelerator.log({"loss": loss.item()})
 
-    accelerator.wait_for_everyone()
     accelerator.print("Training completed!")
 
-    model.save_pretrained(args.save_dir + f"/{MODEL_ID}")
-    accelerator.print(f"Model saved to {args.save_dir}/{MODEL_ID}")
+    model.save_pretrained(args.save_dir + f"/{args.model_name}")
+    accelerator.print(f"Model saved to {args.save_dir}/{args.model_name}")
     accelerator.end_training()
 
 
 if __name__ == "__main__":
-    main()
+    set_seed(42)
+    args = parse_args()
+    if args.dp_shard_size == 1:
+        # We currently don't support saving with `save_state` when using only
+        # tensor parallelism, fsdp must be enabled
+        warnings.warn(
+            "Accelerator.save_state() is not yet supported with pure tensor parallel training. Training will work, but intermediate checkpoints will not be saved."
+        )
+    train(args)

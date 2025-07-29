@@ -27,7 +27,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
-from typing import Any, Callable, Union, cast
+from typing import Any, Callable, Union
 
 import torch
 import torch.utils.hooks as hooks
@@ -40,6 +40,7 @@ from .checkpointing import load_accelerator_state, load_custom_state, save_accel
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
+from .parallelism_config import ParallelismConfig
 from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, GradientState, PartialState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
@@ -67,7 +68,6 @@ from .utils import (
     LoggerType,
     MegatronLMPlugin,
     MSAMPRecipeKwargs,
-    ParallelismConfig,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
@@ -314,6 +314,12 @@ class Accelerator:
                 raise ValueError(
                     f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
                 )
+        if torch_tp_plugin is not None:
+            warnings.warn(
+                "`TorchTensorParallelPlugin` is deprecated and will be removed in a future version of Accelerate. "
+                "Please use the `ParallelismConfig` with `tp_size` instead.",
+                FutureWarning,
+            )
 
         if dynamo_plugin is not None and dynamo_backend is not None:
             raise ValueError("You cannot pass in both `dynamo_plugin` and `dynamo_backend`, please only pass in one.")
@@ -458,7 +464,7 @@ class Accelerator:
 
         if self.parallelism_config:
             self._build_torch_device_mesh(self.parallelism_config)
-            self.parallelism_config.validate_accelerator(self)
+            self.parallelism_config._validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
 
@@ -743,8 +749,8 @@ class Accelerator:
         return self.is_fsdp2
 
     @property
-    def parallelism_config(self):
-        return cast(ParallelismConfig, self.state.parallelism_config)
+    def parallelism_config(self) -> ParallelismConfig | None:
+        return self.state.parallelism_config
 
     @property
     def torch_device_mesh(self):
@@ -756,7 +762,7 @@ class Accelerator:
             # shouldn't even happen
             return self.state.is_local_main_process
         non_model_shard_dims = {
-            pc.dp_enabled: "dp_replicate",
+            pc.dp_replicate_enabled: "dp_replicate",
             pc.cp_enabled: "cp",
         }
 
@@ -768,11 +774,10 @@ class Accelerator:
         self, parallelism_config: ParallelismConfig | None, torch_tp_plugin: TorchTensorParallelPlugin | None
     ):
         if parallelism_config is None:
-            warnings.warn("No parallelism_config provided! Attempting to load from PartialState.")
             if PartialState._shared_state != {} and PartialState().parallelism_config is not None:
                 parallelism_config = PartialState().parallelism_config
             else:
-                warnings.warn("No parallelism_config found in PartialState, using default ParallelismConfig.")
+                # TODO: Remove after deprecating tp_plugin
                 tp_size = 1 if torch_tp_plugin is None else torch_tp_plugin.tp_size
                 parallelism_config = ParallelismConfig(tp_size=tp_size)
 
