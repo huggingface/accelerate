@@ -58,7 +58,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
-from accelerate.utils.operations import is_namedtuple, concatenate
+from accelerate.utils.operations import concatenate, is_namedtuple
 
 
 if is_torch_xla_available():
@@ -454,14 +454,13 @@ class UtilsTester(unittest.TestCase):
         batch = concatenate([batch1, batch2], dim=0)
 
         assert batch["tuple_key"][0].shape == (8, 2)
-        assert  batch["tuple_key"][1] == batch1["tuple_key"][1] + batch2["tuple_key"][1]
+        assert batch["tuple_key"][1] == batch1["tuple_key"][1] + batch2["tuple_key"][1]
 
         batch1 = {"mix": torch.rand(4, 1)}
         batch2 = {"mix": ["Basketball", "Baseball", "Surf", "Bilboquet"]}
 
         with pytest.raises(TypeError):
             concatenate([batch1, batch2], dim=0)
-
 
     def test_send_to_device_compiles(self):
         compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
