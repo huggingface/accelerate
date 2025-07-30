@@ -1494,7 +1494,7 @@ class Accelerator:
                     "You are using lower version of PyTorch(< 2.7.0) with ipex acceleration on Intel CPU or XPU, Intel has upstreamed most of the optimizations into stock PyTorch from 2.7.0, we enourage you to install the latest stock PyTorch and enjoy the out-of-experience on Intel CPU/XPU."
                 )
                 args = self._prepare_ipex(*args)
-        if self.parallelism_config.tp_enabled:
+        if self.parallelism_config and self.parallelism_config.tp_enabled:
             args = self._prepare_tp(*args)
 
         if self.fp8_backend == FP8BackendType.TE:
