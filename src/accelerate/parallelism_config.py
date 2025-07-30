@@ -234,6 +234,10 @@ class ParallelismConfig:
 
     def _validate_accelerator(self, accelerator: "Accelerator"):
         _warnings = set()
+        
+        if not accelerator.multi_device and self.total_size == 1:
+            # No distributed setup, valid parallelism config
+            return
 
         # We need this to ensure DDP works
         if self.total_size == 1:
