@@ -16,8 +16,7 @@ import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Union
 
-import torch
-
+from torch.distributed.device_mesh import init_device_mesh
 from accelerate.utils.dataclasses import TorchTensorParallelConfig
 
 
@@ -176,7 +175,7 @@ class ParallelismConfig:
         if len(mesh) == 0:
             return
         mesh_dim_names, mesh_shape = mesh
-        device_mesh = torch.distributed.init_device_mesh(
+        device_mesh = init_device_mesh(
             device_type,
             mesh_shape,
             mesh_dim_names=mesh_dim_names,
