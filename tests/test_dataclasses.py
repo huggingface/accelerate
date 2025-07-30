@@ -46,7 +46,7 @@ class TestParallelismConfig:
 
             return mesh
 
-        with patch("torch.distributed.init_device_mesh", side_effect=mock_init_mesh):
+        with patch("accelerate.parallelism_config.init_device_mesh", side_effect=mock_init_mesh):
             yield mock_init_mesh
 
     @pytest.mark.parametrize(

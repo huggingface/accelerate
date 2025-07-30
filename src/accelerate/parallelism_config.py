@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Union
 
 from torch.distributed.device_mesh import init_device_mesh
+
 from accelerate.utils.dataclasses import TorchTensorParallelConfig
 
 
@@ -234,7 +235,6 @@ class ParallelismConfig:
 
     def _validate_accelerator(self, accelerator: "Accelerator"):
         _warnings = set()
-        
         if not accelerator.multi_device and self.total_size == 1:
             # No distributed setup, valid parallelism config
             return
