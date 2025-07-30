@@ -27,12 +27,11 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
-from typing import Any, Callable, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
-from torch.distributed.tensor.experimental import implicit_replication
 
 from accelerate.utils.dataclasses import FP8BackendType
 
@@ -749,7 +748,7 @@ class Accelerator:
         return self.is_fsdp2
 
     @property
-    def parallelism_config(self) -> ParallelismConfig | None:
+    def parallelism_config(self) -> Optional[ParallelismConfig]:
         return self.state.parallelism_config
 
     @property
@@ -761,7 +760,7 @@ class Accelerator:
         if (pc := self.parallelism_config) is None:
             # shouldn't even happen
             return self.state.is_local_main_process
-        non_model_shard_dims = {
+        _non_model_shard_dims = {
             pc.dp_replicate_enabled: "dp_replicate",
             pc.cp_enabled: "cp",
         }
@@ -2778,10 +2777,6 @@ class Accelerator:
         ```
         """
         if self.distributed_type == DistributedType.FSDP:
-            if self.is_fsdp2 and self.parallelism_config.tp_enabled:
-                clip_context_manager = implicit_replication
-            else:
-                clip_context_manager = contextlib.nullcontext
             self.unscale_gradients()
             parameters = [p for p in parameters]
             for model in self._models:
@@ -2789,10 +2784,9 @@ class Accelerator:
                     if not self.is_fsdp2:
                         return model.clip_grad_norm_(max_norm, norm_type)
                     else:
-                        with clip_context_manager():
-                            return torch.nn.utils.clip_grad_norm_(
-                                parameters, max_norm, norm_type=norm_type
-                            )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
+                        return torch.nn.utils.clip_grad_norm_(
+                            parameters, max_norm, norm_type=norm_type
+                        )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # DeepSpeed handles gradient clipping internally, but we can retrieve the gradient norm
             if self.deepspeed_engine_wrapped is not None:
