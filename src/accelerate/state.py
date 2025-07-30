@@ -180,6 +180,8 @@ class PartialState:
         if not self.initialized:
             self._cpu = cpu
             self.backend = None
+            self.parallelism_config = kwargs.pop("parallelism_config", None)
+            self.device_mesh = kwargs.pop("device_mesh", None)
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
             self.debug = parse_flag_from_env("ACCELERATE_DEBUG_MODE")
@@ -869,6 +871,8 @@ class AcceleratorState:
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
           in use.
+        - **parallelism_config** ([`~accelerate.utils.ParallelismConfig`]) -- The parallelism configuration for the
+          current training environment. This is used to configure the distributed training environment.
         - **initialized** (`bool`) -- Whether or not the `AcceleratorState` has been initialized from `Accelerator`.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type
@@ -988,8 +992,6 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
-                if self.torch_tp_plugin is not None:
-                    self.distributed_type = DistributedType.TP
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
                 if is_ipex_available():
                     # check if user disables it explicitly

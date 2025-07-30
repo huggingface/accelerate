@@ -548,6 +548,11 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
             indicates a bug. If we kept the original params instead of raising, the training wouldn't be numerically
             correct and weights wouldn't get updated.
     """
+    from torch.distributed.tensor import DTensor
+
+    accessor_mapping = {}
+
+    accessor_mapping[DTensor] = "_local_tensor"
     try:
         for param_group in optimizer.param_groups:
             param_group["params"] = [mapping[p.data_ptr] for p in param_group["params"]]
@@ -615,12 +620,14 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     fsdp2_plugin.set_auto_wrap_policy(model)
 
     original_sd = model.state_dict()
+    mesh = getattr(accelerator, "torch_device_mesh", None)
 
     fsdp2_kwargs = {
         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
         "offload_policy": fsdp2_plugin.cpu_offload,
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
+        "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
     }
 
     model_has_params4bit = False

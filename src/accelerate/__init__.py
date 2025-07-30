@@ -26,6 +26,7 @@ from .big_modeling import (
 from .data_loader import skip_first_batches
 from .inference import prepare_pippy
 from .launchers import debug_launcher, notebook_launcher
+from .parallelism_config import ParallelismConfig
 from .state import PartialState
 from .utils import (
     AutocastKwargs,

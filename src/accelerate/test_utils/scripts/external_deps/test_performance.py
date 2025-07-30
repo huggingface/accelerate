@@ -25,7 +25,8 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import SAFE_WEIGHTS_NAME, TorchTensorParallelPlugin, set_seed
+from accelerate.parallelism_config import ParallelismConfig
+from accelerate.utils import SAFE_WEIGHTS_NAME, set_seed
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
@@ -83,7 +84,7 @@ def training_function(config, args):
     accelerator_kwargs = {}
     # need this for DeepSpeed tests as `args.tp_size` would be None and `torch.distributed.init_device_mesh` would fail
     if args.tp_size is not None:
-        accelerator_kwargs["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=args.tp_size)
+        accelerator_kwargs["parallelism_config"] = ParallelismConfig(tp_size=args.tp_size)
 
     # Initialize accelerator
     accelerator = Accelerator(**accelerator_kwargs)
