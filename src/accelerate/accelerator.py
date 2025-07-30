@@ -27,7 +27,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Union
 
 import torch
 import torch.utils.hooks as hooks
@@ -748,7 +748,7 @@ class Accelerator:
         return self.is_fsdp2
 
     @property
-    def parallelism_config(self) -> Optional[ParallelismConfig]:
+    def parallelism_config(self) -> Union[ParallelismConfig, None]:
         return self.state.parallelism_config
 
     @property
