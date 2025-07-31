@@ -3958,8 +3958,9 @@ class Accelerator:
 
         <Tip warning={true}>
 
-        `context_parallel` is currently only supported together with FSDP2, and requires `parallelism_config.cp_size` > 1. If either
-        of these conditions are not met, this context manager will have no effect, though to enable fewer code changes it will not raise an Exception.
+        `context_parallel` is currently only supported together with FSDP2, and requires `parallelism_config.cp_size` >
+        1. If either of these conditions are not met, this context manager will have no effect, though to enable fewer
+        code changes it will not raise an Exception.
 
         </Tip>
 

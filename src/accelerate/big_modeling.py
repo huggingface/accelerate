@@ -757,9 +757,8 @@ def attach_context_parallel_hooks(
 
     This function attaches forward_pre_hooks to each self_attn module of the model, where each hook checks the
     args/kwargs, if they contain an attention mask, if it does, it will remove this mask, check if it is a causal mask,
-    if yes, will add a kwarg `is_causal=True`, otherwise will raise an error.
-    This is because context parallelism does not support attention masks.
-    This function modifies the model in place.
+    if yes, will add a kwarg `is_causal=True`, otherwise will raise an error. This is because context parallelism does
+    not support attention masks. This function modifies the model in place.
 
     Args:
         model (`nn.Module`):
