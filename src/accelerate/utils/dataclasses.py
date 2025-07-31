@@ -2143,6 +2143,28 @@ class TorchTensorParallelPlugin:
 
 
 @dataclass
+class TorchContextParallelConfig:
+    """
+    This class holds the configuration for context parallelism in PyTorch.
+    """
+
+    cp_comm_stategy: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Communication strategy for context parallelism. Can be one of 'allgather' or 'alltoall'. Defaults to 'allgather'."
+        }
+    )
+
+    def __post_init__(self):
+        if self.cp_comm_stategy is None:
+            self.cp_comm_stategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
+        if self.cp_comm_stategy not in ["allgather", "alltoall"]:
+            raise ValueError(
+                f"Invalid cp_comm_stategy: {self.cp_comm_stategy}. Must be one of 'allgather' or 'alltoall'."
+            )
+
+
+@dataclass
 class TorchTensorParallelConfig:
     """
     Use this object in your [`Accelerator`] to customize your torch tensor parallelism.

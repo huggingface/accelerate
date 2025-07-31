@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Union
 
 from torch.distributed.device_mesh import init_device_mesh
 
-from accelerate.utils.dataclasses import TorchTensorParallelConfig
+from accelerate.utils.dataclasses import TorchContextParallelConfig, TorchTensorParallelConfig
 
 
 if TYPE_CHECKING:
@@ -63,6 +64,7 @@ class ParallelismConfig:
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
+    cp_handler: Union[None, TorchContextParallelConfig] = None
 
     def __repr__(self):
         return (
@@ -71,7 +73,9 @@ class ParallelismConfig:
             f"\tdp_shard_size={self.dp_shard_size},\n"
             f"\ttp_size={self.tp_size},\n"
             f"\tcp_size={self.cp_size},\n"
-            f"\ttotal_size={self.total_size}\n)"
+            f"\ttotal_size={self.total_size}\n"
+            f"\ttp_handler={self.tp_handler},\n"
+            f"\tcp_handler={self.cp_handler})\n"
         )
 
     @property
@@ -206,6 +210,23 @@ class ParallelismConfig:
 
     def __post_init__(self):
         # Basic size validation
+        if self.dp_replicate_size == 1:
+            self.dp_replicate_size = int(os.environ.get("PARALLELISM_CONFIG_DP_REPLICATE_SIZE", "1"))
+        if self.dp_shard_size == 1:
+            self.dp_shard_size = int(os.environ.get("PARALLELISM_CONFIG_DP_SHARD_SIZE", "1"))
+        if self.tp_size == 1:
+            self.tp_size = int(os.environ.get("PARALLELISM_CONFIG_TP_SIZE", "1"))
+        if self.cp_size == 1:
+            self.cp_size = int(os.environ.get("PARALLELISM_CONFIG_CP_SIZE", "1"))
+
+        if self.tp_size > 1:
+            if self.tp_handler is None:
+                self.tp_handler = TorchTensorParallelConfig()
+
+        if self.cp_size > 1:
+            if self.cp_handler is None:
+                self.cp_handler = TorchContextParallelConfig()
+
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
         if self.dp_shard_size < 1:

@@ -43,6 +43,7 @@ def parse_args():
     parser.add_argument("--dp-replicate-size", type=int, default=1)
     parser.add_argument("--dp-shard-size", type=int, default=1)
     parser.add_argument("--tp-size", type=int, default=1)
+    parser.add_argument("--cp-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=1024)
     parser.add_argument("--num-steps", type=int, default=1000)
     parser.add_argument("--save-dir", type=str, default="./outputs")
@@ -52,17 +53,42 @@ def parse_args():
     return parser.parse_args()
 
 
-def forward(model, batch, optimizer, accelerator):
-    # To get the proper loss value, we need to average across devices that are participating in data parallel/context parallel training
-    loss_reduce_grp = (
-        accelerator.torch_device_mesh["dp_cp"].get_group() if accelerator.parallelism_config.dp_cp_dim_names else None
-    )
-    outputs = model(**batch)
-    loss = outputs.loss
-    accelerator.backward(loss)
-    optimizer.step()
-    optimizer.zero_grad()
-    dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
+def _self_attn_pre_forward_hook(module, *args, **kwargs):
+    kwargs = args[1]
+    kwargs["attention_mask"] = None
+    kwargs["is_causal"] = True
+    args = list(args)
+    args[1] = kwargs
+    return tuple(args)
+
+
+def fix_model(model):
+    for name, module in model.named_modules():
+        if name.endswith("self_attn"):
+            module: torch.nn.Module
+            module.register_forward_pre_hook(_self_attn_pre_forward_hook, with_kwargs=True)
+
+    return model
+
+
+def forward(model, batch, optimizer, accelerator: Accelerator):
+    input_ids, labels = batch["input_ids"], batch["labels"]
+    with accelerator.maybe_context_parallel(
+        buffers=[input_ids, labels], buffer_seq_dims=[1, 1], no_restore_buffers={input_ids, labels}
+    ):
+        # To get the proper loss value, we need to average across devices that are participating in data parallel/context parallel training
+        loss_reduce_grp = (
+            accelerator.torch_device_mesh["dp_cp"].get_group()
+            if accelerator.parallelism_config.dp_cp_dim_names
+            else None
+        )
+        outputs = model(**batch)
+        loss = outputs.loss
+        accelerator.backward(loss)
+        optimizer.step()
+        optimizer.zero_grad()
+        dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
+
     return loss
 
 
@@ -71,21 +97,22 @@ def train(args):
         dp_replicate_size=args.dp_replicate_size,
         dp_shard_size=args.dp_shard_size,
         tp_size=args.tp_size,
+        cp_size=args.cp_size,
     )
 
     # FSDP needs extra configuration, so we properly shard the model
-    if parallelism_config.dp_shard_enabled:
+    fsdp2_plugin = None
+    if parallelism_config.dp_shard_enabled or parallelism_config.cp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
             auto_wrap_policy="transformer_based_wrap",
             transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
+            state_dict_type="SHARDED_STATE_DICT",
+            activation_checkpointing=True,
         )
 
     accelerator = Accelerator(
-        log_with=["wandb"],
-        mixed_precision="bf16",
-        parallelism_config=parallelism_config,
-        fsdp_plugin=fsdp2_plugin if parallelism_config.dp_shard_enabled else None,
+        log_with=["wandb"], mixed_precision="bf16", parallelism_config=parallelism_config, fsdp_plugin=fsdp2_plugin
     )
     accelerator.init_trackers("nd_parallel_training")
 
@@ -107,6 +134,8 @@ def train(args):
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+    if parallelism_config.cp_enabled:
+        model = fix_model(model)
 
     total_num_steps = min(args.num_steps, len(dataloader))
     performance_tracker = PerformanceTracker(warmup_steps=5)
