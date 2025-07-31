@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union, get_a
 import torch
 
 from .constants import (
+    BETA_CP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
     FSDP2_PYTORCH_VERSION,
@@ -2152,10 +2153,15 @@ class TorchContextParallelConfig:
         default=None,
         metadata={
             "help": "Communication strategy for context parallelism. Can be one of 'allgather' or 'alltoall'. Defaults to 'allgather'."
-        }
+        },
     )
 
     def __post_init__(self):
+        if not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION):
+            raise ValueError(
+                f"Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                "Please upgrade your PyTorch version."
+            )
         if self.cp_comm_stategy is None:
             self.cp_comm_stategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
         if self.cp_comm_stategy not in ["allgather", "alltoall"]:
