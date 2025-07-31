@@ -505,6 +505,53 @@ def get_cluster_input():
                 error_message="Please enter yes or no.",
             )
 
+    parallelism_config = {}
+
+    if fsdp_config.get("fsdp_version", 1) == 2:
+        use_parallelism_config = _ask_field(
+            "Do you want to use the parallelism config? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+
+        if use_parallelism_config:
+            prefix = "parallelism_config_"
+            parallelism_config[prefix + "dp_replicate_size"] = _ask_field(
+                "What is the data parallelism replicate size? [1]: ",
+                int,
+                default=1,
+                error_message="Please enter an integer.",
+            )
+
+            parallelism_config[prefix + "dp_shard_size"] = _ask_field(
+                "What is the FSDP shard size? [1]: ",
+                int,
+                default=1,
+                error_message="Please enter an integer.",
+            )
+
+            parallelism_config[prefix + "tp_size"] = _ask_field(
+                "What is the tensor parallelism size? [1]: ",
+                int,
+                default=1,
+                error_message="Please enter an integer.",
+            )
+
+            parallelism_config[prefix + "cp_size"] = _ask_field(
+                "What is the context parallelism size? [1]: ",
+                int,
+                default=1,
+                error_message="Please enter an integer.",
+            )
+            if parallelism_config[prefix + "cp_size"] > 1:
+                parallelism_config[prefix + "cp_comm_strategy"] = _ask_options(
+                    "What is the compute parallelism communication strategy?",
+                    ["allgather", "alltoall"],
+                    lambda x: ["allgather", "alltoall"][int(x)],
+                    default=0,
+                )
+
     megatron_lm_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:
         use_megatron_lm = _ask_field(
@@ -849,6 +896,7 @@ def get_cluster_input():
         fp8_config=fp8_config,
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
+        parallelism_config=parallelism_config,
         megatron_lm_config=megatron_lm_config,
         ipex_config=ipex_config,
         mpirun_config=mpirun_config,

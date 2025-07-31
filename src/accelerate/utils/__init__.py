@@ -61,6 +61,7 @@ from .dataclasses import (
     SageMakerDistributedType,
     TensorInformation,
     TERecipeKwargs,
+    TorchContextParallelConfig,
     TorchDynamoPlugin,
     TorchTensorParallelConfig,
     TorchTensorParallelPlugin,
