@@ -35,6 +35,7 @@ from huggingface_hub import split_torch_state_dict_into_shards
 
 from accelerate.utils.dataclasses import FP8BackendType
 
+from .big_modeling import attach_context_parallel_hooks
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -1508,7 +1509,7 @@ class Accelerator:
             args = self._prepare_tp(*args)
 
         if self.parallelism_config and self.parallelism_config.cp_enabled:
-            self._prepare_cp()
+            args = self._prepare_cp(*args)
 
         if self.fp8_backend == FP8BackendType.TE:
             args = self._prepare_te(*args)
@@ -1574,7 +1575,7 @@ class Accelerator:
 
         return args
 
-    def _prepare_cp(self):
+    def _prepare_cp(self, *args):
         from torch.distributed.tensor.experimental import context_parallel
         from torch.distributed.tensor.experimental._attention import set_rotate_method
 
@@ -1582,6 +1583,14 @@ class Accelerator:
         set_rotate_method(cp_comm_strategy)
 
         self._cp_context = functools.partial(context_parallel, mesh=self.torch_device_mesh["cp"])
+
+        for arg in args:
+            if not isinstance(arg, torch.nn.Module):
+                continue
+
+            attach_context_parallel_hooks(arg)
+
+        return args
 
     def _prepare_fsdp2(self, *args):
         # First pass: prepare everything except schedulers (and model, which is prepared separately below)

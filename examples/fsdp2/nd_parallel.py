@@ -53,24 +53,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def _self_attn_pre_forward_hook(module, *args, **kwargs):
-    kwargs = args[1]
-    kwargs["attention_mask"] = None
-    kwargs["is_causal"] = True
-    args = list(args)
-    args[1] = kwargs
-    return tuple(args)
-
-
-def fix_model(model):
-    for name, module in model.named_modules():
-        if name.endswith("self_attn"):
-            module: torch.nn.Module
-            module.register_forward_pre_hook(_self_attn_pre_forward_hook, with_kwargs=True)
-
-    return model
-
-
 def forward(model, batch, optimizer, accelerator: Accelerator):
     input_ids, labels = batch["input_ids"], batch["labels"]
     with accelerator.maybe_context_parallel(
@@ -134,8 +116,6 @@ def train(args):
     dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
-    if parallelism_config.cp_enabled:
-        model = fix_model(model)
 
     total_num_steps = min(args.num_steps, len(dataloader))
     performance_tracker = PerformanceTracker(warmup_steps=5)
