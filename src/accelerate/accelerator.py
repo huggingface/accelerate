@@ -165,6 +165,8 @@ if is_torch_xla_available():
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
 
+if is_torch_version(">=", "2.6.0"):
+    from .dist_checkpointing import save_model_and_optimizer
 
 try:
     from torch.optim.lr_scheduler import LRScheduler
@@ -3453,10 +3455,17 @@ class Accelerator:
             # Finish running the previous step before checkpointing
             xm.mark_step()
 
+        # TODO: Siro - how to properly decide when to do this
+        _dist_save = self.parallelism_config is not None and self.parallelism_config.total_size > 1 and True
+        if _dist_save:
+            save_model_and_optimizer(self, self._models[0], self._optimizers[0], output_dir, True)
+
         # Save the models taking care of FSDP and DeepSpeed nuances
         weights = []
         for i, model in enumerate(self._models):
-            if self.distributed_type == DistributedType.FSDP:
+            if _dist_save:
+                pass
+            elif self.distributed_type == DistributedType.FSDP:
                 logger.info("Saving FSDP model")
                 save_fsdp_model(self.state.fsdp_plugin, self, model, output_dir, i)
                 logger.info(f"FSDP Model saved to output dir {output_dir}")
@@ -3474,7 +3483,9 @@ class Accelerator:
 
         # Save the optimizers taking care of FSDP and DeepSpeed nuances
         optimizers = []
-        if self.distributed_type == DistributedType.FSDP:
+        if _dist_save:
+            pass
+        elif self.distributed_type == DistributedType.FSDP:
             for i, opt in enumerate(self._optimizers):
                 logger.info("Saving FSDP Optimizer")
                 save_fsdp_optimizer(self.state.fsdp_plugin, self, opt, self._models[i], output_dir, i)

@@ -303,13 +303,15 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
                 optim_state = torch.load(input_optimizer_file, weights_only=True)
                 logger.info(f"Optimizer state loaded from {input_optimizer_file}")
         else:
+            from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+
             ckpt_dir = (
                 os.path.join(input_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
                 if f"{OPTIMIZER_NAME}" not in input_dir
                 else input_dir
             )
             logger.info(f"Loading Optimizer from {ckpt_dir}")
-            optim_state = {"optimizer": optimizer.state_dict()}
+            optim_state = {"optimizer": get_optimizer_state_dict(model, optimizer)}
             dist_cp.load(
                 optim_state,
                 checkpoint_id=ckpt_dir,
