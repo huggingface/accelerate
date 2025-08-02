@@ -785,32 +785,50 @@ class Accelerator:
         return parallelism_config
 
     @property
-    def tensor_parallel_rank(self) -> Optional[int]:
-        if self.parallelism_config and self.parallelism_config.tp_enabled:
-            return self.torch_device_mesh.get_local_rank("tp")
-        return None
+    def tensor_parallel_rank(self) -> int:
+        """
+        Returns the local rank for tensor parallelism.
+        Raises an error if tensor parallelism is not enabled.
+        """
+        if not self.parallelism_config or not self.parallelism_config.tp_enabled:
+            raise RuntimeError("Tensor parallelism is not enabled. Please check your configuration.")
+        return self.torch_device_mesh.get_local_rank("tp")
 
     @property
-    def pipeline_parallel_rank(self) -> Optional[int]:
+    def pipeline_parallel_rank(self) -> int:
+        """
+        Returns the local rank for pipeline parallelism.
+        Not implemented in Accelerate.
+        """
         raise NotImplementedError("Pipeline parallelism is currently not supported in Accelerate.")
 
     @property
-    def context_parallel_rank(self) -> Optional[int]:
+    def context_parallel_rank(self) -> int:
+        """
+        Returns the local rank for context parallelism.
+        Not implemented in Accelerate.
+        """
         raise NotImplementedError("Context parallelism is currently not supported in Accelerate.")
-      
-    # Replicate based Data Parallelism (e.g. DDP)
-    @property
-    def data_parallel_rank(self) -> Optional[int]:
-        if self.parallelism_config and self.parallelism_config.dp_replicate_enabled:
-            return self.torch_device_mesh.get_local_rank("dp_replicate")
-        return None
 
-    # Shard based Data Parallelism (e.g. FSDP)
     @property
-    def data_parallel_shard_rank(self) -> Optional[int]:
-        if self.parallelism_config and self.parallelism_config.dp_shard_enabled:
-            return self.torch_device_mesh.get_local_rank("dp_shard")
-        return None
+    def data_parallel_rank(self) -> int:
+        """
+        Returns the local rank for replicate-based data parallelism (e.g., DDP).
+        Raises an error if not enabled.
+        """
+        if not self.parallelism_config or not self.parallelism_config.dp_replicate_enabled:
+            raise RuntimeError("Replicate-based data parallelism is not enabled. Please check your configuration.")
+        return self.torch_device_mesh.get_local_rank("dp_replicate")
+
+    @property
+    def data_parallel_shard_rank(self) -> int:
+        """
+        Returns the local rank for shard-based data parallelism (e.g., FSDP).
+        Raises an error if not enabled.
+        """
+        if not self.parallelism_config or not self.parallelism_config.dp_shard_enabled:
+            raise RuntimeError("Shard-based data parallelism is not enabled. Please check your configuration.")
+        return self.torch_device_mesh.get_local_rank("dp_shard")
 
     def _build_torch_device_mesh(self, parallelism_config):
         if PartialState._shared_state != {} and getattr(PartialState(), "device_mesh", None) is not None:
@@ -819,8 +837,6 @@ class Accelerator:
             device_mesh = parallelism_config.build_device_mesh(self.device.type)
         self.state.device_mesh = device_mesh
         PartialState().device_mesh = device_mesh
-
-    
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
