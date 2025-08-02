@@ -784,6 +784,34 @@ class Accelerator:
 
         return parallelism_config
 
+    @property
+    def tensor_parallel_rank(self) -> Optional[int]:
+        if self.parallelism_config and self.parallelism_config.tp_enabled:
+            return self.torch_device_mesh.get_local_rank("tp")
+        return None
+
+    @property
+    def pipeline_parallel_rank(self) -> Optional[int]:
+        raise NotImplementedError("Pipeline parallelism is currently not supported in Accelerate.")
+
+    @property
+    def context_parallel_rank(self) -> Optional[int]:
+        raise NotImplementedError("Context parallelism is currently not supported in Accelerate.")
+      
+    # Replicate based Data Parallelism (e.g. DDP)
+    @property
+    def data_parallel_rank(self) -> Optional[int]:
+        if self.parallelism_config and self.parallelism_config.dp_replicate_enabled:
+            return self.torch_device_mesh.get_local_rank("dp_replicate")
+        return None
+
+    # Shard based Data Parallelism (e.g. FSDP)
+    @property
+    def data_parallel_shard_rank(self) -> Optional[int]:
+        if self.parallelism_config and self.parallelism_config.dp_shard_enabled:
+            return self.torch_device_mesh.get_local_rank("dp_shard")
+        return None
+
     def _build_torch_device_mesh(self, parallelism_config):
         if PartialState._shared_state != {} and getattr(PartialState(), "device_mesh", None) is not None:
             device_mesh = PartialState().device_mesh
@@ -791,6 +819,8 @@ class Accelerator:
             device_mesh = parallelism_config.build_device_mesh(self.device.type)
         self.state.device_mesh = device_mesh
         PartialState().device_mesh = device_mesh
+
+    
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
