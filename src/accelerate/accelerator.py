@@ -787,8 +787,8 @@ class Accelerator:
     @property
     def tensor_parallel_rank(self) -> int:
         """
-        Returns the local rank for tensor parallelism.
-        If tensor parallelism is configured but not enabled, returns 0 since all ranks are assumed to be the same.
+        Returns the local rank for tensor parallelism. If tensor parallelism is configured but not enabled, returns 0
+        since all ranks are assumed to be the same.
         """
         if self.parallelism_config:
             if self.parallelism_config.tp_enabled:
@@ -813,8 +813,8 @@ class Accelerator:
     @property
     def data_parallel_rank(self) -> int:
         """
-        Returns the local rank for replicate-based data parallelism.
-        If replicate-based data parallelism is configured but not enabled, returns 0 since all ranks are assumed to be the same.
+        Returns the local rank for replicate-based data parallelism. If replicate-based data parallelism is configured
+        but not enabled, returns 0 since all ranks are assumed to be the same.
         """
         if self.parallelism_config:
             if self.parallelism_config.dp_replicate_enabled:
@@ -825,8 +825,8 @@ class Accelerator:
     @property
     def data_parallel_shard_rank(self) -> int:
         """
-        Returns the local rank for shard-based data parallelism.
-        If shard-based data parallelism is configured but not enabled, returns 0 since all ranks are assumed to be the same.
+        Returns the local rank for shard-based data parallelism. If shard-based data parallelism is configured but not
+        enabled, returns 0 since all ranks are assumed to be the same.
         """
         if self.parallelism_config:
             if self.parallelism_config.dp_shard_enabled:
