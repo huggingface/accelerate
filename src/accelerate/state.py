@@ -232,6 +232,7 @@ class PartialState:
                             and (
                                 os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true"
                                 or os.environ.get("FSDP_STATE_DICT_TYPE", "SHARDED_STATE_DICT") == "FULL_STATE_DICT"
+                                or True
                             )
                         ):
                             self.backend = "cuda:nccl,cpu:gloo"
