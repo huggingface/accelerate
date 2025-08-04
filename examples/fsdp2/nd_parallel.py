@@ -23,7 +23,6 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
-from transformers.loss.loss_utils import ForCausalLMLoss
 
 from accelerate import Accelerator
 from accelerate.parallelism_config import ParallelismConfig
@@ -62,6 +61,8 @@ def forward(model, batch, optimizer, accelerator: Accelerator):
         buffers=buffers, buffer_seq_dims=[1, 1, 1], no_restore_buffers=set(buffers)
     ):
         # To get the proper loss value, we need to average across devices that are participating in data parallel/context parallel training
+        # As for DP we have a different batch on each device and for CP we essentially have a different part of sequences on each device
+        # I.e. with causal modelling and seq_len 1024, this dimension becomes another batch dimension of sorts
         loss_reduce_grp = (
             accelerator.torch_device_mesh["dp_cp"].get_group()
             if accelerator.parallelism_config.dp_cp_dim_names
