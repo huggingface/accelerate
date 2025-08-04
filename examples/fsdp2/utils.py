@@ -112,7 +112,7 @@ def create_collate_fn():
     def collate_fn(batch):
         input_ids = torch.tensor([item["input_ids"] for item in batch], dtype=torch.long)
         shift_labels = torch.tensor([item["shift_labels"] for item in batch], dtype=torch.long)
-        return {"input_ids": input_ids, "shift_labels": shift_labels}
+        return {"input_ids": input_ids, "shift_labels": shift_labels, "labels": shift_labels}
 
     return collate_fn
 

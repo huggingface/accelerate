@@ -55,9 +55,11 @@ def parse_args():
 
 
 def forward(model, batch, optimizer, accelerator: Accelerator):
-    input_ids, shift_labels = batch["input_ids"], batch["shift_labels"]
+    # We need both labels and shift_labels, as the loss computation in the model is hidden behind `if labels is not None`, but the loss computation
+    # itself prioritzes shift_labels (if provided) which are the correct ones (due to labels being wrong if cp enabled)
+    buffers = [batch["input_ids"], batch["shift_labels"], batch["labels"]]
     with accelerator.maybe_context_parallel(
-        buffers=[input_ids, shift_labels], buffer_seq_dims=[1, 1], no_restore_buffers={input_ids, shift_labels}
+        buffers=buffers, buffer_seq_dims=[1, 1, 1], no_restore_buffers=set(buffers)
     ):
         # To get the proper loss value, we need to average across devices that are participating in data parallel/context parallel training
         loss_reduce_grp = (
@@ -66,10 +68,7 @@ def forward(model, batch, optimizer, accelerator: Accelerator):
             else None
         )
         outputs = model(**batch)
-        # With shift labels we need to compute loss ourselves
-        loss = ForCausalLMLoss(
-            logits=outputs.logits, labels=None, shift_labels=shift_labels, vocab_size=model.config.vocab_size
-        )
+        loss = outputs.loss
         accelerator.backward(loss)
         optimizer.step()
         optimizer.zero_grad()
