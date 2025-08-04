@@ -142,3 +142,6 @@ wandb
 
 # ruff
 .ruff_cache
+
+
+models

@@ -75,6 +75,7 @@ from .utils import (
     TorchDynamoPlugin,
     TorchTensorParallelPlugin,
     apply_fp8_autowrap,
+    apply_tp_plan,
     check_os_kernel,
     clean_state_dict_for_safetensors,
     compare_versions,
@@ -1534,32 +1535,27 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def _prepare_tp(self, *args):
-        device_mesh = self.torch_device_mesh
+        result = [
+            self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj for obj in args
+        ]
 
-        for arg in args:
-            if not isinstance(arg, torch.nn.Module):
-                continue
+        result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
 
-            from torch.distributed.tensor import DTensor, Replicate
-            from transformers.integrations.tensor_parallel import ReplicateParallel
+        for arg in result:
+            if isinstance(arg, torch.nn.Module):
+                arg = apply_tp_plan(self, arg)
+            elif isinstance(arg, torch.optim.Optimizer):
+                from torch.distributed.tensor.experimental import implicit_replication
 
-            model: torch.nn.Module = arg
-            tp_plan = ReplicateParallel
+                original_step = arg.step
 
-            for name, param in model.named_parameters():
-                if isinstance(param, DTensor):
-                    continue
+                def wrapped_step(closure=None):
+                    with implicit_replication():
+                        return original_step(closure)
 
-                dp = DTensor.from_local(param, device_mesh=device_mesh["tp"], placements=[Replicate()])
-                param_name, param_type = name.rsplit(".", 1)
-                module_to_tp = model.get_submodule(param_name)
+                arg.step = wrapped_step
 
-                tp_plan().prepare_module_tp(module_to_tp, device_mesh["tp"])
-                if not isinstance(dp, torch.nn.Parameter):
-                    dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
-                setattr(module_to_tp, param_type, dp)
-
-        return args
+        return tuple(result)
 
     def _prepare_fsdp2(self, *args):
         # First pass: prepare everything except schedulers (and model, which is prepared separately below)
@@ -1731,7 +1727,7 @@ class Accelerator:
                     "You can't train a model that has been loaded in 8-bit or 4-bit precision with CPU or disk offload. "
                     "If you want train the 8-bit or 4-bit model in CPU, please install bitsandbytes with multi-backend, see https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
                 )
-        elif device_placement and not self.verify_device_map(model):
+        elif device_placement and not self.verify_device_map(model) and False:
             model = model.to(self.device)
         if not evaluation_mode:
             if self.multi_device and not (self.parallelism_config and self.parallelism_config.tp_enabled):
@@ -1760,7 +1756,7 @@ class Accelerator:
                         "Model should undergo tensor parallel before passing it to accelerate."
                         "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
                     )
-                if model.tp_size != self.parallelism_config.tp_size:
+                if model.tp_size != self.parallelism_config.tp_size and False:
                     raise ValueError(
                         f"tp_size in the plugin {self.parallelism_config.tp_size} should be same as model's tp size {model.tp_size}"
                     )

@@ -292,6 +292,10 @@ from .other import (
     write_basic_config,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
+from .safetensors_reader import (
+    SafetensorsReader,
+)
+from .tensor_parallel import apply_tp_plan
 from .torch_xla import install_xla
 from .tqdm import tqdm
 from .transformer_engine import (
