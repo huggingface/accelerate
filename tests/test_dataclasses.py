@@ -215,6 +215,10 @@ class TestParallelismConfig:
     def test_cp_handler(self):
         """Test CP handler with various configurations."""
 
+        # Any cp_size > 1 requires torch >= BETA_CP_AVAILABLE_PYTORCH_VERSION, we use placeholder for this check as this test doesn't depend on a specific size
+        if _should_skip_cp_test(2):
+            pytest.skip(f"CP tests require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
+
         from accelerate.utils import TorchContextParallelConfig
 
         for setting in ("allgather", "alltoall"):
