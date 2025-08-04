@@ -69,7 +69,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
             packed_input_ids.append(full_sequence[:-1])
             packed_labels.append(full_sequence[1:])
 
-        return {"input_ids": packed_input_ids, "labels": packed_labels}
+        return {"input_ids": packed_input_ids, "shift_labels": packed_labels}
 
     with accelerator.main_process_first():
         packed_dataset = tokenized_dataset.map(
@@ -111,8 +111,8 @@ def create_collate_fn():
 
     def collate_fn(batch):
         input_ids = torch.tensor([item["input_ids"] for item in batch], dtype=torch.long)
-        labels = torch.tensor([item["labels"] for item in batch], dtype=torch.long)
-        return {"input_ids": input_ids, "labels": labels}
+        shift_labels = torch.tensor([item["shift_labels"] for item in batch], dtype=torch.long)
+        return {"input_ids": input_ids, "shift_labels": shift_labels}
 
     return collate_fn
 

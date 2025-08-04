@@ -749,7 +749,7 @@ def _attach_layerwise_casting_hooks(
         )
 
 
-def attach_context_parallel_hooks(
+def _attach_context_parallel_hooks(
     model: nn.Module,
 ):
     """

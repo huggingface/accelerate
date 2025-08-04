@@ -57,10 +57,10 @@ class ParallelismConfig:
 
     """
 
-    dp_replicate_size: int = 1
-    dp_shard_size: int = 1
-    tp_size: int = 1
-    cp_size: int = 1
+    dp_replicate_size: int = None
+    dp_shard_size: int = None
+    tp_size: int = None
+    cp_size: int = None
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
@@ -210,13 +210,13 @@ class ParallelismConfig:
 
     def __post_init__(self):
         # Basic size validation
-        if self.dp_replicate_size == 1:
+        if self.dp_replicate_size is None:
             self.dp_replicate_size = int(os.environ.get("PARALLELISM_CONFIG_DP_REPLICATE_SIZE", "1"))
-        if self.dp_shard_size == 1:
+        if self.dp_shard_size is None:
             self.dp_shard_size = int(os.environ.get("PARALLELISM_CONFIG_DP_SHARD_SIZE", "1"))
-        if self.tp_size == 1:
+        if self.tp_size is None:
             self.tp_size = int(os.environ.get("PARALLELISM_CONFIG_TP_SIZE", "1"))
-        if self.cp_size == 1:
+        if self.cp_size is None:
             self.cp_size = int(os.environ.get("PARALLELISM_CONFIG_CP_SIZE", "1"))
 
         if self.tp_size > 1:

@@ -105,10 +105,10 @@ class TestParallelismConfig:
     ):
         # Skip tests based on version requirements
         if _should_skip_cp_test(cp_size):
-            pytest.skip(f"CP tests require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
+            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
         if _should_skip_tp_test(tp_size):
             pytest.skip(
-                f"TP tests require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+                f"tests with `tp_size>1` require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
             )
 
         config = ParallelismConfig(
@@ -145,10 +145,10 @@ class TestParallelismConfig:
         """Test build_device_mesh creates correct mesh and applies flattening."""
         # Skip tests based on version requirements
         if _should_skip_cp_test(cp_size):
-            pytest.skip(f"CP tests require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
+            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
         if _should_skip_tp_test(tp_size):
             pytest.skip(
-                f"TP tests require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+                f"tests with `tp_size>1` require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
             )
 
         config = ParallelismConfig(
@@ -194,10 +194,10 @@ class TestParallelismConfig:
         cp_size,
     ):
         if _should_skip_cp_test(cp_size):
-            pytest.skip(f"CP tests require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
+            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
         if _should_skip_tp_test(tp_size):
             pytest.skip(
-                f"TP tests require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+                f"tests with `tp_size>1` require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
             )
 
         new_env = {
@@ -217,7 +217,7 @@ class TestParallelismConfig:
 
         # Any cp_size > 1 requires torch >= BETA_CP_AVAILABLE_PYTORCH_VERSION, we use placeholder for this check as this test doesn't depend on a specific size
         if _should_skip_cp_test(2):
-            pytest.skip(f"CP tests require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
+            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
 
         from accelerate.utils import TorchContextParallelConfig
 

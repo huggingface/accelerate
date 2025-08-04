@@ -35,7 +35,7 @@ from huggingface_hub import split_torch_state_dict_into_shards
 
 from accelerate.utils.dataclasses import FP8BackendType
 
-from .big_modeling import attach_context_parallel_hooks
+from .big_modeling import _attach_context_parallel_hooks
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -448,12 +448,6 @@ class Accelerator:
                     self.has_fp8_handler = True
 
         parallelism_config = self._setup_parallelism_config(parallelism_config, torch_tp_plugin)
-
-        # TODO: Siro - figure out a better place where this can go (needs to be above AcceleratorState init)
-        if parallelism_config and parallelism_config.cp_enabled and fsdp_plugin is None:
-            raise ValueError(
-                "`cp_enabled` is set to `True` in the `parallelism_config`, but no `fsdp_plugin` was provided. We need a `fsdp_plugin` to use `cp_enabled=True`, as we also shard the model across the device mesh to save more memory"
-            )
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         kwargs["parallelism_config"] = parallelism_config
@@ -1585,10 +1579,8 @@ class Accelerator:
         self._cp_context = functools.partial(context_parallel, mesh=self.torch_device_mesh["cp"])
 
         for arg in args:
-            if not isinstance(arg, torch.nn.Module):
-                continue
-
-            attach_context_parallel_hooks(arg)
+            if isinstance(arg, torch.nn.Module):
+                _attach_context_parallel_hooks(arg)
 
         return args
 
@@ -3991,10 +3983,10 @@ class Accelerator:
             ):
                 yield
         else:
-            if not getattr(self, "_warned_about_cp", False) and self.is_main_process:
-                logger.warning("Context parallel training is not enabled. This context manager will have no effect.")
-            # As this context manager is recreated each training step, we only warn once
-            self._warned_about_cp = True
+            logger.warning_once(
+                "Context parallel training is not enabled. This context manager will have no effect. "
+                "To enable it, set `parallelism_config.cp_size` > 1 in the `Accelerator` constructor."
+            )
             yield
 
     @contextmanager

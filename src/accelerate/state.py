@@ -981,6 +981,10 @@ class AcceleratorState:
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,
             ]:
+                if self.parallelism_config and self.parallelism_config.cp_enabled and fsdp_plugin is None:
+                    raise ValueError(
+                        "`cp_size > 1` in the `parallelism_config`, but no `fsdp_plugin` was provided. We need a `fsdp_plugin` to use `cp_enabled=True`, as we also shard the model across the device mesh to save more memory"
+                    )
                 if (os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or fsdp_plugin is not None) or (
                     self.parallelism_config is not None and self.parallelism_config.cp_enabled
                 ):

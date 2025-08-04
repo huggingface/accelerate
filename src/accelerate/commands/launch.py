@@ -1039,15 +1039,8 @@ def _validate_launch_command(args):
     if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
 
-    # TODO: Merge into 1 if
-    if not args.use_fsdp and args.use_parallelism_config:
-        raise ValueError(
-            "You cannot use `--use_parallelism_config` without `--use_fsdp`. Please set `--use_fsdp` to True if you want to use parallelism config."
-        )
-    elif args.fsdp_version == 1 and args.use_parallelism_config:
-        raise ValueError(
-            "You cannot use `--use_parallelism_config` with FSDP version 1. Please set `--fsdp_version=2` if you want to use parallelism config."
-        )
+    if (not args.use_fsdp or args.fsdp_version == 1) and args.use_parallelism_config:
+        raise ValueError("You cannot use `--use_parallelism_config` without `--use_fsdp` and `--fsdp_version=2`. ")
 
     defaults = None
     warned = []

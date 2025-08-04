@@ -91,7 +91,10 @@ This can scale your context size to 1M+ sequence length potentially. Below, we s
 </p>
 
 > [!Tip]
-> These examples were created with a script you can find [in the examples folder](https://github.com/huggingface/accelerate/blob/main/examples/fsdp2/nd_parallel.py). For instructions on how to run it, see the [README](https://github.com/huggingface/accelerate/blob/main/examples/fsdp2/README.md) in the same folder.
+> These examples were created with a script you can find [in the examples folder](https://github.com/huggingface/accelerate/blob/main/examples/fsdp2/nd_parallel.py). To run the example on 8 H100 GPUs (128k sequence length), you can use the following command:
+> ```bash
+> accelerate launch --use-fsdp --fsdp-activation-checkpointing=TRUE examples/fsdp2/nd_parallel.py --cp-size=8 --sequence-length=128000
+> ```
 
 
 ## Accelerate's interface
@@ -99,8 +102,22 @@ This can scale your context size to 1M+ sequence length potentially. Below, we s
 The context manager takes a few arguments, that are used to configure the context parallelism.
 
 - `buffers`: This is a list of tensors that are to be sharded across the sequence dimension. These tensors are usually input ids, labels and attention mask.
-- `buffer_seq_dims`: This is a list of integers, that specify the sequence dimension of the buffers, in the order of the `buffers` list.
-- `no_restore_buffers`: The implementation of context parallelism modifies the buffers in-place, converting them to `torch.distributed.tensor.Dtensor`s. After the context manager is exited, a communication kernel would need to be launched to restore the buffers to their original state (usually all-gather). This takes some time, so it is recommended to pass the same tensors as in the `buffers` argument, to avoid unnecessary communication, unless you are sure that you need to use the buffers after the context manager is exited.
+- `buffer_seq_dims`: This is a list of integers, that specify the sequence dimension of the buffers, in the order of the `buffers` list. If you pass `buffers=[input_ids, shift_labels]` with both having shape `[batch_size, sequence_length]`, you would pass `buffer_seq_dims=[1, 1]`.
+                     as the sequence dimension is the second dimension of the tensors. This is required for correct computation of the model outputs.
+- `no_restore_buffers`: The implementation of context parallelism modifies the buffers in-place, converting them to `torch.distributed.tensor.Dtensor`s. After the context manager exits, a communication kernel would need to be launched to restore the buffers to their original state (usually all-gather). This takes some time, so it is recommended to pass the same tensors as in the `buffers` argument, to avoid unnecessary communication, unless you are sure that you need to use the buffers after the context manager exits.
+
+
+> [!Warning]
+> Context parallelism is not compatible with `labels` that are a copy of `input_ids`, which models from 🤗 transformers can shift to enable causal language modeling themselves.
+> Imagine this case:
+> labels = [l1, l2, l3, l4, ... li]
+> if we apply context parallelism, each rank would end up with a part of labels, such as this:
+> labels_rank_0 = [l1, l2], labels_rank_1 = [l3, l4], ...
+> after transformers modelling code shifts the labels, it would end up with:
+> labels_rank_0 = [l2, PAD], labels_rank_1 = [l3, PAD], ...
+> where `PAD` is a padding token. This would result in incorrect loss computation, as the labels are not aligned with the inputs anymore.
+> Because of this, you need to manually shift the labels before passing them in the model
+
 
 ## Configurable options
 Accelerate provides only a single option to configure context parallelism (except of `cp_size`)

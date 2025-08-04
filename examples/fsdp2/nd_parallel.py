@@ -23,6 +23,7 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM
+from transformers.loss.loss_utils import ForCausalLMLoss
 
 from accelerate import Accelerator
 from accelerate.parallelism_config import ParallelismConfig
@@ -54,9 +55,9 @@ def parse_args():
 
 
 def forward(model, batch, optimizer, accelerator: Accelerator):
-    input_ids, labels = batch["input_ids"], batch["labels"]
+    input_ids, shift_labels = batch["input_ids"], batch["shift_labels"]
     with accelerator.maybe_context_parallel(
-        buffers=[input_ids, labels], buffer_seq_dims=[1, 1], no_restore_buffers={input_ids, labels}
+        buffers=[input_ids, shift_labels], buffer_seq_dims=[1, 1], no_restore_buffers={input_ids, shift_labels}
     ):
         # To get the proper loss value, we need to average across devices that are participating in data parallel/context parallel training
         loss_reduce_grp = (
@@ -65,7 +66,10 @@ def forward(model, batch, optimizer, accelerator: Accelerator):
             else None
         )
         outputs = model(**batch)
-        loss = outputs.loss
+        # With shift labels we need to compute loss ourselves
+        loss = ForCausalLMLoss(
+            logits=outputs.logits, labels=None, shift_labels=shift_labels, vocab_size=model.config.vocab_size
+        )
         accelerator.backward(loss)
         optimizer.step()
         optimizer.zero_grad()
@@ -90,7 +94,6 @@ def train(args):
             auto_wrap_policy="transformer_based_wrap",
             transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
             state_dict_type="SHARDED_STATE_DICT",
-            activation_checkpointing=True,
         )
 
     accelerator = Accelerator(
@@ -155,7 +158,7 @@ def train(args):
 if __name__ == "__main__":
     set_seed(42)
     args = parse_args()
-    if args.dp_shard_size == 1:
+    if args.dp_shard_size == 1 and args.tp_size > 1:
         # We currently don't support saving with `save_state` when using only
         # tensor parallelism, fsdp must be enabled
         warnings.warn(
