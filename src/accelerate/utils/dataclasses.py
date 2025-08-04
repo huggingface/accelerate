@@ -2149,7 +2149,7 @@ class TorchContextParallelConfig:
     This class holds the configuration for context parallelism in PyTorch.
     """
 
-    cp_comm_stategy: Optional[str] = field(
+    cp_comm_strategy: Optional[str] = field(
         default=None,
         metadata={
             "help": "Communication strategy for context parallelism. Can be one of 'allgather' or 'alltoall'. Defaults to 'allgather'."
@@ -2162,11 +2162,11 @@ class TorchContextParallelConfig:
                 f"Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
                 "Please upgrade your PyTorch version."
             )
-        if self.cp_comm_stategy is None:
-            self.cp_comm_stategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
-        if self.cp_comm_stategy not in ["allgather", "alltoall"]:
+        if self.cp_comm_strategy is None:
+            self.cp_comm_strategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
+        if self.cp_comm_strategy not in ["allgather", "alltoall"]:
             raise ValueError(
-                f"Invalid cp_comm_stategy: {self.cp_comm_stategy}. Must be one of 'allgather' or 'alltoall'."
+                f"Invalid cp_comm_strategy: {self.cp_comm_strategy}. Must be one of 'allgather' or 'alltoall'."
             )
 
 

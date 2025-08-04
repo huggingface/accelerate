@@ -17,6 +17,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from accelerate.parallelism_config import ParallelismConfig
+from accelerate.utils import patch_environment
 from accelerate.utils.constants import (
     BETA_CP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
@@ -169,3 +170,77 @@ class TestParallelismConfig:
             expected_flattened.append((config.dp_cp_dim_names, "dp_cp"))
 
         assert device_mesh.flattened_dims == expected_flattened
+
+    @pytest.mark.parametrize(
+        "dp_replicate_size, dp_shard_size, tp_size, cp_size",
+        [
+            (8, 1, 1, 1),
+            (1, 8, 1, 1),
+            (2, 4, 1, 1),
+            (1, 4, 2, 1),
+            (2, 2, 2, 1),
+            (1, 1, 8, 1),
+            (1, 1, 1, 4),
+            (1, 4, 1, 2),
+            (1, 2, 2, 2),
+            (2, 2, 2, 2),
+        ],
+    )
+    def test_from_env(
+        self,
+        dp_replicate_size,
+        dp_shard_size,
+        tp_size,
+        cp_size,
+    ):
+        if _should_skip_cp_test(cp_size):
+            pytest.skip(f"CP tests require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
+        if _should_skip_tp_test(tp_size):
+            pytest.skip(
+                f"TP tests require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+            )
+
+        new_env = {
+            "PARALLELISM_CONFIG_DP_REPLICATE_SIZE": dp_replicate_size,
+            "PARALLELISM_CONFIG_DP_SHARD_SIZE": dp_shard_size,
+            "PARALLELISM_CONFIG_TP_SIZE": tp_size,
+            "PARALLELISM_CONFIG_CP_SIZE": cp_size,
+        }
+
+        with patch_environment(**new_env):
+            config = ParallelismConfig()
+            for key, value in new_env.items():
+                assert getattr(config, key.split("PARALLELISM_CONFIG_")[-1].lower()) == value
+
+    def test_cp_handler(self):
+        """Test CP handler with various configurations."""
+
+        from accelerate.utils import TorchContextParallelConfig
+
+        for setting in ("allgather", "alltoall"):
+            cp_handler = TorchContextParallelConfig(cp_comm_strategy=setting)
+            pc = ParallelismConfig(cp_size=2, cp_handler=cp_handler)
+
+            assert pc.cp_handler is not None, "CP handler should be set"
+            assert pc.cp_handler.cp_comm_strategy == setting, (
+                f"CP handler strategy should be {setting} but got {pc.cp_handler.cp_comm_strategy}"
+            )
+
+        for setting in ("allgather", "alltoall"):
+            with patch_environment(PARALLELISM_CONFIG_CP_COMM_STRATEGY=setting):
+                pc = ParallelismConfig(cp_size=2)
+                assert pc.cp_handler is not None, "CP handler should be set from environment"
+                assert pc.cp_handler.cp_comm_strategy == setting, (
+                    f"CP handler strategy should be {setting} but got {pc.cp_handler.cp_comm_strategy}"
+                )
+
+        for setting in ("invalid", "unsupported"):
+            with pytest.raises(ValueError, match=f"Invalid cp_comm_strategy: {setting}"):
+                TorchContextParallelConfig(cp_comm_strategy=setting)
+
+            with patch_environment(PARALLELISM_CONFIG_CP_COMM_STRATEGY=setting):
+                with pytest.raises(ValueError, match=f"Invalid cp_comm_strategy: {setting}"):
+                    pc = ParallelismConfig(cp_size=2)
+
+    def test_tp_handler(self):
+        assert True, "Tensor parallelism handler doesn't hold any logic yet"

@@ -1579,7 +1579,7 @@ class Accelerator:
         from torch.distributed.tensor.experimental import context_parallel
         from torch.distributed.tensor.experimental._attention import set_rotate_method
 
-        cp_comm_strategy = self.parallelism_config.cp_handler.cp_comm_stategy
+        cp_comm_strategy = self.parallelism_config.cp_handler.cp_comm_strategy
         set_rotate_method(cp_comm_strategy)
 
         self._cp_context = functools.partial(context_parallel, mesh=self.torch_device_mesh["cp"])
