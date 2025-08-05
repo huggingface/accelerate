@@ -1213,7 +1213,7 @@ class DeepSpeedPlugin:
 
         if self.zero3_save_16bit_model is None:
             self.zero3_save_16bit_model = (
-                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false").lower() == "true"
             )
         if self.enable_msamp is None:
             self.enable_msamp = os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"

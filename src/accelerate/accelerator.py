@@ -342,7 +342,9 @@ class Accelerator:
             else:
                 # init from env variables
                 deepspeed_plugins = (
-                    DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
+                    DeepSpeedPlugin()
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true"
+                    else None
                 )
         else:
             # If we're creating a second `Accelerator`, users shouldn't be passing in a `deepspeed_plugin`
@@ -375,7 +377,7 @@ class Accelerator:
 
             self.deepspeed_engine_wrapped = None
 
-        if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
+        if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
         ):
             if not is_torch_version(">=", FSDP_PYTORCH_VERSION):
@@ -383,7 +385,9 @@ class Accelerator:
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
-                FullyShardedDataParallelPlugin() if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" else None
+                FullyShardedDataParallelPlugin()
+                if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+                else None
             )
         else:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
@@ -396,7 +400,7 @@ class Accelerator:
 
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
-                MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" else None
+                MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false").lower() == "true" else None
             )
         else:
             if not isinstance(megatron_lm_plugin, MegatronLMPlugin):
@@ -2863,7 +2867,7 @@ class Accelerator:
                     xm.all_reduce("sum", gradients, scale=1.0 / self.num_processes)
                     # Set is_xla_gradients_synced to True to avoid all-reduce twice in the AcceleratedOptimizer step.
                     acc_opt.gradient_state.is_xla_gradients_synced = True
-            if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
+            if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true":
                 self.unscale_gradients()
                 parameters = [p for p in parameters]
                 for model in self._models:
