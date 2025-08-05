@@ -343,7 +343,9 @@ class Accelerator:
             else:
                 # init from env variables
                 deepspeed_plugins = (
-                    DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
+                    DeepSpeedPlugin()
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true"
+                    else None
                 )
         else:
             # If we're creating a second `Accelerator`, users shouldn't be passing in a `deepspeed_plugin`
@@ -376,7 +378,7 @@ class Accelerator:
 
             self.deepspeed_engine_wrapped = None
 
-        if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
+        if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
         ):
             if not is_torch_version(">=", FSDP_PYTORCH_VERSION):
@@ -384,7 +386,9 @@ class Accelerator:
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
-                FullyShardedDataParallelPlugin() if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" else None
+                FullyShardedDataParallelPlugin()
+                if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+                else None
             )
         else:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
@@ -397,7 +401,7 @@ class Accelerator:
 
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
-                MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" else None
+                MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false").lower() == "true" else None
             )
         else:
             if not isinstance(megatron_lm_plugin, MegatronLMPlugin):
@@ -788,6 +792,56 @@ class Accelerator:
                 parallelism_config = ParallelismConfig(tp_size=tp_size)
 
         return parallelism_config
+
+    @property
+    def tensor_parallel_rank(self) -> int:
+        """
+        Returns the local rank for tensor parallelism. If tensor parallelism is configured but not enabled, returns 0
+        since all ranks are assumed to be the same.
+        """
+        if self.parallelism_config:
+            if self.parallelism_config.tp_enabled:
+                return self.torch_device_mesh.get_local_rank("tp")
+            return 0
+        raise RuntimeError("Tensor parallelism is not configured. Set `parallelism_config` first.")
+
+    @property
+    def pipeline_parallel_rank(self) -> int:
+        """
+        Pipeline parallelism is not supported yet.
+        """
+        raise NotImplementedError("Pipeline parallelism is currently not supported in Accelerate.")
+
+    @property
+    def context_parallel_rank(self) -> int:
+        """
+        Context parallelism is not supported yet.
+        """
+        raise NotImplementedError("Context parallelism is currently not supported in Accelerate.")
+
+    @property
+    def data_parallel_rank(self) -> int:
+        """
+        Returns the local rank for replicate-based data parallelism. If replicate-based data parallelism is configured
+        but not enabled, returns 0 since all ranks are assumed to be the same.
+        """
+        if self.parallelism_config:
+            if self.parallelism_config.dp_replicate_enabled:
+                return self.torch_device_mesh.get_local_rank("dp_replicate")
+            return 0
+        raise RuntimeError("Data parallelism is not configured. Set `parallelism_config` first.")
+
+    @property
+    def data_parallel_shard_rank(self) -> int:
+        """
+        Returns the local rank for shard-based data parallelism. If shard-based data parallelism is configured but not
+        enabled, returns 0 since all ranks are assumed to be the same.
+        """
+        if self.parallelism_config:
+            if self.parallelism_config.dp_shard_enabled:
+                return self.torch_device_mesh.get_local_rank("dp_shard")
+            return 0
+        raise RuntimeError("Shard-based data parallelism is not configured. Set `parallelism_config` first.")
 
     def _build_torch_device_mesh(self, parallelism_config):
         if PartialState._shared_state != {} and getattr(PartialState(), "device_mesh", None) is not None:
@@ -1542,9 +1596,17 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def _prepare_tp(self, *args):
+        # First pass: prepare everything except schedulers (and model, which is prepared separately below)
+        result = [
+            self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj for obj in args
+        ]
+
+        # Second pass: prepare schedulers
+        result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
+
         device_mesh = self.torch_device_mesh
 
-        for arg in args:
+        for arg in result:
             if not isinstance(arg, torch.nn.Module):
                 continue
 
@@ -1833,6 +1895,17 @@ class Accelerator:
                         "limit_all_gathers": fsdp_plugin.limit_all_gathers,
                         "device_id": self.device,
                     }
+
+                    if isinstance(kwargs["ignored_modules"], str):
+                        reg = re.compile(kwargs["ignored_modules"])
+                        ignored = []
+                        for name, module in model.named_modules():
+                            if reg.fullmatch(name):
+                                # ensure that the device for these modules is still set correctly
+                                module.to(self.device)
+                                ignored.append(module)
+                        kwargs["ignored_modules"] = ignored
+
                     model = FSDP(model, **kwargs)
                     if fsdp_plugin.activation_checkpointing:
                         from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
@@ -2828,7 +2901,7 @@ class Accelerator:
                     xm.all_reduce("sum", gradients, scale=1.0 / self.num_processes)
                     # Set is_xla_gradients_synced to True to avoid all-reduce twice in the AcceleratedOptimizer step.
                     acc_opt.gradient_state.is_xla_gradients_synced = True
-            if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
+            if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true":
                 self.unscale_gradients()
                 parameters = [p for p in parameters]
                 for model in self._models:

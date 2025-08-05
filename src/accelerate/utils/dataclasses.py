@@ -1214,7 +1214,7 @@ class DeepSpeedPlugin:
 
         if self.zero3_save_16bit_model is None:
             self.zero3_save_16bit_model = (
-                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false").lower() == "true"
             )
         if self.enable_msamp is None:
             self.enable_msamp = os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"
@@ -1562,8 +1562,9 @@ class FullyShardedDataParallelPlugin:
             Whether to offload parameters to CPU. Should be either a `bool` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or
             `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2.
-        ignored_modules (`Optional[Iterable[torch.nn.Module]]`, defaults to `None`):
-            A list of modules to ignore when wrapping with FSDP.
+        ignored_modules (`Optional[Union[Iterable[torch.nn.Module], str]]`, defaults to `None`):
+            A list of modules to ignore when wrapping with FSDP. When passing a string, will match the modules by name
+            using regex fullmatch.
         state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
             State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or
             `sharded_state_dict`.
@@ -1661,7 +1662,7 @@ class FullyShardedDataParallelPlugin:
             "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2. Defaults to `False`"
         },
     )
-    ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
+    ignored_modules: Optional[Union[Iterable[torch.nn.Module], str]] = field(
         default=None,
         metadata={"help": "A list of modules to ignore when wrapping with FSDP."},
     )
@@ -1896,6 +1897,9 @@ class FullyShardedDataParallelPlugin:
             self.activation_checkpointing = (
                 str_to_bool(os.environ.get(env_prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
             )
+
+        if self.ignored_modules is None:
+            self.ignored_modules = os.environ.get(env_prefix + "IGNORED_MODULES", None)
 
         if self.cpu_ram_efficient_loading is None:
             self.cpu_ram_efficient_loading = (
