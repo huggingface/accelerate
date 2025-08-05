@@ -788,7 +788,7 @@ def launch_command_parser(subparsers=None):
     parallelism_config_args.add_argument(
         "--parallelism_config_dp_shard_size",
         type=int,
-        default=-1,
+        default=1,
         help="The number of processes for FSDP sharding. Defaults to 1 (No FSDP sharding).",
     )
 
