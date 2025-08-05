@@ -189,7 +189,7 @@ class PartialState:
             dist_information = None
             if use_sagemaker_dp is None:
                 use_sagemaker_dp = (
-                    os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
+                    os.environ.get("ACCELERATE_USE_SAGEMAKER", "false").lower() == "true"
                     and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
                 )
 
@@ -204,7 +204,7 @@ class PartialState:
             if not cpu and self.backend != "xla":
                 if int(os.environ.get("LOCAL_RANK", -1)) != -1:
                     # Deal with spawning deepspeed
-                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true":
                         if not is_deepspeed_available():
                             raise ImportError(
                                 "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
@@ -228,9 +228,9 @@ class PartialState:
                             torch.sdaa.set_device(f"sdaa:{local_rank}")
                         if (
                             self.backend == "nccl"
-                            and os.environ.get("ACCELERATE_USE_FSDP", "false") == "true"
+                            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
                             and (
-                                os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true"
+                                os.environ.get("FSDP_OFFLOAD_PARAMS", "false").lower() == "true"
                                 or os.environ.get("FSDP_STATE_DICT_TYPE", "SHARDED_STATE_DICT") == "FULL_STATE_DICT"
                             )
                         ):
@@ -960,7 +960,7 @@ class AcceleratorState:
                         os.environ["XLA_USE_BF16"] = str(1)
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
-            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
+            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true" and not cpu:
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not isinstance(deepspeed_plugin, dict):
                     deepspeed_plugin.set_mixed_precision(mixed_precision)
@@ -981,12 +981,12 @@ class AcceleratorState:
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,
             ]:
-                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or fsdp_plugin is not None:
+                if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None:
                     self.distributed_type = DistributedType.FSDP
                     if self._mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
-                if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" and self.distributed_type not in [
+                if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false").lower() == "true" and self.distributed_type not in [
                     DistributedType.MULTI_XPU,
                 ]:
                     self.distributed_type = DistributedType.MEGATRON_LM
