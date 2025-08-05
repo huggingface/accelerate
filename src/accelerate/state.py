@@ -992,7 +992,9 @@ class AcceleratorState:
                         and self.parallelism_config.cp_enabled
                         and fsdp_plugin.fsdp_version == 1
                     ):
-                        raise ValueError("Using `cp_size>1` requires FSDP2, but the provided fsdp_plugin is using FSDP1. ")
+                        raise ValueError(
+                            "Using `cp_size>1` requires FSDP2, but the provided fsdp_plugin is using FSDP1. "
+                        )
                     if (os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or fsdp_plugin is not None) or (
                         self.parallelism_config is not None and self.parallelism_config.cp_enabled
                     ):
