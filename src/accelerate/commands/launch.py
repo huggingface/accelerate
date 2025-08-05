@@ -270,6 +270,12 @@ def launch_command_parser(subparsers=None):
         help="Whether to use fsdp.",
     )
     paradigm_args.add_argument(
+        "--use_parallelism_config",
+        default=False,
+        action="store_true",
+        help="Whether to use the parallelism config to configure the N-d distributed training.",
+    )
+    paradigm_args.add_argument(
         "--use_megatron_lm",
         default=False,
         action="store_true",
@@ -767,6 +773,45 @@ def launch_command_parser(subparsers=None):
         help="The number of oneCCL worker threads when using Accelerate to launch multi-CPU training with mpirun.",
     )
 
+    # ParallelismConfig arguments
+    parallelism_config_args = parser.add_argument_group(
+        "ParallelismConfig Arguments",
+        "Arguments related to the ParallelismConfig used for distributed training.",
+    )
+    parallelism_config_args.add_argument(
+        "--parallelism_config_dp_replicate_size",
+        type=int,
+        default=1,
+        help="The number of processes for data parallel training. Defaults to 1 (no data parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_dp_shard_size",
+        type=int,
+        default=1,
+        help="The number of processes for FSDP sharding. Defaults to 1 (No FSDP sharding).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_tp_size",
+        type=int,
+        default=1,
+        help="The number of processes for tensor parallel training. Defaults to 1 (no tensor parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_cp_size",
+        type=int,
+        default=1,
+        help="The number of processese for context parallel training. Defaults to 1 (no context parallelism).",
+    )
+    parallelism_config_args.add_argument(
+        "--parallelism_config_cp_comm_strategy",
+        type=str,
+        default="allgather",
+        help="The communication strategy for context parallel training. Defaults to 'allgather'. Other option is alltoall",
+    )
+
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 
@@ -994,6 +1039,9 @@ def _validate_launch_command(args):
     if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
 
+    if (not args.use_fsdp or args.fsdp_version == 1) and args.use_parallelism_config:
+        raise ValueError("You cannot use `--use_parallelism_config` without `--use_fsdp` and `--fsdp_version=2`. ")
+
     defaults = None
     warned = []
     mp_from_config_flag = False
@@ -1027,6 +1075,7 @@ def _validate_launch_command(args):
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
+            args.use_parallelism_config = defaults.parallelism_config != {}
         if args.gpu_ids is None:
             if defaults.gpu_ids is not None:
                 args.gpu_ids = defaults.gpu_ids

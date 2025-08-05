@@ -64,6 +64,7 @@ class TestPrepareMultiGpuEnv(unittest.TestCase):
             num_cpu_threads_per_process=1,
             enable_cpu_affinity=False,
             same_network=False,
+            use_parallelism_config=False,
         )
 
         prepare_multi_gpu_env(args)

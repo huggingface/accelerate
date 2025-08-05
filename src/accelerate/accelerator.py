@@ -35,6 +35,7 @@ from huggingface_hub import split_torch_state_dict_into_shards
 
 from accelerate.utils.dataclasses import FP8BackendType
 
+from .big_modeling import _attach_context_parallel_hooks
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -780,6 +781,10 @@ class Accelerator:
     ):
         if parallelism_config is None:
             if PartialState._shared_state != {} and PartialState().parallelism_config is not None:
+                if os.environ.get("ACCELERATE_USE_PARALLELISM_CONFIG", "false") == "true":
+                    raise ValueError(
+                        "Partial state contains a `parallelism_config` which is not None, but you configured `parallelism_config` from the `accelerate launch` CLI. We don't know which to use, please remove one of those configuration methods."
+                    )
                 parallelism_config = PartialState().parallelism_config
             else:
                 # TODO: Remove after deprecating tp_plugin
@@ -1551,6 +1556,9 @@ class Accelerator:
         if self.parallelism_config and self.parallelism_config.tp_enabled:
             args = self._prepare_tp(*args)
 
+        if self.parallelism_config and self.parallelism_config.cp_enabled:
+            args = self._prepare_cp(*args)
+
         if self.fp8_backend == FP8BackendType.TE:
             args = self._prepare_te(*args)
         elif self.fp8_backend == FP8BackendType.AO:
@@ -1620,6 +1628,21 @@ class Accelerator:
                 if not isinstance(dp, torch.nn.Parameter):
                     dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
                 setattr(module_to_tp, param_type, dp)
+
+        return args
+
+    def _prepare_cp(self, *args):
+        from torch.distributed.tensor.experimental import context_parallel
+        from torch.distributed.tensor.experimental._attention import set_rotate_method
+
+        cp_comm_strategy = self.parallelism_config.cp_handler.cp_comm_strategy
+        set_rotate_method(cp_comm_strategy)
+
+        self._cp_context = functools.partial(context_parallel, mesh=self.torch_device_mesh["cp"])
+
+        for arg in args:
+            if isinstance(arg, torch.nn.Module):
+                _attach_context_parallel_hooks(arg)
 
         return args
 
@@ -3975,6 +3998,69 @@ class Accelerator:
                 err += f"\n\t- Item at index {index}, `{get_pretty_name(obj)}`"
             raise ValueError(err)
         self._custom_objects.extend(objects)
+
+    @contextmanager
+    def maybe_context_parallel(
+        self,
+        buffers: list[torch.Tensor] | None = None,
+        buffer_seq_dims: list[int] | None = None,
+        no_restore_buffers: set[torch.Tensor] | None = None,
+    ):
+        """
+        A context manager that enables context parallel training.
+
+        Args:
+            buffers (`list[torch.Tensor]`, `optional`):
+                Buffers, which are going to be sharded along the sequence dimension. Common examples are inputs, labels
+                or positional embedding buffers. This context manager will modify these buffers in-place, and after
+                exiting the context, the buffers will be restored to their original state. To avoid unnecessary
+                restores, you can use `no_restore_buffers` to specify which buffers don't need to be restored.
+            buffer_seq_dims (`list[int]`, `optional`):
+                Sequence dimensions of `buffers`.
+            no_restore_buffers (`set[torch.Tensor]`, `optional`):
+                This set must be a subset of `buffers`. Specifies which buffers from `buffers` argument won't be
+                restored after the context exits. These buffers will be then kept in sharded state.
+
+        <Tip warning={true}>
+
+        `context_parallel` is currently only supported together with FSDP2, and requires `parallelism_config.cp_size` >
+        1. If either of these conditions are not met, this context manager will have no effect, though to enable fewer
+        code changes it will not raise an Exception.
+
+        </Tip>
+
+        <Tip warning={true}>
+
+        This context manager has to be recreated with each training step, as shown in the example below.
+
+        </Tip>
+
+        Example:
+
+        ```python
+        >>> for batch in dataloader:
+        ...     with accelerator.maybe_context_parallel(
+        ...         buffers=[batch["input_ids"], batch["attention_mask"]],
+        ...         buffer_seq_dims=[1, 1],
+        ...         no_restore_buffers={batch["input_ids"]},
+        ...     ):
+        ...         outputs = model(batch)
+        ...         ...
+        ```
+        """
+        # We don't need to check FSDP2 as parallelism_config does that for us
+        # Invariant: in this branch self._cp_context is set, as it was set by `self._prepare_cp`
+        if self.parallelism_config and self.parallelism_config.cp_enabled:
+            with self._cp_context(
+                buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers
+            ):
+                yield
+        else:
+            logger.warning_once(
+                "Context parallel training is not enabled. This context manager will have no effect. "
+                "To enable it, set `parallelism_config.cp_size` > 1 in the `Accelerator` constructor."
+            )
+            yield
 
     @contextmanager
     def autocast(self, autocast_handler: AutocastKwargs = None):

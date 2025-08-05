@@ -981,11 +981,27 @@ class AcceleratorState:
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,
             ]:
-                if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None:
-                    self.distributed_type = DistributedType.FSDP
-                    if self._mixed_precision != "no":
-                        fsdp_plugin.set_mixed_precision(self._mixed_precision)
-                    self.fsdp_plugin = fsdp_plugin
+                # TODO: Siro - remove when axolotl fixes their side
+                if not os.environ.get("ACCELERATE_ALLOW_CP_STANDALONE", "false").lower() == "true":
+                    if self.parallelism_config and self.parallelism_config.cp_enabled and fsdp_plugin is None:
+                        raise ValueError(
+                            "`cp_size > 1` specified in the `parallelism_config`, but no `fsdp_plugin` was provided. We need a `fsdp_plugin` to use context parallelism, as we also shard the model across the device mesh to save more memory"
+                        )
+                    if (
+                        self.parallelism_config is not None
+                        and self.parallelism_config.cp_enabled
+                        and fsdp_plugin.fsdp_version == 1
+                    ):
+                        raise ValueError(
+                            "Using `cp_size>1` requires FSDP2, but the provided `fsdp_plugin` is using FSDP1. "
+                        )
+                    if (
+                        os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None
+                    ) or (self.parallelism_config is not None and self.parallelism_config.cp_enabled):
+                        self.distributed_type = DistributedType.FSDP
+                        if self._mixed_precision != "no":
+                            fsdp_plugin.set_mixed_precision(self._mixed_precision)
+                        self.fsdp_plugin = fsdp_plugin
                 if os.environ.get(
                     "ACCELERATE_USE_MEGATRON_LM", "false"
                 ).lower() == "true" and self.distributed_type not in [
