@@ -986,7 +986,9 @@ class AcceleratorState:
                     if self._mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
-                if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false").lower() == "true" and self.distributed_type not in [
+                if os.environ.get(
+                    "ACCELERATE_USE_MEGATRON_LM", "false"
+                ).lower() == "true" and self.distributed_type not in [
                     DistributedType.MULTI_XPU,
                 ]:
                     self.distributed_type = DistributedType.MEGATRON_LM

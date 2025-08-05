@@ -342,7 +342,9 @@ class Accelerator:
             else:
                 # init from env variables
                 deepspeed_plugins = (
-                    DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true" else None
+                    DeepSpeedPlugin()
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true"
+                    else None
                 )
         else:
             # If we're creating a second `Accelerator`, users shouldn't be passing in a `deepspeed_plugin`
@@ -383,7 +385,9 @@ class Accelerator:
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
-                FullyShardedDataParallelPlugin() if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" else None
+                FullyShardedDataParallelPlugin()
+                if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+                else None
             )
         else:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
