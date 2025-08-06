@@ -971,6 +971,15 @@ class AcceleratorState:
                     first_plugin = next(iter(deepspeed_plugin.values()))
                     first_plugin.select(_from_accelerator_state=True)
                 self.deepspeed_plugins = deepspeed_plugin
+                
+                config = deepspeed_plugin.deepspeed_config
+                if self.mixed_precision != "fp8":
+                    if config.get("fp16", {}).get("enabled", False):
+                        self.mixed_precision = "fp16"
+                    elif config.get("bf16", {}).get("enabled", False):
+                        self.mixed_precision = "bf16"
+                    else:
+                        self.mixed_precision = "no"
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
