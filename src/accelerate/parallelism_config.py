@@ -25,11 +25,6 @@ from accelerate.utils.dataclasses import TorchContextParallelConfig, TorchTensor
 if TYPE_CHECKING:
     from accelerate import Accelerator
 
-from .logging import get_logger
-
-
-logger = get_logger(__name__)
-
 
 @dataclass
 class ParallelismConfig:
@@ -210,7 +205,7 @@ class ParallelismConfig:
         else:
             if device_type is not None:
                 if self.device_mesh.device_type != device_type:
-                    logger.warning(
+                    raise ValueError(
                         f"The device_mesh is already created with device type {self.device_mesh.device_type}. However, you are trying to get a device mesh with device_type {device_type}. Please check if you correctly initialized your device_mesh"
                     )
         return self.device_mesh
