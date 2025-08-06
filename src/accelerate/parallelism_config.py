@@ -208,6 +208,15 @@ class ParallelismConfig:
         )
         return tuple(zip(*sorted_items))
 
+    @classmethod
+    def has_env_variables(cls) -> bool:
+        if os.environ.get("ACCELERATE_USE_PARALLELISM_CONFIG", "false") == "true":
+            prefix = "PARALLELISM_CONFIG_"
+            env_size_vars = ["DP_REPLICATE_SIZE", "DP_SHARD_SIZE", "TP_SIZE", "CP_SIZE"]
+            if any(int(os.environ.get(f"{prefix}{var}", "1")) > 1 for var in env_size_vars):
+                return True
+        return False
+
     def __post_init__(self):
         # Basic size validation
         if self.dp_replicate_size is None:

@@ -786,6 +786,8 @@ class Accelerator:
                         "Partial state contains a `parallelism_config` which is not None, but you configured `parallelism_config` from the `accelerate launch` CLI. We don't know which to use, please remove one of those configuration methods."
                     )
                 parallelism_config = PartialState().parallelism_config
+            elif ParallelismConfig.has_env_variables():
+                parallelism_config = ParallelismConfig()
             else:
                 # TODO: Remove after deprecating tp_plugin
                 tp_size = 1 if torch_tp_plugin is None else torch_tp_plugin.tp_size
