@@ -712,7 +712,7 @@ class CpuOffload(ModelHook):
 
     def init_hook(self, module):
         return module.to("cpu")
-    
+
     def pre_forward(self, module, *args, **kwargs):
         if self.prev_module_hook is not None and isinstance(self.prev_module_hook, UserCpuOffloadHook):
             prev_module = self.prev_module_hook.model

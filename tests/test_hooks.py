@@ -482,7 +482,6 @@ class HooksModelTester(unittest.TestCase):
         assert model.batchnorm.weight.device == gpu_device
         assert model.linear2.weight.device == gpu_device
 
-
     def test_cpu_offload_hook_with_prev_module(self):
         if not torch.cuda.is_available():
             self.skipTest("CUDA not available for offload test.")
@@ -494,7 +493,7 @@ class HooksModelTester(unittest.TestCase):
 
         hook1 = CpuOffload(execution_device=gpu_device)
         add_hook_to_module(model1, hook1)
-        user_hook1 = UserCpuOffloadHook(model1, hook1) 
+        user_hook1 = UserCpuOffloadHook(model1, hook1)
 
         hook2 = CpuOffload(execution_device=gpu_device, prev_module_hook=user_hook1)
         add_hook_to_module(model2, hook2)
@@ -515,4 +514,3 @@ class HooksModelTester(unittest.TestCase):
         assert model2.linear1.weight.device == gpu_device
         assert model2.batchnorm.weight.device == gpu_device
         assert model2.linear2.weight.device == gpu_device
-
