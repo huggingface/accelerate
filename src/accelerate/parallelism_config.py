@@ -25,6 +25,11 @@ from accelerate.utils.dataclasses import TorchContextParallelConfig, TorchTensor
 if TYPE_CHECKING:
     from accelerate import Accelerator
 
+from .logging import get_logger
+
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class ParallelismConfig:
@@ -180,7 +185,7 @@ class ParallelismConfig:
         """
         mesh = self._get_mesh()
         if len(mesh) == 0:
-            return
+            return None
         mesh_dim_names, mesh_shape = mesh
         device_mesh = init_device_mesh(
             device_type,
@@ -202,6 +207,12 @@ class ParallelismConfig:
                 self.device_mesh = self.build_device_mesh(device_type)
             else:
                 raise ("You need to pass a device_type e.g cuda to build the device mesh")
+        else:
+            if device_type is not None:
+                if self.device_mesh.device_type != device_type:
+                    logger.warning(
+                        f"The device_mesh is already created with device type {self.device_mesh.device_type}. However, you are trying to get a device mesh with device_type {device_type}. Please check if you correctly initialized your device_mesh"
+                    )
         return self.device_mesh
 
     def _get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:

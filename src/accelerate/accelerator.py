@@ -451,11 +451,12 @@ class Accelerator:
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
 
-        # TODO: Remove after deprecating tp_plugin
         if parallelism_config is None:
-            parallelism_config = ParallelismConfig(
-                tp_size=None if torch_tp_plugin is None else torch_tp_plugin.tp_size
-            )
+            # TODO: Remove after deprecating tp_plugin
+            if torch_tp_plugin is not None:
+                parallelism_config = ParallelismConfig(tp_size=torch_tp_plugin.tp_size)
+            elif os.environ.get("ACCELERATE_USE_PARALLELISM_CONFIG", "false").lower() == "true":
+                parallelism_config = ParallelismConfig()
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(

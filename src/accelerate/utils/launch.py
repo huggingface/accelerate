@@ -355,6 +355,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
 
     prefix = "PARALLELISM_CONFIG_"
     if args.use_parallelism_config:
+        current_env["ACCELERATE_USE_PARALLELISM_CONFIG"] = "true"
         current_env[prefix + "DP_REPLICATE_SIZE"] = str(args.parallelism_config_dp_replicate_size)
         current_env[prefix + "TP_SIZE"] = str(args.parallelism_config_tp_size)
         current_env[prefix + "CP_SIZE"] = str(args.parallelism_config_cp_size)
