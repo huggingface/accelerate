@@ -948,10 +948,9 @@ class AcceleratorState:
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
                     "before using any functionality from the `accelerate` library."
                 )
-            # deepspeed handles mixed_precision using deepspeed_config
-            self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
+            self.mixed_precision = mixed_precision
             if self.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_tpu=True):
-                if mixed_precision == "bf16":
+                if self.mixed_precision == "bf16":
                     if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
                         os.environ["XLA_USE_BF16"] = str(0)
                         os.environ["XLA_DOWNCAST_BF16"] = str(1)
@@ -963,11 +962,11 @@ class AcceleratorState:
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true" and not cpu:
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not isinstance(deepspeed_plugin, dict):
-                    deepspeed_plugin.set_mixed_precision(mixed_precision)
+                    deepspeed_plugin.set_mixed_precision(self.mixed_precision)
                     deepspeed_plugin.select(_from_accelerator_state=True)
                 else:
                     for plugin in deepspeed_plugin.values():
-                        plugin.set_mixed_precision(mixed_precision)
+                        plugin.set_mixed_precision(self.mixed_precision)
                     # The first plugin passed in is always the active one
                     first_plugin = next(iter(deepspeed_plugin.values()))
                     first_plugin.select(_from_accelerator_state=True)
@@ -999,8 +998,8 @@ class AcceleratorState:
                         os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None
                     ) or (self.parallelism_config is not None and self.parallelism_config.cp_enabled):
                         self.distributed_type = DistributedType.FSDP
-                        if self._mixed_precision != "no":
-                            fsdp_plugin.set_mixed_precision(self._mixed_precision)
+                        if self.mixed_precision != "no":
+                            fsdp_plugin.set_mixed_precision(self.mixed_precision)
                         self.fsdp_plugin = fsdp_plugin
                 if os.environ.get(
                     "ACCELERATE_USE_MEGATRON_LM", "false"
@@ -1008,7 +1007,7 @@ class AcceleratorState:
                     DistributedType.MULTI_XPU,
                 ]:
                     self.distributed_type = DistributedType.MEGATRON_LM
-                    megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
+                    megatron_lm_plugin.set_mixed_precision(self.mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
                 if is_ipex_available():
@@ -1018,13 +1017,13 @@ class AcceleratorState:
                     self.use_ipex = False
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
-                and self._mixed_precision == "no"
+                and self.mixed_precision == "no"
                 and self.device.type == "cuda"
             ):
                 torch.backends.cuda.matmul.allow_tf32 = True
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
-                and self._mixed_precision == "no"
+                and self.mixed_precision == "no"
                 and self.device.type == "musa"
             ):
                 torch.backends.musa.matmul.allow_tf32 = True
@@ -1048,24 +1047,10 @@ class AcceleratorState:
                 raise ValueError(err.format(flag="cpu=True"))
             if (
                 mixed_precision is not None
-                and mixed_precision != self._mixed_precision
+                and mixed_precision != self.mixed_precision
                 and self.distributed_type != DistributedType.DEEPSPEED
             ):
                 raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
-
-    @property
-    def mixed_precision(self):
-        if self.distributed_type == DistributedType.DEEPSPEED:
-            config = self.deepspeed_plugin.deepspeed_config
-            if config.get("fp16", {}).get("enabled", False):
-                mixed_precision = "fp16"
-            elif config.get("bf16", {}).get("enabled", False):
-                mixed_precision = "bf16"
-            else:
-                mixed_precision = "no"
-        else:
-            mixed_precision = self._mixed_precision
-        return mixed_precision
 
     @staticmethod
     def _reset_state(reset_partial_state: bool = False):
