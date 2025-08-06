@@ -964,15 +964,16 @@ class AcceleratorState:
                 if not isinstance(deepspeed_plugin, dict):
                     deepspeed_plugin.set_mixed_precision(self.mixed_precision)
                     deepspeed_plugin.select(_from_accelerator_state=True)
+                    config = deepspeed_plugin.deepspeed_config
                 else:
                     for plugin in deepspeed_plugin.values():
                         plugin.set_mixed_precision(self.mixed_precision)
                     # The first plugin passed in is always the active one
                     first_plugin = next(iter(deepspeed_plugin.values()))
                     first_plugin.select(_from_accelerator_state=True)
+                    config = first_plugin.deepspeed_config
                 self.deepspeed_plugins = deepspeed_plugin
                 
-                config = deepspeed_plugin.deepspeed_config
                 if self.mixed_precision != "fp8":
                     if config.get("fp16", {}).get("enabled", False):
                         self.mixed_precision = "fp16"
