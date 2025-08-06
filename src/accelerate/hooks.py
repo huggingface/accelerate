@@ -714,9 +714,20 @@ class CpuOffload(ModelHook):
         return module.to("cpu")
 
     def pre_forward(self, module, *args, **kwargs):
-        if self.prev_module_hook is not None:
-            self.prev_module_hook.offload()
-            clear_device_cache()
+        if self.prev_module_hook is not None and isinstance(self.prev_module_hook, UserCpuOffloadHook):
+            prev_module = self.prev_module_hook.model
+            prev_device = next(prev_module.parameters()).device
+
+            # Only offload the previous module if it is not already on CPU.
+            if prev_device != torch.device("cpu"):
+                self.prev_module_hook.offload()
+                clear_device_cache()
+
+        # If the current device is already the self.execution_device, we can skip the transfer.
+        current_device = next(module.parameters()).device
+        if current_device == self.execution_device:
+            return args, kwargs
+
         module.to(self.execution_device)
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 
