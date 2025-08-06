@@ -997,9 +997,9 @@ class AcceleratorState:
                         raise ValueError(
                             "Using `cp_size>1` requires FSDP2, but the provided `fsdp_plugin` is using FSDP1. "
                         )
-                if (
-                    os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None
-                ) or (self.parallelism_config is not None and self.parallelism_config.cp_enabled):
+                if (os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None) or (
+                    self.parallelism_config is not None and self.parallelism_config.cp_enabled
+                ):
                     self.distributed_type = DistributedType.FSDP
                     if self._mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
