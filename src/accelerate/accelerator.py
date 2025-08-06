@@ -453,7 +453,9 @@ class Accelerator:
 
         # TODO: Remove after deprecating tp_plugin
         if parallelism_config is None:
-            parallelism_config = ParallelismConfig(tp_size = None if torch_tp_plugin is None else torch_tp_plugin.tp_size)
+            parallelism_config = ParallelismConfig(
+                tp_size=None if torch_tp_plugin is None else torch_tp_plugin.tp_size
+            )
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
