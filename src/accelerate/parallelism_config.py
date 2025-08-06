@@ -15,7 +15,7 @@
 import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Optional
 
 from torch.distributed.device_mesh import init_device_mesh
 
@@ -65,6 +65,8 @@ class ParallelismConfig:
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
     cp_handler: Union[None, TorchContextParallelConfig] = None
+
+    device_mesh = None
 
     def __repr__(self):
         return (
@@ -193,7 +195,15 @@ class ParallelismConfig:
             device_mesh[self.dp_cp_dim_names]._flatten("dp_cp")
 
         return device_mesh
-
+    
+    def get_device_mesh(self, device_type: Optional[str] = None):
+        if self.device_mesh is None:
+            if device_type is not None:
+                self.device_mesh = self.build_device_mesh(device_type)
+            else:
+                raise("You need to pass a device_type e.g cuda to build the device mesh")
+        return self.device_mesh
+        
     def _get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
         """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""
 

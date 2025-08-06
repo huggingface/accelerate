@@ -451,10 +451,11 @@ class Accelerator:
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
 
-        parallelism_config = self._setup_parallelism_config(parallelism_config, torch_tp_plugin)
+        # TODO: Remove after deprecating tp_plugin
+        if parallelism_config is None:
+            parallelism_config = ParallelismConfig(tp_size = None if torch_tp_plugin is None else torch_tp_plugin.tp_size)
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
-        kwargs["parallelism_config"] = parallelism_config
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
@@ -462,12 +463,13 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugins,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
+            parallelism_config=parallelism_config,
             _from_accelerator=True,
             **kwargs,
         )
 
         if self.parallelism_config:
-            self._build_torch_device_mesh(self.parallelism_config)
+            self.state.device_mesh = parallelism_config.get_device_mesh(self.device.type)
             self.parallelism_config._validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
@@ -776,23 +778,6 @@ class Accelerator:
         # TODO: S1ro - this is a temporary solution until we figure out why `save_safe_file` is slow when not all processes
         return True
 
-    def _setup_parallelism_config(
-        self, parallelism_config: ParallelismConfig | None, torch_tp_plugin: TorchTensorParallelPlugin | None
-    ):
-        if parallelism_config is None:
-            if PartialState._shared_state != {} and PartialState().parallelism_config is not None:
-                if os.environ.get("ACCELERATE_USE_PARALLELISM_CONFIG", "false") == "true":
-                    raise ValueError(
-                        "Partial state contains a `parallelism_config` which is not None, but you configured `parallelism_config` from the `accelerate launch` CLI. We don't know which to use, please remove one of those configuration methods."
-                    )
-                parallelism_config = PartialState().parallelism_config
-            else:
-                # TODO: Remove after deprecating tp_plugin
-                tp_size = None if torch_tp_plugin is None else torch_tp_plugin.tp_size
-                parallelism_config = ParallelismConfig(tp_size=tp_size)
-
-        return parallelism_config
-
     @property
     def tensor_parallel_rank(self) -> int:
         """
@@ -842,14 +827,6 @@ class Accelerator:
                 return self.torch_device_mesh.get_local_rank("dp_shard")
             return 0
         raise RuntimeError("Shard-based data parallelism is not configured. Set `parallelism_config` first.")
-
-    def _build_torch_device_mesh(self, parallelism_config):
-        if PartialState._shared_state != {} and getattr(PartialState(), "device_mesh", None) is not None:
-            device_mesh = PartialState().device_mesh
-        else:
-            device_mesh = parallelism_config.build_device_mesh(self.device.type)
-        self.state.device_mesh = device_mesh
-        PartialState().device_mesh = device_mesh
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
