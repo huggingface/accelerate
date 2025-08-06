@@ -917,6 +917,7 @@ class AcceleratorState:
             self.use_ipex = None
             self.torch_tp_plugin = torch_tp_plugin
             self.parallelism_config = parallelism_config
+            self.device_mesh = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
