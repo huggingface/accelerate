@@ -33,7 +33,9 @@ from accelerate import Accelerator, DeepSpeedPlugin, DistributedType
 from accelerate.state import AcceleratorState
 from accelerate.utils.deepspeed import get_active_deepspeed_plugin
 
+
 EVAL_BATCH_SIZE = 16
+
 
 class NoiseModel(torch.nn.Module):
     def __init__(self, noise_factor=0.1):
