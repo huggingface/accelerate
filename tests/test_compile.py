@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+from unittest import skip
 
 import torch
 from torch.utils.benchmark import Timer
@@ -35,6 +36,7 @@ else:
 
 
 @require_huggingface_suite
+@skip("Don't work with torch 2.8")
 class RegionalCompilationTester(unittest.TestCase):
     def _get_model_and_inputs(self):
         from transformers import AutoConfig, AutoModelForCausalLM
