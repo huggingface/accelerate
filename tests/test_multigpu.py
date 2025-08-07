@@ -14,6 +14,7 @@
 
 import inspect
 import unittest
+from unittest import skip
 
 import torch
 
@@ -109,6 +110,7 @@ class MultiDeviceTester(unittest.TestCase):
     @require_torchvision
     @require_multi_device
     @require_huggingface_suite
+    @skip("Will soon deprecate pippy")
     def test_pippy(self):
         """
         Checks the integration with the pippy framework
