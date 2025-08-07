@@ -371,6 +371,7 @@ class TERecipeKwargs(KwargsHandler):
     amax_history_len: int = None
     amax_compute_algo: AmaxComputeAlgorithm = None
     override_linear_precision: tuple[bool, bool, bool] = None
+    use_mxfp8_block_scaling: bool = None
 
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
@@ -399,6 +400,8 @@ class TERecipeKwargs(KwargsHandler):
             dgrad = parse_flag_from_env(env_prefix + "OVERRIDE_DGRAD")
             wgrad = parse_flag_from_env(env_prefix + "OVERRIDE_WGRAD")
             self.override_linear_precision = (fprop, dgrad, wgrad)
+        if self.use_mxfp8_block_scaling is None:
+            self.use_mxfp8_block_scaling = parse_flag_from_env(env_prefix + "USE_MXFP8_BLOCK_SCALING")
 
 
 @dataclass

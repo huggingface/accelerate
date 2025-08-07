@@ -134,6 +134,7 @@ from .imports import (
     is_torchvision_available,
     is_trackio_available,
     is_transformer_engine_available,
+    is_transformer_engine_mxfp8_available,
     is_transformers_available,
     is_triton_available,
     is_wandb_available,
