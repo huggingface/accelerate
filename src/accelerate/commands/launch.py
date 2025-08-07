@@ -182,13 +182,6 @@ def launch_command_parser(subparsers=None):
     hardware_args.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
-    hardware_args.add_argument(
-        "--ipex",
-        default=False,
-        action="store_true",
-        help="Whether or not this should launch a Intel PyTorch Extension (IPEX) training.",
-    )
-
     # Resource selection arguments
     resource_args = parser.add_argument_group(
         "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
@@ -1199,12 +1192,6 @@ def _validate_launch_command(args):
                 warned.append(
                     f"\t`--num_cpu_threads_per_process` was set to `{args.num_cpu_threads_per_process}` to improve out-of-box performance when training on CPUs"
                 )
-
-    if args.ipex is not None:
-        logger.warning(
-            "ipex flag is deprecated, will be removed in Accelerate v1.10. "
-            "From 2.7.0, PyTorch has all needed optimizations for Intel CPU and XPU."
-        )
 
     if args.use_xpu is not None:
         logger.warning(
