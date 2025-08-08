@@ -50,7 +50,7 @@ def can_convert_te_model(from_config=False):
 
     accelerator = Accelerator(**accelerator_kwargs)
     dataloader = torch.utils.data.DataLoader(torch.randn(10, 32), batch_size=2)
-    model = torch.nn.Sequential(torch.nn.Linear(32, 32), torch.nn.Linear(32, 16))
+    model = torch.nn.Sequential(torch.nn.Linear(32, 32), torch.nn.LayerNorm(32, bias=False), torch.nn.Linear(32, 16))
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
 
