@@ -212,6 +212,13 @@ def get_sagemaker_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
+            dynamo_config[prefix + "use_regional_compilation"] = _ask_field(
+                "Do you want to enable regional compilation? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+
     ec2_instance_query = "Which EC2 instance type you want to use for your training?"
     if distributed_type != SageMakerDistributedType.NO:
         ec2_instance_type = _ask_options(

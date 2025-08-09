@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
-
 from accelerate import debug_launcher
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
@@ -23,12 +21,14 @@ from accelerate.test_utils import (
     require_cpu,
     require_multi_device,
     require_non_cpu,
+    run_first,
     test_sync,
 )
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import patch_environment
 
 
-class SyncScheduler(unittest.TestCase):
+class SyncScheduler(AccelerateTestCase):
     test_file_path = path_in_accelerate_package("test_utils", "scripts", "test_sync.py")
 
     @require_cpu
@@ -43,6 +43,7 @@ class SyncScheduler(unittest.TestCase):
     def test_gradient_sync_gpu(self):
         test_sync.main()
 
+    @run_first
     @require_multi_device
     def test_gradient_sync_gpu_multi(self):
         print(f"Found {device_count} devices.")

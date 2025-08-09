@@ -18,7 +18,7 @@ from diffusers import DiffusionPipeline
 from accelerate import PartialState  # Can also be Accelerator or AcceleratorState
 
 
-pipe = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
+pipe = DiffusionPipeline.from_pretrained("stable-diffusion-v1-5/stable-diffusion-v1-5", torch_dtype=torch.float16)
 distributed_state = PartialState()
 pipe.to(distributed_state.device)
 

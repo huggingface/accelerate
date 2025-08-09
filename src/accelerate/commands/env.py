@@ -26,7 +26,7 @@ import torch
 from accelerate import __version__ as version
 from accelerate.commands.config import default_config_file, load_config_from_file
 
-from ..utils import is_mlu_available, is_musa_available, is_npu_available, is_xpu_available
+from ..utils import is_mlu_available, is_musa_available, is_npu_available, is_sdaa_available, is_xpu_available
 
 
 def env_command_parser(subparsers=None):
@@ -49,8 +49,23 @@ def env_command(args):
     pt_cuda_available = torch.cuda.is_available()
     pt_xpu_available = is_xpu_available()
     pt_mlu_available = is_mlu_available()
+    pt_sdaa_available = is_sdaa_available()
     pt_musa_available = is_musa_available()
     pt_npu_available = is_npu_available()
+
+    accelerator = "N/A"
+    if pt_cuda_available:
+        accelerator = "CUDA"
+    elif pt_xpu_available:
+        accelerator = "XPU"
+    elif pt_mlu_available:
+        accelerator = "MLU"
+    elif pt_sdaa_available:
+        accelerator = "SDAA"
+    elif pt_musa_available:
+        accelerator = "MUSA"
+    elif pt_npu_available:
+        accelerator = "NPU"
 
     accelerate_config = "Not found"
     # Get the default from the config file.
@@ -72,18 +87,21 @@ def env_command(args):
         "`accelerate` bash location": bash_location,
         "Python version": platform.python_version(),
         "Numpy version": np.__version__,
-        "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
-        "PyTorch XPU available": str(pt_xpu_available),
-        "PyTorch NPU available": str(pt_npu_available),
-        "PyTorch MLU available": str(pt_mlu_available),
-        "PyTorch MUSA available": str(pt_musa_available),
-        "System RAM": f"{psutil.virtual_memory().total / 1024 ** 3:.2f} GB",
+        "PyTorch version": f"{pt_version}",
+        "PyTorch accelerator": accelerator,
+        "System RAM": f"{psutil.virtual_memory().total / 1024**3:.2f} GB",
     }
     if pt_cuda_available:
         info["GPU type"] = torch.cuda.get_device_name()
-    if pt_mlu_available:
+    elif pt_xpu_available:
+        info["XPU type"] = torch.xpu.get_device_name()
+    elif pt_mlu_available:
         info["MLU type"] = torch.mlu.get_device_name()
-    if pt_npu_available:
+    elif pt_sdaa_available:
+        info["SDAA type"] = torch.sdaa.get_device_name()
+    elif pt_musa_available:
+        info["MUSA type"] = torch.musa.get_device_name()
+    elif pt_npu_available:
         info["CANN version"] = torch.version.cann
 
     print("\nCopy-and-paste the text below in your GitHub issue\n")

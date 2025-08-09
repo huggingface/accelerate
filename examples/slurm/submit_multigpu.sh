@@ -11,7 +11,7 @@
 #SBATCH --time=01:59:00             # maximum execution time (HH:MM:SS)
 
 ######################
-### Set enviroment ###
+### Set environment ###
 ######################
 source activateEnvironment.sh
 export GPUS_PER_NODE=4

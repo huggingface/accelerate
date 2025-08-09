@@ -16,9 +16,10 @@ import argparse
 import os
 import subprocess
 import sys
+import warnings
 from ast import literal_eval
 from shutil import which
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import torch
 
@@ -26,16 +27,20 @@ from ..commands.config.config_args import SageMakerConfig
 from ..utils import (
     DynamoBackend,
     PrecisionType,
+    is_ccl_available,
     is_fp8_available,
+    is_hpu_available,
     is_ipex_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
 )
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
-from ..utils.other import is_port_in_use, merge_dicts
+from ..utils.other import get_free_port, is_port_in_use, merge_dicts
+from ..utils.versions import compare_versions
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
@@ -74,7 +79,7 @@ def _get_mpirun_args():
         return mpi_app, "-f", "-n", "-ppn", ""
 
 
-def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
+def setup_fp8_env(args: argparse.Namespace, current_env: dict[str, str]):
     """
     Setup the FP8 environment variables.
     """
@@ -83,11 +88,16 @@ def setup_fp8_env(args: argparse.Namespace, current_env: Dict[str, str]):
         if arg.startswith("fp8_"):
             value = getattr(args, arg)
             if value is not None:
-                current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
+                if arg == "fp8_override_linear_precision":
+                    current_env[prefix + "FP8_OVERRIDE_FPROP"] = str(value[0])
+                    current_env[prefix + "FP8_OVERRIDE_DGRAD"] = str(value[1])
+                    current_env[prefix + "FP8_OVERRIDE_WGRAD"] = str(value[2])
+                else:
+                    current_env[f"{prefix}{arg.upper()}"] = str(getattr(args, arg))
     return current_env
 
 
-def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
+def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict[str, str]]:
     """
     Prepares and returns the command list and an environment with the correct simple launcher environment variables.
     """
@@ -95,12 +105,11 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if args.no_python and args.module:
         raise ValueError("--module and --no_python cannot be used together")
 
+    num_processes = getattr(args, "num_processes", None)
+    num_machines = args.num_machines
     if args.mpirun_hostfile is not None:
         mpi_app_name, hostfile_arg, num_proc_arg, proc_per_node_arg, bind_to_arg = _get_mpirun_args()
-        mpirun_ccl = getattr(args, "mpirun_ccl", None)
         bind_to = getattr(args, "bind-to", "socket")
-        num_machines = args.num_machines
-        num_processes = getattr(args, "num_processes", None)
         nproc_per_node = str(num_processes // num_machines) if num_processes and num_machines else "1"
         cmd += [
             mpi_app_name,
@@ -129,21 +138,32 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
             current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = args.gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = args.gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
-    if args.num_machines > 1:
-        current_env["MASTER_ADDR"] = args.main_process_ip
-        current_env["MASTER_PORT"] = str(args.main_process_port)
+    if num_machines > 1:
+        assert args.main_process_ip is not None, (
+            "When using multiple machines, you need to specify the main process IP."
+        )
+        assert args.main_process_port is not None, (
+            "When using multiple machines, you need to specify the main process port."
+        )
 
-        if args.mpirun_hostfile is not None:
-            current_env["CCL_WORKER_COUNT"] = str(mpirun_ccl)
-    elif args.num_processes > 1:
+    ccl_worker_count = getattr(args, "mpirun_ccl", 0) if is_ccl_available() else 0
+    if (num_processes is not None and num_processes > 1) or num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
         current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
+        current_env["CCL_WORKER_COUNT"] = str(ccl_worker_count)
+    if current_env["ACCELERATE_USE_CPU"]:
+        current_env["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
+        current_env["KMP_BLOCKTIME"] = str(1)
 
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
@@ -156,7 +176,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
-                "FP8 is not available on this machine. Please ensure that either Transformer Engine or MSAMP is installed."
+                "FP8 is not available on this machine. Please ensure that either Transformer Engine, MSAMP or torchao is installed."
             )
         current_env = setup_fp8_env(args, current_env)
 
@@ -170,20 +190,27 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
     current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
+    current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_ipex_available():
         current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
-        current_env["ACCELERATE_USE_XPU"] = str(args.use_xpu).lower()
     if args.enable_cpu_affinity:
         current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return cmd, current_env
 
 
-def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
+def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     """
     Prepares and returns an environment with the correct multi-GPU environment variables.
     """
+    # get free port and update configurations
+    if args.main_process_port == 0:
+        args.main_process_port = get_free_port()
+
+    elif args.main_process_port is None:
+        args.main_process_port = 29500
+
     num_processes = args.num_processes
     num_machines = args.num_machines
     main_process_ip = args.main_process_ip
@@ -202,18 +229,25 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         if main_process_port is not None:
             args.master_port = str(main_process_port)
 
-    if main_process_port is None:
-        main_process_port = 29500
-
     # only need to check port availability in main process, in case we have to start multiple launchers on the same machine
     # for some reasons like splitting log files.
     need_port_check = num_machines <= 1 or int(args.machine_rank) == 0
     if need_port_check and is_port_in_use(main_process_port):
-        raise ConnectionError(
-            f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
-            "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
-            " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
-        )
+        if num_machines <= 1:
+            args.standalone = True
+            warnings.warn(
+                f"Port `{main_process_port}` is already in use. "
+                "Accelerate will attempt to launch in a standalone-like mode by finding an open port automatically for this session. "
+                "If this current attempt fails, or for more control in future runs, please specify a different port "
+                "(e.g., `--main_process_port <your_chosen_port>`) or use `--main_process_port 0` for automatic selection "
+                "in your launch command or Accelerate config file."
+            )
+        else:
+            raise ConnectionError(
+                f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
+                "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
+                " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
+            )
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
@@ -231,10 +265,14 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -247,7 +285,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
-                "FP8 is not available on this machine. Please ensure that either Transformer Engine or MSAMP is installed."
+                "FP8 is not available on this machine. Please ensure that either Transformer Engine, MSAMP or torchao is installed."
             )
         current_env = setup_fp8_env(args, current_env)
 
@@ -261,13 +299,20 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
     current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
+    current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     if args.use_fsdp:
         current_env["ACCELERATE_USE_FSDP"] = "true"
         if args.fsdp_cpu_ram_efficient_loading and not args.fsdp_sync_module_states:
             raise ValueError("When using `--fsdp_cpu_ram_efficient_loading` set `--fsdp_sync_module_states` to `True`")
 
+        current_env["FSDP_VERSION"] = str(args.fsdp_version) if hasattr(args, "fsdp_version") else "1"
+
+        # For backwards compatibility, we support this in launched scripts,
+        # however, we do not ask users for this in `accelerate config` CLI
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
+
+        current_env["FSDP_RESHARD_AFTER_FORWARD"] = str(args.fsdp_reshard_after_forward).lower()
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
         if args.fsdp_auto_wrap_policy is not None:
@@ -283,6 +328,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
+        if getattr(args, "fsdp_ignored_modules", None) is not None:
+            current_env["FSDP_IGNORED_MODULES"] = str(args.fsdp_ignored_modules)
 
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"
@@ -302,13 +349,34 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if args.enable_cpu_affinity:
         current_env["ACCELERATE_CPU_AFFINITY"] = "1"
+
+    if not args.use_parallelism_config:
+        return current_env
+
+    prefix = "PARALLELISM_CONFIG_"
+    if args.use_parallelism_config:
+        current_env["ACCELERATE_USE_PARALLELISM_CONFIG"] = "true"
+        current_env[prefix + "DP_REPLICATE_SIZE"] = str(args.parallelism_config_dp_replicate_size)
+        current_env[prefix + "TP_SIZE"] = str(args.parallelism_config_tp_size)
+        current_env[prefix + "CP_SIZE"] = str(args.parallelism_config_cp_size)
+        current_env[prefix + "DP_SHARD_SIZE"] = str(args.parallelism_config_dp_shard_size)
+        if args.parallelism_config_cp_size > 1:
+            current_env[prefix + "CP_COMM_STRATEGY"] = str(args.parallelism_config_cp_comm_strategy)
+
     return current_env
 
 
-def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
+def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict[str, str]]:
     """
     Prepares and returns the command list and an environment with the correct DeepSpeed environment variables.
     """
+    # get free port and update configurations
+    if args.main_process_port == 0:
+        args.main_process_port = get_free_port()
+
+    elif args.main_process_port is None:
+        args.main_process_port = 29500
+
     num_processes = args.num_processes
     num_machines = args.num_machines
     main_process_ip = args.main_process_ip
@@ -321,8 +389,14 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         args.deepspeed_multinode_launcher = DEEPSPEED_MULTINODE_LAUNCHERS[0]
 
     if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        cmd = ["deepspeed", "--no_local_rank"]
-        cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
+        cmd = ["deepspeed"]
+        cmd.extend(["--hostfile", str(args.deepspeed_hostfile)])
+        if args.deepspeed_multinode_launcher == "nossh":
+            if compare_versions("deepspeed", "<", "0.14.5"):
+                raise ValueError("nossh launcher requires DeepSpeed >= 0.14.5")
+            cmd.extend(["--node_rank", str(args.machine_rank), "--no_ssh"])
+        else:
+            cmd.extend(["--no_local_rank", "--launcher", str(args.deepspeed_multinode_launcher)])
         if args.deepspeed_exclusion_filter is not None:
             cmd.extend(
                 [
@@ -364,18 +438,25 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         if main_process_port is not None:
             args.master_port = str(main_process_port)
 
-    if main_process_port is None:
-        main_process_port = 29500
-
     # only need to check port availability in main process, in case we have to start multiple launchers on the same machine
     # for some reasons like splitting log files.
     need_port_check = num_machines <= 1 or int(args.machine_rank) == 0
     if need_port_check and is_port_in_use(main_process_port):
-        raise ConnectionError(
-            f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
-            "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
-            " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
-        )
+        if num_machines <= 1:
+            args.standalone = True
+            warnings.warn(
+                f"Port `{main_process_port}` is already in use. "
+                "Accelerate will attempt to launch in a standalone-like mode by finding an open port automatically for this session. "
+                "If this current attempt fails, or for more control in future runs, please specify a different port "
+                "(e.g., `--main_process_port <your_chosen_port>`) or use `--main_process_port 0` for automatic selection "
+                "in your launch command or Accelerate config file."
+            )
+        else:
+            raise ConnectionError(
+                f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
+                "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
+                " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
+            )
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
@@ -393,10 +474,14 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_mlu_available():
             current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
+        elif is_sdaa_available():
+            current_env["SDAA_VISIBLE_DEVICES"] = gpu_ids
         elif is_musa_available():
             current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        elif is_hpu_available():
+            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
@@ -411,7 +496,7 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
-                "FP8 is not available on this machine. Please ensure that either Transformer Engine or MSAMP is installed."
+                "FP8 is not available on this machine. Please ensure that either Transformer Engine, MSAMP or torchao is installed."
             )
         current_env = setup_fp8_env(args, current_env)
     current_env["ACCELERATE_CONFIG_DS_FIELDS"] = str(args.deepspeed_fields_from_accelerate_config).lower()
@@ -440,8 +525,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
 
 
 def prepare_tpu(
-    args: argparse.Namespace, current_env: Dict[str, str], pod: bool = False
-) -> Tuple[argparse.Namespace, Dict[str, str]]:
+    args: argparse.Namespace, current_env: dict[str, str], pod: bool = False
+) -> tuple[argparse.Namespace, dict[str, str]]:
     """
     Prepares and returns an environment with the correct TPU environment variables.
     """
@@ -459,7 +544,7 @@ def prepare_tpu(
     return args, current_env
 
 
-def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
+def _convert_nargs_to_dict(nargs: list[str]) -> dict[str, str]:
     if len(nargs) < 0:
         return {}
     # helper function to infer type for argsparser
@@ -503,7 +588,7 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
 
 def prepare_sagemager_args_inputs(
     sagemaker_config: SageMakerConfig, args: argparse.Namespace
-) -> Tuple[argparse.Namespace, Dict[str, Any]]:
+) -> tuple[argparse.Namespace, dict[str, Any]]:
     # configure environment
     print("Configuring Amazon SageMaker environment")
     os.environ["AWS_DEFAULT_REGION"] = sagemaker_config.region
@@ -550,12 +635,13 @@ def prepare_sagemager_args_inputs(
         "ACCELERATE_DYNAMO_MODE": args.dynamo_mode,
         "ACCELERATE_DYNAMO_USE_FULLGRAPH": str(args.dynamo_use_fullgraph),
         "ACCELERATE_DYNAMO_USE_DYNAMIC": str(args.dynamo_use_dynamic),
+        "ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION": str(args.dynamo_use_regional_compilation),
         "ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
-                "FP8 is not available on this machine. Please ensure that either Transformer Engine or MSAMP is installed."
+                "FP8 is not available on this machine. Please ensure that either Transformer Engine, MSAMP or torchao is installed."
             )
         environment = setup_fp8_env(args, environment)
     # configure distribution set up

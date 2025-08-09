@@ -17,8 +17,6 @@ This file contains utilities for handling input from the user and registering sp
 based on https://github.com/bchao1/bullet
 """
 
-from typing import List
-
 from .keymap import KEYMAP, get_character
 
 
@@ -36,7 +34,7 @@ def mark(key: str):
     return decorator
 
 
-def mark_multiple(*keys: List[str]):
+def mark_multiple(*keys: list[str]):
     """
     Mark the function with the key codes so it can be handled in the register
     """

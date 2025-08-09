@@ -16,6 +16,7 @@ import csv
 import json
 import logging
 import os
+import random
 import re
 import subprocess
 import tempfile
@@ -31,18 +32,35 @@ from packaging import version
 
 # We use TF to parse the logs
 from accelerate import Accelerator
+from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
     MockingTestCase,
     TempDirTestCase,
+    require_aim,
     require_clearml,
     require_comet_ml,
     require_dvclive,
+    require_matplotlib,
+    require_mlflow,
     require_pandas,
+    require_swanlab,
     require_tensorboard,
+    require_trackio,
     require_wandb,
     skip,
 )
-from accelerate.tracking import CometMLTracker, GeneralTracker
+from accelerate.tracking import (
+    AimTracker,
+    ClearMLTracker,
+    CometMLTracker,
+    DVCLiveTracker,
+    GeneralTracker,
+    MLflowTracker,
+    SwanLabTracker,
+    TensorBoardTracker,
+    TrackioTracker,
+    WandBTracker,
+)
 from accelerate.utils import (
     ProjectConfiguration,
     is_comet_ml_available,
@@ -52,7 +70,7 @@ from accelerate.utils import (
 
 
 if is_comet_ml_available():
-    from comet_ml import OfflineExperiment
+    from comet_ml import ExperimentConfig
 
 if is_tensorboard_available():
     import struct
@@ -201,16 +219,111 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         assert logged_items["_step"] == "0"
 
 
-# Comet has a special `OfflineExperiment` we need to use for testing
-def offline_init(self, run_name: str, tmpdir: str):
-    self.run_name = run_name
-    self.writer = OfflineExperiment(project_name=run_name, offline_directory=tmpdir)
-    logger.info(f"Initialized offline CometML project {self.run_name}")
-    logger.info("Make sure to log any initial configurations with `self.store_init_configuration` before training!")
+@require_mlflow
+class MLflowTrackingTest(unittest.TestCase):
+    def setUp(self):
+        import mlflow
+
+        self.tmpdir = tempfile.TemporaryDirectory()
+        mlflow.set_tracking_uri("file://" + self.tmpdir.name)
+
+    @require_matplotlib
+    def create_mock_figure(self):
+        """Create a mock figure for testing."""
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure(figsize=(6, 4))
+        return fig
+
+    def test_log(self):
+        import mlflow
+
+        """Test that log calls mlflow.log_metrics with only numeric values and the correct step."""
+        values = {"accuracy": 0.95, "loss": 0.1, "non_numeric": "ignored"}
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.log(values, step=10)
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        # Retrieve the run and check the logged metrics.
+        run = mlflow.get_run(run_id)
+        metrics = run.data.metrics
+        self.assertEqual(metrics.get("accuracy"), 0.95)
+        self.assertEqual(metrics.get("loss"), 0.1)
+        self.assertNotIn("non_numeric", metrics)
+
+    @require_matplotlib
+    def test_log_figure(self):
+        import mlflow
+
+        """Test that log_figure calls mlflow.log_figure with the correct arguments."""
+        dummy_figure = self.create_mock_figure()
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.log_figure(dummy_figure, artifact_file="dummy_figure.png")
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        self.assertIn(
+            "dummy_figure.png",
+            [artifact.path for artifact in mlflow.artifacts.list_artifacts(run_id=run_id)],
+        )
+
+    def test_log_artifact(self):
+        import mlflow
+
+        """Test that log_artifact calls mlflow.log_artifact with the correct file path."""
+        dummy_file_path = os.path.join(self.tmpdir.name, "dummy.txt")
+        with open(dummy_file_path, "w") as f:
+            f.write("dummy content")
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.log_artifact(dummy_file_path, artifact_path="artifact_dir")
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        self.assertIn(
+            "artifact_dir/dummy.txt",
+            [
+                artifact.path
+                for artifact in mlflow.artifacts.list_artifacts(run_id=run_id, artifact_path="artifact_dir")
+            ],
+        )
+
+    def test_log_artifacts(self):
+        import mlflow
+
+        """Test that log_artifacts calls mlflow.log_artifacts with the correct directory."""
+        dummy_dir = os.path.join(self.tmpdir.name, "dummy_dir")
+        os.mkdir(dummy_dir)
+        dummy_file_path = os.path.join(dummy_dir, "dummy.txt")
+        with open(dummy_file_path, "w") as f:
+            f.write("dummy content")
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.log_artifacts(dummy_dir, artifact_path="artifact_dir")
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        self.assertIn(
+            "artifact_dir/dummy.txt",
+            [
+                artifact.path
+                for artifact in mlflow.artifacts.list_artifacts(run_id=run_id, artifact_path="artifact_dir")
+            ],
+        )
 
 
 @require_comet_ml
-@mock.patch.object(CometMLTracker, "__init__", offline_init)
 class CometMLTest(unittest.TestCase):
     @staticmethod
     def get_value_from_key(log_list, key: str, is_param: bool = False):
@@ -231,7 +344,9 @@ class CometMLTest(unittest.TestCase):
 
     def test_init_trackers(self):
         with tempfile.TemporaryDirectory() as d:
-            tracker = CometMLTracker("test_project_with_config", d)
+            tracker = CometMLTracker(
+                "test_project_with_config", online=False, experiment_config=ExperimentConfig(offline_directory=d)
+            )
             accelerator = Accelerator(log_with=tracker)
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
             accelerator.init_trackers(None, config)
@@ -249,7 +364,9 @@ class CometMLTest(unittest.TestCase):
 
     def test_log(self):
         with tempfile.TemporaryDirectory() as d:
-            tracker = CometMLTracker("test_project_with_config", d)
+            tracker = CometMLTracker(
+                "test_project_with_config", online=False, experiment_config=ExperimentConfig(offline_directory=d)
+            )
             accelerator = Accelerator(log_with=tracker)
             accelerator.init_trackers(None)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
@@ -408,6 +525,123 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         self.assertCountEqual(plot["data"][0]["cells"]["values"], [[1, 2], [3, 4], [5, 6]])
 
 
+@require_swanlab
+@mock.patch.dict(os.environ, {"SWANLAB_MODE": "offline"})
+class SwanLabTrackingTest(TempDirTestCase, MockingTestCase):
+    def setUp(self):
+        super().setUp()
+        # Setting Path where SwanLab parsed log files are saved via the SWANLAB_LOG_DIR env var
+        self.add_mocks(mock.patch.dict(os.environ, {"SWANLAB_LOG_DIR": self.tmpdir}))
+
+    @skip
+    def test_swanlab(self):
+        # Disable hardware monitoring to prevent errors in test mode.
+        import swanlab
+        from swanlab.log.backup import BackupHandler
+        from swanlab.log.backup.datastore import DataStore
+        from swanlab.log.backup.models import ModelsParser
+
+        swanlab.merge_settings(swanlab.Settings(hardware_monitor=False))
+        # Start a fake training session.
+        accelerator = Accelerator(log_with="swanlab")
+        project_name = "test_project_with_config"
+        experiment_name = "test"
+        description = "test project for swanlab"
+        tags = ["my_tag"]
+        config = {
+            "epochs": 10,
+            "learning_rate": 0.01,
+            "offset": 0.1,
+        }
+        kwargs = {
+            "swanlab": {
+                "experiment_name": experiment_name,
+                "description": description,
+                "tags": tags,
+            }
+        }
+        accelerator.init_trackers(project_name, config, kwargs)
+        record_metrics = []
+        record_scalars = []
+        record_images_count = 0
+        record_logs = []
+        for epoch in range(1, swanlab.config.epochs):
+            acc = 1 - 2**-epoch - random.random() / epoch - 0.1
+            loss = 2**-epoch + random.random() / epoch + 0.1
+            ll = swanlab.log(
+                {
+                    "accuracy": acc,
+                    "loss": loss,
+                    "image": swanlab.Image(np.random.random((3, 3, 3))),
+                },
+                step=epoch,
+            )
+            log = f"epoch={epoch}, accuracy={acc}, loss={loss}"
+            print(log)
+            record_scalars.extend([acc, loss])
+            record_images_count += 1
+            record_logs.append(log)
+            record_metrics.extend([x for _, x in ll.items()])
+        accelerator.end_training()
+
+        # Load latest offline log
+        run_dir = swanlab.get_run().public.run_dir
+        assert os.path.exists(run_dir) is True
+        ds = DataStore()
+        ds.open_for_scan(os.path.join(run_dir.__str__(), BackupHandler.BACKUP_FILE).__str__())
+        with ModelsParser() as models_parser:
+            for record in ds:
+                if record is None:
+                    continue
+                models_parser.parse_record(record)
+        header, project, experiment, logs, runtime, columns, scalars, medias, footer = models_parser.get_parsed()
+
+        # test file header
+        assert header.backup_type == "DEFAULT"
+
+        # test project info
+        assert project.name == project_name
+        assert project.workspace is None
+        assert project.public is None
+
+        # test experiment info
+        assert experiment.name is not None
+        assert experiment.description == description
+        assert experiment.tags == tags
+
+        # test log record
+        backup_logs = [log.message for log in logs]
+        for record_log in record_logs:
+            assert record_log in backup_logs, "Log not found in backup logs: " + record_log
+
+        # test runtime info
+        runtime_info = runtime.to_file_model(os.path.join(run_dir.__str__(), "files"))
+        assert runtime_info.conda is None, "Not using conda, should be None"
+        assert isinstance(runtime_info.requirements, str), "Requirements should be a string"
+        assert isinstance(runtime_info.metadata, dict), "Metadata should be a dictionary"
+        assert isinstance(runtime_info.config, dict), "Config should be a dictionary"
+        for key in runtime_info.config:
+            assert key in config, f"Config key {key} not found in original config"
+            assert runtime_info.config[key]["value"] == config[key], (
+                f"Config value for {key} does not match original value"
+            )
+
+        # test scalar
+        assert len(scalars) + len(medias) == len(record_metrics), "Total metrics count does not match"
+        backup_scalars = [
+            metric.metric["data"]
+            for metric in record_metrics
+            if metric.column_info.chart_type.value.column_type == "FLOAT"
+        ]
+        assert len(backup_scalars) == len(scalars), "Total scalars count does not match"
+        for scalar in backup_scalars:
+            assert scalar in record_scalars, f"Scalar {scalar} not found in original scalars"
+        backup_images = [
+            metric for metric in record_metrics if metric.column_info.chart_type.value.column_type == "IMAGE"
+        ]
+        assert len(backup_images) == record_images_count, "Total images count does not match"
+
+
 class MyCustomTracker(GeneralTracker):
     "Basic tracker that writes to a csv for testing"
 
@@ -424,10 +658,17 @@ class MyCustomTracker(GeneralTracker):
     name = "my_custom_tracker"
     requires_logging_directory = False
 
-    def __init__(self, dir: str):
-        self.f = open(f"{dir}/log.csv", "w+")
-        self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
-        self.writer.writeheader()
+    def __init__(self, dir: str, **kwargs):
+        super().__init__(**kwargs)
+        self.log_dir = dir
+        self.f = None
+        self.writer = None
+
+    def start(self):
+        if self.f is None:
+            self.f = open(os.path.join(self.log_dir, "log.csv"), "w+")
+            self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
+            self.writer.writeheader()
 
     @property
     def tracker(self):
@@ -533,3 +774,97 @@ class DVCLiveTrackingTest(unittest.TestCase):
                 val_path = os.path.join(scalars, f"{val}.tsv")
                 steps = [int(row["step"]) for row in logs[val_path]]
                 assert steps == [0, 1, 3]
+
+
+class TrackerDeferredInitializationTest(unittest.TestCase):
+    """
+    Tests tracker's deferred initialization via `start()` method, preventing
+    premature `PartialState` access (and `torch.distributed` init) before
+    `Accelerator` has configured the distributed environment, especially with
+    `InitProcessGroupKwargs`.
+    """
+
+    @require_tensorboard
+    def test_tensorboard_deferred_init(self):
+        """Test that TensorBoard tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = TensorBoardTracker(run_name="test_tb", logging_dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            _ = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_wandb
+    def test_wandb_deferred_init(self):
+        """Test that WandB tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = WandBTracker(run_name="test_wandb")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_trackio
+    def test_trackio_deferred_init(self):
+        """Test that trackio tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = TrackioTracker(run_name="test_trackio")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_comet_ml
+    def test_comet_ml_deferred_init(self):
+        """Test that CometML tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = CometMLTracker(run_name="test_comet")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_aim
+    def test_aim_deferred_init(self):
+        """Test that Aim tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = AimTracker(run_name="test_aim", repo=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            _ = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_mlflow
+    def test_mlflow_deferred_init(self):
+        """Test that MLflow tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = MLflowTracker(experiment_name="test_mlflow", logging_dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            _ = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_clearml
+    def test_clearml_deferred_init(self):
+        """Test that ClearML tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = ClearMLTracker(run_name="test_clearml")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_dvclive
+    def test_dvclive_deferred_init(self):
+        """Test that DVCLive tracker initialization doesn't initialize distributed"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            PartialState._reset_state()
+            tracker = DVCLiveTracker(dir=temp_dir)
+            self.assertEqual(PartialState._shared_state, {})
+            _ = Accelerator(log_with=tracker)
+            self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_swanlab
+    def test_swanlab_deferred_init(self):
+        """Test that SwanLab tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = SwanLabTracker(run_name="test_swanlab")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})

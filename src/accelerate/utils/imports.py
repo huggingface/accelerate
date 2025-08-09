@@ -15,6 +15,7 @@
 import importlib
 import importlib.metadata
 import os
+import sys
 import warnings
 from functools import lru_cache, wraps
 
@@ -62,19 +63,24 @@ def is_torch_distributed_available() -> bool:
     return _torch_distributed_available
 
 
+def is_xccl_available():
+    if is_torch_version(">=", "2.7.0"):
+        return torch.distributed.distributed_c10d.is_xccl_available()
+    if is_ipex_available():
+        return False
+    return False
+
+
 def is_ccl_available():
     try:
         pass
     except ImportError:
         print(
-            "Intel(R) oneCCL Bindings for PyTorch* is required to run DDP on Intel(R) GPUs, but it is not"
+            "Intel(R) oneCCL Bindings for PyTorch* is required to run DDP on Intel(R) XPUs, but it is not"
             " detected. If you see \"ValueError: Invalid backend: 'ccl'\" error, please install Intel(R) oneCCL"
             " Bindings for PyTorch*."
         )
-    return (
-        importlib.util.find_spec("torch_ccl") is not None
-        or importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
-    )
+    return importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
 
 
 def get_ccl_version():
@@ -102,15 +108,14 @@ def is_schedulefree_available():
 
 
 def is_transformer_engine_available():
-    return _is_package_available("transformer_engine", "transformer-engine")
+    if is_hpu_available():
+        return _is_package_available("intel_transformer_engine", "intel-transformer-engine")
+    else:
+        return _is_package_available("transformer_engine", "transformer-engine")
 
 
 def is_lomo_available():
     return _is_package_available("lomo_optim")
-
-
-def is_fp8_available():
-    return is_msamp_available() or is_transformer_engine_available()
 
 
 def is_cuda_available():
@@ -142,9 +147,15 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     return True
 
 
+def is_torchao_available():
+    package_exists = _is_package_available("torchao")
+    if package_exists:
+        torchao_version = version.parse(importlib.metadata.version("torchao"))
+        return compare_versions(torchao_version, ">=", "0.6.1")
+    return False
+
+
 def is_deepspeed_available():
-    if is_mlu_available():
-        return _is_package_available("deepspeed", metadata_name="deepspeed-mlu")
     return _is_package_available("deepspeed")
 
 
@@ -158,9 +169,26 @@ def is_bf16_available(ignore_tpu=False):
         return not ignore_tpu
     if is_cuda_available():
         return torch.cuda.is_bf16_supported()
+    if is_mlu_available():
+        return torch.mlu.is_bf16_supported()
+    if is_xpu_available():
+        return torch.xpu.is_bf16_supported()
     if is_mps_available():
         return False
     return True
+
+
+def is_fp16_available():
+    "Checks if fp16 is supported"
+    if is_habana_gaudi1():
+        return False
+
+    return True
+
+
+def is_fp8_available():
+    "Checks if fp8 is supported"
+    return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
 
 
 def is_4bit_bnb_available():
@@ -229,6 +257,8 @@ def is_timm_available():
 
 
 def is_triton_available():
+    if is_xpu_available():
+        return _is_package_available("triton", "pytorch-triton-xpu")
     return _is_package_available("triton")
 
 
@@ -250,6 +280,14 @@ def is_wandb_available():
 
 def is_comet_ml_available():
     return _is_package_available("comet_ml")
+
+
+def is_swanlab_available():
+    return _is_package_available("swanlab")
+
+
+def is_trackio_available():
+    return sys.version_info >= (3, 10) and _is_package_available("trackio")
 
 
 def is_boto3_available():
@@ -276,6 +314,10 @@ def is_clearml_available():
 
 def is_pandas_available():
     return _is_package_available("pandas")
+
+
+def is_matplotlib_available():
+    return _is_package_available("matplotlib")
 
 
 def is_mlflow_available():
@@ -377,20 +419,58 @@ def is_npu_available(check_device=False):
 
 
 @lru_cache
+def is_sdaa_available(check_device=False):
+    "Checks if `torch_sdaa` is installed and potentially if a SDAA is in the environment"
+    if importlib.util.find_spec("torch_sdaa") is None:
+        return False
+
+    import torch_sdaa  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            _ = torch.sdaa.device_count()
+            return torch.sdaa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "sdaa") and torch.sdaa.is_available()
+
+
+@lru_cache
+def is_hpu_available(init_hccl=False):
+    "Checks if `torch.hpu` is installed and potentially if a HPU is in the environment"
+    if (
+        importlib.util.find_spec("habana_frameworks") is None
+        or importlib.util.find_spec("habana_frameworks.torch") is None
+    ):
+        return False
+
+    import habana_frameworks.torch  # noqa: F401
+
+    if init_hccl:
+        import habana_frameworks.torch.distributed.hccl as hccl  # noqa: F401
+
+    return hasattr(torch, "hpu") and torch.hpu.is_available()
+
+
+def is_habana_gaudi1():
+    if is_hpu_available():
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+            return True
+
+    return False
+
+
+@lru_cache
 def is_xpu_available(check_device=False):
     """
     Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and
     potentially if a XPU is in the environment
     """
 
-    "check if user disables it explicitly"
-    if not parse_flag_from_env("ACCELERATE_USE_XPU", default=True):
-        return False
-
     if is_ipex_available():
-        if is_torch_version("<=", "1.12"):
-            return False
-
         import intel_extension_for_pytorch  # noqa: F401
     else:
         if is_torch_version("<=", "2.3"):
@@ -421,6 +501,22 @@ def is_torchdata_stateful_dataloader_available():
         torchdata_version = version.parse(importlib.metadata.version("torchdata"))
         return compare_versions(torchdata_version, ">=", "0.8.0")
     return False
+
+
+def torchao_required(func):
+    """
+    A decorator that ensures the decorated function is only called when torchao is available.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not is_torchao_available():
+            raise ImportError(
+                "`torchao` is not available, please install it before calling this function via `pip install torchao`."
+            )
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 # TODO: Rework this into `utils.deepspeed` and migrate the "core" chunks into `accelerate.deepspeed`

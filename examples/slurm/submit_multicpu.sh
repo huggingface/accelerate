@@ -8,7 +8,7 @@
 #SBATCH --error=E-%x.%j
 
 ######################
-### Set enviroment ###
+### Set environment ###
 ######################
 source activateEnvironment.sh
 

@@ -23,9 +23,6 @@ import torch
 from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, RandomSampler, SequentialSampler
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, get_scheduler
-from transformers.testing_utils import mockenv_context
-from transformers.trainer_utils import set_seed
-from transformers.utils import is_torch_bf16_available
 
 from accelerate.accelerator import Accelerator
 from accelerate.scheduler import AcceleratedScheduler
@@ -36,13 +33,15 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     path_in_accelerate_package,
     require_deepspeed,
+    require_fp16,
     require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
+    run_first,
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset, RegressionModel
-from accelerate.utils import patch_environment
+from accelerate.utils import is_bf16_available, is_fp16_available, patch_environment, set_seed
 from accelerate.utils.dataclasses import DeepSpeedPlugin
 from accelerate.utils.deepspeed import (
     DeepSpeedEngineWrapper,
@@ -80,10 +79,12 @@ stages = [ZERO2, ZERO3]
 optims = [CUSTOM_OPTIMIZER, DS_OPTIMIZER]
 schedulers = [CUSTOM_SCHEDULER, DS_SCHEDULER]
 model_types = [NO_CONFIG, CONFIG_WITH_NO_HIDDEN_SIZE, CONFIG_WITH_HIDDEN_SIZE, CONFIG_WITH_HIDDEN_SIZES]
-if is_torch_bf16_available():
-    dtypes = [FP16, BF16]
-else:
-    dtypes = [FP16]
+
+dtypes = []
+if is_bf16_available():
+    dtypes.append(BF16)
+if is_fp16_available():
+    dtypes.append(FP16)
 
 
 def parameterized_custom_name_func(func, param_num, param):
@@ -242,7 +243,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             deepspeed_plugin.deepspeed_config_process(**kwargs)
         assert "`optimizer.params.lr` not found in kwargs." in str(cm.exception)
 
-    @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
+    @parameterized.expand(dtypes, name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
         AcceleratorState._reset_state(True)
         deepspeed_plugin = DeepSpeedPlugin(
@@ -254,7 +255,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_save_16bit_model=True,
             zero3_init_flag=True,
         )
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             state = Accelerator(mixed_precision=dtype, deepspeed_plugin=deepspeed_plugin).state
             assert state.deepspeed_plugin.deepspeed_config[dtype]["enabled"]
 
@@ -269,13 +270,14 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_init_flag=True,
         )
 
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)  # noqa: F841
             from transformers.integrations import is_deepspeed_zero3_enabled
 
             assert is_deepspeed_zero3_enabled()
 
     @parameterized.expand(optim_scheduler_params, name_func=parameterized_custom_name_func)
+    @require_fp16
     def test_prepare_deepspeed(self, optim_type, scheduler_type):
         # 1. Testing with one of the ZeRO Stages is enough to test the `_prepare_deepspeed` function.
         # Here we test using ZeRO Stage 2 with FP16 enabled.
@@ -307,7 +309,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 zero3_save_16bit_model=False,
                 zero3_init_flag=False,
             )
-            with mockenv_context(**self.dist_env):
+            with patch_environment(**self.dist_env):
                 accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
 
                 train_set = RegressionDataset(length=80)
@@ -365,7 +367,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         elif optim_type == DS_OPTIMIZER and scheduler_type == DS_SCHEDULER:
             # Test DeepSpeed optimizer + DeepSpeed scheduler
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
-            with mockenv_context(**self.dist_env):
+            with patch_environment(**self.dist_env):
                 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision="fp16")
                 train_set = RegressionDataset(length=80)
                 eval_set = RegressionDataset(length=20)
@@ -422,7 +424,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         elif optim_type == CUSTOM_OPTIMIZER and scheduler_type == DS_SCHEDULER:
             # Test custom optimizer + DeepSpeed scheduler
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
-            with mockenv_context(**self.dist_env):
+            with patch_environment(**self.dist_env):
                 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision="fp16")
                 train_set = RegressionDataset(length=80)
                 eval_set = RegressionDataset(length=20)
@@ -455,7 +457,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         elif optim_type == DS_OPTIMIZER and scheduler_type is CUSTOM_SCHEDULER:
             # Test deepspeed optimizer + custom scheduler
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
-            with mockenv_context(**self.dist_env):
+            with patch_environment(**self.dist_env):
                 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision="fp16")
                 train_set = RegressionDataset(length=80)
                 eval_set = RegressionDataset(length=20)
@@ -522,7 +524,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_save_16bit_model=False,
             zero3_init_flag=False,
         )
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
 
             train_set = RegressionDataset(length=80)
@@ -553,6 +555,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 in str(cm.exception)
             )
 
+    @require_fp16
     def test_save_checkpoints(self):
         deepspeed_plugin = DeepSpeedPlugin(
             hf_ds_config=self.ds_config_file[ZERO3],
@@ -574,7 +577,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
 
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision="fp16")
             kwargs["train_batch_size"] = (
                 kwargs["train_micro_batch_size_per_gpu"]
@@ -612,7 +615,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         del deepspeed_plugin.deepspeed_config["bf16"]
         del deepspeed_plugin.deepspeed_config["fp16"]
 
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
             train_set = RegressionDataset(length=80)
             eval_set = RegressionDataset(length=20)
@@ -643,6 +646,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             assert not config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
 
     @parameterized.expand(model_types, name_func=parameterized_custom_name_func)
+    @require_fp16
     def test_autofill_comm_buffers_dsconfig(self, model_type):
         deepspeed_plugin = DeepSpeedPlugin(
             hf_ds_config=self.ds_config_file[ZERO3],
@@ -652,7 +656,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         del deepspeed_plugin.deepspeed_config["fp16"]
         del deepspeed_plugin.deepspeed_config["optimizer"]
         del deepspeed_plugin.deepspeed_config["scheduler"]
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
             train_set = RegressionDataset(length=80)
             eval_set = RegressionDataset(length=20)
@@ -698,7 +702,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 assert zero_opt["stage3_prefetch_bucket_size"] == int((0.9 * hidden_size) * hidden_size)
                 assert zero_opt["stage3_param_persistence_threshold"] == (10 * hidden_size)
 
-    @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
+    @parameterized.expand(dtypes, name_func=parameterized_custom_name_func)
     def test_autofill_dsconfig_from_ds_plugin(self, dtype):
         ds_config = self.ds_config_dict["zero3"]
         if dtype == BF16:
@@ -724,7 +728,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_save_16bit_model=True,
         )
 
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype)
             config = accelerator.state.deepspeed_plugin.deepspeed_config
             assert config["gradient_clipping"] == 1.0
@@ -737,7 +741,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
         AcceleratorState._reset_state(True)
         diff_dtype = "bf16" if dtype == "fp16" else "fp16"
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             with self.assertRaises(ValueError) as cm:
                 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=diff_dtype)
             assert (
@@ -748,7 +752,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         # base case of passing in `gradient_accumulation_steps` to `DeepSpeedPlugin`
         AcceleratorState._reset_state(True)
         deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=4)
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype)
             deepspeed_plugin = accelerator.state.deepspeed_plugin
             assert deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] == 4
@@ -764,7 +768,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             offload_param_device="cpu",
             zero3_save_16bit_model=True,
         )
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(
                 deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype, gradient_accumulation_steps=8
             )
@@ -787,7 +791,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             "gradient_accumulation_steps,gradient_clipping,zero_stage,offload_optimizer_device,offload_param_device,zero3_save_16bit_model,mixed_precision"
         )
 
-        with mockenv_context(**ambiguous_env):
+        with patch_environment(**ambiguous_env):
             with self.assertRaises(ValueError) as cm:
                 deepspeed_plugin = DeepSpeedPlugin(
                     hf_ds_config=self.ds_config_file[ZERO3],
@@ -830,7 +834,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             hf_ds_config=ds_config,
             zero3_init_flag=False,
         )
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             _ = Accelerator(deepspeed_plugin=deepspeed_plugin)
             _ = AutoModelForCausalLM.from_pretrained("gpt2")
 
@@ -842,6 +846,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
+    @require_fp16
     def test_prepare_deepspeed_prepare_moe(self):
         if compare_versions("transformers", "<", "4.40") and compare_versions("deepspeed", "<", "0.14"):
             return
@@ -855,7 +860,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_save_16bit_model=True,
             transformer_moe_cls_names="Qwen2MoeSparseMoeBlock",
         )
-        with mockenv_context(**self.dist_env):
+        with patch_environment(**self.dist_env):
             accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
             accelerator.state.deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = 1
             model = AutoModelForCausalLM.from_pretrained(QWEN_MOE)
@@ -866,6 +871,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 if isinstance(module, Qwen2MoeSparseMoeBlock):
                     assert hasattr(module, "_z3_leaf") and module._z3_leaf
 
+    @run_first
+    @require_fp16
     def test_basic_run(self):
         test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")
         with tempfile.TemporaryDirectory() as dirpath:
@@ -890,9 +897,10 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 execute_subprocess_async(cmd)
 
 
+@slow
+@run_first
 @require_deepspeed
 @require_multi_device
-@slow
 class DeepSpeedIntegrationTest(TempDirTestCase):
     test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
 
@@ -922,6 +930,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.n_train = 160
         self.n_val = 160
 
+    @require_fp16
     def test_performance(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
@@ -966,6 +975,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage)
 
+    @require_fp16
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = [
@@ -1020,6 +1030,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage)
 
+    @require_fp16
     def test_peak_memory_usage(self):
         if compare_versions("deepspeed", ">", "0.12.6"):
             self.skipTest(

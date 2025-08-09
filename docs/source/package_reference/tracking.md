@@ -29,6 +29,11 @@ rendered properly in your Markdown viewer.
 [[autodoc]] tracking.WandBTracker
     - __init__
 
+## Trackio
+
+[[autodoc]] tracking.TrackioTracker
+    - __init__
+
 ## CometMLTracker
 
 [[autodoc]] tracking.CometMLTracker
@@ -47,4 +52,9 @@ rendered properly in your Markdown viewer.
 ## ClearMLTracker
 
 [[autodoc]] tracking.ClearMLTracker
+    - __init__
+
+## SwanLabTracker
+
+[[autodoc]] tracking.SwanLabTracker
     - __init__

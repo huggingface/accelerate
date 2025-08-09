@@ -23,20 +23,23 @@ import shutil
 import tempfile
 import warnings
 from collections import OrderedDict, defaultdict
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.nn as nn
+from torch import distributed as dist
+from torch import nn
 
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
+    is_hpu_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
     is_npu_available,
     is_peft_available,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
 )
@@ -51,6 +54,9 @@ if is_npu_available(check_device=False):
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_sdaa_available(check_device=False):
+    import torch_sdaa  # noqa: F401
 
 if is_musa_available(check_device=False):
     import torch_musa  # noqa: F401
@@ -87,15 +93,15 @@ def check_device_same(first_device, second_device):
     if first_device.type != second_device.type:
         return False
 
-    if first_device.type == "cuda" and first_device.index is None:
+    if first_device.type != "cpu" and first_device.index is None:
         # In case the first_device is a cuda device and have
         # the index attribute set to `None`, default it to `0`
-        first_device = torch.device("cuda", index=0)
+        first_device = torch.device(first_device.type, index=0)
 
-    if second_device.type == "cuda" and second_device.index is None:
+    if second_device.type != "cpu" and second_device.index is None:
         # In case the second_device is a cuda device and have
         # the index attribute set to `None`, default it to `0`
-        second_device = torch.device("cuda", index=0)
+        second_device = torch.device(second_device.type, index=0)
 
     return first_device == second_device
 
@@ -163,7 +169,7 @@ def dtype_byte_size(dtype: torch.dtype):
         return 1 / 2
     elif dtype == CustomDtype.FP8:
         return 1
-    elif is_torch_version(">=", "2.1.0") and dtype == torch.float8_e4m3fn:
+    elif is_torch_version(">=", "2.1.0") and dtype in [torch.float8_e4m3fn, torch.float8_e5m2]:
         return 1
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
@@ -172,7 +178,7 @@ def dtype_byte_size(dtype: torch.dtype):
     return bit_size // 8
 
 
-def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
     example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
@@ -195,8 +201,8 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
         storage_ptr = tensor.untyped_storage().data_ptr()
         storage_size = tensor.untyped_storage().nbytes()
     except Exception:
-        # Fallback for torch==1.10
         try:
+            # Fallback for torch==1.10
             storage_ptr = tensor.storage().data_ptr()
             storage_size = tensor.storage().size() * _SIZE[tensor.dtype]
         except NotImplementedError:
@@ -215,7 +221,9 @@ def set_module_tensor_to_device(
     value: Optional[torch.Tensor] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     fp16_statistics: Optional[torch.HalfTensor] = None,
-    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
+    tied_params_map: Optional[dict[int, dict[torch.device, torch.Tensor]]] = None,
+    non_blocking: bool = False,
+    clear_cache: bool = True,
 ):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
@@ -239,6 +247,10 @@ def set_module_tensor_to_device(
             A map of current data pointers to dictionaries of devices to already dispatched tied weights. For a given
             execution device, this parameter is useful to reuse the first available pointer of a shared weight on the
             device for all others, instead of duplicating memory.
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            If `True`, the device transfer will be asynchronous with respect to the host, if possible.
+        clear_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not to clear the device cache after setting the tensor on the device.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -289,9 +301,9 @@ def set_module_tensor_to_device(
 
         if dtype is None:
             # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
-            value = value.to(old_value.dtype)
+            value = value.to(old_value.dtype, non_blocking=non_blocking)
         elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
-            value = value.to(dtype)
+            value = value.to(dtype, non_blocking=non_blocking)
 
     device_quantization = None
     with torch.no_grad():
@@ -299,8 +311,8 @@ def set_module_tensor_to_device(
         # # fix the case where the device is meta, we don't want to put it on cpu because there is no data =0
         if (
             param is not None
-            and param.device.type != "cuda"
-            and torch.device(device).type == "cuda"
+            and param.device.type not in ("cuda", "xpu")
+            and torch.device(device).type in ("cuda", "xpu")
             and param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]
         ):
             device_quantization = device
@@ -311,22 +323,24 @@ def set_module_tensor_to_device(
                 device = f"npu:{device}"
             elif is_mlu_available():
                 device = f"mlu:{device}"
+            elif is_sdaa_available():
+                device = f"sdaa:{device}"
             elif is_musa_available():
                 device = f"musa:{device}"
-            elif is_xpu_available():
-                device = f"xpu:{device}"
+            elif is_hpu_available():
+                device = "hpu"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
-            new_value = old_value.to(device)
+            new_value = old_value.to(device, non_blocking=non_blocking)
             if dtype is not None and device in ["meta", torch.device("meta")]:
                 if not str(old_value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
-                    new_value = new_value.to(dtype)
+                    new_value = new_value.to(dtype, non_blocking=non_blocking)
 
                 if not is_buffer:
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
-            new_value = value.to(device)
+            new_value = value.to(device, non_blocking=non_blocking)
         else:
             new_value = torch.tensor(value, device=device)
         if device_quantization is not None:
@@ -339,34 +353,30 @@ def set_module_tensor_to_device(
             if param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]:
                 if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
                     # downcast to fp16 if any - needed for 8bit serialization
-                    new_value = new_value.to(torch.float16)
+                    new_value = new_value.to(torch.float16, non_blocking=non_blocking)
                 # quantize module that are going to stay on the cpu so that we offload quantized weights
                 if device == "cpu" and param_cls.__name__ == "Int8Params":
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(0).to("cpu")
                     new_value.CB = new_value.CB.to("cpu")
                     new_value.SCB = new_value.SCB.to("cpu")
                 else:
-                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(
+                        device, non_blocking=non_blocking
+                    )
             elif param_cls.__name__ in ["QTensor", "QBitsTensor"]:
-                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(device)
+                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(
+                    device, non_blocking=non_blocking
+                )
             elif param_cls.__name__ in ["AffineQuantizedTensor"]:
-                new_value = torch.nn.Parameter(
-                    param_cls(
-                        new_value.layout_tensor,
-                        new_value.block_size,
-                        new_value.shape,
-                        new_value.quant_min,
-                        new_value.quant_max,
-                        new_value.zero_point_domain,
-                    ),
-                    requires_grad=old_value.requires_grad,
-                ).to(device)
+                new_value = new_value.to(device, non_blocking=non_blocking)
             else:
-                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
+                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(
+                    device, non_blocking=non_blocking
+                )
 
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
-                module._parameters[tensor_name].SCB = fp16_statistics.to(device)
+                module._parameters[tensor_name].SCB = fp16_statistics.to(device, non_blocking=non_blocking)
                 del fp16_statistics
             # as we put the weight to meta, it doesn't have SCB attr anymore. make sure that it is not a meta weight
             if (
@@ -392,8 +402,9 @@ def set_module_tensor_to_device(
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
                     module.weight = module.weight.cuda(device_index)
-    # clean pre and post foward hook
-    if device != "cpu":
+
+    # clean pre and post forward hook
+    if clear_cache and device != "cpu":
         clear_device_cache()
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
@@ -443,7 +454,7 @@ def named_module_tensors(
                 yield named_buffer
 
 
-def get_non_persistent_buffers(module: nn.Module, recurse: bool = False):
+def get_non_persistent_buffers(module: nn.Module, recurse: bool = False, fqns: bool = False):
     """
     Gather all non persistent buffers of a given modules into a set
 
@@ -452,12 +463,17 @@ def get_non_persistent_buffers(module: nn.Module, recurse: bool = False):
             The module we want the non persistent buffers on.
         recurse (`bool`, *optional*, defaults to `False`):
             Whether or not to go look in every submodule or just return the direct non persistent buffers.
+        fqns (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the fully-qualified names of the non persistent buffers.
     """
 
     non_persistent_buffers_set = module._non_persistent_buffers_set
     if recurse:
-        for _, m in module.named_modules():
-            non_persistent_buffers_set |= m._non_persistent_buffers_set
+        for n, m in module.named_modules():
+            if fqns:
+                non_persistent_buffers_set |= {n + "." + b for b in m._non_persistent_buffers_set}
+            else:
+                non_persistent_buffers_set |= m._non_persistent_buffers_set
 
     return non_persistent_buffers_set
 
@@ -496,18 +512,26 @@ def check_tied_parameters_in_config(model: nn.Module):
     has_tied_module = False
 
     if "PreTrainedModel" in [c.__name__ for c in inspect.getmro(model.__class__)]:
+        has_tied_word_embedding = False
+        model_decoder_config = None
+        if hasattr(model, "config"):
+            model_decoder_config = (
+                model.config.get_text_config(decoder=True)
+                if hasattr(model.config, "get_text_config")
+                else model.config
+            )
         has_tied_word_embedding = (
-            hasattr(model, "config")
-            and getattr(model.config, "tie_word_embeddings", False)
+            model_decoder_config is not None
+            and getattr(model_decoder_config, "tie_word_embeddings", False)
             and model.get_output_embeddings()
         )
+
         has_tied_encoder_decoder = (
             hasattr(model, "config")
             and getattr(model.config, "is_encoder_decoder", False)
             and getattr(model.config, "tie_encoder_decoder", False)
         )
         has_tied_module = any(hasattr(module, "_tie_weights") for module in model.modules())
-
     return any([has_tied_word_embedding, has_tied_encoder_decoder, has_tied_module])
 
 
@@ -538,68 +562,10 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
         for param in tie_param:
             tie_param_devices[param] = _get_param_device(param, device_map)
         if len(set(tie_param_devices.values())) > 1:
-            logger.warn(
+            logger.warning(
                 f"Tied parameters are on different devices: {tie_param_devices}. "
                 "Please modify your custom device map or set `device_map='auto'`. "
             )
-
-
-def _get_named_modules(
-    module: torch.nn.Module,
-    memo: Optional[Set[torch.nn.Module]] = None,
-    prefix: str = "",
-    remove_duplicate: bool = True,
-):
-    """
-    Return an iterator over all modules in the network, yielding both the name of the module as well as the module
-    itself. Copied from PyTorch `torch.nn.Module.named_modules` for compatability with torch < 2.0 versions with
-    `remove_duplicate` option added.
-
-    Args:
-        memo (set of `torch.nn.Module`, *optional*):
-            A memo to store the set of modules already added to the result
-        prefix (`str`, *optional*):
-            A prefix that will be added to the name of the module
-        remove_duplicate (`bool`, *optional*):
-            Whether to remove the duplicated module instances in the result or not
-
-    Yields:
-        (str, Module): Tuple of name and module
-
-    Note:
-        Duplicate modules are returned only once. In the following example, ``l`` will be returned only once.
-    """
-    if memo is None:
-        memo = set()
-    if module not in memo:
-        if remove_duplicate:
-            memo.add(module)
-        yield prefix, module
-        for name, sub_module in module._modules.items():
-            if sub_module is None:
-                continue
-            submodule_prefix = prefix + ("." if prefix else "") + name
-            yield from _get_named_modules(sub_module, memo, submodule_prefix, remove_duplicate)
-
-
-def _get_named_parameters(module: torch.nn.Module, prefix="", recurse=True, remove_duplicate: bool = True):
-    """
-    Help yield various names + members of modules. Copied from PyTorch `torch.nn.Module.named_modules` for
-    compatability with torch < 2.0 versions with `remove_duplicate` option added.
-    """
-    memo = set()
-    modules = (
-        _get_named_modules(module, prefix=prefix, remove_duplicate=remove_duplicate) if recurse else [(prefix, module)]
-    )
-    for module_prefix, module in modules:
-        members = module._parameters.items()
-        for k, v in members:
-            if v is None or v in memo:
-                continue
-            if remove_duplicate:
-                memo.add(v)
-            name = module_prefix + ("." if module_prefix else "") + k
-            yield name, v
 
 
 def find_tied_parameters(model: torch.nn.Module, **kwargs):
@@ -632,14 +598,12 @@ def find_tied_parameters(model: torch.nn.Module, **kwargs):
     ```
     """
 
-    # get ALL model parameters and thier names
-    all_named_parameters = {name: param for name, param in _get_named_parameters(model, remove_duplicate=False)}
+    # get ALL model parameters and their names
+    all_named_parameters = {name: param for name, param in model.named_parameters(remove_duplicate=False)}
 
     # get ONLY unique named parameters,
     # if parameter is tied and have multiple names, it will be included only once
-    no_duplicate_named_parameters = {
-        name: param for name, param in _get_named_parameters(model, remove_duplicate=True)
-    }
+    no_duplicate_named_parameters = {name: param for name, param in model.named_parameters(remove_duplicate=True)}
 
     # the difference of the two sets will give us the tied parameters
     tied_param_names = set(all_named_parameters.keys()) - set(no_duplicate_named_parameters.keys())
@@ -650,7 +614,7 @@ def find_tied_parameters(model: torch.nn.Module, **kwargs):
     for tied_param_name in tied_param_names:
         tied_param = all_named_parameters[tied_param_name]
         for param_name, param in no_duplicate_named_parameters.items():
-            # compare if parameters are the same, if so, group thier names together
+            # compare if parameters are the same, if so, group their names together
             if param is tied_param:
                 if param_name not in tied_param_groups:
                     tied_param_groups[param_name] = []
@@ -704,7 +668,7 @@ def _get_proper_dtype(dtype: Union[str, torch.device]) -> torch.dtype:
 def compute_module_sizes(
     model: nn.Module,
     dtype: Optional[Union[str, torch.device]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
     buffers_only: bool = False,
 ):
     """
@@ -746,7 +710,7 @@ def compute_module_sizes(
 def compute_module_total_buffer_size(
     model: nn.Module,
     dtype: Optional[Union[str, torch.device]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
 ):
     """
     Compute the total size of buffers in each submodule of a given model.
@@ -756,7 +720,7 @@ def compute_module_total_buffer_size(
 
 
 def get_max_layer_size(
-    modules: List[Tuple[str, torch.nn.Module]], module_sizes: Dict[str, int], no_split_module_classes: List[str]
+    modules: list[tuple[str, torch.nn.Module]], module_sizes: dict[str, int], no_split_module_classes: list[str]
 ):
     """
     Utility function that will scan a list of named modules and return the maximum size used by one full layer. The
@@ -794,7 +758,7 @@ def get_max_layer_size(
     return max_size, layer_names
 
 
-def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None):
+def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None):
     """
     Get the maximum memory available if nothing is passed, converts string to int otherwise.
     """
@@ -819,6 +783,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
+        elif is_sdaa_available():
+            for i in range(torch.sdaa.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device("sdaa", i))
+                    max_memory[i] = torch.sdaa.mem_get_info(i)[0]
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
         elif is_musa_available():
             for i in range(torch.musa.device_count()):
                 try:
@@ -832,6 +804,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
                     max_memory[i] = get_xpu_available_memory(i)
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif is_hpu_available():
+            for i in range(torch.hpu.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device("hpu", i))
+                    max_memory[i] = torch.hpu.mem_get_info(i)[0]
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -863,10 +843,14 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.npu.device_count()
     elif is_mlu_available():
         num_devices = torch.mlu.device_count()
+    elif is_sdaa_available():
+        num_devices = torch.sdaa.device_count()
     elif is_musa_available():
         num_devices = torch.musa.device_count()
     elif is_xpu_available():
         num_devices = torch.xpu.device_count()
+    elif is_hpu_available():
+        num_devices = torch.hpu.device_count()
     else:
         num_devices = torch.cuda.device_count()
     for device in gpu_devices:
@@ -885,7 +869,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     return max_memory
 
 
-def clean_device_map(device_map: Dict[str, Union[int, str, torch.device]], module_name: str = ""):
+def clean_device_map(device_map: dict[str, Union[int, str, torch.device]], module_name: str = ""):
     """
     Cleans a device_map by grouping all submodules that go on the same device together.
     """
@@ -950,10 +934,10 @@ def get_module_leaves(module_sizes):
 
 def get_balanced_memory(
     model: nn.Module,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
     low_zero: bool = False,
 ):
     """
@@ -992,10 +976,16 @@ def get_balanced_memory(
         expected_device_type = "npu"
     elif is_mlu_available():
         expected_device_type = "mlu"
+    elif is_sdaa_available():
+        expected_device_type = "sdaa"
     elif is_musa_available():
         expected_device_type = "musa"
     elif is_xpu_available():
         expected_device_type = "xpu"
+    elif is_hpu_available():
+        expected_device_type = "hpu"
+    elif is_mps_available():
+        expected_device_type = "mps"
     else:
         expected_device_type = "cuda"
     num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
@@ -1095,19 +1085,19 @@ def calculate_maximum_sizes(model: torch.nn.Module):
 
 def _init_infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
-) -> Tuple[
-    List[Union[int, str]],
-    Dict[Union[int, str], Union[int, str]],
-    List[Union[int, str]],
-    List[int],
-    Dict[str, int],
-    List[List[str]],
-    List[str],
-    List[Tuple[str, nn.Module]],
+    special_dtypes: Optional[dict[str, Union[str, torch.device]]] = None,
+) -> tuple[
+    list[Union[int, str]],
+    dict[Union[int, str], Union[int, str]],
+    list[Union[int, str]],
+    list[int],
+    dict[str, int],
+    list[list[str]],
+    list[str],
+    list[tuple[str, nn.Module]],
 ]:
     """
     Initialize variables required for computing the device map for model allocation.
@@ -1133,9 +1123,8 @@ def _init_infer_auto_device_map(
 
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     tied_parameters = find_tied_parameters(model)
-
     if check_tied_parameters_in_config(model) and len(tied_parameters) == 0:
-        logger.warn(
+        logger.warning(
             "The model weights are not tied. Please use the `tie_weights` method before using the `infer_auto_device` function."
         )
 
@@ -1163,7 +1152,7 @@ def get_module_size_with_ties(
     module_size,
     module_sizes,
     modules_to_treat,
-) -> Tuple[int, List[str], List[nn.Module]]:
+) -> tuple[int, list[str], list[nn.Module]]:
     """
     Calculate the total size of a module, including its tied parameters.
 
@@ -1183,7 +1172,7 @@ def get_module_size_with_ties(
     tied_modules = []
 
     for tied_param in tied_params:
-        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if n in tied_param][0]
+        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
         tied_module_names.append(modules_to_treat[tied_module_index][0])
         tied_modules.append(modules_to_treat[tied_module_index][1])
 
@@ -1195,12 +1184,12 @@ def get_module_size_with_ties(
 
 
 def fallback_allocate(
-    modules: List[Tuple[str, nn.Module]],
-    module_sizes: Dict[str, int],
+    modules: list[tuple[str, nn.Module]],
+    module_sizes: dict[str, int],
     size_limit: Union[int, str],
-    no_split_module_classes: Optional[List[str]] = None,
-    tied_parameters: Optional[List[List[str]]] = None,
-) -> Tuple[Optional[str], Optional[nn.Module], List[Tuple[str, nn.Module]]]:
+    no_split_module_classes: Optional[list[str]] = None,
+    tied_parameters: Optional[list[list[str]]] = None,
+) -> tuple[Optional[str], Optional[nn.Module], list[tuple[str, nn.Module]]]:
     """
     Find a module that fits in the size limit using BFS and return it with its name and the remaining modules.
 
@@ -1304,11 +1293,11 @@ def fallback_allocate(
 
 def infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
     reserve_max_layer: bool = True,
     dtype: Optional[Union[str, torch.dtype]] = None,
-    special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
+    special_dtypes: Optional[dict[str, Union[str, torch.dtype]]] = None,
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
@@ -1649,7 +1638,7 @@ def infer_auto_device_map(
     return device_map
 
 
-def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, torch.device]]):
+def check_device_map(model: nn.Module, device_map: dict[str, Union[int, str, torch.device]]):
     """
     Checks a device map covers everything in a given model.
 
@@ -1657,6 +1646,14 @@ def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, tor
         model (`torch.nn.Module`): The model to check the device map against.
         device_map (`Dict[str, Union[int, str, torch.device]]`): The device map to check.
     """
+    all_module_names = dict(model.named_modules())
+    invalid_keys = [k for k in device_map if k != "" and k not in all_module_names]
+
+    if invalid_keys:
+        warnings.warn(
+            f"The following device_map keys do not match any submodules in the model: {invalid_keys}", UserWarning
+        )
+
     all_model_tensors = [name for name, _ in model.state_dict().items()]
     for module_name in device_map.keys():
         if module_name == "":
@@ -1692,7 +1689,7 @@ def load_state_dict(checkpoint_file, device_map=None):
             weight_names = f.keys()
 
         if metadata is None:
-            logger.warn(
+            logger.warning(
                 f"The safetensors archive passed at {checkpoint_file} does not contain metadata. "
                 "Make sure to save your model with the `save_pretrained` method. Defaulting to 'pt' metadata."
             )
@@ -1713,10 +1710,10 @@ def load_state_dict(checkpoint_file, device_map=None):
                 device = list(device_map.values())[0]
                 target_device = device
                 if isinstance(device, int):
-                    if is_xpu_available():
-                        target_device = f"xpu:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         target_device = f"npu:{device}"
+                    elif is_hpu_available():
+                        target_device = "hpu"
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1749,10 +1746,10 @@ def load_state_dict(checkpoint_file, device_map=None):
             for device in devices:
                 target_device = device
                 if isinstance(device, int):
-                    if is_xpu_available():
-                        target_device = f"xpu:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         target_device = f"npu:{device}"
+                    elif is_hpu_available():
+                        target_device = "hpu"
 
                 with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
                     for key in device_weights[device]:
@@ -1767,7 +1764,7 @@ def load_state_dict(checkpoint_file, device_map=None):
 
             return tensors
     else:
-        return torch.load(checkpoint_file, map_location=torch.device("cpu"))
+        return torch.load(checkpoint_file, map_location=torch.device("cpu"), weights_only=True)
 
 
 def get_state_dict_offloaded_model(model: nn.Module):
@@ -1810,7 +1807,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
 def get_state_dict_from_offload(
     module: nn.Module,
     module_name: str,
-    state_dict: Dict[str, Union[str, torch.tensor]],
+    state_dict: dict[str, Union[str, torch.tensor]],
     device_to_put_offload: Union[int, str, torch.device] = "cpu",
 ):
     """
@@ -1846,14 +1843,16 @@ def get_state_dict_from_offload(
 def load_checkpoint_in_model(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
-    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
+    device_map: Optional[dict[str, Union[int, str, torch.device]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: bool = False,
     offload_buffers: bool = False,
-    keep_in_fp32_modules: List[str] = None,
+    keep_in_fp32_modules: list[str] = None,
     offload_8bit_bnb: bool = False,
     strict: bool = False,
+    full_state_dict: bool = True,
+    broadcast_from_rank0: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -1894,6 +1893,12 @@ def load_checkpoint_in_model(
         strict (`bool`, *optional*, defaults to `False`):
             Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
             state_dict.
+        full_state_dict (`bool`, *optional*, defaults to `True`): if this is set to `True`, all the tensors in the
+            loaded state_dict will be gathered. No ShardedTensor and DTensor will be in the loaded state_dict.
+        broadcast_from_rank0 (`False`, *optional*, defaults to `False`): when the option is `True`, a distributed
+            `ProcessGroup` must be initialized. rank0 should receive a full state_dict and will broadcast the tensors
+            in the state_dict one by one to other ranks. Other ranks will receive the tensors and shard (if applicable)
+            according to the local shards in the model.
 
     """
     if offload_8bit_bnb:
@@ -1902,7 +1907,7 @@ def load_checkpoint_in_model(
     tied_params = find_tied_parameters(model)
 
     if check_tied_parameters_in_config(model) and len(tied_params) == 0:
-        logger.warn(
+        logger.warning(
             "The model weights are not tied. Please use the `tie_weights` method before using the `infer_auto_device` function."
         )
     if device_map is not None:
@@ -1974,12 +1979,41 @@ def load_checkpoint_in_model(
     unexpected_keys = set()
     model_keys = set(model.state_dict().keys())
     buffer_names = [name for name, _ in model.named_buffers()]
+    model_devices = {t.device for t in model.state_dict().values() if isinstance(t, torch.Tensor)}
+    model_physical_devices = model_devices - {torch.device("meta")}
     for checkpoint_file in checkpoint_files:
-        loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
         if device_map is None:
-            model.load_state_dict(loaded_checkpoint, strict=strict)
+            # exception for multi-device loading was made for the meta device in torch v2.7.0
+            # https://github.com/pytorch/pytorch/blob/v2.6.0/torch/distributed/checkpoint/state_dict.py#L557-L563
+            # https://github.com/pytorch/pytorch/blob/v2.7.0-rc2/torch/distributed/checkpoint/state_dict.py#L575-L587
+            if is_torch_version(">=", "2.2.0") and (
+                (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1
+            ):
+                from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
+
+                broadcast_from_rank0 &= is_torch_version(">=", "2.4.0")
+                loaded_checkpoint = (
+                    load_state_dict(checkpoint_file, device_map=device_map)
+                    if not broadcast_from_rank0 or dist.get_rank() == 0
+                    else {}
+                )
+                set_model_state_dict(
+                    model,
+                    loaded_checkpoint,
+                    options=StateDictOptions(
+                        full_state_dict=full_state_dict,
+                        strict=strict,
+                        **({"broadcast_from_rank0": broadcast_from_rank0} if is_torch_version(">=", "2.4.0") else {}),
+                    ),
+                )
+            else:
+                loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+                model.load_state_dict(loaded_checkpoint, strict=strict)
+
             unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
         else:
+            loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+
             for param_name, param in loaded_checkpoint.items():
                 # skip SCB parameter (for 8-bit serialization)
                 if "SCB" in param_name:
@@ -2095,9 +2129,11 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
+            DistributedType.MULTI_HPU,
             DistributedType.FSDP,
             DistributedType.XLA,
         ]:
@@ -2129,10 +2165,14 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
         return xamp.GradScaler(**kwargs)
     elif is_mlu_available():
         return torch.mlu.amp.GradScaler(**kwargs)
+    elif is_sdaa_available():
+        return torch.sdaa.amp.GradScaler(**kwargs)
     elif is_musa_available():
         return torch.musa.amp.GradScaler(**kwargs)
     elif is_npu_available():
         return torch.npu.amp.GradScaler(**kwargs)
+    elif is_hpu_available():
+        return torch.amp.GradScaler("hpu", **kwargs)
     elif is_xpu_available():
         return torch.amp.GradScaler("xpu", **kwargs)
     else:

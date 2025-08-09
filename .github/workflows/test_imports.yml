@@ -26,9 +26,9 @@ jobs:
           minimum,
         ]
     steps:
-    - uses: actions/checkout@v3.1.0
+    - uses: actions/checkout@v4
     - name: Set up python 3.9
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: 3.9
         cache: 'pip'

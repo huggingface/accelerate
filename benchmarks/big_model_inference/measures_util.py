@@ -18,6 +18,12 @@ import time
 import psutil
 import torch
 
+from accelerate.test_utils.testing import get_backend
+
+
+torch_device_type, _, _ = get_backend()
+torch_accelerator_module = getattr(torch, torch_device_type, torch.cuda)
+
 
 class PeakCPUMemory:
     def __init__(self):
@@ -54,16 +60,16 @@ def start_measure():
     measures = {"time": time.time()}
 
     gc.collect()
-    torch.cuda.empty_cache()
+    torch_accelerator_module.empty_cache()
 
     # CPU mem
     measures["cpu"] = psutil.Process().memory_info().rss
     cpu_peak_tracker.start()
 
     # GPU mem
-    for i in range(torch.cuda.device_count()):
-        measures[str(i)] = torch.cuda.memory_allocated(i)
-    torch.cuda.reset_peak_memory_stats()
+    for i in range(torch_accelerator_module.device_count()):
+        measures[str(i)] = torch_accelerator_module.memory_allocated(i)
+    torch_accelerator_module.reset_peak_memory_stats()
 
     return measures
 
@@ -73,16 +79,16 @@ def end_measure(start_measures):
     measures = {"time": time.time() - start_measures["time"]}
 
     gc.collect()
-    torch.cuda.empty_cache()
+    torch_accelerator_module.empty_cache()
 
     # CPU mem
     measures["cpu"] = (psutil.Process().memory_info().rss - start_measures["cpu"]) / 2**20
     measures["cpu-peak"] = (cpu_peak_tracker.stop() - start_measures["cpu"]) / 2**20
 
     # GPU mem
-    for i in range(torch.cuda.device_count()):
-        measures[str(i)] = (torch.cuda.memory_allocated(i) - start_measures[str(i)]) / 2**20
-        measures[f"{i}-peak"] = (torch.cuda.max_memory_allocated(i) - start_measures[str(i)]) / 2**20
+    for i in range(torch_accelerator_module.device_count()):
+        measures[str(i)] = (torch_accelerator_module.memory_allocated(i) - start_measures[str(i)]) / 2**20
+        measures[f"{i}-peak"] = (torch_accelerator_module.max_memory_allocated(i) - start_measures[str(i)]) / 2**20
 
     return measures
 
@@ -90,9 +96,9 @@ def end_measure(start_measures):
 def log_measures(measures, description):
     print(f"{description}:")
     print(f"- Time: {measures['time']:.2f}s")
-    for i in range(torch.cuda.device_count()):
-        print(f"- GPU {i} allocated: {measures[str(i)]:.2f}MiB")
+    for i in range(torch_accelerator_module.device_count()):
+        print(f"- {torch_device_type} {i} allocated: {measures[str(i)]:.2f}MiB")
         peak = measures[f"{i}-peak"]
-        print(f"- GPU {i} peak: {peak:.2f}MiB")
+        print(f"- {torch_device_type} {i} peak: {peak:.2f}MiB")
     print(f"- CPU RAM allocated: {measures['cpu']:.2f}MiB")
     print(f"- CPU RAM peak: {measures['cpu-peak']:.2f}MiB")

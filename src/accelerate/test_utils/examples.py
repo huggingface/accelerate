@@ -20,16 +20,15 @@ others are used to either get the code that matters, or to preprocess them (such
 """
 
 import os
-from typing import List
 
 
-def get_function_contents_by_name(lines: List[str], name: str):
+def get_function_contents_by_name(lines: list[str], name: str):
     """
     Extracts a function from `lines` of segmented source code with the name `name`.
 
     Args:
         lines (`List[str]`):
-            Source code of a script seperated by line.
+            Source code of a script separated by line.
         name (`str`):
             The name of the function to extract. Should be either `training_function` or `main`
     """
@@ -49,13 +48,13 @@ def get_function_contents_by_name(lines: List[str], name: str):
             good_lines.append(line)
 
 
-def clean_lines(lines: List[str]):
+def clean_lines(lines: list[str]):
     """
     Filters `lines` and removes any entries that start with a comment ('#') or is just a newline ('\n')
 
     Args:
         lines (`List[str]`):
-            Source code of a script seperated by line.
+            Source code of a script separated by line.
     """
     return [line for line in lines if not line.lstrip().startswith("#") and line != "\n"]
 

@@ -44,10 +44,7 @@ accelerate launch /examples/cv_example.py --data_dir images
 
 ## A few caveats to be aware of
 
-1. We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. 
-It has major fixes related to model correctness and performance improvements for transformer based models.
-Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details.
-2. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
+1. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
 This means that currently only single GPU of `mps` device type can be used.
 
 Finally, please, remember that, `Accelerate` only integrates MPS backend, therefore if you

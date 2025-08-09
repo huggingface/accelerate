@@ -16,7 +16,12 @@ import unittest
 
 from torch import nn
 
-from accelerate.test_utils import memory_allocated_func, require_non_cpu, require_non_torch_xla, torch_device
+from accelerate.test_utils import (
+    memory_allocated_func,
+    require_non_cpu,
+    require_non_torch_xla,
+    torch_device,
+)
 from accelerate.utils.memory import find_executable_batch_size, release_memory
 
 
@@ -35,6 +40,15 @@ class ModelForTest(nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
+class BigModelForTest(ModelForTest):
+    def __init__(self):
+        super().__init__()
+        self.linear3 = nn.Linear(5, 1000)
+
+    def forward(self, x):
+        return self.linear3(super().forward(x))
+
+
 class MemoryTest(unittest.TestCase):
     def test_memory_implicit(self):
         batch_sizes = []
@@ -47,7 +61,31 @@ class MemoryTest(unittest.TestCase):
                 raise_fake_out_of_memory()
 
         mock_training_loop_function()
-        assert batch_sizes == [128, 64, 32, 16, 8]
+        assert batch_sizes == [
+            128,
+            115,
+            103,
+            92,
+            82,
+            73,
+            65,
+            58,
+            52,
+            46,
+            41,
+            36,
+            32,
+            28,
+            25,
+            22,
+            19,
+            17,
+            15,
+            13,
+            11,
+            9,
+            8,
+        ]
 
     def test_memory_explicit(self):
         batch_sizes = []
@@ -61,7 +99,31 @@ class MemoryTest(unittest.TestCase):
             return batch_size, arg1
 
         bs, arg1 = mock_training_loop_function("hello")
-        assert batch_sizes == [128, 64, 32, 16, 8]
+        assert batch_sizes == [
+            128,
+            115,
+            103,
+            92,
+            82,
+            73,
+            65,
+            58,
+            52,
+            46,
+            41,
+            36,
+            32,
+            28,
+            25,
+            22,
+            19,
+            17,
+            15,
+            13,
+            11,
+            9,
+            8,
+        ]
         assert [bs, arg1] == [8, "hello"]
 
     def test_start_zero(self):
@@ -108,7 +170,14 @@ class MemoryTest(unittest.TestCase):
     @require_non_torch_xla
     def test_release_memory(self):
         starting_memory = memory_allocated_func()
-        model = ModelForTest()
+
+        if torch_device.startswith("hpu"):
+            # hpu has a minimum memory allocation that cannot be released,
+            # we need to surpass it by using a bigger model (>5767296 bytes)
+            model = BigModelForTest()
+        else:
+            model = ModelForTest()
+
         model.to(torch_device)
         assert memory_allocated_func() > starting_memory
         model = release_memory(model)

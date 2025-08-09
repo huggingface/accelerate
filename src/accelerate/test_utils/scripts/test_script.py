@@ -33,12 +33,12 @@ from accelerate.utils import (
     DataLoaderConfiguration,
     DistributedType,
     gather,
+    gather_object,
     is_bf16_available,
     is_datasets_available,
+    is_fp16_available,
+    is_hpu_available,
     is_ipex_available,
-    is_mlu_available,
-    is_musa_available,
-    is_npu_available,
     is_pytest_available,
     is_xpu_available,
     set_seed,
@@ -52,12 +52,19 @@ if is_xpu_available():
 else:
     from accelerate.test_utils import RegressionModel
 
+if is_hpu_available():
+    ATOL = 1e-3
+    RTOL = 1e-3
+else:
+    ATOL = 1e-6
+    RTOL = 1e-6
+
 
 def generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler=False):
     "Creates a dataloader that can also use the `SeedableRandomSampler`"
     if use_seedable_sampler:
         # The SeedableRandomSampler is needed during distributed setups
-        # for full reproducability across processes with the `DataLoader`
+        # for full reproducibility across processes with the `DataLoader`
         sampler = SeedableRandomSampler(
             generator=generator,
             data_source=train_set,
@@ -106,9 +113,9 @@ def process_execution_check():
             assert text.startswith("Currently in the main process\n"), "Main process was not first"
             if num_processes > 1:
                 assert text.endswith("Now on another process\n"), "Main process was not first"
-            assert (
-                text.count("Now on another process\n") == accelerator.num_processes - 1
-            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {accelerator.num_processes}"
+            assert text.count("Now on another process\n") == accelerator.num_processes - 1, (
+                f"Only wrote to file {text.count('Now on another process') + 1} times, not {accelerator.num_processes}"
+            )
         except AssertionError:
             path.unlink()
             raise
@@ -194,7 +201,6 @@ def dl_preparation_check():
         result.append(gather(batch))
     result = torch.cat(result)
 
-    print(state.process_index, result, type(dl))
     assert torch.equal(result.cpu(), torch.arange(0, length).long()), "Wrong non-shuffled dataloader result."
 
     dl = DataLoader(range(length), batch_size=8)
@@ -346,13 +352,13 @@ def custom_sampler_check():
     dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index)
     # We need just ensure that `dl.batch_sampler` (or `dl.batch_sampler.batch_sampler` is indeed the old batch sampler
     if hasattr(dl.batch_sampler, "batch_sampler"):
-        assert isinstance(
-            dl.batch_sampler.batch_sampler, CustomBatchSampler
-        ), "Custom sampler was changed after calling `prepare_data_loader`"
+        assert isinstance(dl.batch_sampler.batch_sampler, CustomBatchSampler), (
+            "Custom sampler was changed after calling `prepare_data_loader`"
+        )
     else:
-        assert isinstance(
-            dl.batch_sampler, CustomBatchSampler
-        ), "Custom sampler was changed after calling `prepare_data_loader`"
+        assert isinstance(dl.batch_sampler, CustomBatchSampler), (
+            "Custom sampler was changed after calling `prepare_data_loader`"
+        )
 
 
 def check_seedable_sampler():
@@ -395,9 +401,9 @@ def check_seedable_sampler_in_batch_sampler_shard():
     )
 
     target_sampler = prepared_data_loader.batch_sampler.batch_sampler.sampler
-    assert isinstance(
-        target_sampler, SeedableRandomSampler
-    ), "Sampler in BatchSamplerShard is not SeedableRandomSampler."
+    assert isinstance(target_sampler, SeedableRandomSampler), (
+        "Sampler in BatchSamplerShard is not SeedableRandomSampler."
+    )
 
 
 def check_seedable_sampler_with_data_seed():
@@ -473,8 +479,20 @@ def training_check(use_seedable_sampler=False):
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-    assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+    torch.testing.assert_close(
+        old_model.a,
+        model.a,
+        atol=ATOL,
+        rtol=RTOL,
+        msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+    )
+    torch.testing.assert_close(
+        old_model.b,
+        model.b,
+        atol=ATOL,
+        rtol=RTOL,
+        msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+    )
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
 
@@ -498,36 +516,24 @@ def training_check(use_seedable_sampler=False):
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-    assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+    torch.testing.assert_close(
+        old_model.a,
+        model.a,
+        atol=ATOL,
+        rtol=RTOL,
+        msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+    )
+    torch.testing.assert_close(
+        old_model.b,
+        model.b,
+        atol=ATOL,
+        rtol=RTOL,
+        msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+    )
 
-    accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
+    accelerator.print("Training yielded the same results on one CPU or distributed setup with batch split.")
 
-    if torch.cuda.is_available() or is_npu_available() or is_mlu_available() or is_musa_available():
-        # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
-        print("FP16 training check.")
-        AcceleratorState._reset_state()
-        dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
-        accelerator = Accelerator(mixed_precision="fp16", dataloader_config=dataloader_config)
-        train_dl = generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler)
-        model = RegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-
-        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
-        set_seed(42)
-        generator.manual_seed(42)
-        for _ in range(3):
-            for batch in train_dl:
-                model.zero_grad()
-                output = model(batch["x"])
-                loss = torch.nn.functional.mse_loss(output, batch["y"])
-                accelerator.backward(loss)
-                optimizer.step()
-
-        model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
-
+    # FP32 wrapper check
     if torch.cuda.is_available():
         # Mostly a test that model.forward will have autocast when running unwrap_model(model, keep_fp32_wrapper=True)
         print("Keep fp32 wrapper check.")
@@ -543,7 +549,7 @@ def training_check(use_seedable_sampler=False):
         input_tensor = torch.Tensor([1, 2]).to(dtype=torch.float16, device=accelerator.device)
         output = model_with_fp32_wrapper(input_tensor)
 
-    # BF16 support is only for CPU + TPU, and some GPU
+    # BF16 support
     if is_bf16_available():
         # Mostly a test that BF16 doesn't crash as the operation inside the model is not converted to BF16
         print("BF16 training check.")
@@ -566,10 +572,60 @@ def training_check(use_seedable_sampler=False):
                 optimizer.step()
 
         model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+        torch.testing.assert_close(
+            old_model.a,
+            model.a,
+            atol=ATOL,
+            rtol=RTOL,
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+        )
+        torch.testing.assert_close(
+            old_model.b,
+            model.b,
+            atol=ATOL,
+            rtol=RTOL,
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+        )
 
-    # IPEX support is only for CPU
+    # FP16 support (HPU fp16 model seems to be off by 10% from the CPU, which is a lot of numerical error)
+    if is_fp16_available() and not is_hpu_available():
+        # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
+        print("FP16 training check.")
+        AcceleratorState._reset_state()
+        dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
+        accelerator = Accelerator(mixed_precision="fp16", dataloader_config=dataloader_config)
+        train_dl = generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler)
+        model = RegressionModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
+        set_seed(42)
+        generator.manual_seed(42)
+        for _ in range(3):
+            for batch in train_dl:
+                model.zero_grad()
+                output = model(batch["x"])
+                loss = torch.nn.functional.mse_loss(output, batch["y"])
+                accelerator.backward(loss)
+                optimizer.step()
+
+        model = accelerator.unwrap_model(model).cpu()
+        torch.testing.assert_close(
+            old_model.a,
+            model.a,
+            atol=ATOL,
+            rtol=RTOL,
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+        )
+        torch.testing.assert_close(
+            old_model.b,
+            model.b,
+            atol=ATOL,
+            rtol=RTOL,
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+        )
+
+    # IPEX CPU tests
     if is_ipex_available():
         print("ipex BF16 training check.")
         AcceleratorState._reset_state()
@@ -591,85 +647,101 @@ def training_check(use_seedable_sampler=False):
                 optimizer.step()
 
         model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
-
-    # XPU support is only for XPU
-    if is_xpu_available():
-        print("xpu BF16 training check.")
-        AcceleratorState._reset_state()
-        dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
-        accelerator = Accelerator(mixed_precision="bf16", cpu=False, dataloader_config=dataloader_config)
-        train_dl = generate_baseline_dataloader(train_set, generator, batch_size, use_seedable_sampler)
-        model = RegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-
-        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
-        set_seed(42)
-        generator.manual_seed(42)
-        for _ in range(3):
-            for batch in train_dl:
-                model.zero_grad()
-                output = model(batch["x"])
-                loss = torch.nn.functional.mse_loss(output, batch["y"])
-                accelerator.backward(loss)
-                optimizer.step()
-
-        model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on XPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on XPU or distributed training."
+        torch.testing.assert_close(
+            old_model.a,
+            model.a,
+            atol=ATOL,
+            rtol=RTOL,
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+        )
+        torch.testing.assert_close(
+            old_model.b,
+            model.b,
+            atol=ATOL,
+            rtol=RTOL,
+            msg=lambda msg: f"Did not obtain the same model on CPU or distributed training.\n{msg}",
+        )
 
 
 def test_split_between_processes_dataset(datasets_Dataset):
     state = AcceleratorState()
     data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes)])
     with state.split_between_processes(data, apply_padding=False) as results:
-        assert (
-            len(results) == 2
-        ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+        assert len(results) == 2, (
+            f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+        )
 
     data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
     with state.split_between_processes(data, apply_padding=False) as results:
         if state.is_last_process:
-            assert (
-                len(results) == 1
-            ), f"Last process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+            assert len(results) == 1, (
+                f"Last process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+            )
         else:
-            assert (
-                len(results) == 2
-            ), f"One of the intermediate processes did not receive two items. Process index: {state.process_index}; Length: {len(results)}"
-
-    data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
-    with state.split_between_processes(data, apply_padding=True) as results:
-        if state.num_processes == 1:
-            assert (
-                len(results) == 1
-            ), f"Single process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
-        else:
-            assert (
-                len(results) == 2
-            ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
-
+            assert len(results) == 2, (
+                f"One of the intermediate processes did not receive two items. Process index: {state.process_index}; Length: {len(results)}"
+            )
     state.wait_for_everyone()
+
+    odd_data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
+    even_data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes)])
+
+    for data in [odd_data, even_data]:
+        expected_output = data["k"]
+
+        with state.split_between_processes(data, apply_padding=True) as results:
+            if state.num_processes == 1:
+                assert len(results) == len(data), (
+                    f"Single process did not receive all items. Process index: {state.process_index}; Length: {len(results)}"
+                )
+            else:
+                assert len(results) == 2, (
+                    f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+                )
+
+            results_per_process = []
+            for result in results:
+                results_per_process.append(result)
+
+        state.wait_for_everyone()
+
+        gathered_results = gather_object(results_per_process)
+        output = [r["k"] for r in gathered_results[: len(data)]]
+
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_list():
     state = AcceleratorState()
     data = list(range(0, 2 * state.num_processes))
     with state.split_between_processes(data) as results:
-        assert (
-            len(results) == 2
-        ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
-
-    data = list(range(0, (3 * state.num_processes) - 1))
-    with state.split_between_processes(data, apply_padding=True) as results:
-        if state.is_last_process:
-            # Test that the last process gets the extra item(s)
-            num_samples_per_device = math.ceil(len(data) / state.num_processes)
-            assert (
-                len(results) == num_samples_per_device
-            ), f"Last process did not get the extra item(s). Process index: {state.process_index}; Length: {len(results)}"
+        assert len(results) == 2, (
+            f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+        )
     state.wait_for_everyone()
+
+    even_data = list(range(0, (2 * state.num_processes)))
+    odd_data = list(range(0, (2 * state.num_processes) - 1))
+    for data in [odd_data, even_data]:
+        expected_output = data
+
+        with state.split_between_processes(data, apply_padding=True) as results:
+            num_samples_per_device = math.ceil(len(data) / state.num_processes)
+            # Test all processes gets the correct number of item(s)
+            assert len(results) == num_samples_per_device, (
+                f"Process {state.device} did not get the correct number of item(s). Process index: {state.process_index}; Length: {len(results)}"
+            )
+
+            results_per_process = []
+            for result in results:
+                results_per_process.append(result)
+
+        state.wait_for_everyone()
+
+        gathered_results = gather_object(results_per_process)
+        output = gathered_results[: len(data)]
+
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_nested_dict():
@@ -687,7 +759,7 @@ def test_split_between_processes_nested_dict():
                 assert results["a"] == data_copy["a"][4:]
             elif state.process_index == 3:
                 # We return a list each time
-                assert results["a"] == data_copy["a"][-2:], f'Expected: {data_copy["a"][-2]}, Actual: {results["a"]}'
+                assert results["a"] == data_copy["a"][-2:], f"Expected: {data_copy['a'][-2]}, Actual: {results['a']}"
             if state.process_index == 0:
                 assert results["b"] == data_copy["b"][: 8 // state.num_processes]
             elif state.num_processes == 2:
@@ -695,17 +767,17 @@ def test_split_between_processes_nested_dict():
             elif state.process_index == 3:
                 assert results["b"] == data_copy["b"][-2:]
             if state.process_index == 0:
-                assert torch.allclose(
-                    results["c"], data_copy["c"][: 8 // state.num_processes]
-                ), f"Did not obtain expected values on process 0, expected `{data['c'][:8 // state.num_processes]}`, received: {results['c']}"
+                assert torch.allclose(results["c"], data_copy["c"][: 8 // state.num_processes]), (
+                    f"Did not obtain expected values on process 0, expected `{data['c'][: 8 // state.num_processes]}`, received: {results['c']}"
+                )
             elif state.num_processes == 2:
-                assert torch.allclose(
-                    results["c"], data_copy["c"][4:]
-                ), f"Did not obtain expected values on process 2, expected `{data['c'][4:]}`, received: {results['c']}"
+                assert torch.allclose(results["c"], data_copy["c"][4:]), (
+                    f"Did not obtain expected values on process 2, expected `{data['c'][4:]}`, received: {results['c']}"
+                )
             elif state.process_index == 3:
-                assert torch.allclose(
-                    results["c"], data_copy["c"][-2:]
-                ), f"Did not obtain expected values on process 4, expected `{data['c'][-2:]}`, received: {results['c']}"
+                assert torch.allclose(results["c"], data_copy["c"][-2:]), (
+                    f"Did not obtain expected values on process 4, expected `{data['c'][-2:]}`, received: {results['c']}"
+                )
 
     state.wait_for_everyone()
 
@@ -716,10 +788,32 @@ def test_split_between_processes_tensor():
         data = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]]).to(state.device)
         with state.split_between_processes(data) as results:
             if state.process_index == 0:
-                assert torch.allclose(results, torch.tensor([0, 1, 2, 3]).to(state.device))
+                expected = torch.tensor([[0, 1, 2, 3]]).to(state.device)
             else:
-                assert torch.allclose(results, torch.tensor([4, 5, 6, 7]).to(state.device))
-    state.wait_for_everyone()
+                expected = torch.tensor([[4, 5, 6, 7]]).to(state.device)
+            torch.testing.assert_close(results, expected)
+        state.wait_for_everyone()
+
+    even_data = torch.tensor([[i] for i in range(2 * state.num_processes)]).to(state.device)
+    odd_data = torch.tensor([[i] for i in range(2 * state.num_processes - 1)]).to(state.device)
+    for data in [even_data, odd_data]:
+        expected_output = [torch.tensor(i) for i in data.tolist()]
+
+        with state.split_between_processes(data, apply_padding=True) as results:
+            num_samples_per_device = math.ceil(len(data) / state.num_processes)
+            assert len(results) == num_samples_per_device, (
+                f"Process {state.device} did not get the correct number of item(s). Process index: {state.process_index}; Length: {len(results)}"
+            )
+            results_per_process = []
+            for result in results:
+                results_per_process.append(result.to("cpu"))
+
+        state.wait_for_everyone()
+
+        gathered_results = gather_object(results_per_process)
+        output = gathered_results[: len(data)]
+
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
 def test_split_between_processes_evenly():
@@ -730,13 +824,13 @@ def test_split_between_processes_evenly():
         num_extras = len(data) % state.num_processes
         with state.split_between_processes(data) as results:
             if state.process_index < num_extras:
-                assert (
-                    len(results) == num_samples_per_process + 1
-                ), f"Each Process should have even elements. Expected: {num_samples_per_process + 1}, Actual: {len(results)}"
+                assert len(results) == num_samples_per_process + 1, (
+                    f"Each Process should have even elements. Expected: {num_samples_per_process + 1}, Actual: {len(results)}"
+                )
             else:
-                assert (
-                    len(results) == num_samples_per_process
-                ), f"Each Process should have even elements. Expected: {num_samples_per_process}, Actual: {len(results)}"
+                assert len(results) == num_samples_per_process, (
+                    f"Each Process should have even elements. Expected: {num_samples_per_process}, Actual: {len(results)}"
+                )
     state.wait_for_everyone()
 
 
