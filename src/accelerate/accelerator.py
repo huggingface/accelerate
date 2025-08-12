@@ -118,6 +118,7 @@ from .utils import (
     recursively_apply,
     reduce,
     release_memory,
+    sanitize_config_values,
     save,
     save_fsdp_model,
     save_fsdp_optimizer,
@@ -3199,8 +3200,11 @@ class Accelerator:
             tracker.start()
 
         if config is not None:
+            # Sanitize config values before passing to trackers
+            from .utils import sanitize_config_values
+            sanitized_config = sanitize_config_values(config)
             for tracker in self.trackers:
-                tracker.store_init_configuration(config)
+                tracker.store_init_configuration(sanitized_config)
 
     def get_tracker(self, name: str, unwrap: bool = False):
         """

@@ -39,6 +39,7 @@ from .utils import (
     is_trackio_available,
     is_wandb_available,
     listify,
+    sanitize_config_values,
 )
 
 
@@ -229,14 +230,16 @@ class TensorBoardTracker(GeneralTracker):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
-        self.writer.add_hparams(values, metric_dict={})
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        self.writer.add_hparams(sanitized_values, metric_dict={})
         self.writer.flush()
         project_run_name = time.time()
         dir_name = os.path.join(self.logging_dir, str(project_run_name))
         os.makedirs(dir_name, exist_ok=True)
         with open(os.path.join(dir_name, "hparams.yml"), "w") as outfile:
             try:
-                yaml.dump(values, outfile)
+                yaml.dump(sanitized_values, outfile)
             except yaml.representer.RepresenterError:
                 logger.error("Serialization to store hyperparameters failed")
                 raise
@@ -340,16 +343,19 @@ class WandBTracker(GeneralTracker):
         """
         import wandb
 
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        
         if os.environ.get("WANDB_MODE") == "offline":
             # In offline mode, restart wandb with config included
             if hasattr(self, "run") and self.run:
                 self.run.finish()
 
             init_kwargs = self.init_kwargs.copy()
-            init_kwargs["config"] = values
+            init_kwargs["config"] = sanitized_values
             self.run = wandb.init(project=self.run_name, **init_kwargs)
         else:
-            wandb.config.update(values, allow_val_change=True)
+            wandb.config.update(sanitized_values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to WandB")
 
     @on_main_process
@@ -476,7 +482,10 @@ class TrackioTracker(GeneralTracker):
         """
         import trackio
 
-        trackio.config.update(values, allow_val_change=True)
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        
+        trackio.config.update(sanitized_values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to trackio")
 
     @on_main_process
@@ -561,7 +570,9 @@ class CometMLTracker(GeneralTracker):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
-        self.writer.log_parameters(values)
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        self.writer.log_parameters(sanitized_values)
         logger.debug("Stored initial configuration hyperparameters to Comet")
 
     @on_main_process
@@ -643,7 +654,9 @@ class AimTracker(GeneralTracker):
             values (`dict`):
                 Values to be stored as initial hyperparameters as key-value pairs.
         """
-        self.writer["hparams"] = values
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        self.writer["hparams"] = sanitized_values
 
     @on_main_process
     def log(self, values: dict, step: Optional[int], **kwargs):
@@ -804,16 +817,19 @@ class MLflowTracker(GeneralTracker):
         """
         import mlflow
 
-        for name, value in list(values.items()):
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        
+        for name, value in list(sanitized_values.items()):
             # internally, all values are converted to str in MLflow
             if len(str(value)) > mlflow.utils.validation.MAX_PARAM_VAL_LENGTH:
                 logger.warning_once(
                     f'Accelerate is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
                     f" log_param() only accepts values no longer than {mlflow.utils.validation.MAX_PARAM_VAL_LENGTH} characters so we dropped this attribute."
                 )
-                del values[name]
+                del sanitized_values[name]
 
-        values_list = list(values.items())
+        values_list = list(sanitized_values.items())
 
         # MLflow cannot log more than 100 values in one go, so we have to split it
         for i in range(0, len(values_list), mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH):
@@ -958,7 +974,9 @@ class ClearMLTracker(GeneralTracker):
             values (`dict`):
                 Values to be stored as initial hyperparameters as key-value pairs.
         """
-        return self.task.connect_configuration(values)
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        return self.task.connect_configuration(sanitized_values)
 
     @on_main_process
     def log(self, values: dict[str, Union[int, float]], step: Optional[int] = None, **kwargs):
@@ -1116,7 +1134,9 @@ class DVCLiveTracker(GeneralTracker):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, or `int`.
         """
-        self.live.log_params(values)
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        self.live.log_params(sanitized_values)
 
     @on_main_process
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
@@ -1202,7 +1222,10 @@ class SwanLabTracker(GeneralTracker):
         """
         import swanlab
 
-        swanlab.config.update(values, allow_val_change=True)
+        # Sanitize values before storing
+        sanitized_values = sanitize_config_values(values)
+        
+        swanlab.config.update(sanitized_values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to SwanLab")
 
     @on_main_process
