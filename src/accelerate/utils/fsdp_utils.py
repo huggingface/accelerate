@@ -14,13 +14,14 @@
 import copy
 import functools
 import os
+import re
 import shutil
 import warnings
 from collections import defaultdict
+from collections.abc import Iterable
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Callable, Union, Iterable, List
-import re
+from typing import Callable, Set, Union
 
 import torch
 
@@ -794,7 +795,8 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
     named_params = {k.replace("._orig_mod", ""): v for k, v in named_params.items()}
     return named_params
 
-def get_parameters_from_modules(modules: Union[Iterable[torch.nn.Module], str], model, device) -> List[torch.nn.Parameter]:
+
+def get_parameters_from_modules(modules: Union[Iterable[torch.nn.Module], str], model, device) -> Set[torch.nn.Parameter]:
     """Converts modules to parameters where modules can be a string or list of torch.nn.Module
     Args:
         modules (`Union[Iterable[torch.nn.Module], str]`): List of modules
@@ -814,4 +816,4 @@ def get_parameters_from_modules(modules: Union[Iterable[torch.nn.Module], str], 
         modules = mapped_modules
     for module in modules:
         parameters.extend(list(module.parameters()))
-    return parameters
+    return set(parameters)
