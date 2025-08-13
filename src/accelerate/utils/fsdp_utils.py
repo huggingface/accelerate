@@ -21,7 +21,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Callable, Set, Union
+from typing import Callable, Union
 
 import torch
 
@@ -630,7 +630,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
         "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
-        "ignored_params": get_parameters_from_modules(fsdp2_plugin.ignored_modules, model, accelerator.device)
+        "ignored_params": get_parameters_from_modules(fsdp2_plugin.ignored_modules, model, accelerator.device),
     }
 
     model_has_params4bit = False
@@ -796,8 +796,11 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
     return named_params
 
 
-def get_parameters_from_modules(modules: Union[Iterable[torch.nn.Module], str], model, device) -> Set[torch.nn.Parameter]:
+def get_parameters_from_modules(
+    modules: Union[Iterable[torch.nn.Module], str], model, device
+) -> set[torch.nn.Parameter]:
     """Converts modules to parameters where modules can be a string or list of torch.nn.Module
+
     Args:
         modules (`Union[Iterable[torch.nn.Module], str]`): List of modules
 
