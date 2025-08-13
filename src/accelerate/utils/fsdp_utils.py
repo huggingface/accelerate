@@ -807,6 +807,8 @@ def get_parameters_from_modules(
     Returns:
         `List[torch.nn.Parameter]`: List of parameters
     """
+    if modules is None:
+        return None
     parameters = []
     # code taken from accelerate while preparing kwargs for FSDP
     if isinstance(modules, str):
