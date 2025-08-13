@@ -400,18 +400,19 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
     def test_ignored_modules_regex(self):
         # Check that FSDP's ignored_modules can be a string, in which case it is treated as a regex
-        if self.current_fsdp_version != 1:
-            self.skipTest("ignored_modules only relevant for FSDP1")
-
         env = self.fsdp_envs[1].copy()
         env["FSDP_IGNORED_MODULES"] = ".*\\.q_proj$"
         with patch_environment(**env):
             accelerator = Accelerator()
             model = AutoModel.from_pretrained(LLAMA_TESTING)
-            # model has 2 layers
-            layers_to_ignore = {model.layers[0].self_attn.q_proj, model.layers[1].self_attn.q_proj}
             model = accelerator.prepare(model)
-            assert model._ignored_modules == layers_to_ignore
+            if self.current_fsdp_version == 1:
+                # model has 2 layers
+                layers_to_ignore = {model.layers[0].self_attn.q_proj, model.layers[1].self_attn.q_proj}
+                assert model._ignored_modules == layers_to_ignore
+            else:
+                params_to_ignore = {model.layers[0].self_attn.q_proj.weight, model.layers[1].self_attn.q_proj.weight}
+                assert model._ignored_params == params_to_ignore
 
 
 @require_fsdp2
