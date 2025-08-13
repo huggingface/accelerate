@@ -1564,7 +1564,7 @@ class FullyShardedDataParallelPlugin:
             `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2.
         ignored_modules (`Optional[Union[Iterable[torch.nn.Module], str]]`, defaults to `None`):
             A list of modules to ignore when wrapping with FSDP. When passing a string, will match the modules by name
-            using regex fullmatch.
+            using regex fullmatch. If `fsdp_version` is set to 2, the modules are converted to parameters and used.
         state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
             State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or
             `sharded_state_dict`.
