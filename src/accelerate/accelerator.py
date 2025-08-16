@@ -577,6 +577,7 @@ class Accelerator:
                 "musa",
                 "hpu",
                 "sdaa",
+                "mps",
             ) or is_torch_xla_available(check_is_tpu=True):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
