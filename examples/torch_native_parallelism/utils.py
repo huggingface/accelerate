@@ -17,6 +17,7 @@ Common utilities for FSDP2 examples.
 """
 
 import time
+from contextlib import nullcontext
 
 import torch
 from datasets import Dataset, load_dataset
@@ -25,7 +26,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from accelerate import Accelerator
 
 
-def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int) -> Dataset:
+def get_dataset(tokenizer: AutoTokenizer, seq_len: int, accelerator: Accelerator | None) -> Dataset:
     """
     Load and prepare TinyStories dataset.
 
@@ -37,6 +38,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
     Returns:
         Dataset: Packed dataset
     """
+    processing_ctx = accelerator.main_process_first if accelerator else nullcontext
     raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:50%]")
 
     def tokenize_function(examples):
@@ -50,7 +52,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
         tokenized_batch["labels"] = tokenized_batch["input_ids"].copy()
         return tokenized_batch
 
-    with accelerator.main_process_first():
+    with processing_ctx():
         tokenized_dataset = raw_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
 
     def create_packed_sequences(examples):
@@ -61,6 +63,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
         num_sequences = len(all_tokens) // (seq_len + 1)
         packed_input_ids = []
         packed_labels = []
+        packed_position_ids = []
 
         for i in range(num_sequences):
             start_idx = i * (seq_len + 1)
@@ -68,10 +71,16 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
             full_sequence = all_tokens[start_idx:end_idx]
             packed_input_ids.append(full_sequence[:-1])
             packed_labels.append(full_sequence[1:])
+            packed_position_ids.append(torch.arange(0, seq_len))
 
-        return {"input_ids": packed_input_ids, "shift_labels": packed_labels}
+        return {
+            "input_ids": packed_input_ids,
+            "shift_labels": packed_labels,
+            "position_ids": packed_position_ids,
+            "labels": packed_labels,
+        }
 
-    with accelerator.main_process_first():
+    with processing_ctx():
         packed_dataset = tokenized_dataset.map(
             create_packed_sequences,
             batched=True,
