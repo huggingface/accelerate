@@ -632,7 +632,9 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
     }
     if fsdp2_plugin.ignored_modules is not None:
-        fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(fsdp2_plugin.ignored_modules, model, accelerator.device)
+        fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(
+            fsdp2_plugin.ignored_modules, model, accelerator.device
+        )
 
     model_has_params4bit = False
     for name, param in model.named_parameters():
