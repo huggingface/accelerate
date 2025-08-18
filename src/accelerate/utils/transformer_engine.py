@@ -60,9 +60,11 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
         # Note: @xrsrke (Phuc) found that te.LayerNorm doesn't have any real memory savings or speedups over nn.LayerNorm
         elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
             with GatheredParameters([module.weight, module.bias], modifier_rank=0):
+                has_bias = module.bias is not None
                 te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
                 te_module.weight.copy_(module.weight)
-                te_module.bias.copy_(module.bias)
+                if has_bias:
+                    te_module.bias.copy_(module.bias)
 
             setattr(model, name, te_module)
         elif isinstance(module, te.Linear) and not to_transformer_engine and _convert_linear:
