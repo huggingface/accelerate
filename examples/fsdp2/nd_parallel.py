@@ -54,11 +54,13 @@ def parse_args():
 
 
 def forward(model, batch, optimizer, accelerator: Accelerator):
+    # we also need to prepare position_ids ourselves, as we need them to be affected by context parallel load balancing! (very important)
+    batch["position_ids"] = torch.arange(0, batch["input_ids"].size(1), device=batch["input_ids"].device).unsqueeze(0)
     # We need both labels and shift_labels, as the loss computation in the model is hidden behind `if labels is not None`, but the loss computation
     # itself prioritzes shift_labels (if provided) which are the correct ones (due to labels being wrong if cp enabled)
-    buffers = [batch["input_ids"], batch["shift_labels"], batch["labels"]]
+    buffers = [batch["input_ids"], batch["shift_labels"], batch["labels"], batch["position_ids"]]
     with accelerator.maybe_context_parallel(
-        buffers=buffers, buffer_seq_dims=[1, 1, 1], no_restore_buffers=set(buffers)
+        buffers=buffers, buffer_seq_dims=[1, 1, 1, 1], no_restore_buffers=set(buffers)
     ):
         # To get the proper loss value, we need to average across devices that are participating in data parallel/context parallel training
         # As for DP we have a different batch on each device and for CP we essentially have a different part of sequences on each device
