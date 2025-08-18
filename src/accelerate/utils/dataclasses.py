@@ -1948,7 +1948,12 @@ class FullyShardedDataParallelPlugin:
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
-
+        if is_torch_version("<", "2.7.0") and self.fsdp_version == 2 and self.ignored_modules is not None:
+            _fsdp2_warnings.add(
+                "FSDP2 ignored_params/ignored_modules is not available for torch version < 2.7.0"
+                "Setting ignored_modules to None."
+            )
+            self.ignored_modules = None
         #  Single warning for all deprecation warnings due to FSDP2 conversion
         if _fsdp2_warnings:
             logger.warning("Multiple deprecation warnings due to FSDP2 conversion:\n".join(_fsdp2_warnings))
