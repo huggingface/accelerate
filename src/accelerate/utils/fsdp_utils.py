@@ -14,12 +14,14 @@
 import copy
 import functools
 import os
+import re
 import shutil
 import warnings
 from collections import defaultdict
+from collections.abc import Iterable
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Union
 
 import torch
 
@@ -629,6 +631,10 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
         "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
     }
+    if fsdp2_plugin.ignored_modules is not None:
+        fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(
+            fsdp2_plugin.ignored_modules, model, accelerator.device
+        )
 
     model_has_params4bit = False
     for name, param in model.named_parameters():
@@ -791,3 +797,31 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
     }
     named_params = {k.replace("._orig_mod", ""): v for k, v in named_params.items()}
     return named_params
+
+
+def get_parameters_from_modules(
+    modules: Union[Iterable[torch.nn.Module], str], model, device
+) -> set[torch.nn.Parameter]:
+    """Converts modules to parameters where modules can be a string or list of torch.nn.Module
+
+    Args:
+        modules (`Union[Iterable[torch.nn.Module], str]`): List of modules
+
+    Returns:
+        `List[torch.nn.Parameter]`: List of parameters
+    """
+    if modules is None:
+        return None
+    parameters = []
+    # code taken from accelerate while preparing kwargs for FSDP
+    if isinstance(modules, str):
+        reg = re.compile(modules)
+        mapped_modules = []
+        for name, module in model.named_modules():
+            if reg.fullmatch(name):
+                module.to(device)
+                mapped_modules.append(module)
+        modules = mapped_modules
+    for module in modules:
+        parameters.extend(list(module.parameters()))
+    return set(parameters)
