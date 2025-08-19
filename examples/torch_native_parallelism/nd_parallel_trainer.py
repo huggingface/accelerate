@@ -11,36 +11,53 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import argparse
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
-from accelerate.utils import set_seed
+from accelerate.utils import ParallelismConfig
 from utils import get_dataset
 
 
-def main():
-    set_seed(42)
-    model_name = "NousResearch/Hermes-3-Llama-3.1-8B"
-    seq_len = 1024
+MODEL_ID = "NousResearch/Hermes-3-Llama-3.1-8B"
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sequence-length", type=int, default=4096)
+    parser.add_argument("--checkpoint-frequency", type=int, default=100)
+    parser.add_argument("--model-name", type=str, default=MODEL_ID)
+    parser.add_argument("--save-dir", type=str, default=f"./accelerate-nd-parallel-{MODEL_ID.split('/')[-1]}")
+    parser.add_argument("--device-type", type=str, default="cuda")
+    return parser.parse_args()
+
+
+def main():
+    pc = ParallelismConfig()
+    args = parse_args()
+
+    model_kwargs = {}
+    if pc.tp_enabled:
+        model_kwargs["tp_plan"] = "auto"
+        model_kwargs["device_mesh"] = pc.build_device_mesh(args.device_type)
+
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    model = AutoModelForCausalLM.from_pretrained(args.model_name, use_cache=False, **model_kwargs)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    packed_dataset = get_dataset(tokenizer, seq_len)
+    packed_dataset = get_dataset(tokenizer, args.sequence_length)
 
     training_args = TrainingArguments(
-        output_dir=f"./accelerate-nd-parallel-{model_name.split('/')[-1]}",
+        output_dir=args.save_dir,
         num_train_epochs=1,
         per_device_train_batch_size=1,
         logging_steps=5,
-        save_steps=100,
+        save_steps=args.checkpoint_frequency,
         learning_rate=5e-5,
         remove_unused_columns=False,
-        seed=42,
         bf16=True,
-        data_seed=42,
     )
 
     trainer = Trainer(
