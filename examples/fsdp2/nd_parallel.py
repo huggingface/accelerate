@@ -34,24 +34,8 @@ from utils import (
     setup_tokenizer,
 )
 
-
-MODEL_ID = "NousResearch/Hermes-3-Llama-3.1-8B"
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dp-replicate-size", type=int, default=1)
-    parser.add_argument("--dp-shard-size", type=int, default=1)
-    parser.add_argument("--tp-size", type=int, default=1)
-    parser.add_argument("--cp-size", type=int, default=1)
-    parser.add_argument("--sequence-length", type=int, default=1024)
-    parser.add_argument("--num-steps", type=int, default=1000)
-    parser.add_argument("--save-dir", type=str, default="./outputs")
-    parser.add_argument("--checkpoint-frequency", type=int, default=100)
-    parser.add_argument("--model-name", type=str, default=MODEL_ID)
-
-    return parser.parse_args()
-
+MODEL_ID = "Qwen/Qwen2.5-7B"
+# MODEL_ID = "axolotl-ai-co/gpt-oss-120b-dequantized"
 
 def forward(model, batch, optimizer, accelerator: Accelerator):
     # We need both labels and shift_labels, as the loss computation in the model is hidden behind `if labels is not None`, but the loss computation
@@ -78,90 +62,56 @@ def forward(model, batch, optimizer, accelerator: Accelerator):
     return loss
 
 
-def train(args):
+def train():
     parallelism_config = ParallelismConfig(
-        dp_replicate_size=args.dp_replicate_size,
-        dp_shard_size=args.dp_shard_size,
-        tp_size=args.tp_size,
-        cp_size=args.cp_size,
+        dp_shard_size=2,
     )
 
-    # FSDP needs extra configuration, so we properly shard the model
     fsdp2_plugin = None
-    if parallelism_config.dp_shard_enabled or parallelism_config.cp_enabled:
+    if parallelism_config.dp_shard_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
             auto_wrap_policy="transformer_based_wrap",
-            transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
+            # transformer_cls_names_to_wrap=["GptOssDecoderLayer"],
+            transformer_cls_names_to_wrap=["Qwen2DecoderLayer"],
             state_dict_type="SHARDED_STATE_DICT",
+            cpu_offload=True
+            
         )
 
     accelerator = Accelerator(
-        log_with=["wandb"], mixed_precision="bf16", parallelism_config=parallelism_config, fsdp_plugin=fsdp2_plugin
+        mixed_precision="bf16", parallelism_config=parallelism_config, fsdp_plugin=fsdp2_plugin
     )
-    accelerator.init_trackers("nd_parallel_training")
-
-    # If TP was enabled, we need to tell transformers to prepare the model for us
-    model_kwargs = (
-        {"tp_size": args.tp_size, "tp_plan": "auto", "device_mesh": accelerator.torch_device_mesh}
-        if args.tp_size > 1
-        else {}
-    )
+    if accelerator.is_main_process:
+        device_map = "cpu"
+    else:
+        device_map="meta"
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_name,
+        MODEL_ID,
         torch_dtype=torch.bfloat16,
-        use_cache=False,
-        **model_kwargs,
+        device_map=device_map
     )
-    tokenizer = setup_tokenizer(args.model_name)
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
-    dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
-    dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
 
-    model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+    model, optimizer = accelerator.prepare(model, optimizer)
+    print(torch.distributed.get_rank(), gpu_memory_usage_all())
 
-    total_num_steps = min(args.num_steps, len(dataloader))
-    performance_tracker = PerformanceTracker(warmup_steps=5)
+def gpu_memory_usage_all(device=0):
+    device = torch.device(f"cuda:{device}")
+    _BYTES_IN_GIB = 1024**3
+    peak_memory_active = torch.cuda.memory_stats().get("active_bytes.all.peak", 0) / _BYTES_IN_GIB
+    peak_memory_alloc = torch.cuda.max_memory_allocated(device) / _BYTES_IN_GIB
+    peak_memory_reserved = torch.cuda.max_memory_reserved(device) / _BYTES_IN_GIB
+    memory_stats = {
+        "peak_memory_active": peak_memory_active,
+        "peak_memory_alloc": peak_memory_alloc,
+        "peak_memory_reserved": peak_memory_reserved,
+    }
+    torch.cuda.reset_peak_memory_stats(device)
 
-    accelerator.print("Starting training...")
-    for step, batch in enumerate(dataloader):
-        if step >= total_num_steps:
-            break
-
-        loss = forward(model, batch, optimizer, accelerator)
-
-        # We report TPS per device, so we divide by the number of devices in the non-data parallel dimension
-        metrics = performance_tracker.step(batch["input_ids"].shape[1] / parallelism_config.non_data_parallel_size)
-
-        print_msg = f"Step {step}/{total_num_steps}, Loss: {loss.item():.4f}"
-        if "warmup_completed" in metrics:
-            accelerator.print("Warm up completed! Starting performance tracking...")
-        elif metrics:
-            print_msg += performance_tracker.get_print_message(metrics, with_memory=True)
-
-        if step % 10 == 0 or step == total_num_steps - 1:
-            accelerator.print(print_msg)
-
-        if step % args.checkpoint_frequency == 0 and step > 0 and parallelism_config.dp_shard_enabled:
-            accelerator.print(f"Saving checkpoint at step {step}...")
-            accelerator.save_state(args.save_dir + f"/checkpoint-{step}")
-
-        accelerator.log({"loss": loss.item()})
-
-    accelerator.print("Training completed!")
-
-    model.save_pretrained(args.save_dir + f"/{args.model_name}")
-    accelerator.print(f"Model saved to {args.save_dir}/{args.model_name}")
-    accelerator.end_training()
+    return memory_stats
 
 
 if __name__ == "__main__":
     set_seed(42)
-    args = parse_args()
-    if args.dp_shard_size == 1 and args.tp_size > 1:
-        # We currently don't support saving with `save_state` when using only
-        # tensor parallelism, fsdp must be enabled
-        warnings.warn(
-            "Accelerator.save_state() is not yet supported with pure tensor parallel training. Training will work, but intermediate checkpoints will not be saved."
-        )
-    train(args)
+    train()
