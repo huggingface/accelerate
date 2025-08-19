@@ -26,7 +26,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from accelerate import Accelerator
 
 
-def get_dataset(tokenizer: AutoTokenizer, seq_len: int, accelerator: Accelerator | None) -> Dataset:
+def get_dataset(tokenizer: AutoTokenizer, seq_len: int, accelerator: Accelerator | None = None) -> Dataset:
     """
     Load and prepare TinyStories dataset.
 

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
 from accelerate.utils import set_seed
 from utils import get_dataset
@@ -23,8 +23,7 @@ def main():
     seq_len = 1024
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    cfg = AutoConfig.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_config(cfg)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -32,11 +31,11 @@ def main():
     packed_dataset = get_dataset(tokenizer, seq_len)
 
     training_args = TrainingArguments(
-        output_dir="./qwen-finetuned",
+        output_dir=f"./accelerate-nd-parallel-{model_name.split('/')[-1]}",
         num_train_epochs=1,
         per_device_train_batch_size=1,
         logging_steps=5,
-        save_steps=1000,
+        save_steps=100,
         learning_rate=5e-5,
         remove_unused_columns=False,
         seed=42,
