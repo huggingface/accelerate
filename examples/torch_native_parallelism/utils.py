@@ -140,7 +140,7 @@ class PerformanceTracker:
         self.is_in_warmup = True
         self.step_count = 0
 
-    def step(self, batch_tokens: int) -> dict:
+    def step(self, batch_tokens: int, model_flops_per_token: float | None = None) -> dict:
         """
         Update performance tracking with a new step.
 
@@ -159,13 +159,14 @@ class PerformanceTracker:
             return {"warmup_completed": True}
 
         if not self.is_in_warmup and self.start_time is not None:
+            dct = {}
             self.num_tokens += batch_tokens
             total_time = time.perf_counter() - self.start_time
             steps_from_warmup = self.step_count - self.warmup_steps
 
             if total_time > 0 and steps_from_warmup > 0:
                 memory_stats = gpu_memory_usage_all()
-                return {
+                dct = {
                     "tokens_per_second": self.num_tokens / total_time,
                     "steps_per_second": steps_from_warmup / total_time,
                     "total_tokens": self.num_tokens,
@@ -173,10 +174,16 @@ class PerformanceTracker:
                     **memory_stats,
                 }
 
+            if model_flops_per_token is not None:
+                flops = model_flops_per_token * self.num_tokens
+                dct["tflops_per_device"] = flops / (total_time * 1e12)
+            
+            return dct
+
         return {}
 
     def get_print_message(self, metrics: dict, with_memory: bool = False) -> str:
-        print_msg = f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f}\n"
+        print_msg = f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f} | Average TFLOPS: {metrics['tflops_per_device']:.2f}\n"
         if with_memory:
             print_msg += (
                 f"\tMemory (GB): active={metrics['peak_memory_active']:.1f}, "

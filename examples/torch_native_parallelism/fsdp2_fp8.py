@@ -18,16 +18,19 @@ This example demonstrates how to use torchao's Float8LinearConfig with Accelerat
 """
 
 import argparse
-import time
 
 import torch
-from datasets import Dataset, load_dataset
 from torch.utils.data import DataLoader
 from torchao.float8 import Float8LinearConfig
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from accelerate import Accelerator
 from accelerate.utils import AORecipeKwargs, FullyShardedDataParallelPlugin, TorchDynamoPlugin, set_seed
+from utils import (
+    PerformanceTracker,
+    create_collate_fn,
+    get_dataset,
+)
 
 
 WARMUP_STEPS = 10
@@ -70,64 +73,6 @@ def get_model_flops_per_token(model: AutoModelForCausalLM, args: argparse.Namesp
     return (mlp_flops + attn_flops + attn_dotproduct_flops) * cfg.num_hidden_layers
 
 
-def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int) -> Dataset:
-    """
-    Load and prepare TinyStories dataset.
-
-    Args:
-        accelerator (Accelerate): Accelerate accelerator instance
-        tokenizer (AutoTokenizer): Hugging Face tokenizer
-        seq_len (int): Sequence length for the dataset
-
-    Returns:
-        Dataset: Packed dataset
-    """
-
-    raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:50%]")
-
-    def tokenize_function(examples):
-        tokenized_batch = tokenizer(
-            examples["text"],
-            padding=False,
-            truncation=True,
-            max_length=seq_len,
-            return_tensors=None,
-        )
-        tokenized_batch["labels"] = tokenized_batch["input_ids"].copy()
-        return tokenized_batch
-
-    with accelerator.main_process_first():
-        tokenized_dataset = raw_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
-
-    def create_packed_sequences(examples):
-        all_tokens = []
-        for input_ids in examples["input_ids"]:
-            all_tokens.extend(input_ids)
-
-        num_sequences = len(all_tokens) // (seq_len + 1)
-        packed_input_ids = []
-        packed_labels = []
-
-        for i in range(num_sequences):
-            start_idx = i * (seq_len + 1)
-            end_idx = start_idx + (seq_len + 1)
-            full_sequence = all_tokens[start_idx:end_idx]
-            packed_input_ids.append(full_sequence[:-1])
-            packed_labels.append(full_sequence[1:])
-
-        return {"input_ids": packed_input_ids, "labels": packed_labels}
-
-    with accelerator.main_process_first():
-        packed_dataset = tokenized_dataset.map(
-            create_packed_sequences,
-            batched=True,
-            remove_columns=tokenized_dataset.column_names,
-            batch_size=1000,
-        )
-
-    return packed_dataset.shuffle(seed=42)
-
-
 def main():
     """
     Main function to train the model.
@@ -151,7 +96,6 @@ def main():
 
     fp8_config = Float8LinearConfig(
         enable_fsdp_float8_all_gather=True,  # extra saving by gathering parameters in fp8 and upcasting after
-        force_recompute_fp8_weight_in_bwd=True,
     )
 
     kwargs = []
@@ -179,39 +123,19 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+    dataset = get_dataset(tokenizer, args.sequence_length, accelerator)
+    dataloader = DataLoader(dataset, batch_size=1, collate_fn=create_collate_fn())
 
-    model, optimizer = accelerator.prepare(model, optimizer)
-
-    dataset = get_dataset(accelerator, tokenizer, args.sequence_length)
-
-    def collate_fn(batch):
-        input_ids = torch.tensor([item["input_ids"] for item in batch], dtype=torch.long)
-        labels = torch.tensor([item["labels"] for item in batch], dtype=torch.long)
-        # Transformers expect `labels` to not be shifted, though we already shifted them, so we pass them both
-        # We need to pass both `shift_labels` and `labels` to the model, as the loss is calculated inside `if labels is not None`
-        # `shift_labels` take precedence over `labels` in this case
-        return {"input_ids": input_ids, "labels": labels, "shift_labels": labels}
-
-    # We keep batch size at 1, as it is basically the same as sequence length, which we use instead
-    dataloader = DataLoader(dataset, batch_size=1, collate_fn=collate_fn)
-    dataloader = accelerator.prepare(dataloader)
+    model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+    accelerator.wait_for_everyone()
 
     model.train()
 
     total_num_steps = min(args.num_steps, len(dataloader))
-    num_tokens = 0
-    is_in_warmup = True
     model_flops_per_token = get_model_flops_per_token(model, args)
-
-    accelerator.print(f"Warming up for {WARMUP_STEPS} steps...")
+    performance_tracker = PerformanceTracker(warmup_steps=5)
 
     for step, batch in enumerate(dataloader):
-        if step == WARMUP_STEPS:
-            accelerator.print("Warm up completed! Starting training")
-            start_time = time.perf_counter()
-            num_tokens = 0
-            is_in_warmup = False
-
         if step >= total_num_steps:
             break
 
@@ -221,30 +145,15 @@ def main():
         accelerator.backward(loss)
         optimizer.step()
         optimizer.zero_grad()
+        metrics = performance_tracker.step(batch["input_ids"].shape[1], model_flops_per_token)
 
-        steps_from_warmup = step - WARMUP_STEPS
         print_msg = f"Step {step}/{total_num_steps}, Loss: {loss.item():.4f}"
-        metrics = {"loss": loss.item()}
+        if "warmup_completed" in metrics:
+            accelerator.print("Warm up completed! Starting training")
+        elif metrics:
+            print_msg += performance_tracker.get_print_message(metrics)
 
-        if not is_in_warmup and steps_from_warmup > 0:
-            num_tokens += batch["input_ids"].shape[1]
-            total_time = time.perf_counter() - start_time
-            tps = num_tokens / total_time
-            tflops = num_tokens * model_flops_per_token / (total_time * 1e12)
-
-            # it's rather hard to get a good estimate of MFU as we train with FP8, so both FP8 and BF16 tensor cores are used, therefore we just report TFLOPS (Tera floating point operations per second)
-            # Given H100 SXM, the theoretical peak flops are ~990 TFLOPS for bf16 and ~1980 TFLOPS for fp8 [https://resources.nvidia.com/en-us-gpu-resources/h100-datasheet-24306]
-            # This is WITH sparsity, so we divide by 2 to get the answer w/o sparsity
-            print_msg += f", Average steps/s: {steps_from_warmup / total_time:.2f}, TPS per device: {tps:.2f}, TFLOPS per device: {tflops:.2f}"
-            metrics.update(
-                {
-                    "steps_per_second": steps_from_warmup / total_time,
-                    "tps_per_device": tps,
-                    "tflops_per_device": tflops,
-                }
-            )
-
-        if steps_from_warmup % 10 == 0 or step == total_num_steps:
+        if step % 10 == 0 or step == total_num_steps - 1:
             accelerator.print(print_msg)
 
         accelerator.log(metrics)

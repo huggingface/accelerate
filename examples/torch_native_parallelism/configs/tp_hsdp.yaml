@@ -17,8 +17,8 @@ mixed_precision: bf16
 num_machines: 1
 num_processes: 8
 parallelism_config:
-  parallelism_config_cp_size: 2
-  parallelism_config_dp_replicate_size: 1
+  parallelism_config_cp_size: 1
+  parallelism_config_dp_replicate_size: 2
   parallelism_config_dp_shard_size: 2
   parallelism_config_tp_size: 2
 rdzv_backend: static

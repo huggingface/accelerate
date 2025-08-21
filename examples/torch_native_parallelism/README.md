@@ -1,15 +1,18 @@
-## FSDP2 Examples
+## Torch Native Parallelism
 
-This folder contains examples of using FSDP2 with Accelerate, utilizing extra methods to improve training speed, performance or accuracy.
+With recent versions of Torch, there has been steady improvements in native parallelism using torch `DeviceMesh` and `DTensor`. 🤗 accelerate allows you to use these with our `ParallelismConfig` abstraction and/or `FullyShardedDataParallelPlugin(fsdp_version=2)`
+This folder contains various examples of such use-cases: such as composing multiple parallelism strategies, low-bit training etc.
 
-### FSDP2 + ND Parallelism
+### ND Parallelism
 
 With `ParallelismConfig`, you can use 🤗 accelerate to train models with n-dimensional parallelism. This builds on top of 🤗 transformers, which we utilize for tensor parallelism sharding.
 Accelerate then takes care of everything else, such as data parallelism, FSDP, and more to come.
-Script `nd_parallel.py` showcases just how you can do it. We enable you to configure 3 different parallel dimensions (for now 👀):
+Script `nd_parallel.py` showcases just how you can do it. We enable you to configure 4 different parallel dimensions (for now 👀):
 - dp_replicate_size: how many replicas of the model to create, each replica is trained on a different subset of the data and averaged at the end of each step, same as DDP in Torch
 - dp_shard_size: across how many devices is the model sharded, this is utilizing FSDP2 to shard the model across devices, so each device has a different part of the model
 - tp_size: how many devices to use for tensor parallelism, this is utilizing the tensor parallelism from 🤗 transformers
+- cp_size: how many devices to use for context parallelism, this will also shard the model, optimizer and gradients using `FSDP2` across
+the same group of devices, to further optimize memory usage (this comes with no slowdown)
 
 For example, with 8 nodes, you can run the script as such:
 ```bash
@@ -25,9 +28,22 @@ accelerate launch --num-processes 8 nd_parallel.py \
   with `--dp-replicate-size`. This is only a general guideline, you can (and should) experiment with different parallelism configurations to find the best one for your model and hardware. You can learn more about the general strategies for parallelism in our [blog](TODO) or if you wanna dive deep, read the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook).
 </Tip>
 
-We plan to add more parallelisms in the future, with context parallelism coming soon and pipeline parallelism being planned.
+This feature is fully integrated into 🤗 transformers `Trainer` as well. It's as simple as launching your script with path to your accelerate config file. You can see a minimal example of that in `nd_parallel_trainer.py`.
+You can launch that script as:
 
-### FSDP2 + ao Float8Linear
+#### HSDP + TP (3D parallelism)
+
+```bash
+accelerate launch --config-file configs/tp_hsdp.yaml nd_parallel_trainer.py
+```
+
+#### Context parallelism (128k sequence length)
+
+```bash
+accelerate launch --config-file configs/cp.yaml nd_parallel_trainer.py --sequence-length=128000
+```
+
+  ### FSDP2 + ao Float8Linear
 
 In file `fsdp2_fp8.py` we use `Float8Linear` from `ao` to train a model partially in FP8 precision. We utilize `AORecipeKwargs` to pass the `Float8LinearConfig` to the accelerator, 
 which replaces the default `torch.nn.Linear` with `Float8Linear`. We also utilize `TorchDynamoPlugin` together with regional compilation to compile the model,
@@ -41,16 +57,16 @@ In our example, we use a 8B Llama3.1 model, which has a hidden dimension of 4096
 <div style="display: flex; gap: 25px;">
   <div style="text-align: center; width: 49%;">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/examples/fsdp2/fp8_tps.png" alt="tps" style="width: 100%;">
-    <p style="text-align: center; margin-top: 8px;">TPs per device, bf16 vs fp8</p>
+    <p style="text-align: center; margin-top: 8px;">TPS per device, BF16 vs FP8</p>
   </div>
   <div style="text-align: center; width: 49%;">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/examples/fsdp2/fp8_tflops.png" alt="tflops" style="width: 100%;">
-    <p style="text-align: center; margin-top: 8px;">TFLOPS per device, bf16 vs fp8. We cannot really compare MFU as fp8 tensor cores are used as well.</p>
+    <p style="text-align: center; margin-top: 8px;">TFLOPS per device, BF16 vs FP8. We cannot really compare MFU as FP8 tensor cores are used as well.</p>
   </div>
   
   <div style="text-align: center; width: 49%;">  
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/examples/fsdp2/fp8_loss.png" alt="loss" style="width: 100%; max-width: 900px;">
-    <p style="text-align: center; margin-top: 8px;">Loss curve, bf16 vs fp8, it's hard to see the difference as the curves mostly overlap</p>
+    <p style="text-align: center; margin-top: 8px;">Loss curve, BF16 vs FP8, it's hard to see the difference as the curves mostly overlap</p>
   </div>
 </div>
 
