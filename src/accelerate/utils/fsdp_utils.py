@@ -155,6 +155,23 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
                 planner=DefaultSavePlanner(),
             )
             logger.info(f"Model saved to {ckpt_dir}")
+            
+            
+def reset_fsdp_state(model):
+    """Reset FSDP internal state after loading checkpoint"""
+    from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+    
+    def reset_fsdp_attributes(module):
+        if isinstance(module, FSDP):
+            # Reset the _is_root attribute for non-root modules
+            if hasattr(module, '_is_root') and module != model:
+                module._is_root = False
+            # Reset other FSDP state if needed
+            if hasattr(module, '_has_lazy_init'):
+                module._has_lazy_init = False
+    
+    model.apply(reset_fsdp_attributes)
+    return model
 
 
 def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False):
@@ -228,6 +245,8 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             logger.info(f"Model loaded from {ckpt_dir}")
 
         load_result = _set_model_state_dict(loading_model, state_dict, adapter_only=adapter_only, sd_options=sd_options)
+        if model != loading_model:
+            reset_fsdp_state(loading_model)
     return load_result
 
 
