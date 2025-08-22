@@ -60,9 +60,9 @@ torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 class ModelForTest(nn.Module):
     def __init__(self):
         super().__init__()
-        self.linear1 = nn.Linear(3, 4)
-        self.batchnorm = nn.BatchNorm1d(4)
-        self.linear2 = nn.Linear(4, 5)
+        self.linear1 = nn.Linear(3, 4)  # (12 + 4) * 4 = 64
+        self.batchnorm = nn.BatchNorm1d(4)  # (4 * 4) * 4 + 8 = 72
+        self.linear2 = nn.Linear(4, 5)  # (20 + 5) * 4 = 100
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
@@ -555,7 +555,7 @@ class ModelingUtilsTester(unittest.TestCase):
         # model has size 236: linear1 64, batchnorm 72, linear2 100
         try:
             with self.assertLogs() as cm:
-                device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200})
+                device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200}, reserve_max_layer=True)
                 self.assertFalse(any("insufficient memory" in out for out in cm.output))
         except AssertionError:
             # No logs exist; test passes implicitly
@@ -564,7 +564,19 @@ class ModelingUtilsTester(unittest.TestCase):
         # only linear1 fits on device 0 as we keep memory available for the maximum layer in case of offload
         assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": 1}
 
-        device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 172, 2: 200})
+        # test with reserve_max_layer=False (default)
+        try:
+            with self.assertLogs() as cm:
+                device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200})
+                self.assertFalse(any("insufficient memory" in out for out in cm.output))
+        except AssertionError:
+            # No logs exist; test passes implicitly
+            pass
+
+        # since there are no offloaded modules, we can allocate linear1 and batchnorm to device 0
+        assert device_map == {"linear1": 0, "batchnorm": 0, "linear2": 1}
+
+        device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 172, 2: 200}, reserve_max_layer=True)
         # On device 1, we don't care about keeping size available for the max layer, so even if there is just the
         # size available for batchnorm + linear2, they fit here.
         assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": 1}
@@ -576,50 +588,72 @@ class ModelingUtilsTester(unittest.TestCase):
 
         # When splitting a bigger model, the split is done at the layer level
         model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
-        device_map = infer_auto_device_map(model, max_memory={0: 500, 1: 500})
+        device_map = infer_auto_device_map(model, max_memory={0: 500, 1: 500}, reserve_max_layer=True)
         assert device_map == {"0": 0, "1.linear1": 0, "1.batchnorm": 0, "1.linear2": 1, "2": 1}
+
+        # Splitting is done when not reserving max layer
+        device_map = infer_auto_device_map(model, max_memory={0: 536, 1: 500})
+        assert device_map == {"0": 0, "1": 0, "2.linear1": 0, "2.batchnorm": 1, "2.linear2": 1}
 
         # With no_split_module_classes, it's done at that module level
         model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
         device_map = infer_auto_device_map(
-            model, max_memory={0: 500, 1: 500}, no_split_module_classes=["ModelForTest"]
+            model,
+            max_memory={0: 500, 1: 500},
+            no_split_module_classes=["ModelForTest"],
+            reserve_max_layer=True
         )
         assert device_map == {"0": 0, "1": 1, "2": 1}
 
-        # Setting reserve_max_layer to False prevents unnecessary offloading
-        model = nn.Sequential(nn.Linear(10,5), nn.Linear(5,5), nn.Linear(5,15))
+        # Make sure no splitting happens when reserve_max_layer=False
+        model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
+        device_map = infer_auto_device_map(
+            model,
+            max_memory={0: 500, 1: 500},
+            no_split_module_classes=["ModelForTest"]
+        )
+        assert device_map == {"0": 0, "1": 0, "2": 1}
+
+        model = nn.Sequential(nn.Linear(10, 5), nn.Linear(5, 5), nn.Linear(5, 15))
         gpu_0_mem = 145 * 4
         gpu_1_mem = 100 * 4
-        cpu_mem = 700 * 4 # large enough mem
-        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu':cpu_mem}, reserve_max_layer=True)
+        cpu_mem = 700 * 4
+
+        # Setting reserve_max_layer to False prevents unnecessary offloading
+        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu': cpu_mem}, reserve_max_layer=True)
         assert device_map == {'0': 0, '1': 1, '2': 'cpu'}
 
-        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu':cpu_mem}, reserve_max_layer=False)
+        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu': cpu_mem}, reserve_max_layer=False)
         assert device_map == {'0': 0, '1': 0, '2': 1}
 
-        # Setting reserve_max_layer to False doesn't prevent necessary offloading
-        model = nn.Sequential(nn.Linear(10,5), nn.Linear(5,5), nn.Linear(5,15), nn.Linear(5,15))
+        # When offloading is necessary, both produce the same device_map with offloading
+        model = nn.Sequential(nn.Linear(10, 5), nn.Linear(5, 5), nn.Linear(5, 15), nn.Linear(5, 15))
 
         expected_device_map = {'0': 0, '1': 1, '2': 'cpu', '3': 'cpu'}
-        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu':cpu_mem}, reserve_max_layer=True)
+        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu': cpu_mem}, reserve_max_layer=True)
         assert device_map == expected_device_map
 
-        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu':cpu_mem}, reserve_max_layer=False)
+        device_map = infer_auto_device_map(model, max_memory={0: gpu_0_mem, 1: gpu_1_mem, 'cpu': cpu_mem}, reserve_max_layer=False)
         assert device_map == expected_device_map
-
 
     def test_infer_auto_device_map_with_tied_weights(self):
         model = nn.Sequential(
             OrderedDict([("layer1", ModelForTest()), ("layer2", ModelForTest()), ("layer3", ModelForTest())])
         )
+        # With reserve_max_layer=True
         model.layer3.linear2.weight = model.layer1.linear2.weight
-        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500}, reserve_max_layer=True)
         expected = {"layer1": 0, "layer3.linear2": 0, "layer2": 1, "layer3.linear1": 1, "layer3.batchnorm": 1}
+        assert device_map == expected
+
+        # With reserve_max_layer=False
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        expected = {"layer1": 0, "layer3": 0, "layer2": 1}
         assert device_map == expected
 
         # With three weights tied together
         model.layer2.linear2.weight = model.layer1.linear2.weight
-        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500}, reserve_max_layer=True)
         expected = {
             "layer1": 0,
             "layer2.linear2": 0,
@@ -631,15 +665,40 @@ class ModelingUtilsTester(unittest.TestCase):
         }
         assert device_map == expected
 
+        # With three weights tied together and reserve_max_layer=True
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        expected = {
+            "layer1": 0,
+            "layer2.linear2": 0,
+            "layer3.linear2": 0,
+            "layer2.linear1": 0,
+            "layer2.batchnorm": 1,
+            "layer3.linear1": 1,
+            "layer3.batchnorm": 1,
+        }
+        assert device_map == expected
+
         # With two groups of weights tied together
         model.layer2.linear1.weight = model.layer1.linear1.weight
-        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500}, reserve_max_layer=True)
         expected = {
             "layer1": 0,
             "layer2.linear1": 0,
             "layer2.linear2": 0,
             "layer3.linear2": 0,
             "layer2.batchnorm": 1,
+            "layer3.linear1": 1,
+            "layer3.batchnorm": 1,
+        }
+        assert device_map == expected
+
+        # With two groups of weights tied together and reserve_max_layer=False
+        model.layer2.linear1.weight = model.layer1.linear1.weight
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        expected = {
+            "layer1": 0,
+            "layer2": 0,
+            "layer3.linear2": 0,
             "layer3.linear1": 1,
             "layer3.batchnorm": 1,
         }
@@ -658,8 +717,12 @@ class ModelingUtilsTester(unittest.TestCase):
         )
         model.linear3.weight = model.linear1.weight
         model.linear3.bias = model.linear1.bias
-        device_map = infer_auto_device_map(model, max_memory={0: 250, 1: 400})
+        device_map = infer_auto_device_map(model, max_memory={0: 250, 1: 400}, reserve_max_layer=True)
         expected = {"linear1": 0, "linear2": 1, "linear3": 0, "linear4": 1}
+        assert device_map == expected
+
+        device_map = infer_auto_device_map(model, max_memory={0: 250, 1: 400})
+        expected = {"linear1": 0, "linear2": 0, "linear3": 0, "linear4": 1}
         assert device_map == expected
 
         # With tied weights sharing a same prefix name (`compute.weight` vs `compute.weight_submodule.parameter`)
@@ -754,9 +817,17 @@ class ModelingUtilsTester(unittest.TestCase):
         # Should NOT print a warning in such case
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 400, "cpu": "1GB"})
+            device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 400, "cpu": "1GB"}, reserve_max_layer=True)
         assert len(w) == 0
         assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": "cpu", "linear3": "cpu"}
+
+        # With reserve_max_layer=False, linear1 and batchnorm will fit on device 0, and linear2 and linear3 will fit on device 2.
+        # Should NOT print a warning in such case
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 400})
+        assert len(w) == 0
+        assert device_map == {"linear1": 0, "batchnorm": 0, "linear2": 1, "linear3": 1}
 
         # Now we have two devices, but neither the first nor the second device can hold all remaining buffers
         # Should print a warning as intended in such case
@@ -896,6 +967,43 @@ class ModelingUtilsTester(unittest.TestCase):
         # Verify that the entire model is assigned to device 0
         expected_device_map = {"batchnorm": 0, "linear1": "disk", "linear2": "disk"}
         assert device_map == expected_device_map
+
+    def test_infer_auto_device_map_reserve_max_layer(self):
+        model = ModelForTest()
+        # When there is only one execution device,
+        # having reserve_max_layer=False  doesn't change device map
+        expected = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
+        max_mem = {0: 184, "cpu": 400}
+        assert infer_auto_device_map(model, max_memory=max_mem, reserve_max_layer=False) == expected
+
+        assert infer_auto_device_map(model, max_memory=max_mem, reserve_max_layer=True) == expected
+
+        # When there are multiple execution devices and reserving for the max
+        # layer is unnecessary, setting reserve_max_layer=False makes efficient allocation
+        max_mem = {0: 184, 1: 100, "cpu": 400}
+        assert infer_auto_device_map(model, max_memory=max_mem, reserve_max_layer=False) == {"linear1": 0, "batchnorm": 0, "linear2": 1}
+
+        # Less efficient allocation due to unnecessary reservation for the same max_memory config
+        assert infer_auto_device_map(model, max_memory=max_mem, reserve_max_layer=True) == {"linear1": 0, "batchnorm": 1, "linear2": "cpu"}
+
+        # When there are multiple execution devices with offloaded modules,
+        # having reserve_max_layer=False doesn't have any effects
+        model = nn.Sequential(
+            OrderedDict(
+                [
+                    ("linear1", nn.Linear(10, 10)),  # 440 each
+                    ("linear2", nn.Linear(10, 10)),
+                    ("linear3", nn.Linear(10, 10)),
+                    ("linear4", nn.Linear(10, 10)),
+                    ("linear5", nn.Linear(10, 10))
+                ]
+            )
+        )
+
+        expected = {"linear1": 0, "linear2": 1, "linear3": 1, "linear4": "cpu", "linear5": "cpu"}
+        max_mem = {0: 880, 1: 880, "cpu": 1600}
+        assert infer_auto_device_map(model, max_memory=max_mem, reserve_max_layer=False) == expected
+        assert infer_auto_device_map(model, max_memory=max_mem, reserve_max_layer=True) == expected
 
     @require_non_cpu
     def test_get_balanced_memory(self):
