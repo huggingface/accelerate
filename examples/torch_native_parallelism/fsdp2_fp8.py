@@ -26,11 +26,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from accelerate import Accelerator
 from accelerate.utils import AORecipeKwargs, FullyShardedDataParallelPlugin, TorchDynamoPlugin, set_seed
-from utils import (
-    PerformanceTracker,
-    create_collate_fn,
-    get_dataset,
-)
+from utils import PerformanceTracker, create_collate_fn, get_dataset, get_model_flops_per_token
 
 
 WARMUP_STEPS = 10
@@ -47,30 +43,6 @@ def parse_args():
     parser.add_argument("--log-with", type=str, default="wandb", help="Log with wandb or tensorboard")
 
     return parser.parse_args()
-
-
-def get_model_flops_per_token(model: AutoModelForCausalLM, args: argparse.Namespace) -> float:
-    """
-    Get the number of flops per token for the model.
-
-    Args:
-        model (AutoModelForCausalLM): Model to get the flops for
-    """
-    cfg = model.config
-
-    head_dim = cfg.hidden_size // cfg.num_attention_heads
-
-    # MLP: 3 matmuls
-    mlp_flops = 18 * cfg.hidden_size * cfg.intermediate_size
-
-    # Attn (w/o dotproduct)
-    attn_flops = 12 * head_dim * (cfg.num_attention_heads + cfg.num_key_value_heads)
-
-    # attn (dotproduct) - this scales quadratically with sequence length, therefore we have to account for it here too
-    attn_dotproduct_flops = 12 * cfg.num_attention_heads * head_dim * args.sequence_length
-
-    # we also ignore embeddings and layernorms, etc
-    return (mlp_flops + attn_flops + attn_dotproduct_flops) * cfg.num_hidden_layers
 
 
 def main():
@@ -132,7 +104,7 @@ def main():
     model.train()
 
     total_num_steps = min(args.num_steps, len(dataloader))
-    model_flops_per_token = get_model_flops_per_token(model, args)
+    model_flops_per_token = get_model_flops_per_token(model, args.sequence_length)
     performance_tracker = PerformanceTracker(warmup_steps=5)
 
     for step, batch in enumerate(dataloader):

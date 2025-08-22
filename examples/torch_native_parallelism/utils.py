@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Common utilities for FSDP2 examples.
+Common utilities for torch-native-parallelism examples.
 """
 
 import time
@@ -177,7 +177,7 @@ class PerformanceTracker:
             if model_flops_per_token is not None:
                 flops = model_flops_per_token * self.num_tokens
                 dct["tflops_per_device"] = flops / (total_time * 1e12)
-            
+
             return dct
 
         return {}

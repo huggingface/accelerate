@@ -33,6 +33,8 @@ def parse_args():
 
 
 def main():
+    # If ParallelismConfig is not initialized with __init__, it reads from env vars
+    # which were set by using config
     pc = ParallelismConfig()
     args = parse_args()
 
@@ -51,6 +53,7 @@ def main():
 
     training_args = TrainingArguments(
         output_dir=args.save_dir,
+        parallelism_config=pc,
         num_train_epochs=1,
         per_device_train_batch_size=1,
         logging_steps=5,

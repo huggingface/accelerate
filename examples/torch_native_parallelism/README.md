@@ -1,13 +1,13 @@
 ## Torch Native Parallelism
 
-With recent versions of Torch, there has been steady improvements in native parallelism using torch `DeviceMesh` and `DTensor`. 🤗 accelerate allows you to use these with our `ParallelismConfig` abstraction and/or `FullyShardedDataParallelPlugin(fsdp_version=2)`
+With recent versions of Torch, there has been steady improvements in native parallelism using `DeviceMesh` and `DTensor`. 🤗 accelerate allows you to use these with our `ParallelismConfig` abstraction and/or `FullyShardedDataParallelPlugin(fsdp_version=2)`
 This folder contains various examples of such use-cases: such as composing multiple parallelism strategies, low-bit training etc.
 
 ### ND Parallelism
 
 With `ParallelismConfig`, you can use 🤗 accelerate to train models with n-dimensional parallelism. This builds on top of 🤗 transformers, which we utilize for tensor parallelism sharding.
-Accelerate then takes care of everything else, such as data parallelism, FSDP, and more to come.
-Script `nd_parallel.py` showcases just how you can do it. We enable you to configure 4 different parallel dimensions (for now 👀):
+Accelerate then takes care of everything else, such as data parallelism, FSDP or context parallelism.
+Script `nd_parallel.py` showcases this. We enable you to configure 4 different parallel dimensions (for now 👀):
 - dp_replicate_size: how many replicas of the model to create, each replica is trained on a different subset of the data and averaged at the end of each step, same as DDP in Torch
 - dp_shard_size: across how many devices is the model sharded, this is utilizing FSDP2 to shard the model across devices, so each device has a different part of the model
 - tp_size: how many devices to use for tensor parallelism, this is utilizing the tensor parallelism from 🤗 transformers
@@ -23,13 +23,12 @@ accelerate launch --num-processes 8 nd_parallel.py \
 ```
 
 <Tip>
-  Only use TP intra-node - therefore max TP size you should need is 8, you can also lower this as FSDP (`--dp-shard-size`) can be faster on smaller models with
-  shorter sequence lengths. If you still cannot fit into memory, utilize `--dp-shard-size` as much as you can. Then to scale up to utilize all your GPUs, fill the rest
-  with `--dp-replicate-size`. This is only a general guideline, you can (and should) experiment with different parallelism configurations to find the best one for your model and hardware. You can learn more about the general strategies for parallelism in our [blog](TODO) or if you wanna dive deep, read the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook).
+  Only use TP intra-node - therefore max TP size you should need is 8. You can also use a lower size, as FSDP (`--dp-shard-size`) can be faster on smaller models with
+  shorter sequence lengths. If you cannot fit your model into memory, utilize `--dp-shard-size` as much as you can. Afterwards, to scale up and utilize all your resources, use `--dp-replicate-size`. This is only a general guideline, you can (and should) experiment with different parallelism configurations to find the best one for your model and hardware. You can learn more about the general strategies for parallelism in our [blog](https://huggingface.co/blog/accelerate-nd-parallel), or if you really want to dive deep, read the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook).
 </Tip>
 
-This feature is fully integrated into 🤗 transformers `Trainer` as well. It's as simple as launching your script with path to your accelerate config file. You can see a minimal example of that in `nd_parallel_trainer.py`.
-You can launch that script as:
+This feature is also fully integrated into 🤗 transformers `Trainer`. To use it, simply launch your script with path to your accelerate configuration file. You can see a minimal example of such script in `nd_parallel_trainer.py`.
+We provide 2 pre-configured configuration files:
 
 #### HSDP + TP (3D parallelism)
 
