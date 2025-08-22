@@ -17,8 +17,8 @@ import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Union
 
-from accelerate.utils.versions import is_torch_version
 from accelerate.utils.dataclasses import TorchContextParallelConfig, TorchTensorParallelConfig
+from accelerate.utils.versions import is_torch_version
 
 
 if TYPE_CHECKING:
