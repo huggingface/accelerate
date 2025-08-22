@@ -1295,7 +1295,7 @@ def infer_auto_device_map(
     model: nn.Module,
     max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
     no_split_module_classes: Optional[list[str]] = None,
-    reserve_max_layer: bool = True,
+    reserve_max_layer: bool = False,
     dtype: Optional[Union[str, torch.dtype]] = None,
     special_dtypes: Optional[dict[str, Union[str, torch.dtype]]] = None,
     verbose: bool = False,
@@ -1573,22 +1573,19 @@ def infer_auto_device_map(
 
     # before we return, we check if the device map has offloaded layers that aren't accounted for as memory used
     # if so, we call infer_auto_device_map again with the reserve_max_layer set to True
-    if not reserve_max_layer:
+    if not reserve_max_layer and device_map:
+
         if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
             main_device = "cpu"
         else:
-            main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
-
-        execution_device = {
-            name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
-        }
-
-        execution_device[""] = main_device
+            main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]]
+            if not main_device:
+                return device_map
+            main_device = main_device[0]
 
         offloaded_devices = ["disk"] if main_device == "cpu" or main_device == "mps" else ["cpu", "disk"]
-        offload = {name: device in offloaded_devices for name, device in device_map.items()}
 
-        if any(offload.values()):
+        if any(device in offloaded_devices for device in device_map.values()):
             return infer_auto_device_map(
                 model,
                 max_memory,
