@@ -17,8 +17,7 @@ import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Union
 
-from torch.distributed.device_mesh import init_device_mesh
-
+from accelerate.utils import is_torch_version
 from accelerate.utils.dataclasses import TorchContextParallelConfig, TorchTensorParallelConfig
 
 
@@ -178,6 +177,11 @@ class ParallelismConfig:
         Args:
             device_type (`str`): The type of device for which to build the mesh, e
         """
+        if is_torch_version(">=", "2.2.0"):
+            from torch.distributed.device_mesh import init_device_mesh
+        else:
+            raise RuntimeError("Building a device_mesh requires to have torch>=2.2.0")
+
         mesh = self._get_mesh()
         if len(mesh) == 0:
             return None
