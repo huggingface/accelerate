@@ -13,10 +13,11 @@
 # limitations under the License.
 
 """
-Common utilities for FSDP2 examples.
+Common utilities for torch-native-parallelism examples.
 """
 
 import time
+from contextlib import nullcontext
 
 import torch
 from datasets import Dataset, load_dataset
@@ -25,7 +26,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from accelerate import Accelerator
 
 
-def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int) -> Dataset:
+def get_dataset(tokenizer: AutoTokenizer, seq_len: int, accelerator: Accelerator | None = None) -> Dataset:
     """
     Load and prepare TinyStories dataset.
 
@@ -37,6 +38,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
     Returns:
         Dataset: Packed dataset
     """
+    processing_ctx = accelerator.main_process_first if accelerator else nullcontext
     raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:50%]")
 
     def tokenize_function(examples):
@@ -50,7 +52,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
         tokenized_batch["labels"] = tokenized_batch["input_ids"].copy()
         return tokenized_batch
 
-    with accelerator.main_process_first():
+    with processing_ctx():
         tokenized_dataset = raw_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
 
     def create_packed_sequences(examples):
@@ -61,6 +63,7 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
         num_sequences = len(all_tokens) // (seq_len + 1)
         packed_input_ids = []
         packed_labels = []
+        packed_position_ids = []
 
         for i in range(num_sequences):
             start_idx = i * (seq_len + 1)
@@ -68,10 +71,16 @@ def get_dataset(accelerator: Accelerator, tokenizer: AutoTokenizer, seq_len: int
             full_sequence = all_tokens[start_idx:end_idx]
             packed_input_ids.append(full_sequence[:-1])
             packed_labels.append(full_sequence[1:])
+            packed_position_ids.append(torch.arange(0, seq_len))
 
-        return {"input_ids": packed_input_ids, "shift_labels": packed_labels}
+        return {
+            "input_ids": packed_input_ids,
+            "shift_labels": packed_labels,
+            "position_ids": packed_position_ids,
+            "labels": packed_labels,
+        }
 
-    with accelerator.main_process_first():
+    with processing_ctx():
         packed_dataset = tokenized_dataset.map(
             create_packed_sequences,
             batched=True,
@@ -131,7 +140,7 @@ class PerformanceTracker:
         self.is_in_warmup = True
         self.step_count = 0
 
-    def step(self, batch_tokens: int) -> dict:
+    def step(self, batch_tokens: int, model_flops_per_token: float | None = None) -> dict:
         """
         Update performance tracking with a new step.
 
@@ -150,13 +159,14 @@ class PerformanceTracker:
             return {"warmup_completed": True}
 
         if not self.is_in_warmup and self.start_time is not None:
+            dct = {}
             self.num_tokens += batch_tokens
             total_time = time.perf_counter() - self.start_time
             steps_from_warmup = self.step_count - self.warmup_steps
 
             if total_time > 0 and steps_from_warmup > 0:
                 memory_stats = gpu_memory_usage_all()
-                return {
+                dct = {
                     "tokens_per_second": self.num_tokens / total_time,
                     "steps_per_second": steps_from_warmup / total_time,
                     "total_tokens": self.num_tokens,
@@ -164,10 +174,16 @@ class PerformanceTracker:
                     **memory_stats,
                 }
 
+            if model_flops_per_token is not None:
+                flops = model_flops_per_token * self.num_tokens
+                dct["tflops_per_device"] = flops / (total_time * 1e12)
+
+            return dct
+
         return {}
 
     def get_print_message(self, metrics: dict, with_memory: bool = False) -> str:
-        print_msg = f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f}\n"
+        print_msg = f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f} | Average TFLOPS: {metrics['tflops_per_device']:.2f}\n"
         if with_memory:
             print_msg += (
                 f"\tMemory (GB): active={metrics['peak_memory_active']:.1f}, "
