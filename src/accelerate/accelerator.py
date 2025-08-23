@@ -4031,13 +4031,14 @@ class Accelerator:
         Example:
 
         ```python
+        >>> buffers = [batch["input_ids"], batch["position_ids"], batch["shift_labels"]]
         >>> for batch in dataloader:
         ...     with accelerator.maybe_context_parallel(
-        ...         buffers=[batch["input_ids"], batch["attention_mask"]],
-        ...         buffer_seq_dims=[1, 1],
-        ...         no_restore_buffers={batch["input_ids"]},
+        ...         buffers=buffers,
+        ...         buffer_seq_dims=[1, 1, 1],
+        ...         no_restore_buffers=set(buffers),
         ...     ):
-        ...         outputs = model(batch)
+        ...         outputs = model(**batch)
         ...         ...
         ```
         """
@@ -4063,13 +4064,52 @@ class Accelerator:
         Q_LEN,
         KV_LEN,
     ):
-        return self._create_block_mask_fn(
+        """
+        Creates a flex attention mask to use. If `parallelism_config.cp_size > 1`, the mask will
+        be sharded to use with context parallelism. If not, this falls back to default `create_block_mask`.
+        Arguments mimic the signature of `torch.nn.flex_attention.create_block_mask`.
+
+        Args:
+            mask_mod: Mask modifier function to use.
+            B: Batch size.
+            H: Number of query heads.
+            Q_LEN: Query length.
+            KV_LEN: Key/Value length.
+
+        Example:
+
+        ```python
+        >>> def causal(_b, _h, q_idx, kv_idx):
+        ...     return q_idx >= kv_idx
+
+        >>> block_mask = accelerator.create_block_mask(causal, None, None, seq_len, seq_len)
+
+        >>> buffers = [batch["input_ids"], batch["position_ids"], batch["shift_labels"]]
+        >>> for batch in dataloader:
+        ...     with accelerator.maybe_context_parallel(
+        ...         buffers=buffers,
+        ...         buffer_seq_dims=[1, 1, 1],
+        ...         no_restore_buffers=set(buffers),
+        ...     ):
+        ...         batch["attention_mask"] = block_mask
+        ...         outputs = model(**batch)
+        ...         ...
+        """
+        if self.parallelism_config.cp_enabled:
+            logger.warning_once(
+                "Using flex-attention together with context parallel is highly experimental. You might encounter numerical issues, or crashes."
+            )
+
+        mask = self._create_block_mask_fn(
             mask_mod=mask_mod,
             B=B,
             H=H,
             Q_LEN=Q_LEN,
             KV_LEN=KV_LEN,
         )
+        # We flag that this mask is created by us, so we don't remove it in pre-forward hook
+        mask._accelerate_created = True
+        return mask
 
     @contextmanager
     def autocast(self, autocast_handler: AutocastKwargs = None):
