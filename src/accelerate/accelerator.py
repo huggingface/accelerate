@@ -577,7 +577,7 @@ class Accelerator:
                 "musa",
                 "hpu",
                 "sdaa",
-                "mps"
+                "mps",
             ) or is_torch_xla_available(check_is_tpu=True):
                 raise ValueError(f"fp16 mixed precision requires a GPU or MPS device (not {self.device.type!r}).")
             if self.device.type == "mps" and not is_torch_version(">=", "2.5.0"):
