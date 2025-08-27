@@ -588,8 +588,6 @@ class Accelerator:
             if self.is_fsdp2:
                 self.scaler = get_fsdp2_grad_scaler(**kwargs)
             else:
-                if self.device.type == "mps" and not is_torch_version(">=", "2.8.0"):
-                    raise ValueError("Grad Scaler with MPS device requires a Pytorch >= 2.8.0")
                 self.scaler = get_grad_scaler(self.distributed_type, **kwargs)
 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
