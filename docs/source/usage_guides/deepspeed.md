@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed
 
-[DeepSpeed](https://github.com/microsoft/DeepSpeed) implements everything described in the [ZeRO paper](https://arxiv.org/abs/1910.02054). Some of the salient optimizations are:
+[DeepSpeed](https://github.com/deepspeedai/DeepSpeed) implements everything described in the [ZeRO paper](https://arxiv.org/abs/1910.02054). Some of the salient optimizations are:
 
 1. Optimizer state partitioning (ZeRO stage 1)
 2. Gradient partitioning (ZeRO stage 2)
@@ -33,7 +33,7 @@ DeepSpeed ZeRO-2 is primarily used only for training, as its features are of no 
 DeepSpeed ZeRO-3 can be used for inference as well since it allows huge models to be loaded on multiple GPUs, which
 won't be possible on a single GPU.
 
-Accelerate integrates [DeepSpeed](https://github.com/microsoft/DeepSpeed) via 2 options:
+Accelerate integrates [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) via 2 options:
 
 1. Integration of the DeepSpeed features via `deepspeed config file` specification in `accelerate config` . You just supply your custom config file or use our template. Most of
    this document is focused on this feature. This supports all the core features of DeepSpeed and gives user a lot of flexibility.
@@ -74,7 +74,7 @@ Inference:
 
 ## How it works?
 
-**Pre-Requisites**: Install DeepSpeed version >=0.6.5. Please refer to the [DeepSpeed Installation details](https://github.com/microsoft/DeepSpeed#installation)
+**Pre-Requisites**: Install DeepSpeed version >=0.6.5. Please refer to the [DeepSpeed Installation details](https://github.com/deepspeedai/DeepSpeed#installation)
 for more information.
 
 We will first look at easy to use integration via `accelerate config`.
@@ -167,7 +167,7 @@ Currently, `Accelerate` supports following config through the CLI:
 `deepspeed_hostfile`: DeepSpeed hostfile for configuring multi-node compute resources.
 `deepspeed_exclusion_filter`: DeepSpeed exclusion filter string when using mutli-node setup.
 `deepspeed_inclusion_filter`: DeepSpeed inclusion filter string when using mutli-node setup.
-`deepspeed_multinode_launcher`: DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.
+`deepspeed_multinode_launcher`: DeepSpeed multi-node launcher to use, e.g. `pdsh`, `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5). If unspecified, will default to `pdsh`.
 `deepspeed_config_file`: path to the DeepSpeed config file in `json` format. See the next section for more details on this.
 ```
 To be able to tweak more options, you will need to use a DeepSpeed config file.
@@ -194,7 +194,7 @@ For instance, here is how you would run the NLP example `examples/by_feature/dee
 ```bash
 compute_environment: LOCAL_MACHINE
 deepspeed_config:
- deepspeed_config_file: /home/ubuntu/accelerate/examples/configs/deepspeed_config_templates/zero_stage2_config.json
+ deepspeed_config_file: /home/ubuntu/accelerate/examples/deepspeed_config_templates/zero_stage2_config.json
  zero3_init_flag: true
 distributed_type: DEEPSPEED
 fsdp_config: {}
@@ -275,7 +275,7 @@ accelerate launch examples/by_feature/deepspeed_with_config_support.py \
 ```bash
 compute_environment: LOCAL_MACHINE
 deepspeed_config:
- deepspeed_config_file: /home/ubuntu/accelerate/examples/configs/deepspeed_config_templates/zero_stage3_offload_config.json
+ deepspeed_config_file: /home/ubuntu/accelerate/examples/deepspeed_config_templates/zero_stage3_offload_config.json
  zero3_init_flag: true
 distributed_type: DEEPSPEED
 fsdp_config: {}
@@ -710,11 +710,18 @@ model, eval_dataloader = accelerator.prepare(model, eval_dataloader)
 2. Current integration doesn’t support `mpu`, limiting the tensor parallelism which is supported in Megatron-LM.
 3. Current integration doesn’t support multiple models.
 
+## Multi-node DeepSpeed
+DeepSpeed supports multi-node inference and training over a variety of different launchers. You can specify a different launcher by setting the `deepspeed_multinode_launcher` config in the CLI or in the DeepSpeed config file.
+
+Currently, accelerate supports passing configuration for the following DeepSpeed multi-node launchers: `pdsh` (default), `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5).
+
+Please read the [DeepSpeed documentation](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node) for more information on the different launchers. By default, DeepSpeed will attempt to use passwordless SSH from the main machine node to the other nodes to perform the launcher command. In this configuration, the accelerate launch command only needs to be run on the main node. If using the `nossh` launcher, you will need to run the accelerate launch command on every node using copied configuration. 
+
 ## DeepSpeed Resources
 
 The documentation for the internals related to deepspeed can be found [here](../package_reference/deepspeed).
 
-- [Project's github](https://github.com/microsoft/deepspeed)
+- [Project's github](https://github.com/deepspeedai/DeepSpeed)
 - [Usage docs](https://www.deepspeed.ai/getting-started/)
 - [API docs](https://deepspeed.readthedocs.io/en/latest/index.html)
 - [Blog posts](https://www.microsoft.com/en-us/research/search/?q=deepspeed)
@@ -728,7 +735,7 @@ Papers:
 
 
 Finally, please, remember that `Accelerate` only integrates DeepSpeed, therefore if you
-have any problems or questions with regards to DeepSpeed usage, please, file an issue with [DeepSpeed GitHub](https://github.com/microsoft/DeepSpeed/issues).
+have any problems or questions with regards to DeepSpeed usage, please, file an issue with [DeepSpeed GitHub](https://github.com/deepspeedai/DeepSpeed/issues).
 
 
 <Tip>

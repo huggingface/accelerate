@@ -30,3 +30,17 @@ rendered properly in your Markdown viewer.
 ## FullyShardedDataParallelPlugin
 
 [[autodoc]] utils.FullyShardedDataParallelPlugin
+
+## fsdp2_load_full_state_dict
+
+[[autodoc]] utils.fsdp2_load_full_state_dict
+
+## fsdp2_switch_optimizer_parameters
+
+[[autodoc]] utils.fsdp2_switch_optimizer_parameters
+
+## fsdp2_prepare_model
+
+[[autodoc]] utils.fsdp2_prepare_model
+
+## fsdp2_prepare_auto_wrap_policy

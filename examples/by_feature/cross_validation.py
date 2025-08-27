@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-from typing import List
 
 import evaluate
 import numpy as np
@@ -61,7 +60,7 @@ EVAL_BATCH_SIZE = 32
 
 
 def get_fold_dataloaders(
-    accelerator: Accelerator, dataset: DatasetDict, train_idxs: List[int], valid_idxs: List[int], batch_size: int = 16
+    accelerator: Accelerator, dataset: DatasetDict, train_idxs: list[int], valid_idxs: list[int], batch_size: int = 16
 ):
     """
     Gets a set of train, valid, and test dataloaders for a particular fold

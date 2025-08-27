@@ -19,20 +19,24 @@ import json
 import os
 import time
 from functools import wraps
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import yaml
+from packaging import version
 
 from .logging import get_logger
 from .state import PartialState
 from .utils import (
     LoggerType,
+    compare_versions,
     is_aim_available,
     is_clearml_available,
     is_comet_ml_available,
     is_dvclive_available,
     is_mlflow_available,
+    is_swanlab_available,
     is_tensorboard_available,
+    is_trackio_available,
     is_wandb_available,
     listify,
 )
@@ -60,6 +64,12 @@ if is_clearml_available():
 
 if is_dvclive_available():
     _available_trackers.append(LoggerType.DVCLIVE)
+
+if is_swanlab_available():
+    _available_trackers.append(LoggerType.SWANLAB)
+
+if is_trackio_available():
+    _available_trackers.append(LoggerType.TRACKIO)
 
 logger = get_logger(__name__)
 
@@ -129,6 +139,13 @@ class GeneralTracker:
                     f"{err}"
                 )
 
+    def start(self):
+        """
+        Lazy initialization of the tracker inside Accelerator to avoid initializing PartialState before
+        InitProcessGroupKwargs.
+        """
+        pass
+
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Implementations should use the experiment configuration
@@ -178,16 +195,20 @@ class TensorBoardTracker(GeneralTracker):
     name = "tensorboard"
     requires_logging_directory = True
 
-    @on_main_process
     def __init__(self, run_name: str, logging_dir: Union[str, os.PathLike], **kwargs):
+        super().__init__()
+        self.run_name = run_name
+        self.logging_dir_param = logging_dir
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
         try:
             from torch.utils import tensorboard
         except ModuleNotFoundError:
             import tensorboardX as tensorboard
-        super().__init__()
-        self.run_name = run_name
-        self.logging_dir = os.path.join(logging_dir, run_name)
-        self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
+        self.logging_dir = os.path.join(self.logging_dir_param, self.run_name)
+        self.writer = tensorboard.SummaryWriter(self.logging_dir, **self.init_kwargs)
         logger.debug(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -288,14 +309,16 @@ class WandBTracker(GeneralTracker):
     requires_logging_directory = False
     main_process_only = False
 
-    @on_main_process
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
         self.run_name = run_name
+        self.init_kwargs = kwargs
 
+    @on_main_process
+    def start(self):
         import wandb
 
-        self.run = wandb.init(project=self.run_name, **kwargs)
+        self.run = wandb.init(project=self.run_name, **self.init_kwargs)
         logger.debug(f"Initialized WandB project {self.run_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -317,7 +340,16 @@ class WandBTracker(GeneralTracker):
         """
         import wandb
 
-        wandb.config.update(values, allow_val_change=True)
+        if os.environ.get("WANDB_MODE") == "offline":
+            # In offline mode, restart wandb with config included
+            if hasattr(self, "run") and self.run:
+                self.run.finish()
+
+            init_kwargs = self.init_kwargs.copy()
+            init_kwargs["config"] = values
+            self.run = wandb.init(project=self.run_name, **init_kwargs)
+        else:
+            wandb.config.update(values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to WandB")
 
     @on_main_process
@@ -360,8 +392,8 @@ class WandBTracker(GeneralTracker):
     def log_table(
         self,
         table_name: str,
-        columns: List[str] = None,
-        data: List[List[Any]] = None,
+        columns: list[str] = None,
+        data: list[list[Any]] = None,
         dataframe: Any = None,
         step: Optional[int] = None,
         **kwargs,
@@ -396,30 +428,120 @@ class WandBTracker(GeneralTracker):
         logger.debug("WandB run closed")
 
 
+class TrackioTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports `trackio`. Should be initialized at the start of your script.
+
+    Args:
+        run_name (`str`):
+            The name of the experiment run. Will be used as the `project` name when instantiating trackio.
+        **kwargs (additional keyword arguments, *optional*):
+            Additional key word arguments passed along to the `trackio.init` method. Refer to this
+            [init](https://github.com/gradio-app/trackio/blob/814809552310468b13f84f33764f1369b4e5136c/trackio/__init__.py#L22)
+            to see all supported key word arguments.
+    """
+
+    name = "trackio"
+    requires_logging_directory = False
+    main_process_only = False
+
+    def __init__(self, run_name: str, **kwargs):
+        super().__init__()
+        self.run_name = run_name
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
+        import trackio
+
+        self.run = trackio.init(project=self.run_name, **self.init_kwargs)
+        logger.debug(f"Initialized trackio project {self.run_name}")
+        logger.debug(
+            "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
+        )
+
+    @property
+    def tracker(self):
+        return self.run
+
+    @on_main_process
+    def store_init_configuration(self, values: dict):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+
+        Args:
+            values (Dictionary `str` to `bool`, `str`, `float` or `int`):
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
+                `str`, `float`, `int`, or `None`.
+        """
+        import trackio
+
+        trackio.config.update(values, allow_val_change=True)
+        logger.debug("Stored initial configuration hyperparameters to trackio")
+
+    @on_main_process
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `values` to the current run.
+
+        Args:
+            values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int` or `dict` of
+                `str` to `float`/`int`.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `trackio.log` method.
+        """
+        self.run.log(values, **kwargs)
+        logger.debug("Successfully logged to trackio")
+
+    @on_main_process
+    def finish(self):
+        """
+        Closes `trackio` run
+        """
+        self.run.finish()
+        logger.debug("trackio run closed")
+
+
 class CometMLTracker(GeneralTracker):
     """
     A `Tracker` class that supports `comet_ml`. Should be initialized at the start of your script.
 
     API keys must be stored in a Comet config file.
 
+    Note:
+        For `comet_ml` versions < 3.41.0, additional keyword arguments are passed to `comet_ml.Experiment` instead:
+        https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/Experiment/#comet_ml.Experiment.__init__
+
     Args:
         run_name (`str`):
             The name of the experiment run.
         **kwargs (additional keyword arguments, *optional*):
-            Additional key word arguments passed along to the `Experiment.__init__` method.
+            Additional key word arguments passed along to the `comet_ml.start` method:
+            https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/start/
     """
 
     name = "comet_ml"
     requires_logging_directory = False
 
-    @on_main_process
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
         self.run_name = run_name
+        self.init_kwargs = kwargs
 
-        from comet_ml import Experiment
+    @on_main_process
+    def start(self):
+        import comet_ml
 
-        self.writer = Experiment(project_name=run_name, **kwargs)
+        comet_version = version.parse(comet_ml.__version__)
+        if compare_versions(comet_version, ">=", "3.41.0"):
+            self.writer = comet_ml.start(project_name=self.run_name, **self.init_kwargs)
+        else:
+            logger.info("Update `comet_ml` (>=3.41.0) for experiment reuse and offline support.")
+            self.writer = comet_ml.Experiment(project_name=self.run_name, **self.init_kwargs)
+
         logger.debug(f"Initialized CometML project {self.run_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -440,7 +562,7 @@ class CometMLTracker(GeneralTracker):
                 `str`, `float`, `int`, or `None`.
         """
         self.writer.log_parameters(values)
-        logger.debug("Stored initial configuration hyperparameters to CometML")
+        logger.debug("Stored initial configuration hyperparameters to Comet")
 
     @on_main_process
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
@@ -466,15 +588,15 @@ class CometMLTracker(GeneralTracker):
                 self.writer.log_other(k, v, **kwargs)
             elif isinstance(v, dict):
                 self.writer.log_metrics(v, step=step, **kwargs)
-        logger.debug("Successfully logged to CometML")
+        logger.debug("Successfully logged to Comet")
 
     @on_main_process
     def finish(self):
         """
-        Closes `comet-ml` writer
+        Flush `comet-ml` writer
         """
         self.writer.end()
-        logger.debug("CometML run closed")
+        logger.debug("Comet run flushed")
 
 
 class AimTracker(GeneralTracker):
@@ -491,13 +613,17 @@ class AimTracker(GeneralTracker):
     name = "aim"
     requires_logging_directory = True
 
-    @on_main_process
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
+        super().__init__()
         self.run_name = run_name
+        self.aim_repo_path = logging_dir
+        self.init_kwargs = kwargs
 
+    @on_main_process
+    def start(self):
         from aim import Run
 
-        self.writer = Run(repo=logging_dir, **kwargs)
+        self.writer = Run(repo=self.aim_repo_path, **self.init_kwargs)
         self.writer.name = self.run_name
         logger.debug(f"Initialized Aim project {self.run_name}")
         logger.debug(
@@ -537,7 +663,7 @@ class AimTracker(GeneralTracker):
             self.writer.track(value, name=key, step=step, **kwargs)
 
     @on_main_process
-    def log_images(self, values: dict, step: Optional[int] = None, kwargs: Optional[Dict[str, dict]] = None):
+    def log_images(self, values: dict, step: Optional[int] = None, kwargs: Optional[dict[str, dict]] = None):
         """
         Logs `images` to the current run.
 
@@ -607,13 +733,12 @@ class MLflowTracker(GeneralTracker):
     name = "mlflow"
     requires_logging_directory = False
 
-    @on_main_process
     def __init__(
         self,
         experiment_name: str = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         run_id: Optional[str] = None,
-        tags: Optional[Union[Dict[str, Any], str]] = None,
+        tags: Optional[Union[dict[str, Any], str]] = None,
         nested_run: Optional[bool] = False,
         run_name: Optional[str] = None,
         description: Optional[str] = None,
@@ -626,30 +751,40 @@ class MLflowTracker(GeneralTracker):
 
         nested_run = os.environ.get("MLFLOW_NESTED_RUN", nested_run)
 
+        self.experiment_name = experiment_name
+        self.logging_dir = logging_dir
+        self.run_id = run_id
+        self.tags = tags
+        self.nested_run = nested_run
+        self.run_name = run_name
+        self.description = description
+
+    @on_main_process
+    def start(self):
         import mlflow
 
-        exps = mlflow.search_experiments(filter_string=f"name = '{experiment_name}'")
+        exps = mlflow.search_experiments(filter_string=f"name = '{self.experiment_name}'")
         if len(exps) > 0:
             if len(exps) > 1:
                 logger.warning("Multiple experiments with the same name found. Using first one.")
             experiment_id = exps[0].experiment_id
         else:
             experiment_id = mlflow.create_experiment(
-                name=experiment_name,
-                artifact_location=logging_dir,
-                tags=tags,
+                name=self.experiment_name,
+                artifact_location=self.logging_dir,
+                tags=self.tags,
             )
 
         self.active_run = mlflow.start_run(
-            run_id=run_id,
+            run_id=self.run_id,
             experiment_id=experiment_id,
-            run_name=run_name,
-            nested=nested_run,
-            tags=tags,
-            description=description,
+            run_name=self.run_name,
+            nested=self.nested_run,
+            tags=self.tags,
+            description=self.description,
         )
 
-        logger.debug(f"Initialized mlflow experiment {experiment_name}")
+        logger.debug(f"Initialized mlflow experiment {self.experiment_name}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
@@ -712,6 +847,59 @@ class MLflowTracker(GeneralTracker):
         logger.debug("Successfully logged to mlflow")
 
     @on_main_process
+    def log_figure(self, figure: Any, artifact_file: str, **save_kwargs):
+        """
+        Logs an figure to the current run.
+
+        Args:
+            figure (Any):
+            The figure to be logged.
+            artifact_file (`str`, *optional*):
+            The run-relative artifact file path in posixpath format to which the image is saved.
+            If not provided, the image is saved to a default location.
+            **kwargs:
+            Additional keyword arguments passed to the underlying mlflow.log_image function.
+        """
+        import mlflow
+
+        mlflow.log_figure(figure=figure, artifact_file=artifact_file, **save_kwargs)
+        logger.debug("Successfully logged image to mlflow")
+
+    @on_main_process
+    def log_artifacts(self, local_dir: str, artifact_path: Optional[str] = None):
+        """
+        Logs an artifacts (all content of a dir) to the current run.
+
+            local_dir (`str`):
+                Path to the directory to be logged as an artifact.
+            artifact_path (`str`, *optional*):
+                Directory within the run's artifact directory where the artifact will be logged. If omitted, the
+                artifact will be logged to the root of the run's artifact directory. The run step. If included, the
+                artifact will be affiliated with this step.
+        """
+        import mlflow
+
+        mlflow.log_artifacts(local_dir=local_dir, artifact_path=artifact_path)
+        logger.debug("Successfully logged artofact to mlflow")
+
+    @on_main_process
+    def log_artifact(self, local_path: str, artifact_path: Optional[str] = None):
+        """
+        Logs an artifact (file) to the current run.
+
+            local_path (`str`):
+                Path to the file to be logged as an artifact.
+            artifact_path (`str`, *optional*):
+                Directory within the run's artifact directory where the artifact will be logged. If omitted, the
+                artifact will be logged to the root of the run's artifact directory. The run step. If included, the
+                artifact will be affiliated with this step.
+        """
+        import mlflow
+
+        mlflow.log_artifact(local_path=local_path, artifact_path=artifact_path)
+        logger.debug("Successfully logged artofact to mlflow")
+
+    @on_main_process
     def finish(self):
         """
         End the active MLflow run.
@@ -736,20 +924,26 @@ class ClearMLTracker(GeneralTracker):
     name = "clearml"
     requires_logging_directory = False
 
-    @on_main_process
     def __init__(self, run_name: str = None, **kwargs):
+        super().__init__()
+        self.user_provided_run_name = run_name
+        self._initialized_externally = False
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
         from clearml import Task
 
         current_task = Task.current_task()
-        self._initialized_externally = False
         if current_task:
             self._initialized_externally = True
             self.task = current_task
             return
 
-        kwargs.setdefault("project_name", os.environ.get("CLEARML_PROJECT", run_name))
-        kwargs.setdefault("task_name", os.environ.get("CLEARML_TASK", run_name))
-        self.task = Task.init(**kwargs)
+        task_init_args = {**self.init_kwargs}
+        task_init_args.setdefault("project_name", os.environ.get("CLEARML_PROJECT", self.user_provided_run_name))
+        task_init_args.setdefault("task_name", os.environ.get("CLEARML_TASK", self.user_provided_run_name))
+        self.task = Task.init(**task_init_args)
 
     @property
     def tracker(self):
@@ -767,7 +961,7 @@ class ClearMLTracker(GeneralTracker):
         return self.task.connect_configuration(values)
 
     @on_main_process
-    def log(self, values: Dict[str, Union[int, float]], step: Optional[int] = None, **kwargs):
+    def log(self, values: dict[str, Union[int, float]], step: Optional[int] = None, **kwargs):
         """
         Logs `values` dictionary to the current run. The dictionary keys must be strings. The dictionary values must be
         ints or floats
@@ -822,8 +1016,8 @@ class ClearMLTracker(GeneralTracker):
     def log_table(
         self,
         table_name: str,
-        columns: List[str] = None,
-        data: List[List[Any]] = None,
+        columns: list[str] = None,
+        data: list[list[Any]] = None,
         dataframe: Any = None,
         step: Optional[int] = None,
         **kwargs,
@@ -896,12 +1090,16 @@ class DVCLiveTracker(GeneralTracker):
     name = "dvclive"
     requires_logging_directory = False
 
-    @on_main_process
     def __init__(self, run_name: Optional[str] = None, live: Optional[Any] = None, **kwargs):
+        super().__init__()
+        self.live = live
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
         from dvclive import Live
 
-        super().__init__()
-        self.live = live if live is not None else Live(**kwargs)
+        self.live = self.live if self.live is not None else Live(**self.init_kwargs)
 
     @property
     def tracker(self):
@@ -957,6 +1155,106 @@ class DVCLiveTracker(GeneralTracker):
         self.live.end()
 
 
+class SwanLabTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports `swanlab`. Should be initialized at the start of your script.
+
+    Args:
+        run_name (`str`):
+            The name of the experiment run.
+        **kwargs (additional keyword arguments, *optional*):
+            Additional key word arguments passed along to the `swanlab.init` method.
+    """
+
+    name = "swanlab"
+    requires_logging_directory = False
+    main_process_only = False
+
+    def __init__(self, run_name: str, **kwargs):
+        super().__init__()
+        self.run_name = run_name
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
+        import swanlab
+
+        self.run = swanlab.init(project=self.run_name, **self.init_kwargs)
+        swanlab.config["FRAMEWORK"] = "🤗Accelerate"  # add accelerate logo in config
+        logger.debug(f"Initialized SwanLab project {self.run_name}")
+        logger.debug(
+            "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
+        )
+
+    @property
+    def tracker(self):
+        return self.run
+
+    @on_main_process
+    def store_init_configuration(self, values: dict):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+
+        Args:
+            values (Dictionary `str` to `bool`, `str`, `float` or `int`):
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
+                `str`, `float`, `int`, or `None`.
+        """
+        import swanlab
+
+        swanlab.config.update(values, allow_val_change=True)
+        logger.debug("Stored initial configuration hyperparameters to SwanLab")
+
+    @on_main_process
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `values` to the current run.
+
+        Args:
+        data : Dict[str, DataType]
+            Data must be a dict. The key must be a string with 0-9, a-z, A-Z, " ", "_", "-", "/". The value must be a
+            `float`, `float convertible object`, `int` or `swanlab.data.BaseType`.
+        step : int, optional
+            The step number of the current data, if not provided, it will be automatically incremented.
+        If step is duplicated, the data will be ignored.
+            kwargs:
+                Additional key word arguments passed along to the `swanlab.log` method. Likes:
+                    print_to_console : bool, optional
+                        Whether to print the data to the console, the default is False.
+        """
+        self.run.log(values, step=step, **kwargs)
+        logger.debug("Successfully logged to SwanLab")
+
+    @on_main_process
+    def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
+                Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `swanlab.log` method. Likes:
+                    print_to_console : bool, optional
+                        Whether to print the data to the console, the default is False.
+        """
+        import swanlab
+
+        for k, v in values.items():
+            self.log({k: [swanlab.Image(image) for image in v]}, step=step, **kwargs)
+        logger.debug("Successfully logged images to SwanLab")
+
+    @on_main_process
+    def finish(self):
+        """
+        Closes `swanlab` writer
+        """
+        self.run.finish()
+        logger.debug("SwanLab run closed")
+
+
 LOGGER_TYPE_TO_CLASS = {
     "aim": AimTracker,
     "comet_ml": CometMLTracker,
@@ -965,11 +1263,13 @@ LOGGER_TYPE_TO_CLASS = {
     "wandb": WandBTracker,
     "clearml": ClearMLTracker,
     "dvclive": DVCLiveTracker,
+    "swanlab": SwanLabTracker,
+    "trackio": TrackioTracker,
 }
 
 
 def filter_trackers(
-    log_with: List[Union[str, LoggerType, GeneralTracker]],
+    log_with: list[Union[str, LoggerType, GeneralTracker]],
     logging_dir: Union[str, os.PathLike] = None,
 ):
     """
@@ -986,9 +1286,12 @@ def filter_trackers(
             - `"all"`
             - `"tensorboard"`
             - `"wandb"`
+            - `"trackio"`
+            - `"aim"`
             - `"comet_ml"`
             - `"mlflow"`
             - `"dvclive"`
+            - `"swanlab"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):

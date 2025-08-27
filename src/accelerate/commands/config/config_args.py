@@ -18,7 +18,7 @@ import json
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import yaml
 
@@ -194,6 +194,8 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
+    # args for parallelism config
+    parallelism_config: dict = None
     # args for megatron_lm
     megatron_lm_config: dict = None
     # args for ipex
@@ -209,9 +211,9 @@ class ClusterConfig(BaseConfig):
     tpu_use_cluster: bool = False
     tpu_use_sudo: bool = False
     command_file: str = None
-    commands: List[str] = None
-    tpu_vm: List[str] = None
-    tpu_env: List[str] = None
+    commands: list[str] = None
+    tpu_vm: list[str] = None
+    tpu_env: list[str] = None
 
     # args for dynamo
     dynamo_config: dict = None
@@ -229,6 +231,8 @@ class ClusterConfig(BaseConfig):
             self.mpirun_config = {}
         if self.fp8_config is None:
             self.fp8_config = {}
+        if self.parallelism_config is None:
+            self.parallelism_config = {}
         return super().__post_init__()
 
 

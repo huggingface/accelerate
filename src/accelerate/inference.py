@@ -13,7 +13,7 @@
 # limitations under the License.
 import math
 from types import MethodType
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from .state import PartialState
 from .utils import (
@@ -123,10 +123,10 @@ def pippy_forward(forward, num_chunks, gather_output, *args, **kwargs):
 
 def prepare_pippy(
     model,
-    split_points: Optional[Union[str, List[str]]] = "auto",
-    no_split_module_classes: Optional[List[str]] = None,
-    example_args: Optional[Tuple[Any]] = (),
-    example_kwargs: Optional[Dict[str, Any]] = None,
+    split_points: Optional[Union[str, list[str]]] = "auto",
+    no_split_module_classes: Optional[list[str]] = None,
+    example_args: Optional[tuple[Any]] = (),
+    example_kwargs: Optional[dict[str, Any]] = None,
     num_chunks: Optional[int] = None,
     gather_output: Optional[bool] = False,
 ):

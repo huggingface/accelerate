@@ -16,7 +16,7 @@
 import logging
 import os
 from copy import deepcopy
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -45,9 +45,9 @@ def load_and_quantize_model(
     model: torch.nn.Module,
     bnb_quantization_config: BnbQuantizationConfig,
     weights_location: Union[str, os.PathLike] = None,
-    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
-    no_split_module_classes: Optional[List[str]] = None,
-    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+    device_map: Optional[dict[str, Union[int, str, torch.device]]] = None,
+    no_split_module_classes: Optional[list[str]] = None,
+    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     offload_state_dict: bool = False,
 ):
@@ -144,16 +144,17 @@ def load_and_quantize_model(
             elif torch.is_floating_point(param):
                 param.to(dtype)
         if model_device.type == "cuda":
-            # move everything to cpu in the first place because we can't do quantization if the weights are already on cuda
             model.cuda(torch.cuda.current_device())
             torch.cuda.empty_cache()
         elif torch.cuda.is_available():
             model.to(torch.cuda.current_device())
+        elif torch.xpu.is_available():
+            model.to(torch.xpu.current_device())
         else:
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+            raise RuntimeError("No GPU or Intel XPU found. A GPU or Intel XPU is needed for quantization.")
         logger.info(
-            f"The model device type is {model_device.type}. However, cuda is needed for quantization."
-            "We move the model to cuda."
+            f"The model device type is {model_device.type}. However, gpu or intel xpu is needed for quantization."
+            "We move the model to it."
         )
         return model
 
@@ -167,7 +168,6 @@ def load_and_quantize_model(
             model = replace_with_bnb_layers(
                 model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert
             )
-
         device_map = get_quantized_model_device_map(
             model,
             bnb_quantization_config,
@@ -199,9 +199,11 @@ def get_quantized_model_device_map(
     if device_map is None:
         if torch.cuda.is_available():
             device_map = {"": torch.cuda.current_device()}
+        elif torch.xpu.is_available():
+            device_map = {"": torch.xpu.current_device()}
         else:
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-        logger.info("The device_map was not initialized." "Setting device_map to `{'':torch.cuda.current_device()}`.")
+        logger.info("The device_map was not initialized.Setting device_map to `{'':torch.cuda.current_device()}`.")
 
     if isinstance(device_map, str):
         if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:

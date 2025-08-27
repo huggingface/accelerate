@@ -184,12 +184,12 @@ def training_function(config, args):
         with open(os.path.join(args.output_dir, f"state_{starting_epoch - 1}.json")) as f:
             resumed_state = json.load(f)
             assert resumed_state["accuracy"] == accuracy, "Accuracy mismatch, loading from checkpoint failed"
-            assert (
-                resumed_state["lr"] == lr_scheduler.get_lr()[0]
-            ), "Scheduler learning rate mismatch, loading from checkpoint failed"
-            assert (
-                resumed_state["optimizer_lr"] == optimizer.param_groups[0]["lr"]
-            ), "Optimizer learning rate mismatch, loading from checkpoint failed"
+            assert resumed_state["lr"] == lr_scheduler.get_lr()[0], (
+                "Scheduler learning rate mismatch, loading from checkpoint failed"
+            )
+            assert resumed_state["optimizer_lr"] == optimizer.param_groups[0]["lr"], (
+                "Optimizer learning rate mismatch, loading from checkpoint failed"
+            )
             assert resumed_state["epoch"] == starting_epoch - 1, "Epoch mismatch, loading from checkpoint failed"
             return
 

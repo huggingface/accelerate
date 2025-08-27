@@ -115,9 +115,9 @@ def test_torch_metrics(
 ):
     _, ddp_model, dataloader = get_basic_setup(accelerator, num_samples, batch_size)
     logits, _ = generate_predictions(ddp_model, dataloader, accelerator)
-    assert (
-        len(logits) == num_samples
-    ), f"Unexpected number of inputs:\n    Expected: {num_samples}\n    Actual: {len(logits)}"
+    assert len(logits) == num_samples, (
+        f"Unexpected number of inputs:\n    Expected: {num_samples}\n    Actual: {len(logits)}"
+    )
 
 
 def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
@@ -148,9 +148,9 @@ def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
     distributed = metric.compute()
 
     for key in "accuracy f1".split():
-        assert math.isclose(
-            baseline[key], distributed[key]
-        ), f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
+        assert math.isclose(baseline[key], distributed[key]), (
+            f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
+        )
 
 
 def test_gather_for_metrics_with_non_tensor_objects_iterable_dataset():
@@ -235,9 +235,9 @@ def test_gather_for_metrics_drop_last():
 
     # Should return a full set of complete batches from each GPU
     num_expected_items = per_device_batch_size * accelerator.num_processes
-    assert gathered_items.size(0) == (
-        num_expected_items
-    ), f"Expected number of items: {num_expected_items}, Actual: {gathered_items.size(0)}"
+    assert gathered_items.size(0) == (num_expected_items), (
+        f"Expected number of items: {num_expected_items}, Actual: {gathered_items.size(0)}"
+    )
 
 
 def main():

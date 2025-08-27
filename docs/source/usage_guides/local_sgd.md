@@ -92,7 +92,7 @@ Under the hood, the Local SGD code **disables** automatic gradient synchronizati
 
 ## Limitations
 
-The current implementation works only with basic multi-GPU (or multi-CPU) training without, e.g., [DeepSpeed.](https://github.com/microsoft/DeepSpeed).
+The current implementation works only with basic multi-GPU (or multi-CPU) training without, e.g., [DeepSpeed.](https://github.com/deepspeedai/DeepSpeed).
 
 ## References
 

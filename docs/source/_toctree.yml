@@ -62,8 +62,12 @@
       title: Amazon SageMaker
     - local: usage_guides/mps
       title: Apple M1 GPUs
-    - local: usage_guides/ipex
-      title: IPEX training with CPU
+    - local: usage_guides/intel_cpu
+      title: Intel CPU
+    - local: usage_guides/gaudi
+      title: Intel Gaudi
+    - local: usage_guides/compilation
+      title: Compilation
     title: Training
   - isExpanded: true
     sections:
@@ -86,12 +90,16 @@
     title: Gradient synchronization
   - local: concept_guides/fsdp_and_deepspeed
     title: FSDP vs DeepSpeed
+  - local: concept_guides/fsdp1_vs_fsdp2
+    title: FSDP1 vs FSDP2
+  - local: concept_guides/context_parallelism
+    title: Context parallelism
   - local: concept_guides/low_precision_training
     title: Low precision training methods
   - local: concept_guides/training_tpu
     title: Training on TPUs
   title: Concepts and fundamentals
-- sections: 
+- sections:
   - local: package_reference/accelerator
     title: Accelerator
   - local: package_reference/state

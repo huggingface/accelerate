@@ -208,6 +208,7 @@ These utilities relate to interacting with PyTorch models
 
 [[autodoc]] utils.set_module_tensor_to_device
 
+[[autodoc]] utils.get_module_children_bottom_up
 
 ## Parallel
 

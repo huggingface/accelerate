@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
 import tempfile
 import unittest
 
@@ -22,14 +21,16 @@ import torch.nn as nn
 from accelerate import Accelerator, init_empty_weights
 from accelerate.test_utils import (
     require_bnb,
-    require_cuda,
+    require_cuda_or_xpu,
     require_huggingface_suite,
-    require_multi_gpu,
+    require_multi_device,
     require_non_torch_xla,
     slow,
 )
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils.bnb import load_and_quantize_model
 from accelerate.utils.dataclasses import BnbQuantizationConfig
+from accelerate.utils.memory import clear_device_cache
 
 
 class BitsAndBytesConfigIntegration(unittest.TestCase):
@@ -40,10 +41,10 @@ class BitsAndBytesConfigIntegration(unittest.TestCase):
 
 @require_non_torch_xla
 @slow
-@require_cuda
+@require_cuda_or_xpu
 @require_bnb
 @require_huggingface_suite
-class MixedInt8EmptyModelTest(unittest.TestCase):
+class MixedInt8EmptyModelTest(AccelerateTestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
     # We need to test on relatively large models (aka >1b parameters otherwise the quantiztion may not work as expected)
@@ -97,8 +98,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         del self.model_fp16
         del self.model_8bit
 
-        gc.collect()
-        torch.cuda.empty_cache()
+        clear_device_cache(garbage_collection=True)
 
     def test_memory_footprint(self):
         r"""
@@ -198,7 +198,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         )
         assert model.lm_head.weight.dtype == torch.float32
 
-    @require_multi_gpu
+    @require_multi_device
     def test_cpu_gpu_loading_custom_device_map(self):
         from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
@@ -253,7 +253,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         assert model_8bit.transformer.h[1].mlp.dense_4h_to_h.weight.__class__ == Int8Params
         self.check_inference_correctness(model_8bit)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_cpu_gpu_loading_custom_device_map_offload_state_dict(self):
         from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
@@ -310,7 +310,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         assert model_8bit.transformer.h[1].mlp.dense_4h_to_h.weight.__class__ == Int8Params
         self.check_inference_correctness(model_8bit)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
         from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
@@ -401,12 +401,11 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
             self.check_inference_correctness(model_8bit_from_saved)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_int8_serialization_offload(self):
         r"""
         Test whether it is possible to serialize a model in 8-bit and offload weights to cpu/disk
         """
-
         from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
 
@@ -499,7 +498,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
 @require_non_torch_xla
 @slow
-@require_cuda
+@require_cuda_or_xpu
 @require_bnb
 @require_huggingface_suite
 class MixedInt8LoaddedModelTest(unittest.TestCase):
@@ -543,8 +542,7 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
         del self.model_fp16
         del self.model_8bit
 
-        gc.collect()
-        torch.cuda.empty_cache()
+        clear_device_cache(garbage_collection=True)
 
     def test_memory_footprint(self):
         r"""
@@ -605,7 +603,7 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
 
 @require_non_torch_xla
 @slow
-@require_cuda
+@require_cuda_or_xpu
 @require_bnb
 @require_huggingface_suite
 class Bnb4BitEmptyModelTest(unittest.TestCase):
@@ -663,8 +661,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         del self.model_fp16
         del self.model_4bit
 
-        gc.collect()
-        torch.cuda.empty_cache()
+        clear_device_cache(garbage_collection=True)
 
     def test_memory_footprint(self):
         r"""
@@ -736,7 +733,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         )
         assert model.lm_head.weight.dtype == torch.float32
 
-    @require_multi_gpu
+    @require_multi_device
     def test_cpu_gpu_loading_random_device_map(self):
         from transformers import AutoConfig, AutoModelForCausalLM
 
@@ -789,7 +786,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         )
         self.check_inference_correctness(model_4bit)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_cpu_gpu_loading_custom_device_map(self):
         from transformers import AutoConfig, AutoModelForCausalLM
 
@@ -819,7 +816,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         )
         self.check_inference_correctness(model_4bit)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
         from transformers import AutoConfig, AutoModelForCausalLM
 
@@ -855,7 +852,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
 
 @require_non_torch_xla
 @slow
-@require_cuda
+@require_cuda_or_xpu
 @require_bnb
 @require_huggingface_suite
 class Bnb4BitTestLoadedModel(unittest.TestCase):
@@ -904,8 +901,7 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
         del self.model_fp16
         del self.model_4bit
 
-        gc.collect()
-        torch.cuda.empty_cache()
+        clear_device_cache(garbage_collection=True)
 
     def test_memory_footprint(self):
         r"""

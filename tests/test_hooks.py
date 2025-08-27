@@ -13,22 +13,28 @@
 # limitations under the License.
 
 import inspect
+import re
 import unittest
 
 import torch
 import torch.nn as nn
+from parameterized import parameterized
 from torch.fx import symbolic_trace
 
+from accelerate.big_modeling import attach_layerwise_casting_hooks
 from accelerate.hooks import (
     AlignDevicesHook,
+    CpuOffload,
     ModelHook,
     SequentialHook,
+    UserCpuOffloadHook,
     add_hook_to_module,
     attach_align_device_hook,
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_multi_device, torch_device
+from accelerate.test_utils import require_multi_device, require_non_hpu, torch_device
+from accelerate.utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 
 
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
@@ -56,6 +62,34 @@ class PostForwardHook(ModelHook):
 
 
 class HooksModelTester(unittest.TestCase):
+    def check_dtype_for_layerwise_upcasting(
+        self,
+        module,
+        storage_dtype,
+        loading_type,
+        patterns_to_check=None,
+    ):
+        for name, submodule in module.named_modules():
+            attrs = []
+            if getattr(submodule, "weight", None) is not None:
+                attrs.append(("weight", submodule.weight))
+            if getattr(submodule, "bias", None) is not None:
+                attrs.append(("bias", submodule.bias))
+
+            if not isinstance(submodule, SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING):
+                if patterns_to_check is None:
+                    for _, tensor in attrs:
+                        self.assertEqual(tensor.dtype, loading_type)
+                continue
+
+            if patterns_to_check and any(re.search(pat, name) for pat in patterns_to_check):
+                expected = loading_type
+            else:
+                expected = storage_dtype
+
+            for _, tensor in attrs:
+                self.assertEqual(tensor.dtype, expected)
+
     def test_add_and_remove_hooks(self):
         test_model = ModelForTest()
         test_hook = ModelHook()
@@ -153,6 +187,7 @@ class HooksModelTester(unittest.TestCase):
         output1 = test_model(x)
         assert not output1.requires_grad
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_align_devices_as_model_parallelism(self):
         model = ModelForTest()
@@ -399,3 +434,83 @@ class HooksModelTester(unittest.TestCase):
 
             # Now the output is expected to be different since we modified the graph.
             assert not torch.allclose(output1, output3)
+
+    @parameterized.expand(
+        [
+            (torch.float16, torch.float32),
+            (torch.float8_e4m3fn, torch.float32),
+            (torch.float8_e4m3fn, torch.float32, ["batchnorm"]),
+        ]
+    )
+    def test_layerwise_upcasting_inference(self, storage_dtype, compute_dtype, skip_modules_pattern=None):
+        test_model = ModelForTest()
+        loading_dtype = next(test_model.parameters()).data.dtype
+        inputs = torch.randn(2, 3)
+        inputs = inputs.to(compute_dtype) if inputs.dtype == torch.float32 else inputs
+
+        attach_layerwise_casting_hooks(
+            test_model,
+            storage_dtype=storage_dtype,
+            compute_dtype=compute_dtype,
+            skip_modules_pattern=skip_modules_pattern,
+        )
+        patterns_to_check = skip_modules_pattern if skip_modules_pattern else None
+        self.check_dtype_for_layerwise_upcasting(test_model, storage_dtype, loading_dtype, patterns_to_check)
+
+        with torch.no_grad():
+            _ = test_model(inputs)
+
+    def test_cpu_offload_hook_moves_model(self):
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA not available for offload test.")
+
+        model = ModelForTest()
+        gpu_device = torch.device("cuda:0")
+        hook = CpuOffload(execution_device=gpu_device)
+        add_hook_to_module(model, hook)
+
+        x = torch.randn(2, 3).to(gpu_device)
+        output = model(x)
+        self.assertEqual(output.device, gpu_device)
+
+        remove_hook_from_module(model)
+        output2 = model(x)
+        self.assertEqual(output2.device, gpu_device)
+
+        # should be on the gpu
+        assert model.linear1.weight.device == gpu_device
+        assert model.batchnorm.weight.device == gpu_device
+        assert model.linear2.weight.device == gpu_device
+
+    def test_cpu_offload_hook_with_prev_module(self):
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA not available for offload test.")
+
+        model1 = ModelForTest()
+        model2 = ModelForTest()
+        gpu_device = torch.device("cuda:0")
+        cpu_device = torch.device("cpu")
+
+        hook1 = CpuOffload(execution_device=gpu_device)
+        add_hook_to_module(model1, hook1)
+        user_hook1 = UserCpuOffloadHook(model1, hook1)
+
+        hook2 = CpuOffload(execution_device=gpu_device, prev_module_hook=user_hook1)
+        add_hook_to_module(model2, hook2)
+
+        x = torch.randn(2, 3).to(gpu_device)
+        output1 = model1(x)
+        self.assertEqual(output1.device, gpu_device)
+
+        output2 = model2(x)
+        self.assertEqual(output2.device, gpu_device)
+
+        # should be on the cpu
+        assert model1.linear1.weight.device == cpu_device
+        assert model1.batchnorm.weight.device == cpu_device
+        assert model1.linear2.weight.device == cpu_device
+
+        # should be on the gpu still
+        assert model2.linear1.weight.device == gpu_device
+        assert model2.batchnorm.weight.device == gpu_device
+        assert model2.linear2.weight.device == gpu_device

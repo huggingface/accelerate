@@ -41,7 +41,7 @@ with init_empty_weights():
 
 Next, the weights are loaded into the model for inference.
 
-The [`load_checkpoint_and_dispatch`] method loads a checkpoint inside your empty model and dispatches the weights for each layer across all available devices, starting with the fastest devices (GPU, MPS, XPU, NPU, MLU, MUSA) first before moving to the slower ones (CPU and hard drive).
+The [`load_checkpoint_and_dispatch`] method loads a checkpoint inside your empty model and dispatches the weights for each layer across all available devices, starting with the fastest devices (GPU, MPS, XPU, NPU, MLU, SDAA, MUSA) first before moving to the slower ones (CPU and hard drive).
 
 Setting `device_map="auto"` automatically fills all available space on the GPU(s) first, then the CPU, and finally, the hard drive (the absolute slowest option) if there is still not enough memory.
 

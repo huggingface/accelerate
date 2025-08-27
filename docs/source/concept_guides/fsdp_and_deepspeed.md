@@ -109,7 +109,7 @@ While FSDP require an explicit `--fsdp_cpu_ram_efficient_loading true` to activa
 <Tip>
 
     For FSDP, whenever setting `--fsdp_cpu_ram_efficient_loading true`, `accelerate` will automatically set `sync_module_states` to true. 
-    For RAM efficient loading the weights will be loaded only in a singe rank, and thus requires `sync_module_states` to broadcast weights to other ranks.
+    For RAM efficient loading the weights will be loaded only in a single rank, and thus requires `sync_module_states` to broadcast weights to other ranks.
 
 </Tip>
 
@@ -125,7 +125,7 @@ FSDP requires an explicit `--fsdp_auto_wrap_policy` for the algorithm to decide 
 
 ### Parameters Summoning
 
-FSDP requires an explicit `--fsdp_use_orig_params` flag if using `torch.compile`, see [the pytorch documenation](https://pytorch.org/docs/stable/fsdp.html#module-torch.distributed.fsdp). For DeepSpeed this is transparent to the user.
+FSDP requires an explicit `--fsdp_use_orig_params` flag if using `torch.compile`, see [the pytorch documentation](https://pytorch.org/docs/stable/fsdp.html#module-torch.distributed.fsdp). For DeepSpeed this is transparent to the user.
 
 <Tip>
 
@@ -147,7 +147,7 @@ Deepspeed requires explicit `--gradient_accumulation_steps` and `--gradient_clip
 
 ## On Differences in Data Precision Handling
 
-To discuss the how data precision is handled in both FSDP and Deepspeed, it is instructive to first give an overview of how model parameters are handled in these frameworks. Before the model / optimizer parameters are distributed across GPUs, parameter preparation is involved to first "flatten" them to  one-dimensional [`torch.Tensor`](https://pytorch.org/docs/stable/tensors.html#torch-tensor). The implementation of FSDP / DeepSpeed varies in the respect of the `dtype` in which these "flattened" parameters are stored, and there are ramifications with regards to how [`torch.Optimizer`](https://pytorch.org/docs/stable/optim.html#module-torch.optim) allocate their `dtype`s. The table below outlines the processes for both frameworks; the "Local" column indicates the process occurring at a per-gpu level, therefore any memory overheads by upcasting should be understood to be amortized by the number of gpus used.
+To discuss how data precision is handled in both FSDP and Deepspeed, it is instructive to first give an overview of how model parameters are handled in these frameworks. Before the model / optimizer parameters are distributed across GPUs, parameter preparation is involved to first "flatten" them to one-dimensional [`torch.Tensor`](https://pytorch.org/docs/stable/tensors.html#torch-tensor). The implementation of FSDP / DeepSpeed varies in the respect of the `dtype` in which these "flattened" parameters are stored, and there are ramifications with regards to how [`torch.Optimizer`](https://pytorch.org/docs/stable/optim.html#module-torch.optim) allocate their `dtype`s. The table below outlines the processes for both frameworks; the "Local" column indicates the process occurring at a per-gpu level, therefore any memory overheads by upcasting should be understood to be amortized by the number of gpus used.
 
 <Tip>
 
@@ -166,7 +166,7 @@ Optimizer (Actual Step) | ✅ | FSDP<br>DeepSpeed  | occurs in `torch_dtype` <br
 
 <Tip warning={true}>
 
-    Therefore when using DeepSpeed a small number of GPUs, be aware of potentially significant memory overheads due to the upcasting during preperation.
+    Therefore when using DeepSpeed a small number of GPUs, be aware of potentially significant memory overheads due to the upcasting during preparation.
 
 </Tip>
 

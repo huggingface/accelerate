@@ -16,7 +16,7 @@ from types import MethodType
 
 import torch.nn as nn
 
-from .imports import is_fp8_available
+from .imports import is_hpu_available, is_transformer_engine_available
 from .operations import GatheredParameters
 
 
@@ -27,9 +27,17 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
     """
     Recursively converts the linear and layernorm layers of a model to their `transformers_engine` counterpart.
     """
-    if not is_fp8_available():
+    if not is_transformer_engine_available():
         raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
-    import transformer_engine.pytorch as te
+
+    if is_hpu_available():
+        import intel_transformer_engine as te
+
+        if not hasattr(te, "LayerNorm"):
+            # HPU does not have a LayerNorm implementation in TE
+            te.LayerNorm = nn.LayerNorm
+    else:
+        import transformer_engine.pytorch as te
 
     for name, module in model.named_children():
         if isinstance(module, nn.Linear) and to_transformer_engine and _convert_linear:
@@ -52,9 +60,11 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
         # Note: @xrsrke (Phuc) found that te.LayerNorm doesn't have any real memory savings or speedups over nn.LayerNorm
         elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
             with GatheredParameters([module.weight, module.bias], modifier_rank=0):
+                has_bias = module.bias is not None
                 te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
                 te_module.weight.copy_(module.weight)
-                te_module.bias.copy_(module.bias)
+                if has_bias:
+                    te_module.bias.copy_(module.bias)
 
             setattr(model, name, te_module)
         elif isinstance(module, te.Linear) and not to_transformer_engine and _convert_linear:
@@ -86,13 +96,22 @@ def has_transformer_engine_layers(model):
     """
     Returns whether a given model has some `transformer_engine` layer or not.
     """
-    if not is_fp8_available():
+    if not is_transformer_engine_available():
         raise ImportError("Using `has_transformer_engine_layers` requires transformer_engine to be installed.")
-    import transformer_engine.pytorch as te
+
+    if is_hpu_available():
+        import intel_transformer_engine as te
+
+        module_cls_to_check = te.Linear
+    else:
+        import transformer_engine.pytorch as te
+
+        module_cls_to_check = (te.LayerNorm, te.Linear, te.TransformerLayer)
 
     for m in model.modules():
-        if isinstance(m, (te.LayerNorm, te.Linear, te.TransformerLayer)):
+        if isinstance(m, module_cls_to_check):
             return True
+
     return False
 
 
@@ -101,9 +120,13 @@ def contextual_fp8_autocast(model_forward, fp8_recipe, use_during_eval=False):
     Wrapper for a model's forward method to apply FP8 autocast. Is context aware, meaning that by default it will
     disable FP8 autocast during eval mode, which is generally better for more accurate metrics.
     """
-    if not is_fp8_available():
+    if not is_transformer_engine_available():
         raise ImportError("Using `contextual_fp8_autocast` requires transformer_engine to be installed.")
-    from transformer_engine.pytorch import fp8_autocast
+
+    if is_hpu_available():
+        from intel_transformer_engine import fp8_autocast
+    else:
+        from transformer_engine.pytorch import fp8_autocast
 
     def forward(self, *args, **kwargs):
         enabled = use_during_eval or self.training
@@ -120,15 +143,39 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
     """
     Applies FP8 context manager to the model's forward method
     """
-    if not is_fp8_available():
+    if not is_transformer_engine_available():
         raise ImportError("Using `apply_fp8_autowrap` requires transformer_engine to be installed.")
-    import transformer_engine.common.recipe as te_recipe
+
+    if is_hpu_available():
+        import intel_transformer_engine.recipe as te_recipe
+
+        is_fp8_block_scaling_available = False
+        message = "MXFP8 block scaling is not available on HPU."
+
+    else:
+        import transformer_engine.common.recipe as te_recipe
+        import transformer_engine.pytorch as te
+
+        is_fp8_block_scaling_available, message = te.fp8.check_mxfp8_support()
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
     if "fp8_format" in kwargs:
         kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
     use_during_eval = kwargs.pop("use_autocast_during_eval", False)
-    fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+    use_mxfp8_block_scaling = kwargs.pop("use_mxfp8_block_scaling", False)
+
+    if use_mxfp8_block_scaling and not is_fp8_block_scaling_available:
+        raise ValueError(f"MXFP8 block scaling is not available: {message}")
+
+    if use_mxfp8_block_scaling:
+        if "amax_compute_algo" in kwargs:
+            raise ValueError("`amax_compute_algo` is not supported for MXFP8 block scaling.")
+        if "amax_history_len" in kwargs:
+            raise ValueError("`amax_history_len` is not supported for MXFP8 block scaling.")
+        fp8_recipe = te_recipe.MXFP8BlockScaling(**kwargs)
+    else:
+        fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+
     new_forward = contextual_fp8_autocast(model.forward, fp8_recipe, use_during_eval)
 
     if hasattr(model.forward, "__func__"):

@@ -102,9 +102,15 @@ jobs:
         id: date
         run: |
           echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
+          # Get the previous month
+          echo "base_year=$(date -d 'last month' '+%y')" >> $GITHUB_ENV
+          echo "base_month=$(date -d 'last month' '+%m')" >> $GITHUB_ENV
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
         with:
           file: benchmarks/fp8/transformer_engine/Dockerfile
           push: true
           tags: huggingface/accelerate:gpu-fp8-transformerengine-nightly-${{ env.date }}
+          build-args: |
+            BASE_YEAR=${{ env.base_year }}
+            BASE_MONTH=${{ env.base_month }}

@@ -19,10 +19,10 @@ extras = {}
 extras["quality"] = [
     "black ~= 23.1",  # hf-doc-builder has a hidden dependency on `black`
     "hf-doc-builder >= 0.3.0",
-    "ruff ~= 0.6.4",
+    "ruff ~= 0.11.2",
 ]
 extras["docs"] = []
-extras["test_prod"] = ["pytest>=7.2.0,<=8.0.0", "pytest-xdist", "pytest-subtests", "parameterized"]
+extras["test_prod"] = ["pytest>=7.2.0,<=8.0.0", "pytest-xdist", "pytest-subtests", "parameterized", "pytest-order"]
 extras["test_dev"] = [
     "datasets",
     "diffusers",
@@ -40,7 +40,17 @@ extras["testing"] = extras["test_prod"] + extras["test_dev"]
 extras["deepspeed"] = ["deepspeed"]
 extras["rich"] = ["rich"]
 
-extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive"]
+extras["test_fp8"] = ["torchao"]  # note: TE for now needs to be done via pulling down the docker image directly
+extras["test_trackers"] = [
+    "wandb",
+    "comet-ml",
+    "tensorboard",
+    "dvclive",
+    "mlflow",
+    "matplotlib",
+    "swanlab",
+    "trackio",
+]
 extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
 extras["sagemaker"] = [
@@ -49,7 +59,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="1.2.0.dev0",
+    version="1.11.0.dev0",
     description="Accelerate",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -88,7 +98,7 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
 )
@@ -103,20 +113,15 @@ setup(
 #      git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi'
 #    Push the tag and release commit to git: git push --tags origin vXX.xx-release
 # 5. Run the following commands in the top-level directory:
-#      rm -rf dist
-#      rm -rf build
-#      python setup.py bdist_wheel
-#      python setup.py sdist
+#      make prepare_release
 # 6. Upload the package to the pypi test server first:
-#      twine upload dist/* -r testpypi
+#      make target=testpypi upload_release
 # 7. Check that you can install it in a virtualenv by running:
-#      pip install accelerate
-#      pip uninstall accelerate
-#      pip install -i https://testpypi.python.org/pypi accelerate
+#      make install_test_release
 #      accelerate env
 #      accelerate test
 # 8. Upload the final version to actual pypi:
-#      twine upload dist/* -r pypi
+#      make target=pypi upload_release
 # 9. Add release notes to the tag in github once everything is looking hunky-dory.
 # 10. Go back to the main branch and update the version in __init__.py, setup.py to the new version ".dev" and push to
 #     main.
