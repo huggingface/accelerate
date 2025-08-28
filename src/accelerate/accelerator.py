@@ -27,7 +27,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
-from typing import Any, Callable, Union
+from typing import Any, Callable, Iterable, Optional, Union
 
 import torch
 import torch.utils.hooks as hooks
@@ -3021,6 +3021,39 @@ class Accelerator:
         except Exception:
             # Dataset had no length or raised an error
             return data
+
+    def collect_epoch_for_metrics(
+        self,
+        step_iter: Iterable,
+        step_fn: Callable[[Any], torch.Tensor],  # returns [b, ...] tensor per step
+        *,
+        cat_dim: int = 0,
+        expected_len: Optional[int] = None,
+        stream_to: Optional[Callable[[torch.Tensor, int], None]] = None,
+    ) -> Optional[torch.Tensor]:
+        """
+        Helper that streams per-step outputs, uses gather_for_metrics internally, and returns an epoch-level tensor.
+        
+        Args:
+            step_iter (`Iterable`):
+                An iterable (e.g., dataloader) that yields batches.
+            step_fn (`Callable[[Any], torch.Tensor]`):
+                A function that takes a batch and returns a tensor of shape [b, ...].
+            cat_dim (`int`, *optional*, defaults to 0):
+                The dimension along which to concatenate tensors.
+            expected_len (`int`, *optional*):
+                Expected length of the final tensor. If provided, will slice to this length.
+            stream_to (`Callable[[torch.Tensor, int], None]`, *optional*):
+                If provided, will be called with each gathered chunk and its step index.
+                When provided, returns a summary dict instead of a tensor.
+                
+        Returns:
+            `torch.Tensor` or `dict`: The concatenated tensor of all steps, or a summary dict if stream_to is provided.
+        """
+        from .utils.operations import collect_epoch_for_metrics
+        return collect_epoch_for_metrics(
+            self, step_iter, step_fn, cat_dim=cat_dim, expected_len=expected_len, stream_to=stream_to
+        )
 
     def reduce(self, tensor, reduction="sum", scale=1.0):
         """
