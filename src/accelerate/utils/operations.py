@@ -32,6 +32,7 @@ from .imports import (
     is_torch_distributed_available,
     is_torch_xla_available,
 )
+from typing import Any, Callable, Iterable, Optional
 
 
 if is_torch_xla_available():
@@ -842,6 +843,91 @@ def find_device(data):
                 return device
     elif isinstance(data, torch.Tensor):
         return data.device
+
+
+def collect_epoch_for_metrics(
+    accelerator: "Accelerator",
+    step_iter: Iterable,
+    step_fn: Callable[[Any], torch.Tensor],  # returns [b, ...] tensor per step
+    *,
+    cat_dim: int = 0,
+    expected_len: Optional[int] = None,
+    stream_to: Optional[Callable[[torch.Tensor, int], None]] = None,
+) -> Optional[torch.Tensor]:
+    """
+    Helper that streams per-step outputs, uses gather_for_metrics internally, and returns an epoch-level tensor.
+    
+    Args:
+        accelerator (`Accelerator`):
+            The accelerator object to use for gathering.
+        step_iter (`Iterable`):
+            An iterable (e.g., dataloader) that yields batches.
+        step_fn (`Callable[[Any], torch.Tensor]`):
+            A function that takes a batch and returns a tensor of shape [b, ...].
+        cat_dim (`int`, *optional*, defaults to 0):
+            The dimension along which to concatenate tensors.
+        expected_len (`int`, *optional*):
+            Expected length of the final tensor. If provided, will slice to this length.
+        stream_to (`Callable[[torch.Tensor, int], None]`, *optional*):
+            If provided, will be called with each gathered chunk and its step index.
+            When provided, returns a summary dict instead of a tensor.
+            
+    Returns:
+        `torch.Tensor` or `dict`: The concatenated tensor of all steps, or a summary dict if stream_to is provided.
+    """
+    import torch
+    
+    # On main process: accumulates CPU chunks
+    if accelerator.is_main_process:
+        chunks = []
+        total_count = 0
+        step_index = 0
+    
+    # Process each step
+    for step_data in step_iter:
+        # Get step output
+        step_output = step_fn(step_data)
+        
+        # Use gather_for_metrics to dedup automatically
+        gathered_output = accelerator.gather_for_metrics(step_output)
+        
+        # On main process: accumulate chunks
+        if accelerator.is_main_process:
+            if stream_to is not None:
+                # Stream to callback if provided
+                stream_to(gathered_output, step_index)
+                total_count += gathered_output.shape[cat_dim] if gathered_output.dim() > cat_dim else 1
+            else:
+                # Store chunk for later concatenation
+                chunks.append(gathered_output.cpu())
+                total_count += gathered_output.shape[cat_dim] if gathered_output.dim() > cat_dim else 1
+            step_index += 1
+    
+    # Return appropriate result
+    if accelerator.is_main_process:
+        if stream_to is not None:
+            # Return summary if streaming
+            return {"steps": step_index, "count": total_count}
+        else:
+            # Concatenate all chunks
+            if len(chunks) == 0:
+                return torch.empty(0)
+            
+            result = torch.cat(chunks, dim=cat_dim)
+            
+            # Slice to expected length if provided
+            if expected_len is not None and result.shape[cat_dim] > expected_len:
+                if cat_dim == 0:
+                    result = result[:expected_len]
+                else:
+                    slices = [slice(None)] * result.dim()
+                    slices[cat_dim] = slice(expected_len)
+                    result = result[tuple(slices)]
+            
+            return result
+    else:
+        # Non-main processes return None
+        return None
 
 
 @contextmanager
