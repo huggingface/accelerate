@@ -2136,6 +2136,10 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
         return torch.amp.GradScaler("hpu", **kwargs)
     elif is_xpu_available():
         return torch.amp.GradScaler("xpu", **kwargs)
+    elif is_mps_available():
+        if not is_torch_version(">=", "2.8.0"):
+            raise ValueError("Grad Scaler with MPS device requires a Pytorch >= 2.8.0")
+        return torch.amp.GradScaler("mps", **kwargs)
     else:
         if is_torch_version(">=", "2.3"):
             return torch.amp.GradScaler("cuda", **kwargs)

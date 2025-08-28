@@ -182,7 +182,7 @@ def is_bf16_available(ignore_tpu=False):
     if is_xpu_available():
         return torch.xpu.is_bf16_supported()
     if is_mps_available():
-        return False
+        return torch.backends.mps.is_macos_or_newer(14, 0)
     return True
 
 
