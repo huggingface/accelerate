@@ -1557,7 +1557,8 @@ class FullyShardedDataParallelPlugin:
             A config to enable mixed precision training with FullyShardedDataParallel. If passing in a `dict`, it
             should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`, can be an instance of
             `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2. If passing in a `str`, it
-            should be one of the following values: fp8, fp16, bf16, fp32, and used to set `param_dtype`, `reduce_dtype`, and `buffer_dtype`.
+            should be one of the following values: fp8, fp16, bf16, fp32, and used to set `param_dtype`,
+            `reduce_dtype`, and `buffer_dtype`.
         auto_wrap_policy (`Optional(Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]), defaults to `NO_WRAP`):
             A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one
             of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. See
