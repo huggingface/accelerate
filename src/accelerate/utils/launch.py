@@ -313,7 +313,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
 
         current_env["FSDP_RESHARD_AFTER_FORWARD"] = str(args.fsdp_reshard_after_forward).lower()
-        current_env["FSDP_MIXED_PRECISION_POLICY"] = str(args.fsdp_mixed_precision_policy).lower()
+        if args.fsdp_mixed_precision_policy is not None:
+            current_env["FSDP_MIXED_PRECISION_POLICY"] = str(args.fsdp_mixed_precision_policy).lower()
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
         if args.fsdp_auto_wrap_policy is not None:
