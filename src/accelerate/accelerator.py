@@ -1320,7 +1320,7 @@ class Accelerator:
 
         <Tip warning={true}>
 
-        Overidding `even_batches` will not affect iterable-style data loaders.
+        Overriding `even_batches` will not affect iterable-style data loaders.
 
         </Tip>
 
@@ -1356,7 +1356,7 @@ class Accelerator:
 
                 if iterable_dl_seen:
                     warnings.warn(
-                        "Overridding even_batches is only supported for map-style datasets, yet some dataloaders given were iterable"
+                        "Overriding even_batches is only supported for map-style datasets, yet some dataloaders given were iterable"
                     )
             else:
                 even_batches = self.even_batches
@@ -1535,7 +1535,7 @@ class Accelerator:
                 and self.state.use_ipex
             ):
                 logger.warning(
-                    "You are using lower version of PyTorch(< 2.7.0) with ipex acceleration on Intel CPU or XPU, Intel has upstreamed most of the optimizations into stock PyTorch from 2.7.0, we enourage you to install the latest stock PyTorch and enjoy the out-of-experience on Intel CPU/XPU."
+                    "You are using lower version of PyTorch(< 2.7.0) with ipex acceleration on Intel CPU or XPU, Intel has upstreamed most of the optimizations into stock PyTorch from 2.7.0, we encourage you to install the latest stock PyTorch and enjoy the out-of-experience on Intel CPU/XPU."
                 )
                 args = self._prepare_ipex(*args)
         if self.parallelism_config and self.parallelism_config.tp_enabled:
@@ -1665,7 +1665,7 @@ class Accelerator:
             else:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
 
-        # Get old params and canonicalize - we cannonicalize to have the mapping easy
+        # Get old params and canonicalize - we canonicalize to have the mapping easy
         old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
 
         # Swap the optimizer parameters with empty, so `fully_shard` after will not allocate too much memory
@@ -2881,7 +2881,7 @@ class Accelerator:
                     while isinstance(opt, AcceleratedOptimizer):
                         opt = opt.optimizer
                     gradients = xm._fetch_gradients(opt)
-                    # Use xm.all_reduce to perform an in-place all-reduce. Recusrsive all-reduce each tensor
+                    # Use xm.all_reduce to perform an in-place all-reduce. Recursive all-reduce each tensor
                     # one by one in self.reduce is non-inplace.
                     xm.all_reduce("sum", gradients, scale=1.0 / self.num_processes)
                     # Set is_xla_gradients_synced to True to avoid all-reduce twice in the AcceleratedOptimizer step.
@@ -3040,7 +3040,7 @@ class Accelerator:
             reduction (`str`, *optional*, defaults to "sum"):
                 A reduction type, can be one of 'sum', 'mean', or 'none'. If 'none', will not perform any operation.
             scale (`float`, *optional*, defaults to 1.0):
-                A default scaling value to be applied after the reduce, only valied on XLA.
+                A default scaling value to be applied after the reduce, only valid on XLA.
 
         Returns:
             `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`:
@@ -3332,7 +3332,7 @@ class Accelerator:
 
         Arguments:
             model: (`torch.nn.Module`):
-                Model to be saved. The model can be wrapped or unwraped.
+                Model to be saved. The model can be wrapped or unwrapped.
             save_directory (`str` or `os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
@@ -3443,7 +3443,7 @@ class Accelerator:
 
         `hook(models: list[torch.nn.Module], weights: list[dict[str, torch.Tensor]], input_dir: str) -> None`
 
-        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, `weigths`
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, `weights`
         argument are the state dicts of the `models`, and the `input_dir` argument is the `input_dir` argument passed
         to [`Accelerator.load_state`].
 

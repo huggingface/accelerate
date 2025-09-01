@@ -316,7 +316,7 @@ def _gpu_gather(tensor):
     state = PartialState()
     gather_op = torch.distributed.all_gather_into_tensor
 
-    # FIXME: the below 2 lines are added to work-aound a bug related to INT64 collectives in oneCCL. Remove them once pytorch-2.9 is released.
+    # FIXME: the below 2 lines are added to work-around a bug related to INT64 collectives in oneCCL. Remove them once pytorch-2.9 is released.
     if state.device.type == "xpu":
         torch.xpu.synchronize()
 
@@ -519,7 +519,7 @@ def gather_tensor_shape(tensor):
 
 def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
     """
-    Copys a tensor that only exists on a single device and broadcasts it to other devices. Differs from `broadcast` as
+    Copies a tensor that only exists on a single device and broadcasts it to other devices. Differs from `broadcast` as
     each worker doesn't need to know its shape when used (and tensor can be `None`)
 
     Args:
@@ -731,7 +731,7 @@ def reduce(tensor, reduction="mean", scale=1.0):
         reduction (`str`, *optional*, defaults to `"mean"`):
             A reduction method. Can be of "mean", "sum", or "none"
         scale (`float`, *optional*):
-            A default scaling value to be applied after the reduce, only valied on XLA.
+            A default scaling value to be applied after the reduce, only valid on XLA.
 
     Returns:
         The same data structure as `data` with all the tensors reduced.
@@ -787,7 +787,7 @@ def convert_to_fp32(tensor):
 
 class ConvertOutputsToFp32:
     """
-    Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
+    Decorator to apply to a function outputting tensors (like a model forward pass) that ensures the outputs in FP16
     precision will be convert back to FP32.
 
     Args:

@@ -873,7 +873,7 @@ def finish_mpu_init():
     _set_random_seed(args.seed, args.data_parallel_random_init)
 
 
-# intialize megatron setup
+# initialize megatron setup
 def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     accelerator.print("Initializing Megatron-LM")
     assert torch.cuda.is_available(), "Megatron requires CUDA."
@@ -1344,7 +1344,7 @@ class MegatronEngine(torch.nn.Module):
                 padding = torch.cuda.LongTensor([[tokenizer.eod] * max_new_tokens] * inputs.shape[0])
                 prompts_tokens_tensor = torch.concat([inputs.cuda(), padding], axis=-1)
 
-            # We need the sizes of these tensors for the boradcast
+            # We need the sizes of these tensors for the broadcast
             sizes_list = [
                 prompts_tokens_tensor.size(0),  # Batch size
                 prompts_tokens_tensor.size(1),
@@ -1353,7 +1353,7 @@ class MegatronEngine(torch.nn.Module):
         # First, broadcast the sizes.
         sizes_tensor = broadcast_int_list(2, int_list=sizes_list, rank=0)
 
-        # Now that we have the sizes, we can boradcast the tokens
+        # Now that we have the sizes, we can broadcast the tokens
         # and length tensors.
         sizes = sizes_tensor.tolist()
         context_tokens_tensor = broadcast_tensor(sizes, torch.int64, tensor=prompts_tokens_tensor, rank=0)

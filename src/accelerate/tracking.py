@@ -111,7 +111,7 @@ class GeneralTracker:
     (`bool`): Whether the logger requires a directory to store their logs. `tracker` (`object`): Should return internal
     tracking mechanism used by a tracker class (such as the `run` for wandb)
 
-    Implementations can also include a `main_process_only` (`bool`) attribute to toggle if relevent logging, init, and
+    Implementations can also include a `main_process_only` (`bool`) attribute to toggle if relevant logging, init, and
     other functions should occur on the main process or across all processes (by default will use `True`)
     """
 
