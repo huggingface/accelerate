@@ -89,7 +89,7 @@ def convert_config_to_fsdp2(config: dict) -> dict:
     new_fsdp_config = {}
 
     if fsdp_config.get("fsdp_version", 1) == 2:
-        logger.warning("Config already specfies FSDP2, skipping conversion...")
+        logger.warning("Config already specifies FSDP2, skipping conversion...")
         logger.warning(
             "If the config doesn't use new argument names, change `fsdp_version` to `1` and rerun the command."
         )

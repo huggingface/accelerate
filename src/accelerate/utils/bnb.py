@@ -314,7 +314,7 @@ def _replace_with_bnb_layers(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     # bitsandbytes will initialize CUDA on import, so it needs to be imported lazily
     import bitsandbytes as bnb

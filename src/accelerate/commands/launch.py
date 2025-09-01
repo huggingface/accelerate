@@ -493,13 +493,13 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_exclusion_filter",
         default=None,
         type=str,
-        help="DeepSpeed exclusion filter string when using mutli-node setup.",
+        help="DeepSpeed exclusion filter string when using multi-node setup.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_inclusion_filter",
         default=None,
         type=str,
-        help="DeepSpeed inclusion filter string when using mutli-node setup.",
+        help="DeepSpeed inclusion filter string when using multi-node setup.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_multinode_launcher",
@@ -585,7 +585,7 @@ def launch_command_parser(subparsers=None):
         "--fsdp_use_orig_params",
         default="true",
         type=str,
-        help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres."
+        help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable parameters."
         " (useful only when `use_fsdp` flag is passed).",
     )
     fsdp_args.add_argument(

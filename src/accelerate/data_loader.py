@@ -75,7 +75,7 @@ class SeedableRandomSampler(RandomSampler):
     Same as a random sampler, except that in `__iter__` a seed can be used.
 
     Needed specifically in distributed cases, when the random generator for each GPU needs to start from the same seed
-    and be fully reproducable on multiple iterations.
+    and be fully reproducible on multiple iterations.
 
     If a custom `generator` is passed, it will rely on its initial seed as well as the current iteration it is on
     (stored in `self.epoch`).
@@ -408,7 +408,7 @@ class DataLoaderStateMixin:
 class DataLoaderAdapter:
     """
     A class which wraps around a PyTorch `DataLoader` (or variants of it) to be used with the `Accelerator`. For
-    compatability reasons, this class inherits from the class it wraps around, so it can be used as a drop-in.
+    compatibility reasons, this class inherits from the class it wraps around, so it can be used as a drop-in.
     """
 
     def __init__(self, dataset, use_stateful_dataloader=False, batch_sampler=None, **kwargs):
@@ -451,8 +451,8 @@ class DataLoaderAdapter:
     @property
     def __class__(self):
         """
-        In order to maintain backwards compatability with other code, we need to ensure `isinstance(obj, DataLoader)`
-        returs true. This is because some downstream code assumes that the `DataLoader` is the base class of the
+        In order to maintain backwards compatibility with other code, we need to ensure `isinstance(obj, DataLoader)`
+        returns true. This is because some downstream code assumes that the `DataLoader` is the base class of the
         object.
         """
         return self.base_dataloader.__class__
@@ -763,12 +763,12 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
 
         # if a device mesh is provided extract each dimension (dp, fsdp, tp)
         # device mesh may hold any number of dimensions, however,
-        # below code is for targetted support for dp, fsdp and tp
+        # below code is for targeted support for dp, fsdp and tp
 
         # device mesh will be used only if there is tp involved
         # or any multi-dimensional parallelism involving tp
         # (dp, tp) (fsdp, tp) (dp, fsdp, tp)
-        # otherwise the default behavour not using device mesh should be sufficient
+        # otherwise the default behaviour not using device mesh should be sufficient
         # since multi dimensional parallelism devoid of tp would anyway need
         # different batches for each process irrespective of dp or fsdp
         self.submesh_tp = None
@@ -1063,7 +1063,7 @@ def prepare_data_loader(
             ignored otherwise.
         use_seedable_sampler (`bool`, *optional*, defaults to `False`):
             Whether to use the [`~data_loader.SeedableRandomSampler`] instead of a `RandomSampler` for better
-            reproducability. Comes at a cost of potentially different performances due to different shuffling
+            reproducibility. Comes at a cost of potentially different performances due to different shuffling
             algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
             `self.set_epoch`
         data_seed (`int`, *optional*, defaults to `None`):
