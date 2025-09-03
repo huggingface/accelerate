@@ -2946,7 +2946,7 @@ class Accelerator:
         >>> from accelerate import Accelerator
 
         >>> accelerator = Accelerator()
-        >>> process_tensor = torch.tensor([accelerator.process_index])
+        >>> process_tensor = torch.tensor([accelerator.process_index], device=accelerator.device)
         >>> gathered_tensor = accelerator.gather(process_tensor)
         >>> gathered_tensor
         tensor([0, 1, 2, 3])
