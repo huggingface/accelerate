@@ -32,6 +32,7 @@ from .imports import (
     is_torch_distributed_available,
     is_torch_xla_available,
 )
+from .versions import is_torch_version
 
 
 if is_torch_xla_available():
@@ -317,7 +318,8 @@ def _gpu_gather(tensor):
     gather_op = torch.distributed.all_gather_into_tensor
 
     # FIXME: the below 2 lines are added to work-aound a bug related to INT64 collectives in oneCCL. Remove them once pytorch-2.9 is released.
-    if state.device.type == "xpu":
+    if state.device.type == "xpu" and is_torch_version("<=", "2.8"):
+        print(f"extra synchronize....")
         torch.xpu.synchronize()
 
     def _gpu_gather_one(tensor):
