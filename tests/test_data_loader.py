@@ -557,6 +557,49 @@ class DataLoaderTester(AccelerateTestCase):
         assert dataloader_ref() is None
         assert gradient_state_ref() is None
 
+    def test_skip_first_batches_by_samples(self):
+        dataset = list(range(16))
+        # 1 Read samples by two processes
+        # 1.1 Read samples by index 0
+        batch_sampler = BatchSampler(dataset, batch_size=4, drop_last=False)
+        batch_sampler_0 = BatchSamplerShard(batch_sampler=batch_sampler, num_processes=2, process_index=0)
+        shard_dataloader_0 = DataLoaderShard(dataset=dataset, batch_sampler=batch_sampler_0)
+        shard_dataloader_0 = skip_first_batches(shard_dataloader_0, num_samples=0)
+        shard_dataloader_iter_0 = iter(shard_dataloader_0)
+        assert next(shard_dataloader_iter_0).tolist() == [0, 1, 2, 3]
+        # 1.2 Read samples by index 1
+        batch_sampler = BatchSampler(dataset, batch_size=4, drop_last=False)
+        batch_sampler_1 = BatchSamplerShard(batch_sampler=batch_sampler, num_processes=2, process_index=1)
+        shard_dataloader_1 = DataLoaderShard(dataset=dataset, batch_sampler=batch_sampler_1)
+        shard_dataloader_1 = skip_first_batches(shard_dataloader_1, num_samples=0)
+        shard_dataloader_iter_1 = iter(shard_dataloader_1)
+        assert next(shard_dataloader_iter_1).tolist() == [4, 5, 6, 7]
+
+        # 2 Continue to read samples by three processes with skip
+        # 2.1 Read samples by index 0 with skip
+        batch_sampler = BatchSampler(dataset, batch_size=4, drop_last=False)
+        batch_sampler_0 = BatchSamplerShard(batch_sampler=batch_sampler, num_processes=3, process_index=0)
+        shard_dataloader_0 = DataLoaderShard(dataset=dataset, batch_sampler=batch_sampler_0)
+        shard_dataloader_0 = skip_first_batches(shard_dataloader_0, num_samples=8)
+        shard_dataloader_iter_0 = iter(shard_dataloader_0)
+        assert next(shard_dataloader_iter_0).tolist() == [8, 9, 10, 11]
+
+        # 2.2 Read samples by index 1 with skip
+        batch_sampler = BatchSampler(dataset, batch_size=4, drop_last=False)
+        batch_sampler_1 = BatchSamplerShard(batch_sampler=batch_sampler, num_processes=3, process_index=1)
+        shard_dataloader_1 = DataLoaderShard(dataset=dataset, batch_sampler=batch_sampler_1)
+        shard_dataloader_1 = skip_first_batches(shard_dataloader_1, num_samples=8)
+        shard_dataloader_iter_1 = iter(shard_dataloader_1)
+        assert next(shard_dataloader_iter_1).tolist() == [12, 13, 14, 15]
+
+        # 2.3 Read samples by index 2 with skip
+        batch_sampler = BatchSampler(dataset, batch_size=4, drop_last=False)
+        batch_sampler_2 = BatchSamplerShard(batch_sampler=batch_sampler, num_processes=3, process_index=2)
+        shard_dataloader_2 = DataLoaderShard(dataset=dataset, batch_sampler=batch_sampler_2)
+        shard_dataloader_2 = skip_first_batches(shard_dataloader_2, num_samples=8)
+        shard_dataloader_iter_2 = iter(shard_dataloader_2)
+        assert next(shard_dataloader_iter_2).tolist() == [8, 9, 10, 11]
+
 
 class StatefulDataLoaderTester(AccelerateTestCase):
     @require_torchdata_stateful_dataloader
