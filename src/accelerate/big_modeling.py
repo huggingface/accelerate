@@ -767,7 +767,9 @@ def _attach_context_parallel_hooks(
     """
 
     def _self_attn_pre_forward_hook(_module, module_args, module_kwargs):
-        if "attention_mask" in module_kwargs:
+        if "attention_mask" in module_kwargs and not getattr(
+            module_kwargs["attention_mask"], "_accelerate_created", False
+        ):
             module_kwargs["attention_mask"] = None
             module_kwargs["is_causal"] = True
 
