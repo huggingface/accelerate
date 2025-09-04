@@ -21,7 +21,7 @@ from contextlib import nullcontext
 
 import torch
 from datasets import Dataset, load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate import Accelerator
 
@@ -202,7 +202,7 @@ def setup_tokenizer(model_id: str) -> AutoTokenizer:
 
 
 def gpu_memory_usage_all(device=0):
-    device_type = infer_device()
+    device_type = torch.accelerator.current_accelerator().type
     device = torch.device(f"{device_type}:{device}")
     torch_device_module = getattr(torch, device_type, torch.cuda)
     _BYTES_IN_GIB = 1024**3
