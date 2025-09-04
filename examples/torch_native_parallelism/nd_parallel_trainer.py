@@ -13,7 +13,7 @@
 # limitations under the License.
 import argparse
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
 from accelerate.utils import ParallelismConfig
 from utils import get_dataset
@@ -39,7 +39,7 @@ def main():
     args = parse_args()
 
     if args.device_type == "auto":
-        args.device_type = infer_device()
+        args.device_type = torch.accelerator.current_accelerator().type
 
     model_kwargs = {}
     if pc.tp_enabled:
