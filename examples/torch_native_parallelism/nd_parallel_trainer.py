@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument("--checkpoint-frequency", type=int, default=100)
     parser.add_argument("--model-name", type=str, default=MODEL_ID)
     parser.add_argument("--save-dir", type=str, default=f"./accelerate-nd-parallel-{MODEL_ID.split('/')[-1]}")
-    parser.add_argument("--device-type", type=str, default="cuda")
+    parser.add_argument("--device-type", type=str, default="auto")
     return parser.parse_args()
 
 
@@ -37,6 +37,9 @@ def main():
     # which were set by using config
     pc = ParallelismConfig()
     args = parse_args()
+
+    if args.device_type == "auto":
+        args.device_type = torch.accelerator.current_accelerator().type
 
     model_kwargs = {}
     if pc.tp_enabled:
