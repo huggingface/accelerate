@@ -1175,7 +1175,7 @@ class Accelerator:
                 yield
             finally:
                 model.set_requires_gradient_sync(True)
-        else:  
+        else:
             context = contextlib.nullcontext
             if self.use_distributed:
                 if self.distributed_type != DistributedType.DEEPSPEED or self.state.deepspeed_plugin.zero_stage < 2:
