@@ -188,6 +188,13 @@ class BigModelingTester(unittest.TestCase):
         assert module.weight.device == torch.device("cpu")
         assert module.running_mean.device == torch.device("cpu")
 
+    def test_init_empty_weights_with_tie_embedding(self):
+        with init_empty_weights():
+            module = torch.nn.ModuleList([torch.nn.Embedding(12, 12), torch.nn.Linear(12, 12)])
+            # tie embedding
+            module[0].weight = module[1].weight
+        assert module[0].weight is module[1].weight
+
     def test_init_empty_weights_very_large_model(self):
         # This is a 100 billion parameters model.
         with init_empty_weights():
