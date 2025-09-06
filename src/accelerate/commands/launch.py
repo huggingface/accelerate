@@ -609,7 +609,12 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="Decides Whether (true|false) intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder. (useful only when `use_fsdp` flag is passed).",
     )
-
+    fsdp_args.add_argument(
+        "--fsdp_mixed_precision_policy",
+        type=str,
+        default=None,
+        help="Set mixed precision policy. Value has to be one of fp8, fp16, bf16, fp32",
+    )
     # megatron_lm args
     megatron_lm_args = parser.add_argument_group("Megatron-LM Arguments", "Arguments related to Megatron-LM.")
     megatron_lm_args.add_argument(

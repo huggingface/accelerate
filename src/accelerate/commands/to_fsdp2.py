@@ -32,6 +32,7 @@ ARGUMENT_KEY_MAPPING = {
     # New keys in FSDP2
     "fsdp_version": "fsdp_version",
     "fsdp_reshard_after_forward": "fsdp_reshard_after_forward",
+    "fsdp_mixed_precision_policy": "fsdp_mixed_precision_policy",
     # https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
     # https://huggingface.co/docs/accelerate/en/usage_guides/fsdp
     "fsdp_auto_wrap_policy": "fsdp_auto_wrap_policy",
