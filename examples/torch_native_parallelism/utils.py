@@ -202,16 +202,18 @@ def setup_tokenizer(model_id: str) -> AutoTokenizer:
 
 
 def gpu_memory_usage_all(device=0):
-    device = torch.device(f"cuda:{device}")
+    device_type = torch.accelerator.current_accelerator().type
+    device = torch.device(f"{device_type}:{device}")
+    torch_device_module = getattr(torch, device_type, torch.cuda)
     _BYTES_IN_GIB = 1024**3
-    peak_memory_active = torch.cuda.memory_stats().get("active_bytes.all.peak", 0) / _BYTES_IN_GIB
-    peak_memory_alloc = torch.cuda.max_memory_allocated(device) / _BYTES_IN_GIB
-    peak_memory_reserved = torch.cuda.max_memory_reserved(device) / _BYTES_IN_GIB
+    peak_memory_active = torch_device_module.memory_stats().get("active_bytes.all.peak", 0) / _BYTES_IN_GIB
+    peak_memory_alloc = torch_device_module.max_memory_allocated(device) / _BYTES_IN_GIB
+    peak_memory_reserved = torch_device_module.max_memory_reserved(device) / _BYTES_IN_GIB
     memory_stats = {
         "peak_memory_active": peak_memory_active,
         "peak_memory_alloc": peak_memory_alloc,
         "peak_memory_reserved": peak_memory_reserved,
     }
-    torch.cuda.reset_peak_memory_stats(device)
+    torch_device_module.reset_peak_memory_stats(device)
 
     return memory_stats

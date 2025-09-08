@@ -1169,13 +1169,20 @@ class Accelerator:
         >>> optimizer.zero_grad()
         ```
         """
-        context = contextlib.nullcontext
-        if self.use_distributed:
-            if self.distributed_type != DistributedType.DEEPSPEED or self.state.deepspeed_plugin.zero_stage < 2:
-                context = getattr(model, "no_sync", context)
+        if self.is_fsdp2:
+            model.set_requires_gradient_sync(False)
+            try:
+                yield
+            finally:
+                model.set_requires_gradient_sync(True)
+        else:
+            context = contextlib.nullcontext
+            if self.use_distributed:
+                if self.distributed_type != DistributedType.DEEPSPEED or self.state.deepspeed_plugin.zero_stage < 2:
+                    context = getattr(model, "no_sync", context)
 
-        with context():
-            yield
+            with context():
+                yield
 
     @staticmethod
     @contextmanager
@@ -2946,7 +2953,7 @@ class Accelerator:
         >>> from accelerate import Accelerator
 
         >>> accelerator = Accelerator()
-        >>> process_tensor = torch.tensor([accelerator.process_index])
+        >>> process_tensor = torch.tensor([accelerator.process_index], device=accelerator.device)
         >>> gathered_tensor = accelerator.gather(process_tensor)
         >>> gathered_tensor
         tensor([0, 1, 2, 3])
