@@ -317,6 +317,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
             env = self.fsdp_envs[fsdp_version].copy()
             with patch_environment(**env):
+                plugin = FullyShardedDataParallelPlugin(mixed_precision_policy=mp_dtype)
+                assert plugin.mixed_precision_policy == mp_policy
+            with patch_environment(**env):
                 plugin = FullyShardedDataParallelPlugin(
                     mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, **{extra_arg: dtype}}
                 )
