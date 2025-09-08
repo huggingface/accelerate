@@ -805,8 +805,8 @@ class DataLoaderConfiguration:
         use_seedable_sampler (`bool`, defaults to `False`):
             Whether or not use a fully seedable random sampler ([`data_loader.SeedableRandomSampler`]). Ensures
             training results are fully reproducible using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are negligible when using multiple different seeds to compare. Should
-            also be ran with [`~utils.set_seed`] for the best results.
+            may differ, on average the differences are negligible when using multiple different seeds to compare.
+            Should also be ran with [`~utils.set_seed`] for the best results.
         data_seed (`int`, defaults to `None`):
             The seed to use for the underlying generator when using `use_seedable_sampler`. If `None`, the generator
             will use the current default seed from torch.
