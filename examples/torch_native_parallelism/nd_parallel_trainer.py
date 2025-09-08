@@ -13,6 +13,7 @@
 # limitations under the License.
 import argparse
 
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
 from accelerate.utils import ParallelismConfig
@@ -69,7 +70,7 @@ def main():
     trainer = Trainer(
         model=model,
         args=training_args,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         train_dataset=packed_dataset,
     )
 
