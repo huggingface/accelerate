@@ -625,7 +625,7 @@ class ToFSDP2Tester(unittest.TestCase):
             with self.assertLogs(level="WARNING") as cm:
                 to_fsdp2_command(args)
 
-            assert "Config already specfies FSDP2, skipping conversion..." in cm.output[0]
+            assert "Config already specifies FSDP2, skipping conversion..." in cm.output[0]
 
     # Has to be the last test because it overwrites the config file
     def test_fsdp2_overwrite(self):
