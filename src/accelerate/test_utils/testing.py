@@ -598,7 +598,7 @@ def require_torchdata_stateful_dataloader(test_case):
 def run_first(test_case):
     """
     Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator are
-    garanteed to run first.
+    guaranteed to run first.
 
     This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
@@ -617,7 +617,7 @@ def run_first(test_case):
 class TempDirTestCase(unittest.TestCase):
     """
     A TestCase class that keeps a single `tempfile.TemporaryDirectory` open for the duration of the class, wipes its
-    data at the start of a test, and then destroyes it at the end of the TestCase.
+    data at the start of a test, and then destroys it at the end of the TestCase.
 
     Useful for when a class or API requires a single constant folder throughout it's use, such as Weights and Biases
 

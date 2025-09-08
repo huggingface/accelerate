@@ -50,7 +50,7 @@ def test_gather_object(state):
     assert gathered_obj == list(range(state.num_processes)), f"{gathered_obj} != {list(range(state.num_processes))}"
 
 
-def test_gather_non_contigous(state):
+def test_gather_non_contiguous(state):
     # Skip this test because the 'is_contiguous' function of XLA tensor always returns True.
     if state.distributed_type == DistributedType.XLA:
         return
@@ -160,8 +160,8 @@ def main():
     test_gather(state)
     state.print("testing gather_object")
     test_gather_object(state)
-    state.print("testing gather non-contigous")
-    test_gather_non_contigous(state)
+    state.print("testing gather non-contiguous")
+    test_gather_non_contiguous(state)
     state.print("testing broadcast")
     test_broadcast(state)
     state.print("testing pad_across_processes")

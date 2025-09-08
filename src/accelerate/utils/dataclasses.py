@@ -683,7 +683,7 @@ class DynamoBackend(str, BaseEnum):
           more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
         - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
           more](https://github.com/intel/intel-extension-for-pytorch).
-        - **TVM** -- Uses Apach TVM for inference optimizations. [Read more](https://tvm.apache.org/)
+        - **TVM** -- Uses Apache TVM for inference optimizations. [Read more](https://tvm.apache.org/)
         - **HPU_BACKEND** -- Uses HPU backend for inference optimizations.
 
     """
@@ -804,9 +804,9 @@ class DataLoaderConfiguration:
             all workers.
         use_seedable_sampler (`bool`, defaults to `False`):
             Whether or not use a fully seedable random sampler ([`data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
-            also be ran with [`~utils.set_seed`] for the best results.
+            training results are fully reproducible using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are negligible when using multiple different seeds to compare.
+            Should also be ran with [`~utils.set_seed`] for the best results.
         data_seed (`int`, defaults to `None`):
             The seed to use for the underlying generator when using `use_seedable_sampler`. If `None`, the generator
             will use the current default seed from torch.
@@ -849,8 +849,8 @@ class DataLoaderConfiguration:
         default=False,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`data_loader.SeedableRandomSampler`])."
-            "Ensures training results are fully reproducable using a different sampling technique. "
-            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "Ensures training results are fully reproducible using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are negligible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
@@ -956,7 +956,7 @@ class GradientAccumulationPlugin(KwargsHandler):
         sync_with_dataloader (`bool`, *optional*, defaults to `True`):
             Whether to synchronize setting the gradients when at the end of the dataloader.
         sync_each_batch (`bool`, *optional*):
-                Whether to synchronize setting the gradients at each data batch. Seting to `True` may reduce memory
+                Whether to synchronize setting the gradients at each data batch. Setting to `True` may reduce memory
                 requirements when using gradient accumulation with distributed training, at expense of speed.
 
     Example:
@@ -2008,7 +2008,7 @@ class FullyShardedDataParallelPlugin:
 
     def set_auto_wrap_policy(self, model):
         """
-        Given `model`, creates an `auto_wrap_policy` baesd on the passed in policy and if we can use the
+        Given `model`, creates an `auto_wrap_policy` based on the passed in policy and if we can use the
         `transformer_cls_to_wrap`
         """
         from torch.distributed.fsdp.wrap import (
@@ -2256,7 +2256,7 @@ class MegatronLMPlugin:
         lr_warmup_fraction (`float`, defaults to `None`):
             Fraction of lr-warmup-(iters/samples) to linearly warmup learning rate over.
         min_lr (`float`, defaults to `0`):
-            Minumum value for learning rate. The scheduler clip values below this threshold.
+            Minimum value for learning rate. The scheduler clip values below this threshold.
         consumed_samples (`List`, defaults to `None`):
             Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call.
         no_wd_decay_cond (`Optional`, defaults to `None`):
@@ -2383,7 +2383,7 @@ class MegatronLMPlugin:
     )
     min_lr: float = field(
         default=0,
-        metadata={"help": "Minumum value for learning rate. The scheduler clip values below this threshold."},
+        metadata={"help": "Minimum value for learning rate. The scheduler clip values below this threshold."},
     )
     consumed_samples: list[int] = field(
         default=None,
