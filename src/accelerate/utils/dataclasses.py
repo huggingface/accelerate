@@ -1773,8 +1773,7 @@ class FullyShardedDataParallelPlugin:
         # Strategy: By default we should always assume that values are passed in, else we check the environment variables
         if self.fsdp_version is None:
             self.fsdp_version = int(os.environ.get(env_prefix + "VERSION", "1"))
-        if self.mixed_precision_policy is None:
-            self.mixed_precision_policy = os.environ.get(env_prefix + "MIXED_PRECISION_POLICY", None)
+
         if self.fsdp_version == 2:
             if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
                 raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
