@@ -414,7 +414,12 @@ def is_npu_available(check_device=False):
     if importlib.util.find_spec("torch_npu") is None:
         return False
 
-    import torch_npu  # noqa: F401
+    # NOTE: importing torch_npu may raise error in some envs
+    # e.g. inside cpu-only container with torch_npu installed
+    try:
+        import torch_npu  # noqa: F401
+    except Exception:
+        return False
 
     if check_device:
         try:
