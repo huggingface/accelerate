@@ -600,10 +600,14 @@ def slice_tensors(data, tensor_slice, process_index=None, num_processes=None):
 
 def concatenate(data, dim=0):
     """
-    Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors with the same shape.
+    Recursively concatenates elements in a nested structure of tensors or strings.
+
+    Supports nested lists, tuples, or dictionaries that contain either:
+    - torch.Tensors (with the same shape except along `dim`)
+    - strings (concatenated as flat lists)
 
     Args:
-        data (nested list/tuple/dictionary of lists of tensors `torch.Tensor`):
+        data (nested list/tuple/dictionary of lists of tensors `torch.Tensor` or `str`):
             The data to concatenate.
         dim (`int`, *optional*, defaults to 0):
             The dimension on which to concatenate.
@@ -611,7 +615,9 @@ def concatenate(data, dim=0):
     Returns:
         The same data structure as `data` with all the tensors concatenated.
     """
-    if isinstance(data[0], (tuple, list)):
+    if isinstance(data[0], list) and all(isinstance(x, str) for x in data[0]):
+        return honor_type(data[0], [item for sublist in data for item in sublist])
+    elif isinstance(data[0], (tuple, list)):
         return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
     elif isinstance(data[0], Mapping):
         return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
