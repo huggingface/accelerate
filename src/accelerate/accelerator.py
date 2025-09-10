@@ -570,7 +570,9 @@ class Accelerator:
             self.native_amp = True
             supported_device = ("xpu", "cuda", "npu", "xla", "mlu", "musa", "hpu", "sdaa", "mps")
             if self.device.type not in supported_device or is_torch_xla_available(check_is_tpu=True):
-                raise ValueError(f"fp16 mixed precision requires a device in {supported_device} (not {self.device.type!r}).")
+                raise ValueError(
+                    f"fp16 mixed precision requires a device in {supported_device} (not {self.device.type!r})."
+                )
             if self.device.type == "mps" and not is_torch_version(">=", "2.5.0"):
                 raise ValueError("fp16 mixed precision with MPS device requires a Pytorch >= 2.5.0")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
