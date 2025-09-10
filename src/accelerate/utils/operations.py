@@ -116,7 +116,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
         )
     elif isinstance(data, Mapping):
         return type(data)(
-            {
+            **{
                 k: recursively_apply(
                     func, v, *args, test_type=test_type, error_on_other_type=error_on_other_type, **kwargs
                 )
