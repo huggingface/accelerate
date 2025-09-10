@@ -25,7 +25,7 @@ import unittest
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 from unittest import mock
 
 import torch
@@ -847,7 +847,7 @@ def path_in_accelerate_package(*components: str) -> Path:
 
 
 @contextmanager
-def assert_exception(exception_class: Exception, msg: str = None) -> bool:
+def assert_exception(exception_class: Exception, msg: Optional[str] = None) -> bool:
     """
     Context manager to assert that the right `Exception` class was raised.
 

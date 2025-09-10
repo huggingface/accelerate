@@ -127,7 +127,7 @@ class AutocastKwargs(KwargsHandler):
     """
 
     enabled: bool = True
-    cache_enabled: bool = None
+    cache_enabled: Optional[bool] = None
 
 
 class DDPCommunicationHookType(BaseEnum):
@@ -364,14 +364,14 @@ class TERecipeKwargs(KwargsHandler):
             Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
     """
 
-    use_autocast_during_eval: bool = None
-    margin: int = None
-    interval: int = None
+    use_autocast_during_eval: Optional[bool] = None
+    margin: Optional[int] = None
+    interval: Optional[int] = None
     fp8_format: FP8Format = None
-    amax_history_len: int = None
+    amax_history_len: Optional[int] = None
     amax_compute_algo: AmaxComputeAlgorithm = None
     override_linear_precision: tuple[bool, bool, bool] = None
-    use_mxfp8_block_scaling: bool = None
+    use_mxfp8_block_scaling: Optional[bool] = None
 
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
@@ -931,7 +931,7 @@ class ProjectConfiguration:
         },
     )
 
-    def set_directories(self, project_dir: str = None):
+    def set_directories(self, project_dir: Optional[str] = None):
         "Sets `self.project_dir` and `self.logging_dir` to the appropriate values."
         self.project_dir = project_dir
         if self.logging_dir is None:

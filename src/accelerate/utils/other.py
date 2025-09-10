@@ -20,6 +20,7 @@ from codecs import encode
 from collections import OrderedDict
 from functools import partial, reduce
 from types import MethodType
+from typing import Optional
 
 import numpy as np
 import torch
@@ -460,7 +461,7 @@ def merge_dicts(source, destination):
     return destination
 
 
-def is_port_in_use(port: int = None) -> bool:
+def is_port_in_use(port: Optional[int] = None) -> bool:
     """
     Checks if a port is in use on `localhost`. Useful for checking if multiple `accelerate launch` commands have been
     run and need to see if the port is already in use.

@@ -56,10 +56,10 @@ class ParallelismConfig:
 
     """
 
-    dp_replicate_size: int = None
-    dp_shard_size: int = None
-    tp_size: int = None
-    cp_size: int = None
+    dp_replicate_size: Optional[int] = None
+    dp_shard_size: Optional[int] = None
+    tp_size: Optional[int] = None
+    cp_size: Optional[int] = None
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
