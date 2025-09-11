@@ -34,6 +34,7 @@ from accelerate.hooks import (
     remove_hook_from_submodules,
 )
 from accelerate.test_utils import require_multi_device, require_non_hpu, torch_device
+from accelerate.utils import is_xpu_available
 from accelerate.utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 
 
@@ -461,6 +462,8 @@ class HooksModelTester(unittest.TestCase):
             _ = test_model(inputs)
 
     def test_cpu_offload_hook_moves_model(self):
+        if not torch.cuda.is_available() and not is_xpu_available():
+            self.skipTest("CUDA or XPU not available for offload test.")
 
         model = ModelForTest()
         device = torch.device(torch_device)
@@ -481,6 +484,8 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear2.weight.device == device
 
     def test_cpu_offload_hook_with_prev_module(self):
+        if not torch.cuda.is_available() and not is_xpu_available():
+            self.skipTest("CUDA or XPU not available for offload test.")
 
         model1 = ModelForTest()
         model2 = ModelForTest()
