@@ -392,8 +392,8 @@ class WandBTracker(GeneralTracker):
     def log_table(
         self,
         table_name: str,
-        columns: list[str] = None,
-        data: list[list[Any]] = None,
+        columns: Optional[list[str]] = None,
+        data: Optional[list[list[Any]]] = None,
         dataframe: Any = None,
         step: Optional[int] = None,
         **kwargs,
@@ -735,7 +735,7 @@ class MLflowTracker(GeneralTracker):
 
     def __init__(
         self,
-        experiment_name: str = None,
+        experiment_name: Optional[str] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         run_id: Optional[str] = None,
         tags: Optional[Union[dict[str, Any], str]] = None,
@@ -924,7 +924,7 @@ class ClearMLTracker(GeneralTracker):
     name = "clearml"
     requires_logging_directory = False
 
-    def __init__(self, run_name: str = None, **kwargs):
+    def __init__(self, run_name: Optional[str] = None, **kwargs):
         super().__init__()
         self.user_provided_run_name = run_name
         self._initialized_externally = False
@@ -1016,8 +1016,8 @@ class ClearMLTracker(GeneralTracker):
     def log_table(
         self,
         table_name: str,
-        columns: list[str] = None,
-        data: list[list[Any]] = None,
+        columns: Optional[list[str]] = None,
+        data: Optional[list[list[Any]]] = None,
         dataframe: Any = None,
         step: Optional[int] = None,
         **kwargs,
@@ -1270,7 +1270,7 @@ LOGGER_TYPE_TO_CLASS = {
 
 def filter_trackers(
     log_with: list[Union[str, LoggerType, GeneralTracker]],
-    logging_dir: Union[str, os.PathLike] = None,
+    logging_dir: Optional[Union[str, os.PathLike]] = None,
 ):
     """
     Takes in a list of potential tracker types and checks that:

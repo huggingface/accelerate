@@ -546,7 +546,7 @@ class PartialState:
         """
         yield from self._goes_first(self.is_local_main_process)
 
-    def on_main_process(self, function: Callable[..., Any] = None):
+    def on_main_process(self, function: Callable[..., Any] | None = None):
         """
         Decorator that only runs the decorated function on the main process.
 
@@ -576,7 +576,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_local_main_process(self, function: Callable[..., Any] = None):
+    def on_local_main_process(self, function: Callable[..., Any] | None = None):
         """
         Decorator that only runs the decorated function on the local main process.
 
@@ -635,7 +635,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
+    def on_process(self, function: Callable[..., Any] | None = None, process_index: int | None = None):
         """
         Decorator that only runs the decorated function on the process with the given index.
 
@@ -668,7 +668,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
+    def on_local_process(self, function: Callable[..., Any] | None = None, local_process_index: int | None = None):
         """
         Decorator that only runs the decorated function on the process with the given index on the current node.
 
@@ -744,7 +744,7 @@ class PartialState:
             return torch.device("cpu")
 
     def _prepare_backend(
-        self, cpu: bool = False, sagemaker_dp=False, backend: str = None
+        self, cpu: bool = False, sagemaker_dp=False, backend: str | None = None
     ) -> tuple[str, DistributedType]:
         "Prepares any imports needed before initializing the distributed backend and sets `self.backend` properly"
         distributed_type = None
@@ -894,7 +894,7 @@ class AcceleratorState:
 
     def __init__(
         self,
-        mixed_precision: str = None,
+        mixed_precision: str | None = None,
         cpu: bool = False,
         dynamo_plugin=None,
         deepspeed_plugin=None,
@@ -1205,7 +1205,7 @@ class AcceleratorState:
         return self.deepspeed_plugins[name]
 
     @deepspeed_required
-    def select_deepspeed_plugin(self, name: str = None):
+    def select_deepspeed_plugin(self, name: str | None = None):
         """
         Activates the DeepSpeedPlugin with the given `name`, and will disable all other plugins.
         """

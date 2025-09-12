@@ -14,6 +14,7 @@
 
 import random
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import torch
@@ -66,7 +67,7 @@ def save_accelerator_state(
     dataloaders: list,
     process_index: int,
     step: int,
-    scaler: GradScaler = None,
+    scaler: Optional[GradScaler] = None,
     save_on_each_node: bool = False,
     safe_serialization: bool = True,
 ):

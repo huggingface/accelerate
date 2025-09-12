@@ -310,7 +310,7 @@ class IterableDatasetShard(IterableDataset):
                 f"To use `IterableDatasetShard` in `split_batches` mode, the batch size ({batch_size}) "
                 f"needs to be a round multiple of the number of processes ({num_processes})."
             )
-        self.dataset = dataset
+        self.dataset: IterableDataset = dataset
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.num_processes = num_processes

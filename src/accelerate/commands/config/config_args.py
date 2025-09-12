@@ -189,34 +189,34 @@ class ClusterConfig(BaseConfig):
     enable_cpu_affinity: bool = False
 
     # args for FP8 training
-    fp8_config: dict = None
+    fp8_config: Optional[dict] = None
     # args for deepspeed_plugin
-    deepspeed_config: dict = None
+    deepspeed_config: Optional[dict] = None
     # args for fsdp
-    fsdp_config: dict = None
+    fsdp_config: Optional[dict] = None
     # args for parallelism config
-    parallelism_config: dict = None
+    parallelism_config: Optional[dict] = None
     # args for megatron_lm
-    megatron_lm_config: dict = None
+    megatron_lm_config: Optional[dict] = None
     # args for ipex
-    ipex_config: dict = None
+    ipex_config: Optional[dict] = None
     # args for mpirun
-    mpirun_config: dict = None
+    mpirun_config: Optional[dict] = None
     # args for TPU
     downcast_bf16: bool = False
 
     # args for TPU pods
-    tpu_name: str = None
-    tpu_zone: str = None
+    tpu_name: Optional[str] = None
+    tpu_zone: Optional[str] = None
     tpu_use_cluster: bool = False
     tpu_use_sudo: bool = False
-    command_file: str = None
+    command_file: Optional[str] = None
     commands: list[str] = None
     tpu_vm: list[str] = None
     tpu_env: list[str] = None
 
     # args for dynamo
-    dynamo_config: dict = None
+    dynamo_config: Optional[dict] = None
 
     def __post_init__(self):
         if self.deepspeed_config is None:
@@ -249,8 +249,8 @@ class SageMakerConfig(BaseConfig):
     pytorch_version: str = SAGEMAKER_PYTORCH_VERSION
     transformers_version: str = SAGEMAKER_TRANSFORMERS_VERSION
     py_version: str = SAGEMAKER_PYTHON_VERSION
-    sagemaker_inputs_file: str = None
-    sagemaker_metrics_file: str = None
-    additional_args: dict = None
-    dynamo_config: dict = None
+    sagemaker_inputs_file: Optional[str] = None
+    sagemaker_metrics_file: Optional[str] = None
+    additional_args: Optional[dict] = None
+    dynamo_config: Optional[dict] = None
     enable_cpu_affinity: bool = False

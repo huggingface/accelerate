@@ -22,6 +22,7 @@ import gc
 import importlib
 import inspect
 import warnings
+from typing import Optional
 
 import torch
 from packaging import version
@@ -117,7 +118,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
 
 
 def find_executable_batch_size(
-    function: callable = None, starting_batch_size: int = 128, reduce_batch_size_fn: callable = None
+    function: Optional[callable] = None, starting_batch_size: int = 128, reduce_batch_size_fn: Optional[callable] = None
 ):
     """
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
