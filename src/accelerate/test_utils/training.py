@@ -1,4 +1,5 @@
 # Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,20 +32,6 @@ class RegressionDataset:
 
     def __getitem__(self, i):
         return {"x": self.x[i], "y": self.y[i]}
-
-
-class RegressionModel4XPU(torch.nn.Module):
-    def __init__(self, a=0, b=0, double_output=False):
-        super().__init__()
-        self.a = torch.nn.Parameter(torch.tensor([2, 3]).float())
-        self.b = torch.nn.Parameter(torch.tensor([2, 3]).float())
-        self.first_batch = True
-
-    def forward(self, x=None):
-        if self.first_batch:
-            print(f"Model dtype: {self.a.dtype}, {self.b.dtype}. Input dtype: {x.dtype}")
-            self.first_batch = False
-        return x * self.a[0] + self.b[0]
 
 
 class RegressionModel(torch.nn.Module):

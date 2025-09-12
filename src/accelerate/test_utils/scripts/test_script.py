@@ -48,11 +48,7 @@ from accelerate.utils import (
 )
 
 
-# TODO: remove RegressionModel4XPU once ccl support empty buffer in broadcasting.
-if is_xpu_available():
-    from accelerate.test_utils import RegressionModel4XPU as RegressionModel
-else:
-    from accelerate.test_utils import RegressionModel
+from accelerate.test_utils import RegressionModel
 
 if is_hpu_available():
     ATOL = 1e-3
