@@ -400,7 +400,7 @@ class PartialState:
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
-            torch.distributed.barrier(device_ids=[self.process_index])
+            torch.distributed.barrier(device_ids=[self.local_process_index])
         elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
