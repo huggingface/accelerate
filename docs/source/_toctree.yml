@@ -92,6 +92,8 @@
     title: FSDP vs DeepSpeed
   - local: concept_guides/fsdp1_vs_fsdp2
     title: FSDP1 vs FSDP2
+  - local: concept_guides/context_parallelism
+    title: Context parallelism
   - local: concept_guides/low_precision_training
     title: Low precision training methods
   - local: concept_guides/training_tpu

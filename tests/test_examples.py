@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import mock, skip
 
 import torch
 
@@ -297,12 +297,14 @@ class FeatureExamplesTests(TempDirTestCase):
 
     @require_pippy
     @require_multi_device
+    @skip("Will soon deprecate pippy")
     def test_pippy_examples_bert(self):
         testargs = ["examples/inference/pippy/bert.py"]
         run_command(self.launch_args + testargs)
 
     @require_pippy
     @require_multi_device
+    @skip("Will soon deprecate pippy")
     def test_pippy_examples_gpt2(self):
         testargs = ["examples/inference/pippy/gpt2.py"]
         run_command(self.launch_args + testargs)

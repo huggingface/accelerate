@@ -180,8 +180,6 @@ class PartialState:
         if not self.initialized:
             self._cpu = cpu
             self.backend = None
-            self.parallelism_config = kwargs.pop("parallelism_config", None)
-            self.device_mesh = kwargs.pop("device_mesh", None)
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
             self.debug = parse_flag_from_env("ACCELERATE_DEBUG_MODE")
@@ -189,7 +187,7 @@ class PartialState:
             dist_information = None
             if use_sagemaker_dp is None:
                 use_sagemaker_dp = (
-                    os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
+                    os.environ.get("ACCELERATE_USE_SAGEMAKER", "false").lower() == "true"
                     and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
                 )
 
@@ -197,14 +195,14 @@ class PartialState:
             original_backend = kwargs.pop("backend", None)
             backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, original_backend)
             if original_backend is not None and backend != original_backend:
-                raise ValueError(f"Your assigned backend {original_backend} is not avaliable, please use {backend}")
+                raise ValueError(f"Your assigned backend {original_backend} is not available, please use {backend}")
             self.backend = backend
             self.distributed_type = distributed_type
             use_deepspeed = False
             if not cpu and self.backend != "xla":
                 if int(os.environ.get("LOCAL_RANK", -1)) != -1:
                     # Deal with spawning deepspeed
-                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true":
                         if not is_deepspeed_available():
                             raise ImportError(
                                 "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
@@ -228,9 +226,9 @@ class PartialState:
                             torch.sdaa.set_device(f"sdaa:{local_rank}")
                         if (
                             self.backend == "nccl"
-                            and os.environ.get("ACCELERATE_USE_FSDP", "false") == "true"
+                            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
                             and (
-                                os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true"
+                                os.environ.get("FSDP_OFFLOAD_PARAMS", "false").lower() == "true"
                                 or os.environ.get("FSDP_STATE_DICT_TYPE", "SHARDED_STATE_DICT") == "FULL_STATE_DICT"
                                 or True
                             )
@@ -403,7 +401,7 @@ class PartialState:
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
-            torch.distributed.barrier()
+            torch.distributed.barrier(device_ids=[self.local_process_index])
         elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
@@ -904,6 +902,7 @@ class AcceleratorState:
         fsdp_plugin=None,
         torch_tp_plugin=None,
         megatron_lm_plugin=None,
+        parallelism_config=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -918,6 +917,8 @@ class AcceleratorState:
             self.deepspeed_plugins = None
             self.use_ipex = None
             self.torch_tp_plugin = torch_tp_plugin
+            self.parallelism_config = parallelism_config
+            self.device_mesh = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
@@ -949,8 +950,13 @@ class AcceleratorState:
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
                     "before using any functionality from the `accelerate` library."
                 )
-            # deepspeed handles mixed_precision using deepspeed_config
-            self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
+            # deepspeed handles mixed_precision using deepspeed_config. But we need to set it to fp8
+            # if we're using fp8.
+            if self.distributed_type == DistributedType.DEEPSPEED and mixed_precision != "fp8":
+                self._mixed_precision = "no"
+            else:
+                self._mixed_precision = mixed_precision
+
             if self.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_tpu=True):
                 if mixed_precision == "bf16":
                     if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
@@ -961,7 +967,7 @@ class AcceleratorState:
                         os.environ["XLA_USE_BF16"] = str(1)
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
-            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
+            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true" and not cpu:
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not isinstance(deepspeed_plugin, dict):
                     deepspeed_plugin.set_mixed_precision(mixed_precision)
@@ -982,12 +988,30 @@ class AcceleratorState:
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,
             ]:
-                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or fsdp_plugin is not None:
+                # TODO: Siro - remove when axolotl fixes their side
+                if not os.environ.get("ACCELERATE_ALLOW_CP_STANDALONE", "false").lower() == "true":
+                    if self.parallelism_config and self.parallelism_config.cp_enabled and fsdp_plugin is None:
+                        raise ValueError(
+                            "`cp_size > 1` specified in the `parallelism_config`, but no `fsdp_plugin` was provided. We need a `fsdp_plugin` to use context parallelism, as we also shard the model across the device mesh to save more memory"
+                        )
+                    if (
+                        self.parallelism_config is not None
+                        and self.parallelism_config.cp_enabled
+                        and fsdp_plugin.fsdp_version == 1
+                    ):
+                        raise ValueError(
+                            "Using `cp_size>1` requires FSDP2, but the provided `fsdp_plugin` is using FSDP1. "
+                        )
+                if (os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None) or (
+                    self.parallelism_config is not None and self.parallelism_config.cp_enabled
+                ):
                     self.distributed_type = DistributedType.FSDP
-                    if self._mixed_precision != "no":
+                    if self._mixed_precision != "no" and fsdp_plugin is not None:
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
-                if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" and self.distributed_type not in [
+                if os.environ.get(
+                    "ACCELERATE_USE_MEGATRON_LM", "false"
+                ).lower() == "true" and self.distributed_type not in [
                     DistributedType.MULTI_XPU,
                 ]:
                     self.distributed_type = DistributedType.MEGATRON_LM
@@ -1038,7 +1062,7 @@ class AcceleratorState:
 
     @property
     def mixed_precision(self):
-        if self.distributed_type == DistributedType.DEEPSPEED:
+        if self.distributed_type == DistributedType.DEEPSPEED and self._mixed_precision != "fp8":
             config = self.deepspeed_plugin.deepspeed_config
             if config.get("fp16", {}).get("enabled", False):
                 mixed_precision = "fp16"
@@ -1061,7 +1085,7 @@ class AcceleratorState:
         """
         Destroys the process group. If one is not specified, the default process group is destroyed.
 
-        If `self.fork_lauched` is `True` and `group` is `None`, nothing happens.
+        If `self.fork_launched` is `True` and `group` is `None`, nothing happens.
         """
         PartialState().destroy_process_group(group)
 

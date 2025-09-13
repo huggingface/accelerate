@@ -24,8 +24,10 @@ from torch.fx import symbolic_trace
 from accelerate.big_modeling import attach_layerwise_casting_hooks
 from accelerate.hooks import (
     AlignDevicesHook,
+    CpuOffload,
     ModelHook,
     SequentialHook,
+    UserCpuOffloadHook,
     add_hook_to_module,
     attach_align_device_hook,
     remove_hook_from_module,
@@ -457,3 +459,58 @@ class HooksModelTester(unittest.TestCase):
 
         with torch.no_grad():
             _ = test_model(inputs)
+
+    def test_cpu_offload_hook_moves_model(self):
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA not available for offload test.")
+
+        model = ModelForTest()
+        gpu_device = torch.device("cuda:0")
+        hook = CpuOffload(execution_device=gpu_device)
+        add_hook_to_module(model, hook)
+
+        x = torch.randn(2, 3).to(gpu_device)
+        output = model(x)
+        self.assertEqual(output.device, gpu_device)
+
+        remove_hook_from_module(model)
+        output2 = model(x)
+        self.assertEqual(output2.device, gpu_device)
+
+        # should be on the gpu
+        assert model.linear1.weight.device == gpu_device
+        assert model.batchnorm.weight.device == gpu_device
+        assert model.linear2.weight.device == gpu_device
+
+    def test_cpu_offload_hook_with_prev_module(self):
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA not available for offload test.")
+
+        model1 = ModelForTest()
+        model2 = ModelForTest()
+        gpu_device = torch.device("cuda:0")
+        cpu_device = torch.device("cpu")
+
+        hook1 = CpuOffload(execution_device=gpu_device)
+        add_hook_to_module(model1, hook1)
+        user_hook1 = UserCpuOffloadHook(model1, hook1)
+
+        hook2 = CpuOffload(execution_device=gpu_device, prev_module_hook=user_hook1)
+        add_hook_to_module(model2, hook2)
+
+        x = torch.randn(2, 3).to(gpu_device)
+        output1 = model1(x)
+        self.assertEqual(output1.device, gpu_device)
+
+        output2 = model2(x)
+        self.assertEqual(output2.device, gpu_device)
+
+        # should be on the cpu
+        assert model1.linear1.weight.device == cpu_device
+        assert model1.batchnorm.weight.device == cpu_device
+        assert model1.linear2.weight.device == cpu_device
+
+        # should be on the gpu still
+        assert model2.linear1.weight.device == gpu_device
+        assert model2.batchnorm.weight.device == gpu_device
+        assert model2.linear2.weight.device == gpu_device

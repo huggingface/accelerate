@@ -8,7 +8,7 @@ deepspeed_config:
   # `transformers` uses the right `init` function
   zero3_init_flag: false # true 
 
-# Finally we need to specify the number of GPUs to use
+# Finally we need to specify the number of accelerators to use
 num_processes: 2
 # Optionally we can set the mixed precision now instead of in the deepspeed config file,
 # however this requires the `fp16` and `bf16` options to be set to `auto` in the deepspeed config file

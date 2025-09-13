@@ -35,10 +35,12 @@ from accelerate.utils import (
     gather,
     gather_object,
     is_bf16_available,
+    is_cuda_available,
     is_datasets_available,
     is_fp16_available,
     is_hpu_available,
     is_ipex_available,
+    is_mps_available,
     is_pytest_available,
     is_xpu_available,
     set_seed,
@@ -534,7 +536,7 @@ def training_check(use_seedable_sampler=False):
     accelerator.print("Training yielded the same results on one CPU or distributed setup with batch split.")
 
     # FP32 wrapper check
-    if torch.cuda.is_available():
+    if is_cuda_available() or is_mps_available():
         # Mostly a test that model.forward will have autocast when running unwrap_model(model, keep_fp32_wrapper=True)
         print("Keep fp32 wrapper check.")
         AcceleratorState._reset_state()

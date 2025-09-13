@@ -149,7 +149,7 @@ def check_cuda_p2p_ib_support():
     Checks if the devices being used have issues with P2P and IB communications, namely any consumer GPU hardware after
     the 3090.
 
-    Noteably uses `nvidia-smi` instead of torch to not initialize CUDA.
+    Notably uses `nvidia-smi` instead of torch to not initialize CUDA.
     """
     try:
         device_names, device_count = get_gpu_info()

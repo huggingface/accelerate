@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Union
 
-from torch.distributed.device_mesh import init_device_mesh
-
-from accelerate.utils.dataclasses import TorchTensorParallelConfig
+from accelerate.utils.dataclasses import TorchContextParallelConfig, TorchTensorParallelConfig
+from accelerate.utils.versions import is_torch_version
 
 
 if TYPE_CHECKING:
@@ -56,13 +56,16 @@ class ParallelismConfig:
 
     """
 
-    dp_replicate_size: int = 1
-    dp_shard_size: int = 1
-    tp_size: int = 1
-    cp_size: int = 1
+    dp_replicate_size: int = None
+    dp_shard_size: int = None
+    tp_size: int = None
+    cp_size: int = None
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
+    cp_handler: Union[None, TorchContextParallelConfig] = None
+
+    device_mesh = None
 
     def __repr__(self):
         return (
@@ -71,7 +74,22 @@ class ParallelismConfig:
             f"\tdp_shard_size={self.dp_shard_size},\n"
             f"\ttp_size={self.tp_size},\n"
             f"\tcp_size={self.cp_size},\n"
-            f"\ttotal_size={self.total_size}\n)"
+            f"\ttotal_size={self.total_size}\n"
+            f"\ttp_handler={self.tp_handler},\n"
+            f"\tcp_handler={self.cp_handler})\n"
+        )
+
+    def to_json(self):
+        import copy
+
+        _non_serializable_fields = ["device_mesh"]
+
+        copy.deepcopy(
+            {
+                k: copy.deepcopy(v.__dict__) if hasattr(v, "__dict__") else v
+                for k, v in self.__dict__.items()
+                if k not in _non_serializable_fields
+            }
         )
 
     @property
@@ -172,9 +190,14 @@ class ParallelismConfig:
         Args:
             device_type (`str`): The type of device for which to build the mesh, e
         """
+        if is_torch_version(">=", "2.2.0"):
+            from torch.distributed.device_mesh import init_device_mesh
+        else:
+            raise RuntimeError("Building a device_mesh requires to have torch>=2.2.0")
+
         mesh = self._get_mesh()
         if len(mesh) == 0:
-            return
+            return None
         mesh_dim_names, mesh_shape = mesh
         device_mesh = init_device_mesh(
             device_type,
@@ -189,6 +212,20 @@ class ParallelismConfig:
             device_mesh[self.dp_cp_dim_names]._flatten("dp_cp")
 
         return device_mesh
+
+    def get_device_mesh(self, device_type: Optional[str] = None):
+        if self.device_mesh is None:
+            if device_type is not None:
+                self.device_mesh = self.build_device_mesh(device_type)
+            else:
+                raise ("You need to pass a device_type e.g cuda to build the device mesh")
+        else:
+            if device_type is not None:
+                if self.device_mesh.device_type != device_type:
+                    raise ValueError(
+                        f"The device_mesh is already created with device type {self.device_mesh.device_type}. However, you are trying to get a device mesh with device_type {device_type}. Please check if you correctly initialized your device_mesh"
+                    )
+        return self.device_mesh
 
     def _get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
         """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""
@@ -206,6 +243,23 @@ class ParallelismConfig:
 
     def __post_init__(self):
         # Basic size validation
+        if self.dp_replicate_size is None:
+            self.dp_replicate_size = int(os.environ.get("PARALLELISM_CONFIG_DP_REPLICATE_SIZE", "1"))
+        if self.dp_shard_size is None:
+            self.dp_shard_size = int(os.environ.get("PARALLELISM_CONFIG_DP_SHARD_SIZE", "1"))
+        if self.tp_size is None:
+            self.tp_size = int(os.environ.get("PARALLELISM_CONFIG_TP_SIZE", "1"))
+        if self.cp_size is None:
+            self.cp_size = int(os.environ.get("PARALLELISM_CONFIG_CP_SIZE", "1"))
+
+        if self.tp_size > 1:
+            if self.tp_handler is None:
+                self.tp_handler = TorchTensorParallelConfig()
+
+        if self.cp_size > 1:
+            if self.cp_handler is None:
+                self.cp_handler = TorchContextParallelConfig()
+
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
         if self.dp_shard_size < 1:

@@ -747,3 +747,43 @@ def _attach_layerwise_casting_hooks(
             non_blocking,
             _prefix=layer_name,
         )
+
+
+def _attach_context_parallel_hooks(
+    model: nn.Module,
+):
+    """
+    Monkeypatch huggingface's `transformers` model to fix attention mask issues when using context parallelism.
+
+    This function attaches forward_pre_hooks to each self_attn module of the model, where each hook checks the
+    args/kwargs, if they contain an attention mask, if it does, it will remove this mask, check if it is a causal mask,
+    if yes, will add a kwarg `is_causal=True`, otherwise will raise an error. This is because context parallelism does
+    not support attention masks. This function modifies the model in place.
+
+    Args:
+        model (`nn.Module`):
+            The model to attach the hooks to.
+
+    """
+
+    def _self_attn_pre_forward_hook(_module, module_args, module_kwargs):
+        if "attention_mask" in module_kwargs:
+            module_kwargs["attention_mask"] = None
+            module_kwargs["is_causal"] = True
+
+        return module_args, module_kwargs
+
+    for name, module in model.named_modules():
+        # We hope (assume) that if user uses their own model (without this structure which transformers uses), they read the docs saying they can't pass in attention masks
+        # Then these cases can happen:
+        # 1) some modules end with a `self-attn` module, in which case we attach the hook, but the
+        #    there's no attention mask kwarg -> hook is a no-op
+        # 2) some modules end with a `self-attn` module, in which case we attach the hook, and the
+        #    attention mask kwarg is passed -> hook will remove the attention mask and add
+        #    `is_causal=True` kwarg, which either crashes the training or fixes it
+        #    (training would crash anyway as attention mask isn't supported)
+        # 3) no modules end with a `self-attn` module, in which case we don't attach the hook, this is
+        #    a no-op as well
+        if name.endswith("self_attn"):
+            # we want the hook to be executed first, to avoid any other hooks doing work on the attention mask
+            module.register_forward_pre_hook(_self_attn_pre_forward_hook, with_kwargs=True, prepend=True)

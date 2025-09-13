@@ -194,6 +194,8 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
+    # args for parallelism config
+    parallelism_config: dict = None
     # args for megatron_lm
     megatron_lm_config: dict = None
     # args for ipex
@@ -229,6 +231,8 @@ class ClusterConfig(BaseConfig):
             self.mpirun_config = {}
         if self.fp8_config is None:
             self.fp8_config = {}
+        if self.parallelism_config is None:
+            self.parallelism_config = {}
         return super().__post_init__()
 
 

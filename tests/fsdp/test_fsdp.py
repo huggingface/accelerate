@@ -317,6 +317,9 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
             env = self.fsdp_envs[fsdp_version].copy()
             with patch_environment(**env):
+                plugin = FullyShardedDataParallelPlugin(mixed_precision_policy=mp_dtype)
+                assert plugin.mixed_precision_policy == mp_policy
+            with patch_environment(**env):
                 plugin = FullyShardedDataParallelPlugin(
                     mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, **{extra_arg: dtype}}
                 )
@@ -397,6 +400,22 @@ class FSDPPluginIntegration(AccelerateTestCase):
             fsdp_plugin = FullyShardedDataParallelPlugin()
             assert fsdp_plugin.cpu_ram_efficient_loading is False
             assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
+
+    def test_ignored_modules_regex(self):
+        # Check that FSDP's ignored_modules can be a string, in which case it is treated as a regex
+        env = self.fsdp_envs[1].copy()
+        env["FSDP_IGNORED_MODULES"] = ".*\\.q_proj$"
+        with patch_environment(**env):
+            accelerator = Accelerator()
+            model = AutoModel.from_pretrained(LLAMA_TESTING)
+            model = accelerator.prepare(model)
+            if self.current_fsdp_version == 1:
+                # model has 2 layers
+                layers_to_ignore = {model.layers[0].self_attn.q_proj, model.layers[1].self_attn.q_proj}
+                assert model._ignored_modules == layers_to_ignore
+            else:
+                params_to_ignore = {model.layers[0].self_attn.q_proj.weight, model.layers[1].self_attn.q_proj.weight}
+                assert model._ignored_params == params_to_ignore
 
 
 @require_fsdp2

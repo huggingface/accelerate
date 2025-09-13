@@ -182,13 +182,6 @@ def launch_command_parser(subparsers=None):
     hardware_args.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
-    hardware_args.add_argument(
-        "--ipex",
-        default=False,
-        action="store_true",
-        help="Whether or not this should launch a Intel PyTorch Extension (IPEX) training.",
-    )
-
     # Resource selection arguments
     resource_args = parser.add_argument_group(
         "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
@@ -268,6 +261,12 @@ def launch_command_parser(subparsers=None):
         default=False,
         action="store_true",
         help="Whether to use fsdp.",
+    )
+    paradigm_args.add_argument(
+        "--use_parallelism_config",
+        default=False,
+        action="store_true",
+        help="Whether to use the parallelism config to configure the N-d distributed training.",
     )
     paradigm_args.add_argument(
         "--use_megatron_lm",
@@ -494,13 +493,13 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_exclusion_filter",
         default=None,
         type=str,
-        help="DeepSpeed exclusion filter string when using mutli-node setup.",
+        help="DeepSpeed exclusion filter string when using multi-node setup.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_inclusion_filter",
         default=None,
         type=str,
-        help="DeepSpeed inclusion filter string when using mutli-node setup.",
+        help="DeepSpeed inclusion filter string when using multi-node setup.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_multinode_launcher",
@@ -586,7 +585,7 @@ def launch_command_parser(subparsers=None):
         "--fsdp_use_orig_params",
         default="true",
         type=str,
-        help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres."
+        help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable parameters."
         " (useful only when `use_fsdp` flag is passed).",
     )
     fsdp_args.add_argument(
@@ -765,6 +764,45 @@ def launch_command_parser(subparsers=None):
         type=int,
         default=1,
         help="The number of oneCCL worker threads when using Accelerate to launch multi-CPU training with mpirun.",
+    )
+
+    # ParallelismConfig arguments
+    parallelism_config_args = parser.add_argument_group(
+        "ParallelismConfig Arguments",
+        "Arguments related to the ParallelismConfig used for distributed training.",
+    )
+    parallelism_config_args.add_argument(
+        "--parallelism_config_dp_replicate_size",
+        type=int,
+        default=1,
+        help="The number of processes for data parallel training. Defaults to 1 (no data parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_dp_shard_size",
+        type=int,
+        default=1,
+        help="The number of processes for FSDP sharding. Defaults to 1 (No FSDP sharding).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_tp_size",
+        type=int,
+        default=1,
+        help="The number of processes for tensor parallel training. Defaults to 1 (no tensor parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_cp_size",
+        type=int,
+        default=1,
+        help="The number of processese for context parallel training. Defaults to 1 (no context parallelism).",
+    )
+    parallelism_config_args.add_argument(
+        "--parallelism_config_cp_comm_strategy",
+        type=str,
+        default="allgather",
+        help="The communication strategy for context parallel training. Defaults to 'allgather'. Other option is alltoall",
     )
 
     # Other arguments of the training scripts
@@ -994,6 +1032,9 @@ def _validate_launch_command(args):
     if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
 
+    if (not args.use_fsdp or args.fsdp_version == 1) and args.use_parallelism_config:
+        raise ValueError("You cannot use `--use_parallelism_config` without `--use_fsdp` and `--fsdp_version=2`. ")
+
     defaults = None
     warned = []
     mp_from_config_flag = False
@@ -1027,6 +1068,7 @@ def _validate_launch_command(args):
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
+            args.use_parallelism_config = defaults.parallelism_config != {}
         if args.gpu_ids is None:
             if defaults.gpu_ids is not None:
                 args.gpu_ids = defaults.gpu_ids
@@ -1150,12 +1192,6 @@ def _validate_launch_command(args):
                 warned.append(
                     f"\t`--num_cpu_threads_per_process` was set to `{args.num_cpu_threads_per_process}` to improve out-of-box performance when training on CPUs"
                 )
-
-    if args.ipex is not None:
-        logger.warning(
-            "ipex flag is deprecated, will be removed in Accelerate v1.10. "
-            "From 2.7.0, PyTorch has all needed optimizations for Intel CPU and XPU."
-        )
 
     if args.use_xpu is not None:
         logger.warning(

@@ -14,12 +14,14 @@
 import copy
 import functools
 import os
+import re
 import shutil
 import warnings
 from collections import defaultdict
+from collections.abc import Iterable
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Union
 
 import torch
 
@@ -506,7 +508,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         for (param_name, full_param), sharded_param in zip(full_sd.items(), meta_sharded_sd.values()):
             device_mesh = sharded_param.device_mesh
             full_param = full_param.detach().to(device_mesh.device_type)
-            dist.broadcast(full_param, src=0, group=device_mesh.get_group())
+            dist.broadcast(full_param, src=0, group=dist.group.WORLD)
             sharded_tensor = distribute_tensor(full_param, device_mesh, sharded_param.placements)
             to_contiguous, casting_dtype = _infer_parameter_dtype(
                 model,
@@ -520,7 +522,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         for param_name, sharded_param in meta_sharded_sd.items():
             device_mesh = sharded_param.device_mesh
             full_tensor = torch.empty(sharded_param.size(), device=device_mesh.device_type, dtype=sharded_param.dtype)
-            dist.broadcast(full_tensor, src=0, group=device_mesh.get_group())
+            dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
             sharded_tensor = distribute_tensor(full_tensor, device_mesh, sharded_param.placements)
             to_contiguous, casting_dtype = _infer_parameter_dtype(
                 model,
@@ -631,6 +633,10 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
         "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
     }
+    if fsdp2_plugin.ignored_modules is not None:
+        fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(
+            fsdp2_plugin.ignored_modules, model, accelerator.device
+        )
 
     model_has_params4bit = False
     for name, param in model.named_parameters():
@@ -644,7 +650,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
         # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
-        # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.emtpy`), `fully_shard` would move it to GPU
+        # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.empty`), `fully_shard` would move it to GPU
         # Afterwards, when we call `fsdp2_load_full_state_dict`, us creating the state_dict would result into briefly having two copies of model state_dict on the GPU -> VRAM spike
 
         # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
@@ -793,3 +799,31 @@ def fsdp2_canonicalize_names(named_params: dict) -> dict:
     }
     named_params = {k.replace("._orig_mod", ""): v for k, v in named_params.items()}
     return named_params
+
+
+def get_parameters_from_modules(
+    modules: Union[Iterable[torch.nn.Module], str], model, device
+) -> set[torch.nn.Parameter]:
+    """Converts modules to parameters where modules can be a string or list of torch.nn.Module
+
+    Args:
+        modules (`Union[Iterable[torch.nn.Module], str]`): List of modules
+
+    Returns:
+        `List[torch.nn.Parameter]`: List of parameters
+    """
+    if modules is None:
+        return None
+    parameters = []
+    # code taken from accelerate while preparing kwargs for FSDP
+    if isinstance(modules, str):
+        reg = re.compile(modules)
+        mapped_modules = []
+        for name, module in model.named_modules():
+            if reg.fullmatch(name):
+                module.to(device)
+                mapped_modules.append(module)
+        modules = mapped_modules
+    for module in modules:
+        parameters.extend(list(module.parameters()))
+    return set(parameters)

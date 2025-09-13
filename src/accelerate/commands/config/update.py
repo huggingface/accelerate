@@ -60,4 +60,4 @@ def update_command_parser(parser, parents):
 
 def update_config_command(args):
     config_file = update_config(args)
-    print(f"Sucessfully updated the configuration file at {config_file}.")
+    print(f"Successfully updated the configuration file at {config_file}.")

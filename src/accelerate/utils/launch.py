@@ -328,6 +328,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
         current_env["FSDP_ACTIVATION_CHECKPOINTING"] = str(args.fsdp_activation_checkpointing).lower()
+        if getattr(args, "fsdp_ignored_modules", None) is not None:
+            current_env["FSDP_IGNORED_MODULES"] = str(args.fsdp_ignored_modules)
 
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"
@@ -347,6 +349,20 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if args.enable_cpu_affinity:
         current_env["ACCELERATE_CPU_AFFINITY"] = "1"
+
+    if not args.use_parallelism_config:
+        return current_env
+
+    prefix = "PARALLELISM_CONFIG_"
+    if args.use_parallelism_config:
+        current_env["ACCELERATE_USE_PARALLELISM_CONFIG"] = "true"
+        current_env[prefix + "DP_REPLICATE_SIZE"] = str(args.parallelism_config_dp_replicate_size)
+        current_env[prefix + "TP_SIZE"] = str(args.parallelism_config_tp_size)
+        current_env[prefix + "CP_SIZE"] = str(args.parallelism_config_cp_size)
+        current_env[prefix + "DP_SHARD_SIZE"] = str(args.parallelism_config_dp_shard_size)
+        if args.parallelism_config_cp_size > 1:
+            current_env[prefix + "CP_COMM_STRATEGY"] = str(args.parallelism_config_cp_comm_strategy)
+
     return current_env
 
 
