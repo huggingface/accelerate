@@ -19,13 +19,12 @@ For example, with 8 nodes, you can run the script as such:
 accelerate launch --num-processes 8 nd_parallel.py \
     --dp-replicate-size 2 \
     --dp-shard-size 2 \
-    --tp-size 2 \
+    --tp-size 2
 ```
 
-<Tip>
-  Only use TP intra-node - therefore max TP size you should need is 8. You can also use a lower size, as FSDP (`--dp-shard-size`) can be faster on smaller models with
-  shorter sequence lengths. If you cannot fit your model into memory, utilize `--dp-shard-size` as much as you can. Afterwards, to scale up and utilize all your resources, use `--dp-replicate-size`. This is only a general guideline, you can (and should) experiment with different parallelism configurations to find the best one for your model and hardware. You can learn more about the general strategies for parallelism in our [blog](https://huggingface.co/blog/accelerate-nd-parallel), or if you really want to dive deep, read the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook).
-</Tip>
+> [!Tip]
+> Only use TP intra-node - therefore max TP size you should need is 8. You can also use a lower size, as FSDP (`--dp-shard-size`) can be faster on smaller models with shorter sequence lengths. If you cannot fit your model into memory, utilize `--dp-shard-size` as much as you can. Afterwards, to scale up and utilize all your resources, use `--dp-replicate-size`. This is only a general guideline, you can (and should) experiment with different parallelism configurations to find the best one for your model and hardware. You can learn more about the general strategies for parallelism in our [blog](https://huggingface.co/blog/accelerate-nd-parallel), or if you really want to dive deep, read the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook).
+
 
 This feature is also fully integrated into 🤗 transformers `Trainer`. To use it, simply launch your script with path to your accelerate configuration file. You can see a minimal example of such script in `nd_parallel_trainer.py`.
 We provide 2 pre-configured configuration files:
