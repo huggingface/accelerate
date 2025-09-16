@@ -159,13 +159,19 @@ def save_model_and_optimizer(
     save_path: str,
     async_save: bool = False,
 ) -> None:
+    # async_save = False
     if getattr(accelerator, "_async_save_handle", None) is not None:
         accelerator._async_save_handle.result()
 
     options = dcs.StateDictOptions()
 
-    model_sd, optimizer_sd = dcs.get_state_dict(model, optimizer, options=options)
+    import time
 
+    accelerator.print(f"{time.asctime()} - Preparing state dict...")
+    model_sd, optimizer_sd = dcs.get_state_dict(model, optimizer, options=options)
+    accelerator.print(f"{time.asctime()} - Prepared state dict...")
+
+    accelerator.print(f"{time.asctime()} - Saving state dict...")
     stateful = {
         "model": model_sd,
         "optimizer": optimizer_sd,
@@ -173,10 +179,11 @@ def save_model_and_optimizer(
 
     save_fn = dcp.save if not async_save else dcp.async_save
 
-    potential_handle = save_fn(
+    potential_handle = dcp.async_save(
         state_dict=stateful,
         storage_writer=AccelerateStorageWriter(save_path),
     )
+    accelerator.print(f"{time.asctime()} - Finished saving state dict...")
 
     if async_save:
         accelerator._async_save_handle = potential_handle

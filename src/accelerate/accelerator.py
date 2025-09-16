@@ -3537,9 +3537,10 @@ class Accelerator:
             xm.mark_step()
 
         # TODO: Siro - how to properly decide when to do this
-        _dist_save = self.parallelism_config is not None and self.parallelism_config.total_size > 1 and True
+        _dist_save = self.parallelism_config is not None and self.parallelism_config.total_size > 1
         if _dist_save:
             save_model_and_optimizer(self, self._models[0], self._optimizers[0], output_dir, True)
+            self.print("Finished saving asynchronous checkpoint.")
 
         # Save the models taking care of FSDP and DeepSpeed nuances
         weights = []
