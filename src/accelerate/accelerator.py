@@ -1619,6 +1619,10 @@ class Accelerator:
         from torch.distributed.tensor.experimental import context_parallel
         from torch.distributed.tensor.experimental._attention import set_rotate_method
 
+        if not self.is_fsdp2:
+            # deepspeed handles cp other way
+            return args
+
         cp_comm_strategy = self.parallelism_config.cp_handler.cp_comm_strategy
         set_rotate_method(cp_comm_strategy)
 
@@ -2075,6 +2079,10 @@ class Accelerator:
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         tp_size = deepspeed_plugin.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0)
+
+        cp_size = self.parallelism_config.cp_size if self.parallelism_config else 1
+        cp_handler = self.parallelism_config.cp_handler if self.parallelism_config else None
+
         if tp_size > 1:
             if not compare_versions("deepspeed", ">=", "0.16.4"):
                 raise ImportError(
@@ -2146,7 +2154,7 @@ class Accelerator:
         if batch_size_per_device is not None:
             config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
             config_kwargs["train_batch_size"] = (
-                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes
+                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes // cp_size
             )
 
         model = None
@@ -2161,6 +2169,24 @@ class Accelerator:
                 type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
             ):
                 scheduler = obj
+
+        mpu = None
+        if cp_size > 1:
+            if is_dataloader_present and model is None:
+                raise ValueError(
+                    "You cannot pass a dataloader to `accelerate.prepare()` without passing a model when using Context Parallelism."
+                )
+
+            from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPAttentionHF, UlyssesSPDataLoaderAdapter
+            from deepspeed.utils import groups
+
+            mpu = UlyssesSPAttentionHF.register_with_transformers(
+                model_name_or_path=model,
+                sequence_parallel_size=cp_size,
+                max_length=cp_handler.max_length,
+                core_attn_implementation=cp_handler.attn_implementation or model.config.attn_implementation,
+                micro_batch_size=batch_size_per_device,
+            )
 
         if optimizer is not None:
             if "optimizer" in deepspeed_plugin.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
@@ -2266,7 +2292,7 @@ class Accelerator:
                     )
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
-            kwargs = dict(model=model, config_params=self.deepspeed_config)
+            kwargs = dict(model=model, config_params=self.deepspeed_config, mpu=mpu)
             if optimizer is not None:
                 if isinstance(optimizer, (DummyOptim)):
                     kwargs["model_parameters"] = optimizer.params
@@ -2323,6 +2349,20 @@ class Accelerator:
                     type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
                 ):
                     result[i] = scheduler
+                elif isinstance(result[i], torch.utils.data.DataLoader):
+                    if cp_size > 1:
+                        cp_group = groups._get_sequence_parallel_group()
+                        cp_world_size = groups._get_sequence_parallel_world_size()
+                        cp_rank = groups._get_sequence_parallel_rank()
+                        print(cp_group)
+                        result[i] = UlyssesSPDataLoaderAdapter(
+                            result[i],
+                            sp_rank=cp_rank,
+                            sp_group=cp_group,
+                            sp_world_size=cp_world_size,
+                            device=model.device,
+                        )
+
             # pointing for deepspeed_engine_wrapped.backward()
             if self.deepspeed_engine_wrapped is None:
                 self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
