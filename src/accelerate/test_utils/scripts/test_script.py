@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
 from accelerate.data_loader import SeedableRandomSampler, prepare_data_loader
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import RegressionDataset, are_the_same_tensors
+from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
 from accelerate.utils import (
     DataLoaderConfiguration,
     DistributedType,
@@ -42,13 +42,10 @@ from accelerate.utils import (
     is_ipex_available,
     is_mps_available,
     is_pytest_available,
-    is_xpu_available,
     set_seed,
     synchronize_rng_states,
 )
 
-
-from accelerate.test_utils import RegressionModel
 
 if is_hpu_available():
     ATOL = 1e-3
