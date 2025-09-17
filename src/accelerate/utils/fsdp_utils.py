@@ -125,7 +125,8 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
     sd_options = _prepare_sd_options(fsdp_plugin)
 
     with ctx:
-        state_dict = _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)
+        unwrapped_model = accelerator.unwrap_model(model)
+        state_dict = _get_model_state_dict(unwrapped_model, adapter_only=adapter_only, sd_options=sd_options)
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
@@ -156,6 +157,23 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
                 planner=DefaultSavePlanner(),
             )
             logger.info(f"Model saved to {ckpt_dir}")
+            
+            
+def reset_fsdp_state(model):
+    """Reset FSDP internal state after loading checkpoint"""
+    from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+    
+    def reset_fsdp_attributes(module):
+        if isinstance(module, FSDP):
+            # Reset the _is_root attribute for non-root modules
+            if hasattr(module, '_is_root') and module != model:
+                module._is_root = False
+            # Reset other FSDP state if needed
+            if hasattr(module, '_has_lazy_init'):
+                module._has_lazy_init = False
+    
+    model.apply(reset_fsdp_attributes)
+    return model
 
 
 def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False):
@@ -182,6 +200,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
     )
     sd_options = _prepare_sd_options(fsdp_plugin)
     with ctx:
+        loading_model = model
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             if type(model) is not FSDP and accelerator.process_index != 0 and not accelerator.is_fsdp2:
                 if not fsdp_plugin.sync_module_states and fsdp_plugin.fsdp_version == 1:
@@ -211,13 +230,14 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             state_dict = torch.load(input_model_file, weights_only=True)
             logger.info(f"Model loaded from {input_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT:
+            loading_model = accelerator.unwrap_model(model)
             ckpt_dir = (
                 os.path.join(input_dir, f"{FSDP_MODEL_NAME}_{model_index}")
                 if f"{FSDP_MODEL_NAME}" not in input_dir
                 else input_dir
             )
             logger.info(f"Loading model from {ckpt_dir}")
-            state_dict = {"model": _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)}
+            state_dict = {"model": _get_model_state_dict(loading_model, adapter_only=adapter_only, sd_options=sd_options)}
             dist_cp.load(
                 state_dict=state_dict,
                 storage_reader=dist_cp.FileSystemReader(ckpt_dir),
@@ -226,7 +246,9 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             state_dict = state_dict["model"]
             logger.info(f"Model loaded from {ckpt_dir}")
 
-        load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only, sd_options=sd_options)
+        load_result = _set_model_state_dict(loading_model, state_dict, adapter_only=adapter_only, sd_options=sd_options)
+        if model != loading_model:
+            reset_fsdp_state(loading_model)
     return load_result
 
 
