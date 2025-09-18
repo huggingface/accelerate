@@ -21,7 +21,6 @@ import math
 import os
 import re
 import shutil
-import sys
 import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
