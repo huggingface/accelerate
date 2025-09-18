@@ -870,7 +870,7 @@ class Accelerator:
         with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
             yield inputs
 
-    def on_main_process(self, function: Callable[..., Any] = None):
+    def on_main_process(self, function: Callable[..., Any] | None = None):
         """
         A decorator that will run the decorated function on the main process only. Can also be called using the
         `PartialState` class.
@@ -909,7 +909,7 @@ class Accelerator:
 
         return _inner
 
-    def on_local_main_process(self, function: Callable[..., Any] = None):
+    def on_local_main_process(self, function: Callable[..., Any] | None = None):
         """
         A decorator that will run the decorated function on the local main process only. Can also be called using the
         `PartialState` class.
@@ -990,7 +990,7 @@ class Accelerator:
 
         return _inner
 
-    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
+    def on_process(self, function: Callable[..., Any] | None = None, process_index: int | None = None):
         """
         A decorator that will run the decorated function on a given process index only. Can also be called using the
         `PartialState` class.
@@ -1035,7 +1035,7 @@ class Accelerator:
 
         return _inner
 
-    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
+    def on_local_process(self, function: Callable[..., Any] | None = None, local_process_index: int | None = None):
         """
         A decorator that will run the decorated function on a given local process index only. Can also be called using
         the `PartialState` class.
@@ -1704,7 +1704,9 @@ class Accelerator:
 
         return result
 
-    def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, evaluation_mode: bool = False):
+    def prepare_model(
+        self, model: torch.nn.Module, device_placement: bool | None = None, evaluation_mode: bool = False
+    ):
         """
         Prepares a PyTorch model for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -3462,7 +3464,7 @@ class Accelerator:
         self._save_model_state_pre_hook[handle.id] = hook
         return handle
 
-    def save_state(self, output_dir: str = None, safe_serialization: bool = True, **save_model_func_kwargs):
+    def save_state(self, output_dir: str | None = None, safe_serialization: bool = True, **save_model_func_kwargs):
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
 
@@ -3628,7 +3630,7 @@ class Accelerator:
         self._load_model_state_pre_hook[handle.id] = hook
         return handle
 
-    def load_state(self, input_dir: str = None, load_kwargs: dict | None = None, **load_model_func_kwargs):
+    def load_state(self, input_dir: str | None = None, load_kwargs: dict | None = None, **load_model_func_kwargs):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 

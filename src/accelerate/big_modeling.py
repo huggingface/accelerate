@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def init_empty_weights(include_buffers: bool = None):
+def init_empty_weights(include_buffers: Optional[bool] = None):
     """
     A context manager under which models are initialized with all parameters on the meta device, therefore creating an
     empty model. Useful when just initializing the model would blow the available RAM.
@@ -94,7 +94,7 @@ def init_empty_weights(include_buffers: bool = None):
 
 
 @contextmanager
-def init_on_device(device: torch.device, include_buffers: bool = None):
+def init_on_device(device: torch.device, include_buffers: Optional[bool] = None):
     """
     A context manager under which models are initialized with all parameters on the specified device.
 
@@ -654,7 +654,7 @@ def attach_layerwise_casting_hooks(
     module: torch.nn.Module,
     storage_dtype: torch.dtype,
     compute_dtype: torch.dtype,
-    skip_modules_pattern: Union[str, tuple[str, ...]] = None,
+    skip_modules_pattern: Optional[Union[str, tuple[str, ...]]] = None,
     skip_modules_classes: Optional[tuple[type[torch.nn.Module], ...]] = None,
     non_blocking: bool = False,
 ) -> None:
@@ -715,7 +715,7 @@ def _attach_layerwise_casting_hooks(
     module: torch.nn.Module,
     storage_dtype: torch.dtype,
     compute_dtype: torch.dtype,
-    skip_modules_pattern: Union[str, tuple[str, ...]] = None,
+    skip_modules_pattern: Optional[Union[str, tuple[str, ...]]] = None,
     skip_modules_classes: Optional[tuple[type[torch.nn.Module], ...]] = None,
     non_blocking: bool = False,
     _prefix: str = "",

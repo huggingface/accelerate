@@ -1810,7 +1810,7 @@ def load_checkpoint_in_model(
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: bool = False,
     offload_buffers: bool = False,
-    keep_in_fp32_modules: list[str] = None,
+    keep_in_fp32_modules: Optional[list[str]] = None,
     offload_8bit_bnb: bool = False,
     strict: bool = False,
     full_state_dict: bool = True,
