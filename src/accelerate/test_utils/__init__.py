@@ -60,7 +60,7 @@ from .testing import (
     slow,
     torch_device,
 )
-from .training import RegressionDataset, RegressionModel, RegressionModel4XPU
+from .training import RegressionDataset, RegressionModel
 
 
 from .scripts import test_script, test_sync, test_ops  # isort: skip

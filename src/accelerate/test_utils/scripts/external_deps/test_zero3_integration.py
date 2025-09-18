@@ -28,7 +28,7 @@ GPT2_TINY = "sshleifer/tiny-gpt2"
 @require_huggingface_suite
 def init_torch_dist_then_launch_deepspeed():
     if torch_device == "xpu":
-        backend = "ccl"
+        backend = "xccl"
     elif torch_device == "hpu":
         backend = "hccl"
     else:
