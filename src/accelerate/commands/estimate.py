@@ -63,7 +63,9 @@ def check_has_model(error):
         return "unknown"
 
 
-def create_empty_model(model_name: str, library_name: str, trust_remote_code: bool = False, access_token: Optional[str] = None):
+def create_empty_model(
+    model_name: str, library_name: str, trust_remote_code: bool = False, access_token: Optional[str] = None
+):
     """
     Creates an empty model in full precision from its parent library on the `Hub` to calculate the overall memory
     consumption.

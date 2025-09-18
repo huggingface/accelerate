@@ -91,7 +91,11 @@ class ExampleDifferenceTests(unittest.TestCase):
     examples_path = Path("examples").resolve()
 
     def one_complete_example(
-        self, complete_file_name: str, parser_only: bool, secondary_filename: Optional[str] = None, special_strings: Optional[list] = None
+        self,
+        complete_file_name: str,
+        parser_only: bool,
+        secondary_filename: Optional[str] = None,
+        special_strings: Optional[list] = None,
     ):
         """
         Tests a single `complete` example against all of the implemented `by_feature` scripts

@@ -1712,7 +1712,9 @@ class Accelerator:
 
         return result
 
-    def prepare_model(self, model: torch.nn.Module, device_placement: bool | None = None, evaluation_mode: bool = False):
+    def prepare_model(
+        self, model: torch.nn.Module, device_placement: bool | None = None, evaluation_mode: bool = False
+    ):
         """
         Prepares a PyTorch model for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
