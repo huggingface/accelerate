@@ -2190,6 +2190,40 @@ class TorchContextParallelConfig:
 
 
 @dataclass
+class DeepSpeedContextParallelConfig:
+    max_length: int = field(
+        default=None,
+        metadata={"help": "Maximum sequence length to process."},
+    )
+    attn_implementation: str = field(
+        default=None,
+        metadata={
+            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. If not provided, default from model will be used."
+        },
+    )
+
+    def __post_init__(self):
+        if self.max_length is None:
+            if "PARALLELISM_CONFIG_CP_MAX_LENGTH" not in os.environ:
+                raise ValueError(
+                    "max_length must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_CP_MAX_LENGTH"
+                )
+            self.max_length = int(os.environ["PARALLELISM_CONFIG_CP_MAX_LENGTH"])
+
+        if self.attn_implementation is None:
+            self.attn_implementation = os.environ.get("PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION", None)
+
+        if self.attn_implementation is not None and self.attn_implementation not in [
+            "flash_attention_2",
+            "flash_attention_3",
+            "sdpa",
+        ]:
+            raise ValueError(
+                f"Invalid attn_implementation: {self.attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
+            )
+
+
+@dataclass
 class TorchTensorParallelConfig:
     """
     Use this object in your [`Accelerator`] to customize your torch tensor parallelism.
