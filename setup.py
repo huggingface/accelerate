@@ -46,7 +46,7 @@ extras["test_trackers"] = [
     "comet-ml",
     "tensorboard",
     "dvclive",
-    "mlflow",
+    # "mlflow", too many deps that lead to download a very old version of the lib
     "matplotlib",
     "swanlab",
     "trackio",
