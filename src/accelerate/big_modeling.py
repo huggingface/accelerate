@@ -138,8 +138,9 @@ def init_on_device(device: torch.device, include_buffers: bool = None):
             # previously when it was initialized. Hence, when resetting, you can
             # directly assign that tensor instead of re-init. If you re-init you would
             # lose the relationship.
-            module._parameters[name] = param if param.device == device else \
-                            param_cls(module._parameters[name].to(device), **kwargs)
+            module._parameters[name] = (
+                param if param.device == device else param_cls(module._parameters[name].to(device), **kwargs)
+            )
 
     def register_empty_buffer(module, name, buffer, persistent=True):
         old_register_buffer(module, name, buffer, persistent=persistent)
