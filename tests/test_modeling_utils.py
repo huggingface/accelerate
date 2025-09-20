@@ -677,7 +677,6 @@ class ModelingUtilsTester(unittest.TestCase):
         config = AutoConfig.from_pretrained("bigscience/T0pp")
         with init_empty_weights():
             model = AutoModelForSeq2SeqLM.from_config(config)
-        model.tie_weights()
 
         special_dtypes = {n: torch.float32 for n, _ in model.named_parameters() if "wo" in n}
         max_memory = {0: 10**10, 1: 10**10, "cpu": 10**10}
