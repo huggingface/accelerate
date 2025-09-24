@@ -39,7 +39,7 @@ def get_dataset(tokenizer: AutoTokenizer, seq_len: int, accelerator: Accelerator
         Dataset: Packed dataset
     """
     processing_ctx = accelerator.main_process_first if accelerator else nullcontext
-    raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:50%]")
+    raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:5%]")
 
     def tokenize_function(examples):
         tokenized_batch = tokenizer(
