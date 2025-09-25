@@ -153,7 +153,15 @@ def find_executable_batch_size(
 
         def reduce_batch_size_fn():
             nonlocal batch_size
-            batch_size = batch_size // 2
+            new_batch_size = int(batch_size * 0.9)
+            if new_batch_size == 0:
+                new_batch_size = 1
+            if new_batch_size == batch_size:
+                if batch_size > 1:
+                    new_batch_size = batch_size - 1
+                else:
+                    raise RuntimeError("Batch size reduced to 1 and still out of memory.")
+            batch_size = new_batch_size
             return batch_size
 
     def decorator(*args, **kwargs):
