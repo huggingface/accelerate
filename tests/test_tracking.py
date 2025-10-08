@@ -526,7 +526,7 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
 
 
 @require_swanlab
-@mock.patch.dict(os.environ, {"SWANLAB_MODE": "offline"})
+@mock.patch.dict(os.environ, {"SWANLAB_MODE": "local"})
 class SwanLabTrackingTest(TempDirTestCase, MockingTestCase):
     def setUp(self):
         super().setUp()
