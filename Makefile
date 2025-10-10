@@ -8,16 +8,19 @@ extra_quality_checks:
 	python utils/check_copies.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
+	doc-builder style src/accelerate docs/source --max_len 119
 
 # this target runs checks on all files
 quality:
 	ruff check $(check_dirs)
 	ruff format --check $(check_dirs)
+	doc-builder style src/accelerate docs/source --max_len 119 --check_only
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 style:
 	ruff check $(check_dirs) --fix
 	ruff format $(check_dirs)
+	doc-builder style src/accelerate docs/source --max_len 119
 	
 # Run tests for the library
 test_core:
