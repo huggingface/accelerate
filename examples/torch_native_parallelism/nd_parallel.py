@@ -31,6 +31,7 @@ from utils import (
     PerformanceTracker,
     create_collate_fn,
     get_dataset,
+    get_model_flops_per_token,
     setup_tokenizer,
 )
 
@@ -93,7 +94,7 @@ def train(args):
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
             auto_wrap_policy="transformer_based_wrap",
-            transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
+            transformer_cls_names_to_wrap=["Qwen3DecoderLayer"],
             state_dict_type="SHARDED_STATE_DICT",
         )
 
@@ -122,6 +123,7 @@ def train(args):
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
     total_num_steps = min(args.num_steps, len(dataloader))
+    model_flops_per_token = get_model_flops_per_token(model, args.sequence_length)
     performance_tracker = PerformanceTracker(warmup_steps=5)
 
     accelerator.print("Starting training...")
@@ -132,7 +134,10 @@ def train(args):
         loss = forward(model, batch, optimizer, accelerator)
 
         # We report TPS per device, so we divide by the number of devices in the non-data parallel dimension
-        metrics = performance_tracker.step(batch["input_ids"].shape[1] / parallelism_config.non_data_parallel_size)
+        metrics = performance_tracker.step(
+            batch["input_ids"].shape[1] / parallelism_config.non_data_parallel_size,
+            model_flops_per_token=model_flops_per_token,
+        )
 
         print_msg = f"Step {step}/{total_num_steps}, Loss: {loss.item():.4f}"
         if "warmup_completed" in metrics:
