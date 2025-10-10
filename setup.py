@@ -45,7 +45,7 @@ extras["test_trackers"] = [
     "dvclive",
     # "mlflow", too many deps that lead to download a very old version of the lib
     "matplotlib",
-    "swanlab",
+    "swanlab[dashboard]", # dashboard required for local use
     "trackio",
 ]
 extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
