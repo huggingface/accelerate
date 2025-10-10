@@ -4,7 +4,6 @@
 # Use base conda image to reduce time
 FROM continuumio/miniconda3:latest AS compile-image
 # Specify py version
-# Note: DeepSpeed beyond v0.12.6 requires py 3.10
 ENV PYTHON_VERSION=3.10
 # Install apt libs
 RUN apt-get update && \
