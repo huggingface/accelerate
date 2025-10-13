@@ -895,7 +895,7 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
 
     # set global args, build tokenizer, and set adlr-autoresume,
     # tensorboard-writer, and timers.
-    set_global_variables(args)
+    set_global_variables(args, build_tokenizer=False)
 
     # Megatron's MPU is the master. Complete initialization right away.
     finish_mpu_init()
