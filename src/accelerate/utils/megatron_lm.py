@@ -1207,21 +1207,6 @@ class MegatronEngine(torch.nn.Module):
         if args.fp16 and self.iteration == 0:
             self.optimizer.reload_model_params()
 
-    def megatron_generate(
-        self,
-        inputs,
-        attention_mask=None,
-        max_length=None,
-        max_new_tokens=None,
-        num_beams=None,
-        temperature=None,
-        top_k=None,
-        top_p=None,
-        length_penalty=None,
-        **kwargs,
-    ):
-    raise NotImplementedError("MegatronEngine.megatron_generate is not implemented since the latest version of Megatron-LM removed beam_search_and_return_on_first_stage and generate_tokens_probs_and_return_on_first_stage.")
-
 
 # other utilities
 def avg_losses_across_data_parallel_group(losses):
