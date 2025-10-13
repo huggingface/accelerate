@@ -39,13 +39,15 @@ if is_megatron_lm_available():
     from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_model_parallel_src_rank
     from megatron.core.pipeline_parallel import get_forward_backward_func
     from megatron.core.utils import get_model_config
-    from megatron.inference.text_generation.communication import broadcast_int_list, broadcast_tensor
-    from megatron.inference.text_generation.generation import (
-        beam_search_and_return_on_first_stage,
-        generate_tokens_probs_and_return_on_first_stage,
-    )
+    # from megatron.inference.text_generation.communication import broadcast_int_list, broadcast_tensor
+    from megatron.core.inference.communication_utils import broadcast_int_list, broadcast_tensor
+    # from megatron.inference.text_generation.generation import (
+    #     beam_search_and_return_on_first_stage,
+    #     generate_tokens_probs_and_return_on_first_stage,
+    # )
     from megatron.legacy.data.dataset_utils import build_train_valid_test_datasets
-    from megatron.legacy.model import BertModel, Float16Module, GPTModel, T5Model
+    from megatron.legacy.model import BertModel, GPTModel, T5Model
+    from megatron.core.transformer.module import Float16Module
     from megatron.legacy.model.classification import Classification
     from megatron.training import (
         get_args,
@@ -85,7 +87,13 @@ if is_megatron_lm_available():
         get_ltor_masks_and_position_ids,
         unwrap_model,
     )
+    from megatron.training.gpt_builders import gpt_builder
 
+def beam_search_and_return_on_first_stage(**args):
+    pass
+
+def generate_tokens_probs_and_return_on_first_stage(**args):
+    pass
 
 # model utilities
 def model_provider_func(pre_process=True, post_process=True, add_encoder=True, add_decoder=True):
@@ -99,6 +107,7 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             "Please use `accelerator.load_checkpoint` to load a pre-trained checkpoint matching the distributed setup."
         )
     config = core_transformer_config_from_args(args)
+    config.attention_softmax_in_fp32 = True
     if args.model_type_name == "bert":
         if args.pretraining_flag:
             num_tokentypes = 2 if args.bert_binary_head else 0
@@ -119,13 +128,15 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
                 post_process=post_process,
             )
     elif args.model_type_name == "gpt":
-        model = GPTModel(
-            config=config,
-            num_tokentypes=0,
-            parallel_output=True,
-            pre_process=pre_process,
-            post_process=post_process,
-        )
+        # model = GPTModel(
+        #     config=config,
+        #     num_tokentypes=0,
+        #     parallel_output=True,
+        #     pre_process=pre_process,
+        #     post_process=post_process,
+        # )
+        args.use_legacy_models = False
+        model = gpt_builder(args, pre_process, post_process, vp_stage=None, config=None)
     elif args.model_type_name == "t5":
         model = T5Model(
             config=config,
@@ -632,7 +643,7 @@ class GPTTrainStep(AbstractTrainStep):
 
             # Get the masks and position ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, self.eod_token, self.reset_position_ids, self.reset_attention_mask, self.eod_mask_loss
+                tokens, eod_token=self.eod_token, pad_token=self.eod_token, reset_position_ids=self.reset_position_ids, reset_attention_mask=self.reset_attention_mask, eod_mask_loss=self.eod_mask_loss, pad_mask_loss=True,
             )
 
             return tokens, labels, loss_mask, attention_mask, position_ids
@@ -649,7 +660,7 @@ class GPTTrainStep(AbstractTrainStep):
             tokens = tokens_[:, :-1].contiguous()
             # Get the masks and position ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, self.eod_token, self.reset_position_ids, self.reset_attention_mask, True
+                tokens, eod_token=self.eod_token, pad_token=self.eod_token, reset_position_ids=self.reset_position_ids, reset_attention_mask=self.reset_attention_mask, eod_mask_loss=self.eod_mask_loss, pad_mask_loss=True,
             )
             return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -865,7 +876,7 @@ def finish_mpu_init():
     # torch.distributed initialization
     args = get_args()
     # Pytorch distributed.
-    _initialize_distributed()
+    _initialize_distributed(None, None, None)
 
     # Random seeds for reproducibility.
     if args.rank == 0:
@@ -1041,13 +1052,14 @@ class MegatronEngine(torch.nn.Module):
 
         batch_data_iterator = self.get_batch_data_iterator(batch_data)
 
-        loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad = train_step(
+        loss_reduced, skipped_iter, _, _, _, grad_norm, num_zeros_in_grad = train_step(
             forward_step_func=self.train_step_handler.forward_step,
             data_iterator=batch_data_iterator,
             model=self.module,
             optimizer=self.optimizer,
             opt_param_scheduler=self.scheduler,
             config=self.module_config,
+            forward_backward_func=get_forward_backward_func()
         )
 
         self.optimizer.skipped_iter = skipped_iter == 1
