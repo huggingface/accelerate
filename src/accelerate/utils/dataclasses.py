@@ -2891,7 +2891,7 @@ def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
     megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = 'rope'
 
-    # megatron_lm_plugin.megatron_lm_default_args["qk_layernorm"] = True
+    megatron_lm_plugin.megatron_lm_default_args["qk_layernorm"] = True
     megatron_lm_plugin.megatron_lm_default_args["add_bias_linear"] = False
     megatron_lm_plugin.megatron_lm_default_args["group_query_attention"] = True
     megatron_lm_plugin.megatron_lm_default_args["num_query_groups"] = model.config.num_key_value_heads
@@ -2917,7 +2917,7 @@ def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["moe_permute_fusion"] = True
     megatron_lm_plugin.megatron_lm_default_args["moe_aux_loss_coeff"] = 0
     megatron_lm_plugin.megatron_lm_default_args["rotary_base"] = model.config.rope_theta
-    megatron_lm_plugin.megatron_lm_default_args["decoder_last_pipeline_num_layers"] = 4
+    megatron_lm_plugin.megatron_lm_default_args["decoder_last_pipeline_num_layers"] = 1
     megatron_lm_plugin.megatron_lm_default_args["fp8"] = model.config.fp8
     megatron_lm_plugin.megatron_lm_default_args["fp8_param"] = model.config.fp8_param
     megatron_lm_plugin.megatron_lm_default_args["fp8_param_gather"] = model.config.fp8_param_gather
