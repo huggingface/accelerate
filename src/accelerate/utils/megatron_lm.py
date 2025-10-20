@@ -22,7 +22,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
-
+import logging
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
 from .imports import is_megatron_lm_available
@@ -91,6 +91,7 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
     """Build the model."""
     args = get_args()
     mode = "pre-training" if args.pretraining_flag else "fine-tuning"
+    logging.info(f"in model_provider_func with args: {args}")
     if args.rank == 0:
         print(f"Building {args.model_type_name} model in the {mode} mode.")
         print(
@@ -122,6 +123,7 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
         # use the latest gpt builder to build the model and set use_legacy_models to False
         args.use_legacy_models = False
         model = gpt_builder(args, pre_process, post_process, vp_stage=None, config=None)
+        logging.info(f"Model from gpt_builder: {model}, size: {sum(p.numel() for p in model.parameters())}")
     elif args.model_type_name == "t5":
         model = T5Model(
             config=config,
@@ -146,7 +148,9 @@ def prepare_model_optimizer_scheduler(accelerator):
                 "You must provide a `custom_model_provider_function` when using a `custom_prepare_model_function`."
             )
         custom_model_provider_func = accelerator.state.megatron_lm_plugin.custom_model_provider_function
+        logging.info(f"Preparing model with custom model provider function: {custom_model_provider_func}")
         model = accelerator.state.megatron_lm_plugin.custom_prepare_model_function(custom_model_provider_func)
+        logging.info(f"Model from custom model provider function: {model}, size: {sum(p.numel() for p in model.parameters())}")
         optimizer = prepare_optimizer(accelerator, model)
         scheduler = prepare_scheduler(accelerator, optimizer, scheduler=None)
     else:
@@ -156,6 +160,7 @@ def prepare_model_optimizer_scheduler(accelerator):
         model_provider_func_ = model_provider_func
         if accelerator.state.megatron_lm_plugin.custom_model_provider_function is not None:
             model_provider_func_ = accelerator.state.megatron_lm_plugin.custom_model_provider_function
+        logging.info(f"Preparing model with native model provider function: {model_provider_func_}")
         (model, optimizer, scheduler) = setup_model_and_optimizer(
             model_provider_func_,
             model_type,
@@ -164,6 +169,7 @@ def prepare_model_optimizer_scheduler(accelerator):
             lr_mult=args.lr_mult,
         )
     args.model_len = len(model)
+    logging.info(f"Model length: {args.model_len}")
     return model, optimizer, scheduler
 
 
@@ -871,7 +877,7 @@ def finish_mpu_init():
 
 # initialize megatron setup
 def initialize(accelerator, extra_args_provider=None, args_defaults={}):
-    accelerator.print("Initializing Megatron-LM")
+    accelerator.print(f"Initializing Megatron-LM with args: {args_defaults}")
     assert torch.cuda.is_available(), "Megatron requires CUDA."
 
     # Parse arguments

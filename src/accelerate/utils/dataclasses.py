@@ -2538,6 +2538,7 @@ class MegatronLMPlugin:
         model_config_type = model.config.model_type.lower()
         for model_type in MODEL_CONFIGS_TO_MEGATRON_PARSERS.keys():
             if model_type in model_config_type:
+                logger.info(f"Setting network size args for {model_type}")
                 MODEL_CONFIGS_TO_MEGATRON_PARSERS[model_type](self, model, batch_data)
                 return
         raise ValueError(
@@ -2667,6 +2668,7 @@ def parse_bert_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
     megatron_lm_plugin.megatron_lm_default_args["num_labels"] = num_labels
+    logger.info(f"Parsed BERT config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 
 @add_model_config_to_megatron_parser("gpt2")
@@ -2699,7 +2701,7 @@ def parse_gpt2_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
-
+    logger.info(f"Parsed GPT2 config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 @add_model_config_to_megatron_parser("t5")
 def parse_t5_config(megatron_lm_plugin, model, batch_data):
@@ -2730,7 +2732,7 @@ def parse_t5_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
-
+    logger.info(f"Parsed T5 config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 @add_model_config_to_megatron_parser("llama")
 def parse_llama_config(megatron_lm_plugin, model, batch_data):
@@ -2764,7 +2766,59 @@ def parse_llama_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
     megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    logger.info(f"Parsed Llama config: {megatron_lm_plugin.megatron_lm_default_args}")
 
+@add_model_config_to_megatron_parser("qwen3")
+def parse_qwen3_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "gpt"
+    num_layers = model.config.num_hidden_layers
+    pretraining_flag = True
+    hidden_size = model.config.hidden_size
+    num_attention_heads = model.config.num_attention_heads
+    orig_vocab_size = model.config.vocab_size
+
+    max_position_embeddings = model.config.max_position_embeddings
+    seq_length = getattr(model.config, "max_sequence_length", None)
+    if megatron_lm_plugin.seq_length is None:
+        if seq_length is not None:
+            megatron_lm_plugin.seq_length = seq_length
+        elif megatron_lm_plugin.decoder_seq_length is not None:
+            megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+        elif batch_data is not None:
+            megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+        else:
+            megatron_lm_plugin.seq_length = max_position_embeddings
+
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "Qwen3Tokenizer"
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["num_query_groups"] = model.config.num_key_value_heads
+    megatron_lm_plugin.megatron_lm_default_args["num_key_value_heads"] = model.config.num_key_value_heads
+    megatron_lm_plugin.megatron_lm_default_args["group_query_attention"] = True
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["kv_channels"] = model.config.head_dim
+    megatron_lm_plugin.megatron_lm_default_args["head_dim"] = model.config.head_dim
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["add_bias_linear"] = False
+    megatron_lm_plugin.megatron_lm_default_args["add_qkv_bias"] = False
+    megatron_lm_plugin.megatron_lm_default_args["layernorm_zero_centered_gamma"] = False
+    megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = 'rope'
+    megatron_lm_plugin.megatron_lm_default_args["normalization"] = 'RMSNorm'
+    megatron_lm_plugin.megatron_lm_default_args["qk_layernorm"] = True
+    megatron_lm_plugin.megatron_lm_default_args["ffn_hidden_size"] = model.config.intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["swiglu"] = True
+    megatron_lm_plugin.megatron_lm_default_args["fp8"] = model.config.fp8
+    megatron_lm_plugin.megatron_lm_default_args["fp8_param"] = model.config.fp8_param
+    megatron_lm_plugin.megatron_lm_default_args["fp8_param_gather"] = model.config.fp8_param_gather
+    megatron_lm_plugin.megatron_lm_default_args["fp8_recipe"] = model.config.fp8_recipe
+    megatron_lm_plugin.megatron_lm_default_args["bf16"] = model.config.bf16
+    logger.info(f"Parsed Qwen3 config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 @add_model_config_to_megatron_parser("qwen3_moe")
 def parse_qwen3_moe_config(megatron_lm_plugin, model, batch_data):
@@ -2799,7 +2853,8 @@ def parse_qwen3_moe_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
     megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
-
+    megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = 'rope'
+    logger.info(f"Parsed Qwen3 MoE config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 @add_model_config_to_megatron_parser("glm4_moe")
 def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
@@ -2834,10 +2889,47 @@ def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
     megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = 'rope'
+
+    # megatron_lm_plugin.megatron_lm_default_args["qk_layernorm"] = True
+    megatron_lm_plugin.megatron_lm_default_args["add_bias_linear"] = False
+    megatron_lm_plugin.megatron_lm_default_args["group_query_attention"] = True
+    megatron_lm_plugin.megatron_lm_default_args["num_query_groups"] = model.config.num_key_value_heads
+    megatron_lm_plugin.megatron_lm_default_args["ffn_hidden_size"] = model.config.intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["add_qkv_bias"] = True
+    megatron_lm_plugin.megatron_lm_default_args["normalization"] = 'RMSNorm'
+    megatron_lm_plugin.megatron_lm_default_args["rotary-percent"] = 0.5
+    megatron_lm_plugin.megatron_lm_default_args["swiglu"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_ffn_hidden_size"] = model.config.moe_intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["moe_shared_expert_intermediate_size"] = model.config.moe_intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_pre_softmax"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_score_function"] = "sigmoid"
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_enable_expert_bias"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_bias_update_rate"] = 0
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_load_balancing_type"] = "seq_aux_loss"
+    megatron_lm_plugin.megatron_lm_default_args["moe_token_dispatcher_type"] = "alltoall"
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_topk"] = model.config.num_experts_per_tok
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_topk_scaling_factor"] = model.config.routed_scaling_factor
+    megatron_lm_plugin.megatron_lm_default_args["moe_layer_freq"] = [0] * model.config.first_k_dense_replace + [1] * (model.config.num_hidden_layers - model.config.first_k_dense_replace)
+    megatron_lm_plugin.megatron_lm_default_args["num_experts"] = model.config.n_routed_experts
+    megatron_lm_plugin.megatron_lm_default_args["moe_grouped_gemm"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_dtype"] = "fp32"
+    megatron_lm_plugin.megatron_lm_default_args["moe_permute_fusion"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_aux_loss_coeff"] = 0
+    megatron_lm_plugin.megatron_lm_default_args["rotary_base"] = model.config.rope_theta
+    megatron_lm_plugin.megatron_lm_default_args["decoder_last_pipeline_num_layers"] = 4
+    megatron_lm_plugin.megatron_lm_default_args["fp8"] = model.config.fp8
+    megatron_lm_plugin.megatron_lm_default_args["fp8_param"] = model.config.fp8_param
+    megatron_lm_plugin.megatron_lm_default_args["fp8_param_gather"] = model.config.fp8_param_gather
+    megatron_lm_plugin.megatron_lm_default_args["fp8_recipe"] = model.config.fp8_recipe
+    megatron_lm_plugin.megatron_lm_default_args["bf16"] = model.config.bf16
+    logger.info(f"Parsed GLM4 MoE config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 
 @add_model_config_to_megatron_parser("deepseek_v3")
 def parse_deepseek_v3_config(megatron_lm_plugin, model, batch_data):
+    logger.info(f"Parsing DeepSeek V3 config with model: {model}, size: {sum(p.numel() for p in model.parameters())} and plugin: {megatron_lm_plugin}")
+    logger.info(f"Parsing DeepSeek V3 config with model config: {model.config}")
     model_type_name = "gpt"
     num_layers = model.config.num_hidden_layers
     pretraining_flag = False
@@ -2869,7 +2961,8 @@ def parse_deepseek_v3_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
     megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
-
+    megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = 'rope'
+    logger.info(f"Parsed DeepSeek V3 config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 @dataclass
 class BnbQuantizationConfig:
