@@ -11,15 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import copy
 import importlib
 import math
+from collections.abc import Iterable
 from contextlib import suppress
 from typing import Callable, Optional, Union
 
 import torch
 from packaging import version
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler, Sampler
 
 from .logging import get_logger
 from .state import DistributedType, GradientState, PartialState, is_torch_xla_available
@@ -1372,7 +1373,37 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
         return (SkipDataLoader, *args[1:])
 
 
-def skip_first_batches(dataloader, num_batches=0):
+class SkipSampler(Sampler):
+    def __init__(self, sampler: Union[Sampler[int], Iterable[int]], skip_samples=0):
+        self.sampler = sampler
+        self.skip_samples = skip_samples
+
+    def __iter__(self):
+        for i, item in enumerate(self.sampler):
+            if i >= self.skip_samples:
+                yield item
+
+    def __len__(self):
+        return len(self.sampler) - self.skip_samples
+
+
+def insert_skip_sampler(sampler, skip_samples):
+    if isinstance(sampler, BatchSampler):
+        new_sampler = copy.deepcopy(sampler)
+        if isinstance(sampler, BatchSamplerShard):
+            next_sampler = sampler.batch_sampler
+            inner_sampler = insert_skip_sampler(next_sampler, skip_samples)
+            new_sampler.batch_sampler = inner_sampler
+        else:
+            next_sampler = sampler.sampler
+            inner_sampler = insert_skip_sampler(next_sampler, skip_samples)
+            new_sampler.sampler = inner_sampler
+        return new_sampler
+    else:
+        return SkipSampler(sampler, skip_samples=skip_samples)
+
+
+def skip_first_batches(dataloader, num_batches=0, num_samples=None):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`. Should not be used if
     the original dataloader is a `StatefulDataLoader`.
@@ -1385,7 +1416,12 @@ def skip_first_batches(dataloader, num_batches=0):
     dataset = dataloader.dataset
     sampler_is_batch_sampler = False
     if isinstance(dataset, IterableDataset):
+        assert num_samples is None, "Can't skip samples when the dataset is an IterableDataset."
         new_batch_sampler = None
+    elif num_samples is not None:
+        sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+        batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
+        new_batch_sampler = insert_skip_sampler(batch_sampler, skip_samples=num_samples)
     else:
         sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
         batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
