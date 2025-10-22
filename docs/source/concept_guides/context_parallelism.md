@@ -122,6 +122,8 @@ This can scale your context size to 1M+ sequence length potentially. Below, we s
 
 ALST/UlyssesSP implements a sequence parallelism using attention head parallelism as explained in [this paper](https://arxiv.org/abs/2506.13996) - for simplicity we re-use the concept and the setup of context parallelism, which from the user's end of view is the same - multiple gpus are used to process a single batch.
 
+To give a sense of what ALST enabled is 500K tokens on a single H100 GPU, 3.7M on a single node, and 15M on Llama-8B using just four nodes. This feature of HF Accelerate enables only 1 of the 3 components so the achievable sequence length will be smaller. You'd want TiledMLP, Activation checkpoint offload to CPU and a few other things enabled to get the full power of ALST, for details please see [this tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
+
 To configure the `deepspeed` backend:
 
 ```python
@@ -168,6 +170,7 @@ for iter, batch in enumerate(dl):
     batch = move_to_device(batch, model.device)
     outputs = model(**batch)
 
+    # only if not using liger-kernel
     shift_labels = batch["shift_labels"]
     loss = unwrapped_model.loss_function(
         logits=outputs.logits,
@@ -191,13 +194,14 @@ for iter, batch in enumerate(dl):
         total_good_tokens = sum(good_tokens_per_rank)
         loss = total_loss / max(total_good_tokens, 1)
 
-    # losses += [loss]
     if rank == 0: accelerator.print(f"{iter}: {loss=}")
     accelerator.log(dict(train_loss=loss, step=iter))
 
     accelerator.backward(loss)
     optimizer.step()
 ```
+
+If you use [Liger Kernel](https://github.com/linkedin/Liger-Kernel) it already knows how to handle `shift_labels` so you don't need to go through manual loss calculation, just calling `model(**batch)` will already get the `loss` calculated and done in a very memory-efficient way. If you didn't know about Liger-Kernel - it's highly recommended to be used especially for long sequence length since it liberates a lot of working memory that can be used for handling longer sequences.
 
 If you want to see what HF Accelerate did behind the scenes please read [this full integration tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
 
