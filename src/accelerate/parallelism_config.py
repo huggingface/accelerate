@@ -264,7 +264,9 @@ class ParallelismConfig:
 
         if self.cp_size > 1:
             if self.cp_handler is None:
-                self.cp_handler = TorchContextParallelConfig() if self.backend == "torch" else DeepSpeedContextParallelConfig()
+                self.cp_handler = (
+                    TorchContextParallelConfig() if self.backend == "torch" else DeepSpeedContextParallelConfig()
+                )
 
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
@@ -310,7 +312,11 @@ class ParallelismConfig:
                 f"dp_shard_size/tp_size/cp_size."
             )
 
-        if self.total_size > 1 and not (accelerator.is_fsdp2 or accelerator.multi_device or accelerator.distributed_type == DistributedType.DEEPSPEED):
+        if self.total_size > 1 and not (
+            accelerator.is_fsdp2
+            or accelerator.multi_device
+            or accelerator.distributed_type == DistributedType.DEEPSPEED
+        ):
             raise ValueError(
                 f"ParallelismConfig is only compatible DistributedType.FSDP (version 2) or DistributedType.Multi{{Device}} or DistributedType.DEEPSPEED, but got {accelerator.distributed_type}."
             )

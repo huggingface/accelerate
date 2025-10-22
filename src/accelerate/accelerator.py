@@ -2154,7 +2154,10 @@ class Accelerator:
         if batch_size_per_device is not None:
             config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
             config_kwargs["train_batch_size"] = (
-                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes // cp_size
+                batch_size_per_device
+                * deepspeed_plugin.get_value("gradient_accumulation_steps")
+                * self.num_processes
+                // cp_size
             )
 
         model = None
@@ -2176,7 +2179,7 @@ class Accelerator:
                 raise ValueError(
                     "You cannot pass a dataloader to `accelerate.prepare()` without passing a model when using Context Parallelism."
                 )
-            ver_min_required = "0.18.1"
+            ver_min_required = "0.18.0"  # XXX: change to 0.18.1 when released
             if not compare_versions("deepspeed", ">=", ver_min_required):
                 raise ImportError(
                     f"Deepspeed ALST/Ulysses requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
