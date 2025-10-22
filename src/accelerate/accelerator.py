@@ -1616,12 +1616,12 @@ class Accelerator:
         return args
 
     def _prepare_cp(self, *args):
-        from torch.distributed.tensor.experimental import context_parallel
-        from torch.distributed.tensor.experimental._attention import set_rotate_method
-
         if self.parallelism_config.backend == "deepspeed":
             # deepspeed handles cp in a different way, configured in _prepare_deepspeed
             return args
+
+        from torch.distributed.tensor.experimental import context_parallel
+        from torch.distributed.tensor.experimental._attention import set_rotate_method
 
         cp_comm_strategy = self.parallelism_config.cp_handler.cp_comm_strategy
         set_rotate_method(cp_comm_strategy)
@@ -2193,10 +2193,16 @@ class Accelerator:
                     "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
                 )
 
+            # XXX: probably can move this logic to Deepspeed as well later
+            # if cp_handler.seq_length_is_variable is True seq_length can be set to anything divisible by cp_size
+            # a fixed seq_length and seq_length_is_variable=False will avoid recalculating a few variables on each `forward`
+            seq_length = cp_handler.seq_length if cp_handler.seq_length is not None else cp_size
+
             mpu = UlyssesSPAttentionHF.register_with_transformers(
                 model_name_or_path=model,
                 sequence_parallel_size=cp_size,
-                max_length=cp_handler.max_length,
+                max_length=seq_length,
+                seq_length_is_variable=cp_handler.seq_length_is_variable,
                 core_attn_implementation=cp_handler.attn_implementation or model.config.attn_implementation,
                 micro_batch_size=batch_size_per_device,
             )
@@ -4062,7 +4068,7 @@ class Accelerator:
 
         <Tip warning={true}>
 
-        `context_parallel` is currently only supported together with FSDP2, and requires `parallelism_config.cp_size` >
+        `context_parallel` is currently supported either with FSDP2 or Deepspeed/ALST/UlyssesSP, and requires `parallelism_config.cp_size` >
         1. If either of these conditions are not met, this context manager will have no effect, though to enable fewer
         code changes it will not raise an Exception.
 
