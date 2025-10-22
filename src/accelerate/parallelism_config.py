@@ -61,7 +61,7 @@ class ParallelismConfig:
 
     """
 
-    flavour: Literal["torch", "deepspeed"] = "torch"
+    backend: Literal["torch", "deepspeed"] = "torch"
     dp_replicate_size: Optional[int] = None
     dp_shard_size: Optional[int] = None
     tp_size: Optional[int] = None
@@ -260,11 +260,11 @@ class ParallelismConfig:
 
         if self.tp_size > 1:
             if self.tp_handler is None:
-                self.tp_handler = TorchTensorParallelConfig() if self.flavour == "torch" else None
+                self.tp_handler = TorchTensorParallelConfig() if self.backend == "torch" else None
 
         if self.cp_size > 1:
             if self.cp_handler is None:
-                self.cp_handler = TorchContextParallelConfig() if self.flavour == "torch" else DeepSpeedContextParallelConfig()
+                self.cp_handler = TorchContextParallelConfig() if self.backend == "torch" else DeepSpeedContextParallelConfig()
 
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
