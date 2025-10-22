@@ -122,7 +122,7 @@ This can scale your context size to 1M+ sequence length potentially. Below, we s
 
 ALST/UlyssesSP implements a sequence parallelism using attention head parallelism as explained in [this paper](https://arxiv.org/abs/2506.13996) - for simplicity we re-use the concept and the setup of context parallelism, which from the user's end of view is the same - multiple gpus are used to process a single batch.
 
-To give a sense of what ALST enabled is 500K tokens on a single H100 GPU, 3.7M on a single node, and 15M on Llama-8B using just four nodes. This feature of HF Accelerate enables only 1 of the 3 components so the achievable sequence length will be smaller. You'd want TiledMLP, Activation checkpoint offload to CPU and a few other things enabled to get the full power of ALST, for details please see [this tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
+To give a sense of what ALST made possible - it allowed us to train in bf16 with 500K tokens on a single H100 GPU, 3.7M on a single node, and 15M on Llama-8B using just four nodes. This feature of HF Accelerate enables only 1 of the 3 ALST components so the achievable sequence length will be smaller. You'd want TiledMLP, Activation checkpoint offload to CPU and a few other things enabled to get the full power of ALST, for details please refer to [this tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
 
 To configure the `deepspeed` backend:
 
