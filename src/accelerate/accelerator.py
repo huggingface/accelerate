@@ -1619,8 +1619,8 @@ class Accelerator:
         from torch.distributed.tensor.experimental import context_parallel
         from torch.distributed.tensor.experimental._attention import set_rotate_method
 
-        if not self.is_fsdp2:
-            # deepspeed handles cp other way
+        if self.parallelism_config.backend == "deepspeed":
+            # deepspeed handles cp in a different way, configured in _prepare_deepspeed
             return args
 
         cp_comm_strategy = self.parallelism_config.cp_handler.cp_comm_strategy
