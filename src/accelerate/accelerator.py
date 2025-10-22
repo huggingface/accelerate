@@ -2188,6 +2188,11 @@ class Accelerator:
             from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPAttentionHF, UlyssesSPDataLoaderAdapter
             from deepspeed.utils import groups
 
+            if not hasattr(model, "config"):
+                raise ValueError(
+                    "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
+                )
+
             mpu = UlyssesSPAttentionHF.register_with_transformers(
                 model_name_or_path=model,
                 sequence_parallel_size=cp_size,
