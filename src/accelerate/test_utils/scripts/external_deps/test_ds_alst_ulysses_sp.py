@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Test script for verifying ALST/Ulysses SP works
+"""
+
 import torch
 from deepspeed.runtime.utils import move_to_device
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -20,18 +24,16 @@ from accelerate import Accelerator
 from accelerate.utils import ParallelismConfig, set_seed
 from accelerate.utils.dataclasses import DeepSpeedContextParallelConfig
 
-
 set_seed(42)
 
-model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-# to run the example faster switch to the random model
-# model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+world_size = 2
+model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
 micro_batch_size = 1
 
 parallelism_config = ParallelismConfig(
     backend="deepspeed",
-    cp_size=4,
+    cp_size=world_size,
     # dp_shard_size=1, # set if dp is wanted as well
     cp_handler=DeepSpeedContextParallelConfig(
         seq_length=256,
@@ -42,62 +44,29 @@ parallelism_config = ParallelismConfig(
 
 accelerator = Accelerator(
     parallelism_config=parallelism_config,
-    #    log_with="wandb",  # enable to log into wandb
-)
-accelerator.init_trackers(
-    project_name="ulysses-accelerate",
-    config={},
-    init_kwargs={"wandb": dict(entity="yak", name="deepspeed")},
 )
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(model_name)
 
-# 2 quick rough datasets to demonstrate the workings
-if 1:  # real dataset
-    from datasets import load_dataset
+samples = 4
+seqlen = 32
+input_ids = torch.arange(1, seqlen * samples + 1).view(-1, seqlen) + 100
+position_ids = torch.arange(seqlen * samples).view(-1, seqlen)
 
-    ds = load_dataset("HuggingFaceH4/ultrachat_200k", split="train_sft[:12]")
+ds = torch.utils.data.TensorDataset(input_ids, position_ids)
 
-    # this is a quick example, it should be made more efficient to be used in real application
-    def convert(ex):
-        texts = tokenizer.apply_chat_template(conversation=ex["messages"], tokenize=False)
-        tokenized_dict = tokenizer(texts, max_length=256, padding=True, truncation=True)
-        return tokenized_dict
-    ds = ds.map(convert, batched=False, remove_columns=["prompt", "prompt_id", "messages"])
 
-    def collate_fn(batch):
-        input_ids = torch.tensor(batch[0]["input_ids"]).unsqueeze(0)
-        attention_mask = torch.tensor(batch[0]["attention_mask"]).unsqueeze(0)
-        position_ids = torch.arange(input_ids.shape[1]).unsqueeze(0)
-        return dict(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            labels=input_ids,
-            attention_mask=attention_mask,
-        )
-
-    dl = torch.utils.data.DataLoader(
-        ds, batch_size=micro_batch_size, collate_fn=collate_fn, drop_last=True, shuffle=False
+def collate_fn(batch):
+    input_ids, position_ids = batch[0]
+    return dict(
+        input_ids=input_ids.unsqueeze(0),
+        position_ids=position_ids.unsqueeze(0),
+        labels=input_ids.unsqueeze(0),
     )
 
-else:  # fake dataset
-    samples = 16
-    seqlen = 256
-    input_ids = torch.arange(1, seqlen * samples + 1).view(-1, seqlen) + 100
-    position_ids = torch.arange(seqlen * samples).view(-1, seqlen)
 
-    ds = torch.utils.data.TensorDataset(input_ids, position_ids)
-
-    def collate_fn(batch):
-        input_ids, position_ids = batch[0]
-        return dict(
-            input_ids=input_ids.unsqueeze(0),
-            position_ids=position_ids.unsqueeze(0),
-            labels=input_ids.unsqueeze(0),
-        )
-
-    dl = torch.utils.data.DataLoader(ds, batch_size=micro_batch_size, collate_fn=collate_fn)
+dl = torch.utils.data.DataLoader(ds, batch_size=micro_batch_size, collate_fn=collate_fn)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 

@@ -281,7 +281,7 @@ You can directly see this issue in the profiler output in the image below:
 </p>
 
 
-## Why only FSDP2?
+## Why FSDP1 is not supported
 
 We only support context parallelism with `FSDP2`, as we create a joint mesh of `context_parallel_size` and `dp_shard_size` to
 utilize its full potential.
