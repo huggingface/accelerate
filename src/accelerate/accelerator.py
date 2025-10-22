@@ -2176,6 +2176,11 @@ class Accelerator:
                 raise ValueError(
                     "You cannot pass a dataloader to `accelerate.prepare()` without passing a model when using Context Parallelism."
                 )
+            ver_min_required = "0.18.1"
+            if not compare_versions("deepspeed", ">=", ver_min_required):
+                raise ImportError(
+                    f"Deepspeed ALST/Ulysses requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
+                )
 
             from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPAttentionHF, UlyssesSPDataLoaderAdapter
             from deepspeed.utils import groups
@@ -2354,7 +2359,6 @@ class Accelerator:
                         cp_group = groups._get_sequence_parallel_group()
                         cp_world_size = groups._get_sequence_parallel_world_size()
                         cp_rank = groups._get_sequence_parallel_rank()
-                        print(cp_group)
                         result[i] = UlyssesSPDataLoaderAdapter(
                             result[i],
                             sp_rank=cp_rank,
@@ -3950,9 +3954,10 @@ class Accelerator:
             tp_sharding = self.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0) > 1
             if zero3_sharding or tp_sharding:
                 if model.zero_gather_16bit_weights_on_model_save():
-                    if tp_sharding and not compare_versions("deepspeed", ">=", "0.16.4"):
+                    ver_min_required = "0.16.4"
+                    if tp_sharding and not compare_versions("deepspeed", ">=", ver_min_required):
                         raise ImportError(
-                            "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
+                            f"Deepspeed TP requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
                         )
                     state_dict = (
                         model._consolidated_16bit_state_dict()
