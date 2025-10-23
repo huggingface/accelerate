@@ -256,7 +256,7 @@ class TestParallelismConfig:
         from accelerate.utils import DeepSpeedContextParallelConfig
 
         cp_handler = DeepSpeedContextParallelConfig()
-        pc = ParallelismConfig(cp_size=2, cp_handler=cp_handler)
+        pc = ParallelismConfig(backend="deepspeed", cp_size=2, cp_handler=cp_handler)
 
         assert pc.cp_handler is not None, "CP handler should be set"
         assert pc.cp_handler.seq_length_is_variable is True, "by default we set to expect a variable seqlen"
