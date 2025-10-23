@@ -222,7 +222,7 @@ For an example of an Accelerate training loop with enabled ALST/UlyssesSP see [e
 [!Warning]
 > This API is quite new and still in its experimental stage. While we strive to provide a stable API, it's possible some small parts of the public API will change in the future.
 
-Since this is a Deepspeed backend the usual Deepspeed configuration applies, so you can combine it with optimizer states and/or weights offloading as well to enable even longer sequence length. This technology has been tested to work with DeepSpeed ZeRO stage 2 and 3.
+Since this is a Deepspeed backend the usual Deepspeed configuration applies, so you can combine sequence parallelism with optimizer states and/or weights offloading as well to liberate more gpu memory and enable an even longer sequence length. This technology has been tested to work with DeepSpeed ZeRO stage 2 and 3.
 
 ## Accelerate's interface
 
