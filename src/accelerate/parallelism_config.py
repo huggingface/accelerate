@@ -267,6 +267,13 @@ class ParallelismConfig:
                 self.cp_handler = (
                     TorchContextParallelConfig() if self.backend == "torch" else DeepSpeedContextParallelConfig()
                 )
+            else:
+                backends_config_map = dict(
+                    torch=TorchContextParallelConfig,
+                    deepspeed=DeepSpeedContextParallelConfig,
+                )
+                if not isinstance(self.cp_handler, backends_config_map[self.backend]):
+                    raise ValueError(f"ParallelismConfig's backend={self.backend} requires {backends_config_map[self.backend]}, but cp_handler was set to {type(self.cp_handler)}")
 
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
