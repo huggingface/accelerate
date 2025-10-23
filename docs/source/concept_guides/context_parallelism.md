@@ -207,6 +207,9 @@ If you want to see what HF Accelerate did behind the scenes please read [this fu
 
 For an example of an Accelerate training loop with enabled ALST/UlyssesSP see [examples/alst_ulysses_sequence_parallelism](https://github.com/huggingface/accelerate/blob/main/examples/alst_ulysses_sequence_parallelism).
 
+[!Warning]
+> This API is quite new and still in its experimental stage. While we strive to provide a stable API, it's possible some small parts of the public API will change in the future.
+
 
 ## Accelerate's interface
 
