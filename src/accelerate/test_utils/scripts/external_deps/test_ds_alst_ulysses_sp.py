@@ -24,6 +24,7 @@ from accelerate import Accelerator
 from accelerate.utils import ParallelismConfig, set_seed
 from accelerate.utils.dataclasses import DeepSpeedContextParallelConfig
 
+
 set_seed(42)
 
 world_size = 2

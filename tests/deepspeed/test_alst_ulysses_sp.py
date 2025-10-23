@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 from parameterized import parameterized
+
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     execute_subprocess_async,

@@ -261,7 +261,7 @@ class TestParallelismConfig:
         assert pc.cp_handler is not None, "CP handler should be set"
         assert pc.cp_handler.seq_length_is_variable is True, "by default we set to expect a variable seqlen"
 
-        with pytest.raises(ValueError, match=f"Invalid attn_implementation"):
+        with pytest.raises(ValueError, match="Invalid attn_implementation"):
             DeepSpeedContextParallelConfig(attn_implementation="foobar")
 
     def test_tp_handler(self):
