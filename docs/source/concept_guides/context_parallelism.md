@@ -153,6 +153,18 @@ Instead of setting these values in `DeepSpeedContextParallelConfig` object, you 
 
 If not passed in the code `cp_size` can be set via `--parallelism_config_cp_size` CLI argument.
 
+Ulysses sequence parallelism can be combined with data parallelism:
+
+```python
+parallelism_config = ParallelismConfig(
+    backend="deepspeed",
+    cp_size=2,
+    dp_shard_size=2,
+    cp_handler=DeepSpeedContextParallelConfig(...),
+)
+```
+Here we use 4 gpus, with 2 sequence parallelism replicas. Deepspeed-ZeRO is what drives the data parallelism.
+
 Please note that a lot of magic is hidden inside [UlyssesSPDataLoaderAdapter](https://github.com/deepspeedai/DeepSpeed/blob/64c0052fa08438b4ecf4cae30af15091a92d2108/deepspeed/runtime/sequence_parallel/ulysses_sp.py#L442). It's used behind the scenes, wrapping your original DataLoader object, but you should be aware of it should you run into any problems. It also automatically injects the correct `shift_labels` into the batch dictionary, before the batch gets sharded across the participating ranks.
 
 Now the only remaining piece to start using ALST/UlyssesSP is to aggregate the loss across ranks using a differentiable `all_gather` to get the grads right. The following code does it, while also exlcuding any masked out with `-100` tokens, to get the correct average:
@@ -210,6 +222,7 @@ For an example of an Accelerate training loop with enabled ALST/UlyssesSP see [e
 [!Warning]
 > This API is quite new and still in its experimental stage. While we strive to provide a stable API, it's possible some small parts of the public API will change in the future.
 
+Since this is a Deepspeed backend the usual Deepspeed configuration applies, so you can combine it with optimizer states and/or weights offloading as well to enable even longer sequence length. This technology has been tested to work with DeepSpeed ZeRO stage 2 and 3.
 
 ## Accelerate's interface
 
