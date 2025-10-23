@@ -41,6 +41,7 @@ from .dataclasses import (
     CustomDtype,
     DataLoaderConfiguration,
     DDPCommunicationHookType,
+    DeepSpeedContextParallelConfig,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,

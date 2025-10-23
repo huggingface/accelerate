@@ -24,6 +24,13 @@ With sequence length of 128k, the memory requirement of the attention matrix is 
 
 Context parallelism allows us to shard the inputs to the attention computation along the sequence dimension and compute the attention in parallel on multiple GPUs. With this, we can train models with long sequences, scaling potentially to 1M+ sequence length.
 
+## Supported backends
+
+Multiple backends are currently supported
+
+1. `torch`: PyTorch/FSDP2,which implements several of Ring Attention context parallel protocols [tutorial](https://docs.pytorch.org/tutorials/unstable/context_parallel.html) and [api](https://docs.pytorch.org/docs/stable/distributed.tensor.html#torch.distributed.tensor.experimental.context_parallel).
+2. `deepspeed`: DeepSpeed/ALST/UlyssesSP, which implements sequence parallelism using attention head parallelism: [tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/) and [paper](https://arxiv.org/abs/2506.13996)
+
 ## How to use context parallelism?
 
 ```diff
@@ -44,8 +51,21 @@ accelerator = Accelerator(
 )
 ```
 
-As with any other feature in 🤗`accelerate`, you can enable context parallelism also by passing the corresponding flags to `accelerate launch`.
-In this case, it's no different:
+By default the `torch` backend is selected, but you can select the deepspeed backend via:
+
+```python
+parallelism_config = ParallelismConfig(
+    backend="deepspeed",
+    cp_size=4,
+    cp_handler=DeepSpeedContextParallelConfig(
+        seq_length=256,
+        attn_implementation="sdpa"
+    ),
+)
+```
+See the following sections for nuances of each backend.
+
+As with any other feature in 🤗`accelerate`, you can enable context parallelism also by passing the corresponding flags to `accelerate launch`. In this case, it's no different:
 
 ```bash
 accelerate launch --parallelism-config-cp-size 8 --parallelism-config-cp-comm-strategy [allgather|alltoall] ...
@@ -58,12 +78,14 @@ accelerate launch --parallelism-config-cp-size 8 --parallelism-config-cp-comm-st
 > Context parallelism is compatible with other parallelism strategies, such as data parallelism, tensor parallelism and FSDP2.
 > You can simply combine them by setting your parallelism sizes to the desired values, e.g. `--parallelism-config-dp-size 8 --parallelism-config-tp-size 2 --parallelism-config-cp-size 8`. Or you can use the `ParallelismConfig` class to set them programmatically.
 
+## Torch/FSDP2 backend
+
 > [!Warning]
 > Context parallelism is tightly coupled  with `FSDP2`, which you can learn more about in the [FSDP2 introduction](fsdp1_vs_fsdp2.md). Meaning, context parallelism only works if you use `FullyShardedDataParallelPlugin` or `--use-fsdp` with version set to 2 to your
 > program. If no `FSDP2` is used, error will be raised.
 
 > [!Warning]
-> Context parallelism works only with [SDPA](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) and only with no mask or causal mask. We can't properly detect this for you, so it's your responsibility to ensure that you are using `SDPA` with no mask or causal mask. If you use any other attention implementation, it will raise an error.
+> `torch`-backend Context parallelism works only with [SDPA](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) and only with no mask or causal mask. We can't properly detect this for you, so it's your responsibility to ensure that you are using `SDPA` with no mask or causal mask. If you use any other attention implementation, it will raise an error.
 
 After enabling context parallelism with the methods mentioned above, you can then apply it to your training loop. We provide a thin wrapper around [`torch.distributed.tensor.experimental.context_parallel`](https://docs.pytorch.org/docs/stable/distributed.tensor.html#torch.distributed.tensor.experimental.context_parallel) that you can use in your training loop, that abstracts some of the complexity of using it (more on this later). To minimize the changes you have to do in your training loop, we provide a context manager that is a `noop` if context parallelism is not enabled, and applies the context parallelism if it is enabled. This way, you can use it in your training loop without changing any code based on your parallelism configuration.
 You can use it as follows:
@@ -91,11 +113,116 @@ This can scale your context size to 1M+ sequence length potentially. Below, we s
 </p>
 
 > [!Tip]
-> These examples were created with a script you can find [in the examples folder](https://github.com/huggingface/accelerate/blob/main/examples/fsdp2/nd_parallel.py). To run the example on 8 H100 GPUs (128k sequence length), you can use the following command:
+> These examples were created with a script you can find [in the examples folder](https://github.com/huggingface/accelerate/blob/main/examples/torch_native_parallelism/nd_parallel.py). To run the example on 8 H100 GPUs (128k sequence length), you can use the following command:
 > ```bash
-> accelerate launch --use-fsdp --fsdp-activation-checkpointing=TRUE examples/fsdp2/nd_parallel.py --cp-size=8 --sequence-length=128000
+> accelerate launch --use-fsdp --fsdp-activation-checkpointing=TRUE examples/torch_native_parallelism/nd_parallel.py --cp-size=8 --sequence-length=128000
 > ```
 
+## DeepSpeed/ALST/UlyssesSP backend
+
+ALST/UlyssesSP implements a sequence parallelism using attention head parallelism as explained in [this paper](https://arxiv.org/abs/2506.13996) - for simplicity we re-use the concept and the setup of context parallelism, which from the user's end of view is the same - multiple gpus are used to process a single batch.
+
+To give a sense of what ALST made possible - it allowed us to train in bf16 with 500K tokens on a single H100 GPU, 3.7M on a single node, and 15M on Llama-8B using just four nodes. This feature of HF Accelerate enables only 1 of the 3 ALST components so the achievable sequence length will be smaller. You'd want TiledMLP, Activation checkpoint offload to CPU and a few other things enabled to get the full power of ALST, for details please refer to [this tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
+
+To configure the `deepspeed` backend:
+
+```python
+parallelism_config = ParallelismConfig(
+    backend="deepspeed",
+    cp_size=4,
+    cp_handler=DeepSpeedContextParallelConfig(
+        seq_length=256,
+        seq_length_is_variable=True,
+        attn_implementation="sdpa",
+    ),
+)
+accelerator = Accelerator(
+    ...,
+    parallelism_config=parallelism_config,
+)
+```
+
+- `cp_size` is the degree of the sequence parallelism - in the above example it's 4, therefore 4 gpus will be used to process a single batch.
+- `seq_length` and `seq_length_is_variable` are used to deal with sequence lengths. If `seq_length_is_variable=True` the backend will work with a sequence length that may change between batches, in which case `seq_length` value can be set to anything divisible by the context parallel degree or not set at all. In this case on every `forward` the sequence variables will be derived from input. If `False` then `seq_length` needs to match the batch's sequence length dimension, which then will have to be padded to be always the same. The default is `True`.
+- `attn_implementation` is one of `sdpa`, `flash_attention_2` or `flash_attention_3`. This sequence parallel implementation uses `position_ids` instead of `attention_mask` therefore `eager` can't work here until it'd support working with `position_ids`. Also please note that `sdpa` doesn't handle correctly multiple samples combined into one, it'd attend to the whole sample as one. If the samples aren't combined `sdpa` will work correctly. Therefore Flash Attention should be the ideal choice as it always works.
+
+Instead of setting these values in `DeepSpeedContextParallelConfig` object, you can also use the environment variables to accomplish the same - here they are correspondingly to the end of the list above.
+- `PARALLELISM_CONFIG_CP_SEQ_LENGTH`
+- `PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE`
+- `PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION`
+
+If not passed in the code `cp_size` can be set via `--parallelism_config_cp_size` CLI argument.
+
+Ulysses sequence parallelism can be combined with data parallelism:
+
+```python
+parallelism_config = ParallelismConfig(
+    backend="deepspeed",
+    cp_size=2,
+    dp_shard_size=2,
+    cp_handler=DeepSpeedContextParallelConfig(...),
+)
+```
+Here we use 4 gpus, with 2 sequence parallelism replicas. Deepspeed-ZeRO is what drives the data parallelism.
+
+Please note that a lot of magic is hidden inside [UlyssesSPDataLoaderAdapter](https://github.com/deepspeedai/DeepSpeed/blob/64c0052fa08438b4ecf4cae30af15091a92d2108/deepspeed/runtime/sequence_parallel/ulysses_sp.py#L442). It's used behind the scenes, wrapping your original DataLoader object, but you should be aware of it should you run into any problems. It also automatically injects the correct `shift_labels` into the batch dictionary, before the batch gets sharded across the participating ranks.
+
+Now the only remaining piece to start using ALST/UlyssesSP is to aggregate the loss across ranks using a differentiable `all_gather` to get the grads right. The following code does it, while also exlcuding any masked out with `-100` tokens, to get the correct average:
+
+```python
+cp_size = parallelism_config.cp_size if parallelism_config else 1
+if cp_size > 1:
+    sp_group = accelerator.torch_device_mesh["cp"].get_group()
+    sp_world_size = parallelism_config.cp_size
+
+# Normal training loop
+for iter, batch in enumerate(dl):
+    optimizer.zero_grad()
+
+    batch = move_to_device(batch, model.device)
+    outputs = model(**batch)
+
+    # only if not using liger-kernel
+    shift_labels = batch["shift_labels"]
+    loss = unwrapped_model.loss_function(
+        logits=outputs.logits,
+        labels=None,
+        shift_labels=shift_labels,
+        vocab_size=unwrapped_model.config.vocab_size,
+    )
+
+    if cp_size > 1:
+        # differentiable weighted per-shard-loss aggregation across ranks
+        losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+        # special dealing with SFT that has prompt tokens that aren't used in loss computation
+        good_tokens = (shift_labels != -100).view(-1).sum()
+        good_tokens_per_rank = torch.distributed.nn.functional.all_gather(
+            good_tokens, group=sp_group
+        )
+        total_loss = sum(
+            losses_per_rank[rank] * good_tokens_per_rank[rank]
+            for rank in range(sp_world_size)
+        )
+        total_good_tokens = sum(good_tokens_per_rank)
+        loss = total_loss / max(total_good_tokens, 1)
+
+    if rank == 0: accelerator.print(f"{iter}: {loss=}")
+    accelerator.log(dict(train_loss=loss, step=iter))
+
+    accelerator.backward(loss)
+    optimizer.step()
+```
+
+If you use [Liger Kernel](https://github.com/linkedin/Liger-Kernel) it already knows how to handle `shift_labels` so you don't need to go through manual loss calculation, just calling `model(**batch)` will already get the `loss` calculated and done in a very memory-efficient way. If you didn't know about Liger-Kernel - it's highly recommended to be used especially for long sequence length since it liberates a lot of working memory that can be used for handling longer sequences.
+
+If you want to see what HF Accelerate did behind the scenes please read [this full integration tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
+
+For an example of an Accelerate training loop with enabled ALST/UlyssesSP see [examples/alst_ulysses_sequence_parallelism](https://github.com/huggingface/accelerate/blob/main/examples/alst_ulysses_sequence_parallelism).
+
+[!Warning]
+> This API is quite new and still in its experimental stage. While we strive to provide a stable API, it's possible some small parts of the public API will change in the future.
+
+Since this is a Deepspeed backend the usual Deepspeed configuration applies, so you can combine sequence parallelism with optimizer states and/or weights offloading as well to liberate more gpu memory and enable an even longer sequence length. This technology has been tested to work with DeepSpeed ZeRO stage 2 and 3.
 
 ## Accelerate's interface
 
@@ -174,10 +301,10 @@ You can directly see this issue in the profiler output in the image below:
 </p>
 
 
-## Why only FSDP2?
+## Why FSDP1 is not supported
 
-We only support context parallelism with `FSDP2`, as we create a joint mesh of `context_parallel_size` and `dp_shard_size` to 
-utilize its full potential. 
+We only support context parallelism with `FSDP2`, as we create a joint mesh of `context_parallel_size` and `dp_shard_size` to
+utilize its full potential.
 How it works is: we shard the model across the joint mesh of size `cp_size*dp_shard_size`, which maximizes the memory savings.
 This is a "free lunch" of sorts, as `FSDP` communication is fully overlapped with the computation of attention, as shown in the images below.
 

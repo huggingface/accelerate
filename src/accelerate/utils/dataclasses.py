@@ -2182,6 +2182,52 @@ class TorchContextParallelConfig:
 
 
 @dataclass
+class DeepSpeedContextParallelConfig:
+    seq_length: int = field(
+        default=None,
+        metadata={
+            "help": "Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `seq_length_is_variable=True`"
+        },
+    )
+    seq_length_is_variable: bool = field(
+        default=None,
+        metadata={
+            "help": "If `True` will work with a sequence length that may change between batches, in which case `seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `seq_length` needs to match the batch's sequence length dimension. The default is `True`."
+        },
+    )
+    attn_implementation: str = field(
+        default=None,
+        metadata={
+            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. If not provided, default from model will be used."
+        },
+    )
+
+    def __post_init__(self):
+        # seq_length_is_variable and seq_length are interconnected
+        if self.seq_length_is_variable is None:
+            self.seq_length_is_variable = os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE", True)
+
+        if not self.seq_length_is_variable and self.seq_length is None:
+            if "PARALLELISM_CONFIG_CP_SEQ_LENGTH" not in os.environ:
+                raise ValueError(
+                    "when `seq_length_is_variable` is false `seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_CP_SEQ_LENGTH"
+                )
+            self.seq_length = int(os.environ["PARALLELISM_CONFIG_CP_SEQ_LENGTH"])
+
+        if self.attn_implementation is None:
+            self.attn_implementation = os.environ.get("PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION", None)
+
+        if self.attn_implementation is not None and self.attn_implementation not in [
+            "flash_attention_2",
+            "flash_attention_3",
+            "sdpa",
+        ]:
+            raise ValueError(
+                f"Invalid attn_implementation: {self.attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
+            )
+
+
+@dataclass
 class TorchTensorParallelConfig:
     """
     Use this object in your [`Accelerator`] to customize your torch tensor parallelism.

@@ -1616,6 +1616,10 @@ class Accelerator:
         return args
 
     def _prepare_cp(self, *args):
+        if self.parallelism_config.backend == "deepspeed":
+            # deepspeed handles cp in a different way, configured in _prepare_deepspeed
+            return args
+
         from torch.distributed.tensor.experimental import context_parallel
         from torch.distributed.tensor.experimental._attention import set_rotate_method
 
@@ -2075,6 +2079,10 @@ class Accelerator:
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         tp_size = deepspeed_plugin.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0)
+
+        cp_size = self.parallelism_config.cp_size if self.parallelism_config else 1
+        cp_handler = self.parallelism_config.cp_handler if self.parallelism_config else None
+
         if tp_size > 1:
             if not compare_versions("deepspeed", ">=", "0.16.4"):
                 raise ImportError(
@@ -2146,7 +2154,10 @@ class Accelerator:
         if batch_size_per_device is not None:
             config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
             config_kwargs["train_batch_size"] = (
-                batch_size_per_device * deepspeed_plugin.get_value("gradient_accumulation_steps") * self.num_processes
+                batch_size_per_device
+                * deepspeed_plugin.get_value("gradient_accumulation_steps")
+                * self.num_processes
+                // cp_size
             )
 
         model = None
@@ -2161,6 +2172,40 @@ class Accelerator:
                 type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
             ):
                 scheduler = obj
+
+        mpu = None
+        if cp_size > 1:
+            if is_dataloader_present and model is None:
+                raise ValueError(
+                    "You cannot pass a dataloader to `accelerate.prepare()` without passing a model when using Context Parallelism."
+                )
+            ver_min_required = "0.18.1"
+            if not compare_versions("deepspeed", ">=", ver_min_required):
+                raise ImportError(
+                    f"Deepspeed ALST/Ulysses requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
+                )
+
+            from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPAttentionHF, UlyssesSPDataLoaderAdapter
+            from deepspeed.utils import groups
+
+            if not hasattr(model, "config"):
+                raise ValueError(
+                    "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
+                )
+
+            # XXX: probably can move this logic to Deepspeed as well later
+            # if cp_handler.seq_length_is_variable is True seq_length can be set to anything divisible by cp_size
+            # a fixed seq_length and seq_length_is_variable=False will avoid recalculating a few variables on each `forward`
+            seq_length = cp_handler.seq_length if cp_handler.seq_length is not None else cp_size
+
+            mpu = UlyssesSPAttentionHF.register_with_transformers(
+                model_name_or_path=model,
+                sequence_parallel_size=cp_size,
+                max_length=seq_length,
+                seq_length_is_variable=cp_handler.seq_length_is_variable,
+                core_attn_implementation=cp_handler.attn_implementation or model.config.attn_implementation,
+                micro_batch_size=batch_size_per_device,
+            )
 
         if optimizer is not None:
             if "optimizer" in deepspeed_plugin.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
@@ -2266,7 +2311,7 @@ class Accelerator:
                     )
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
-            kwargs = dict(model=model, config_params=self.deepspeed_config)
+            kwargs = dict(model=model, config_params=self.deepspeed_config, mpu=mpu)
             if optimizer is not None:
                 if isinstance(optimizer, (DummyOptim)):
                     kwargs["model_parameters"] = optimizer.params
@@ -2323,6 +2368,19 @@ class Accelerator:
                     type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
                 ):
                     result[i] = scheduler
+                elif isinstance(result[i], torch.utils.data.DataLoader):
+                    if cp_size > 1:
+                        cp_group = groups._get_sequence_parallel_group()
+                        cp_world_size = groups._get_sequence_parallel_world_size()
+                        cp_rank = groups._get_sequence_parallel_rank()
+                        result[i] = UlyssesSPDataLoaderAdapter(
+                            result[i],
+                            sp_rank=cp_rank,
+                            sp_group=cp_group,
+                            sp_world_size=cp_world_size,
+                            device=model.device,
+                        )
+
             # pointing for deepspeed_engine_wrapped.backward()
             if self.deepspeed_engine_wrapped is None:
                 self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
@@ -3910,9 +3968,10 @@ class Accelerator:
             tp_sharding = self.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0) > 1
             if zero3_sharding or tp_sharding:
                 if model.zero_gather_16bit_weights_on_model_save():
-                    if tp_sharding and not compare_versions("deepspeed", ">=", "0.16.4"):
+                    ver_min_required = "0.16.4"
+                    if tp_sharding and not compare_versions("deepspeed", ">=", ver_min_required):
                         raise ImportError(
-                            "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
+                            f"Deepspeed TP requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
                         )
                     state_dict = (
                         model._consolidated_16bit_state_dict()
@@ -4009,7 +4068,7 @@ class Accelerator:
 
         <Tip warning={true}>
 
-        `context_parallel` is currently only supported together with FSDP2, and requires `parallelism_config.cp_size` >
+        `context_parallel` is currently supported either with FSDP2 or Deepspeed/ALST/UlyssesSP, and requires `parallelism_config.cp_size` >
         1. If either of these conditions are not met, this context manager will have no effect, though to enable fewer
         code changes it will not raise an Exception.
 

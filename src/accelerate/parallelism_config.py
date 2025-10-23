@@ -15,9 +15,14 @@
 import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
-from accelerate.utils.dataclasses import TorchContextParallelConfig, TorchTensorParallelConfig
+from accelerate.utils.dataclasses import (
+    DeepSpeedContextParallelConfig,
+    DistributedType,
+    TorchContextParallelConfig,
+    TorchTensorParallelConfig,
+)
 from accelerate.utils.versions import is_torch_version
 
 
@@ -56,6 +61,7 @@ class ParallelismConfig:
 
     """
 
+    backend: Literal["torch", "deepspeed"] = "torch"
     dp_replicate_size: Optional[int] = None
     dp_shard_size: Optional[int] = None
     tp_size: Optional[int] = None
@@ -254,11 +260,20 @@ class ParallelismConfig:
 
         if self.tp_size > 1:
             if self.tp_handler is None:
-                self.tp_handler = TorchTensorParallelConfig()
+                self.tp_handler = TorchTensorParallelConfig() if self.backend == "torch" else None
 
         if self.cp_size > 1:
             if self.cp_handler is None:
-                self.cp_handler = TorchContextParallelConfig()
+                self.cp_handler = (
+                    TorchContextParallelConfig() if self.backend == "torch" else DeepSpeedContextParallelConfig()
+                )
+            else:
+                backends_config_map = dict(
+                    torch=TorchContextParallelConfig,
+                    deepspeed=DeepSpeedContextParallelConfig,
+                )
+                if not isinstance(self.cp_handler, backends_config_map[self.backend]):
+                    raise ValueError(f"ParallelismConfig's backend={self.backend} requires {backends_config_map[self.backend]}, but cp_handler was set to {type(self.cp_handler)}")
 
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
@@ -304,9 +319,13 @@ class ParallelismConfig:
                 f"dp_shard_size/tp_size/cp_size."
             )
 
-        if self.total_size > 1 and not (accelerator.is_fsdp2 or accelerator.multi_device):
+        if self.total_size > 1 and not (
+            accelerator.is_fsdp2
+            or accelerator.multi_device
+            or accelerator.distributed_type == DistributedType.DEEPSPEED
+        ):
             raise ValueError(
-                f"ParallelismConfig is only compatible DistributedType.FSDP (version 2) or DistributedType.Multi{{Device}}, but got {accelerator.distributed_type}."
+                f"ParallelismConfig is only compatible DistributedType.FSDP (version 2) or DistributedType.Multi{{Device}} or DistributedType.DEEPSPEED, but got {accelerator.distributed_type}."
             )
 
         for parallelism, size in self._sizes.items():
