@@ -90,6 +90,15 @@ if is_megatron_lm_available():
 def model_provider_func(pre_process=True, post_process=True, add_encoder=True, add_decoder=True):
     """Build the model."""
     args = get_args()
+    args.recompute_granularity = "full"
+    args.recompute_method = "uniform"
+    args.recompute_num_layers = 1
+    # args.use_torch_fsdp2 = True
+    args.use_custom_fsdp = True
+    args.sequence_parallel = True
+    args.attention_backend = True
+    args.expert_model_parallel_size = 1
+    # args.data_parallel_sharding_strategy = "optim_grads_params"
     mode = "pre-training" if args.pretraining_flag else "fine-tuning"
     logging.info(f"in model_provider_func with args: {args}")
     if args.rank == 0:
