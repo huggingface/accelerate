@@ -2179,7 +2179,7 @@ class Accelerator:
                 raise ValueError(
                     "You cannot pass a dataloader to `accelerate.prepare()` without passing a model when using Context Parallelism."
                 )
-            ver_min_required = "0.18.0"  # XXX: change to 0.18.1 when released
+            ver_min_required = "0.18.1"
             if not compare_versions("deepspeed", ">=", ver_min_required):
                 raise ImportError(
                     f"Deepspeed ALST/Ulysses requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
