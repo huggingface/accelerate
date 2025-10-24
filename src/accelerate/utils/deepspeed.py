@@ -17,6 +17,8 @@ import json
 import os
 from copy import deepcopy
 
+import apex
+
 from torch import optim
 
 from ..optimizer import AcceleratedOptimizer
@@ -290,6 +292,38 @@ class DeepSpeedEngineWrapper:
         if hasattr(grad_norm, "item"):
             return grad_norm.item()
         return grad_norm
+
+    def backward(self, loss, **kwargs):
+        # runs backpropagation and handles mixed precision
+        self.engine.backward(loss, **kwargs)
+
+    def step(self, sync_gradients=True, gradient_clipping=0.0):
+        # Set gradient accumulation boundary based on Accelerate's sync_gradients state
+        # This tells DeepSpeed whether this is the final micro-batch before gradient sync
+        self.engine.set_gradient_accumulation_boundary(is_boundary=sync_gradients)
+
+        # Only perform step and related operations at gradient accumulation boundaries
+        if sync_gradients:
+            if gradient_clipping:
+                if hasattr(self.engine, "torch_autocast_z0_gradscaler") and self.engine.torch_autocast_z0_gradscaler:
+                    # Unscale for gradient clipping
+                    self.engine.torch_autocast_z0_gradscaler.unscale_(self.optimizer)
+                if not (self.engine.fp16_enabled() or self.engine.bfloat16_enabled() or self.engine.amp_enabled() or self.engine.zero_optimization()):
+                    self.engine.clip_fp32_gradients()
+                elif self.engine.amp_enabled():
+                    # AMP's recommended way of doing clipping
+                    # https://nvidia.github.io/apex/advanced.html#gradient-clipping
+                    master_params = apex.amp.master_params(self.engine.optimizer)
+                    self.engine.clip_grad_norm_(parameters=master_params, max_norm=gradient_clipping, mpu=self.mpu)
+
+            # Deepspeed's `engine.step` performs the following operations:
+            # - gradient accumulation check
+            # - gradient clipping, please set self.gradient_clipping() as zero, because we already clipped the parameters
+            # - optimizer step
+            # - zero grad
+            # - checking overflow
+            # - lr_scheduler step (only if engine.lr_scheduler is not None)
+            self.engine.step()
 
 
 class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
