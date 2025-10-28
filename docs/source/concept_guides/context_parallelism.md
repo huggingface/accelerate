@@ -161,7 +161,7 @@ deepspeed_config:
   deepspeed_config_file: path/to/ds_config.json
 machine_rank: 0
 num_machines: 1
-num_processes: {world_size}
+num_processes: 2
 parallelism_config:
   parallelism_config_dp_replicate_size: 1
   parallelism_config_dp_shard_size: 1
