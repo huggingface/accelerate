@@ -1616,7 +1616,7 @@ class Accelerator:
         return args
 
     def _prepare_cp(self, *args):
-        if self.parallelism_config.backend == "deepspeed":
+        if self.parallelism_config.cp_backend == "deepspeed":
             # deepspeed handles cp in a different way, configured in _prepare_deepspeed
             return args
 
@@ -2150,7 +2150,7 @@ class Accelerator:
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
-        # This is skipped when preparing just a model
+        # This block is skipped when preparing just a model and DL is absent from current call's args
         if batch_size_per_device is not None:
             config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
             config_kwargs["train_batch_size"] = (
@@ -2172,40 +2172,6 @@ class Accelerator:
                 type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
             ):
                 scheduler = obj
-
-        mpu = None
-        if cp_size > 1:
-            if is_dataloader_present and model is None:
-                raise ValueError(
-                    "You cannot pass a dataloader to `accelerate.prepare()` without passing a model when using Context Parallelism."
-                )
-            ver_min_required = "0.18.1"
-            if not compare_versions("deepspeed", ">=", ver_min_required):
-                raise ImportError(
-                    f"Deepspeed ALST/Ulysses requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
-                )
-
-            from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPAttentionHF, UlyssesSPDataLoaderAdapter
-            from deepspeed.utils import groups
-
-            if not hasattr(model, "config"):
-                raise ValueError(
-                    "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
-                )
-
-            # XXX: probably can move this logic to Deepspeed as well later
-            # if cp_handler.seq_length_is_variable is True seq_length can be set to anything divisible by cp_size
-            # a fixed seq_length and seq_length_is_variable=False will avoid recalculating a few variables on each `forward`
-            seq_length = cp_handler.seq_length if cp_handler.seq_length is not None else cp_size
-
-            mpu = UlyssesSPAttentionHF.register_with_transformers(
-                model_name_or_path=model,
-                sequence_parallel_size=cp_size,
-                max_length=seq_length,
-                seq_length_is_variable=cp_handler.seq_length_is_variable,
-                core_attn_implementation=cp_handler.attn_implementation or model.config.attn_implementation,
-                micro_batch_size=batch_size_per_device,
-            )
 
         if optimizer is not None:
             if "optimizer" in deepspeed_plugin.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
@@ -2309,9 +2275,17 @@ class Accelerator:
                         if not self.split_batches
                         else scheduler.total_num_steps
                     )
+
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
-            kwargs = dict(model=model, config_params=self.deepspeed_config, mpu=mpu)
+
+            # note: batch_size derivation is all over the map, especiall in HF Trainer, so try to fix it at the last moment if needed
+            pc = self.parallelism_config
+            if pc is not None and pc.cp_backend == "deepspeed" and pc.cp_size > 1:
+
+                self.deepspeed_config['train_batch_size'] = self.deepspeed_config['train_micro_batch_size_per_gpu']*self.deepspeed_config['gradient_accumulation_steps']*pc.data_parallel_size
+
+            kwargs = dict(model=model, config_params=self.deepspeed_config)
             if optimizer is not None:
                 if isinstance(optimizer, (DummyOptim)):
                     kwargs["model_parameters"] = optimizer.params
@@ -2337,6 +2311,52 @@ class Accelerator:
                 # This env variable is initialized here to make sure it is set to "true"
                 # It should be done by the launcher but it does not work for multi-node runs
                 os.environ["DEEPSPEED_USE_HPU"] = "true"
+
+            mpu = None
+            if cp_size > 1:
+                ver_min_required = "0.18.1"
+                if not compare_versions("deepspeed", ">=", ver_min_required):
+                    raise ImportError(
+                        f"Deepspeed ALST/Ulysses requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
+                    )
+
+                from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPAttentionHF, UlyssesSPDataLoaderAdapter
+
+                if not hasattr(model, "config"):
+                    raise ValueError(
+                        "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
+                    )
+
+                # XXX: probably can move this logic to Deepspeed as well later
+                # if cp_handler.cp_seq_length_is_variable is True seq_length can be set to anything divisible by cp_size
+                # a fixed seq_length and seq_length_is_variable=False will avoid recalculating a few variables on each `forward`
+                cp_seq_length = cp_handler.cp_seq_length if cp_handler.cp_seq_length is not None else cp_size
+
+                mpu = UlyssesSPAttentionHF.register_with_transformers(
+                    model_name_or_path=model,
+                    sequence_parallel_size=cp_size,
+                    max_length=cp_seq_length,
+                    seq_length_is_variable=cp_handler.cp_seq_length_is_variable,
+                    core_attn_implementation=cp_handler.cp_attn_implementation,
+                    micro_batch_size=batch_size_per_device,
+                )
+                kwargs["mpu"] = mpu
+
+                for i in range(len(result)):
+                    if isinstance(result[i], torch.utils.data.DataLoader):
+                        if cp_size > 1:
+                            # note that in case dataloader was prepared apart from model (for the external accelerator.prepare call) you'd need to call deepspeed_ulysses_dl_adapter after prepare(model) (see HF Trainer as the use-case)
+                            cp_group = mpu.get_sequence_parallel_group()
+                            cp_world_size = mpu.get_sequence_parallel_world_size()
+                            cp_rank = mpu.get_sequence_parallel_rank()
+                            result[i] = UlyssesSPDataLoaderAdapter(
+                                result[i],
+                                sp_rank=cp_rank,
+                                sp_group=cp_group,
+                                sp_world_size=cp_world_size,
+                                device=self.device, #model.device,
+                            )
+
 
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
 
@@ -2368,18 +2388,6 @@ class Accelerator:
                     type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
                 ):
                     result[i] = scheduler
-                elif isinstance(result[i], torch.utils.data.DataLoader):
-                    if cp_size > 1:
-                        cp_group = groups._get_sequence_parallel_group()
-                        cp_world_size = groups._get_sequence_parallel_world_size()
-                        cp_rank = groups._get_sequence_parallel_rank()
-                        result[i] = UlyssesSPDataLoaderAdapter(
-                            result[i],
-                            sp_rank=cp_rank,
-                            sp_group=cp_group,
-                            sp_world_size=cp_world_size,
-                            device=model.device,
-                        )
 
             # pointing for deepspeed_engine_wrapped.backward()
             if self.deepspeed_engine_wrapped is None:
@@ -2396,6 +2404,27 @@ class Accelerator:
             if scheduler is not None:
                 self._schedulers.append(scheduler)
         return tuple(result)
+
+    def deepspeed_ulysses_dl_adapter(self, dl, model):
+        """ this is normally called as part of `prepare` but when dataloader was prepared apart from model (for the external accelerator.prepare call) this additional call needs to be made after prepare(model) (see HF Trainer as the use-case)"""
+        cp_size = self.parallelism_config.cp_size if self.parallelism_config else 1
+        if cp_size == 1:
+            return dl
+        from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPDataLoaderAdapter
+        from deepspeed.utils import groups
+
+        cp_group = groups._get_sequence_parallel_group()
+        cp_world_size = groups._get_sequence_parallel_world_size()
+        cp_rank = groups._get_sequence_parallel_rank()
+        dl = UlyssesSPDataLoaderAdapter(
+            dl,
+            sp_rank=cp_rank,
+            sp_group=cp_group,
+            sp_world_size=cp_world_size,
+            device=model.device,
+        )
+        return dl
+
 
     def _prepare_megatron_lm(self, *args):
         megatron_lm_plugin = self.state.megatron_lm_plugin
@@ -4095,7 +4124,7 @@ class Accelerator:
         """
         # We don't need to check FSDP2 as parallelism_config does that for us
         # Invariant: in this branch self._cp_context is set, as it was set by `self._prepare_cp`
-        if self.parallelism_config and self.parallelism_config.cp_enabled:
+        if self.parallelism_config and self.parallelism_config.cp_backend == "torch" and self.parallelism_config.cp_enabled:
             with self._cp_context(
                 buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers
             ):

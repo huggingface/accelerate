@@ -1227,6 +1227,7 @@ class DeepSpeedPlugin:
 
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
+
         if (
             isinstance(self.hf_ds_config, dict)
             or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
@@ -2178,9 +2179,11 @@ class TorchContextParallelConfig:
     def __post_init__(self):
         if not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION):
             raise ValueError(
-                f"Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                f"FSDP2-based Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
                 "Please upgrade your PyTorch version."
             )
+
+
         if self.cp_comm_strategy is None:
             self.cp_comm_strategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
         if self.cp_comm_strategy not in ["allgather", "alltoall"]:
@@ -2188,50 +2191,49 @@ class TorchContextParallelConfig:
                 f"Invalid cp_comm_strategy: {self.cp_comm_strategy}. Must be one of 'allgather' or 'alltoall'."
             )
 
-
 @dataclass
 class DeepSpeedContextParallelConfig:
-    seq_length: int = field(
+    cp_seq_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `seq_length_is_variable=True`"
+            "help": "Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `cp_seq_length_is_variable=True` and leave this field unset"
         },
     )
-    seq_length_is_variable: bool = field(
+    cp_seq_length_is_variable: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "If `True` will work with a sequence length that may change between batches, in which case `seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `seq_length` needs to match the batch's sequence length dimension. The default is `True`."
+            "help": "If `True` will work with a sequence length that may change between batches, in which case `cp_seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `cp_seq_length` needs to match the batch's sequence length dimension. The default is `True`."
         },
     )
-    attn_implementation: str = field(
+    cp_attn_implementation: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. If not provided, default from model will be used."
+            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`."
         },
     )
 
     def __post_init__(self):
-        # seq_length_is_variable and seq_length are interconnected
-        if self.seq_length_is_variable is None:
-            self.seq_length_is_variable = os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE", True)
+        # cp_seq_length_is_variable and cp_seq_length are interconnected
+        if self.cp_seq_length_is_variable is None:
+            self.cp_seq_length_is_variable = os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE", True)
 
-        if not self.seq_length_is_variable and self.seq_length is None:
+        if not self.cp_seq_length_is_variable and self.cp_seq_length is None:
             if "PARALLELISM_CONFIG_CP_SEQ_LENGTH" not in os.environ:
                 raise ValueError(
-                    "when `seq_length_is_variable` is false `seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_CP_SEQ_LENGTH"
+                    "when `cp_seq_length_is_variable` is false `cp_seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_CP_SEQ_LENGTH"
                 )
-            self.seq_length = int(os.environ["PARALLELISM_CONFIG_CP_SEQ_LENGTH"])
+            self.cp_seq_length = int(os.environ["PARALLELISM_CONFIG_CP_SEQ_LENGTH"])
 
-        if self.attn_implementation is None:
-            self.attn_implementation = os.environ.get("PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION", None)
+        if self.cp_attn_implementation is None:
+            self.cp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION", None)
 
-        if self.attn_implementation is not None and self.attn_implementation not in [
+        if self.cp_attn_implementation is not None and self.cp_attn_implementation not in [
             "flash_attention_2",
             "flash_attention_3",
             "sdpa",
         ]:
             raise ValueError(
-                f"Invalid attn_implementation: {self.attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
+                f"Invalid cp_attn_implementation: {self.cp_attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
             )
 
 

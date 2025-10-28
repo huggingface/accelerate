@@ -33,13 +33,13 @@ model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 micro_batch_size = 1
 
 parallelism_config = ParallelismConfig(
-    backend="deepspeed",
+    cp_backend="deepspeed",
     cp_size=world_size,
     # dp_shard_size=1, # set if dp is wanted as well
     cp_handler=DeepSpeedContextParallelConfig(
-        seq_length=256,
-        seq_length_is_variable=True,
-        attn_implementation="sdpa",
+        cp_seq_length=256,
+        cp_seq_length_is_variable=True,
+        cp_attn_implementation="sdpa",
     ),
 )
 

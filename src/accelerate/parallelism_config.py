@@ -46,11 +46,13 @@ class ParallelismConfig:
         tp_size (`int`, defaults to `1`):
             The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be
             used.
+        tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
+            The handler for the tensor parallel group.
         cp_size (`int`, defaults to `1`):
             The size of the context parallel group. Currently not supported, but reserved for future use and enabled
             for downstream libraries.
-        tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
-            The handler for the tensor parallel group.
+        cp_backend (`str`, defaults to `torch`):
+            Which CP backend to use. `torch` (FSDP2) or `deepspeed` (ALST/Ulysses)
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
     together:
@@ -61,11 +63,11 @@ class ParallelismConfig:
 
     """
 
-    backend: Literal["torch", "deepspeed"] = "torch"
     dp_replicate_size: Optional[int] = None
     dp_shard_size: Optional[int] = None
     tp_size: Optional[int] = None
     cp_size: Optional[int] = None
+    cp_backend: Literal["torch", "deepspeed"] = None
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
@@ -80,6 +82,7 @@ class ParallelismConfig:
             f"\tdp_shard_size={self.dp_shard_size},\n"
             f"\ttp_size={self.tp_size},\n"
             f"\tcp_size={self.cp_size},\n"
+            f"\tcp_backend={self.cp_backend},\n"
             f"\ttotal_size={self.total_size}\n"
             f"\ttp_handler={self.tp_handler},\n"
             f"\tcp_handler={self.cp_handler})\n"
@@ -257,23 +260,25 @@ class ParallelismConfig:
             self.tp_size = int(os.environ.get("PARALLELISM_CONFIG_TP_SIZE", "1"))
         if self.cp_size is None:
             self.cp_size = int(os.environ.get("PARALLELISM_CONFIG_CP_SIZE", "1"))
+        if self.cp_backend is None:
+            self.cp_backend = os.environ.get("PARALLELISM_CONFIG_CP_BACKEND", "torch")
 
         if self.tp_size > 1:
             if self.tp_handler is None:
-                self.tp_handler = TorchTensorParallelConfig() if self.backend == "torch" else None
+                self.tp_handler = TorchTensorParallelConfig() if self.cp_backend == "torch" else None
 
         if self.cp_size > 1:
             if self.cp_handler is None:
                 self.cp_handler = (
-                    TorchContextParallelConfig() if self.backend == "torch" else DeepSpeedContextParallelConfig()
+                    TorchContextParallelConfig() if self.cp_backend == "torch" else DeepSpeedContextParallelConfig()
                 )
             else:
-                backends_config_map = dict(
+                cp_backends_config_map = dict(
                     torch=TorchContextParallelConfig,
                     deepspeed=DeepSpeedContextParallelConfig,
                 )
-                if not isinstance(self.cp_handler, backends_config_map[self.backend]):
-                    raise ValueError(f"ParallelismConfig's backend={self.backend} requires {backends_config_map[self.backend]}, but cp_handler was set to {type(self.cp_handler)}")
+                if not isinstance(self.cp_handler, cp_backends_config_map[self.cp_backend]):
+                    raise ValueError(f"ParallelismConfig's cp_backend={self.cp_backend} requires {cp_backends_config_map[self.cp_backend]}, but cp_handler was set to {type(self.cp_handler)}")
 
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
@@ -283,6 +288,9 @@ class ParallelismConfig:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
         if self.cp_size < 1:
             raise ValueError(f"cp_size must be at least 1, but got {self.cp_size}")
+        valid_cp_backends = ["torch", "deepspeed"]
+        if self.cp_backend not in valid_cp_backends:
+            raise ValueError(f"cp_backend must be one of {valid_cp_backends}, but got {self.cp_backend}")
 
         if (self.tp_size > 1 or self.cp_size > 1) and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
             raise ValueError(
