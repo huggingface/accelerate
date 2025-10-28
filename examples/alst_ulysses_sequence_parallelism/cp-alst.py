@@ -64,6 +64,7 @@ if 1:  # real dataset
         texts = tokenizer.apply_chat_template(conversation=ex["messages"], tokenize=False)
         tokenized_dict = tokenizer(texts, max_length=256, padding=True, truncation=True)
         return tokenized_dict
+
     ds = ds.map(convert, batched=False, remove_columns=["prompt", "prompt_id", "messages"])
 
     def collate_fn(batch):

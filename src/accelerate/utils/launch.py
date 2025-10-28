@@ -355,7 +355,10 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
 
     return current_env
 
-def prepare_extend_env_parallelism_config(args: argparse.Namespace, current_env: dict) -> tuple[list[str], dict[str, str]]:
+
+def prepare_extend_env_parallelism_config(
+    args: argparse.Namespace, current_env: dict
+) -> tuple[list[str], dict[str, str]]:
     """
     Extends `current_env` with context parallelism env vars if any have been set
     """
@@ -374,8 +377,6 @@ def prepare_extend_env_parallelism_config(args: argparse.Namespace, current_env:
         current_env[prefix + "CP_SEQ_LENGTH_IS_VARIABLE"] = str(args.parallelism_config_cp_seq_length_is_variable)
         current_env[prefix + "CP_ATTN_IMPLEMENTATION"] = str(args.parallelism_config_cp_attn_implementation)
 
-    print(f"{args.parallelism_config_dp_replicate_size=} {args.parallelism_config_cp_backend=}")
-    #die
     return current_env
 
 

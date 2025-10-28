@@ -2282,8 +2282,11 @@ class Accelerator:
             # note: batch_size derivation is all over the map, especiall in HF Trainer, so try to fix it at the last moment if needed
             pc = self.parallelism_config
             if pc is not None and pc.cp_backend == "deepspeed" and pc.cp_size > 1:
-
-                self.deepspeed_config['train_batch_size'] = self.deepspeed_config['train_micro_batch_size_per_gpu']*self.deepspeed_config['gradient_accumulation_steps']*pc.data_parallel_size
+                self.deepspeed_config["train_batch_size"] = (
+                    self.deepspeed_config["train_micro_batch_size_per_gpu"]
+                    * self.deepspeed_config["gradient_accumulation_steps"]
+                    * pc.data_parallel_size
+                )
 
             kwargs = dict(model=model, config_params=self.deepspeed_config)
             if optimizer is not None:
@@ -2320,7 +2323,10 @@ class Accelerator:
                         f"Deepspeed ALST/Ulysses requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
                     )
 
-                from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPAttentionHF, UlyssesSPDataLoaderAdapter
+                from deepspeed.runtime.sequence_parallel.ulysses_sp import (
+                    UlyssesSPAttentionHF,
+                    UlyssesSPDataLoaderAdapter,
+                )
 
                 if not hasattr(model, "config"):
                     raise ValueError(
@@ -2354,9 +2360,8 @@ class Accelerator:
                                 sp_rank=cp_rank,
                                 sp_group=cp_group,
                                 sp_world_size=cp_world_size,
-                                device=self.device, #model.device,
+                                device=self.device,  # model.device,
                             )
-
 
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
 
@@ -2406,7 +2411,7 @@ class Accelerator:
         return tuple(result)
 
     def deepspeed_ulysses_dl_adapter(self, dl, model):
-        """ this is normally called as part of `prepare` but when dataloader was prepared apart from model (for the external accelerator.prepare call) this additional call needs to be made after prepare(model) (see HF Trainer as the use-case)"""
+        """this is normally called as part of `prepare` but when dataloader was prepared apart from model (for the external accelerator.prepare call) this additional call needs to be made after prepare(model) (see HF Trainer as the use-case)"""
         cp_size = self.parallelism_config.cp_size if self.parallelism_config else 1
         if cp_size == 1:
             return dl
@@ -2424,7 +2429,6 @@ class Accelerator:
             device=model.device,
         )
         return dl
-
 
     def _prepare_megatron_lm(self, *args):
         megatron_lm_plugin = self.state.megatron_lm_plugin
@@ -4124,7 +4128,11 @@ class Accelerator:
         """
         # We don't need to check FSDP2 as parallelism_config does that for us
         # Invariant: in this branch self._cp_context is set, as it was set by `self._prepare_cp`
-        if self.parallelism_config and self.parallelism_config.cp_backend == "torch" and self.parallelism_config.cp_enabled:
+        if (
+            self.parallelism_config
+            and self.parallelism_config.cp_backend == "torch"
+            and self.parallelism_config.cp_enabled
+        ):
             with self._cp_context(
                 buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers
             ):

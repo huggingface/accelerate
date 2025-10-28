@@ -260,7 +260,10 @@ class TestParallelismConfig:
         assert pc.cp_handler is not None, "CP handler should be set"
         assert pc.cp_handler.seq_length_is_variable is True, "by default we set to expect a variable seqlen"
 
-        with pytest.raises(ValueError, match="ParallelismConfig's backend=torch requires <class 'accelerate.utils.dataclasses.TorchContextParallelConfig'>, but cp_handler was set to <class 'accelerate.utils.dataclasses.DeepSpeedContextParallelConfig'"):
+        with pytest.raises(
+            ValueError,
+            match="ParallelismConfig's backend=torch requires <class 'accelerate.utils.dataclasses.TorchContextParallelConfig'>, but cp_handler was set to <class 'accelerate.utils.dataclasses.DeepSpeedContextParallelConfig'",
+        ):
             pc = ParallelismConfig(backend="torch", cp_size=2, cp_handler=cp_handler)
 
         with pytest.raises(ValueError, match="Invalid attn_implementation"):

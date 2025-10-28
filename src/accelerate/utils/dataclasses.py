@@ -2183,13 +2183,13 @@ class TorchContextParallelConfig:
                 "Please upgrade your PyTorch version."
             )
 
-
         if self.cp_comm_strategy is None:
             self.cp_comm_strategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
         if self.cp_comm_strategy not in ["allgather", "alltoall"]:
             raise ValueError(
                 f"Invalid cp_comm_strategy: {self.cp_comm_strategy}. Must be one of 'allgather' or 'alltoall'."
             )
+
 
 @dataclass
 class DeepSpeedContextParallelConfig:

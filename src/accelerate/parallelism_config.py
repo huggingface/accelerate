@@ -278,7 +278,9 @@ class ParallelismConfig:
                     deepspeed=DeepSpeedContextParallelConfig,
                 )
                 if not isinstance(self.cp_handler, cp_backends_config_map[self.cp_backend]):
-                    raise ValueError(f"ParallelismConfig's cp_backend={self.cp_backend} requires {cp_backends_config_map[self.cp_backend]}, but cp_handler was set to {type(self.cp_handler)}")
+                    raise ValueError(
+                        f"ParallelismConfig's cp_backend={self.cp_backend} requires {cp_backends_config_map[self.cp_backend]}, but cp_handler was set to {type(self.cp_handler)}"
+                    )
 
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
