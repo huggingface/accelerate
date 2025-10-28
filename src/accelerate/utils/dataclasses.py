@@ -2215,14 +2215,16 @@ class DeepSpeedContextParallelConfig:
     def __post_init__(self):
         # cp_seq_length_is_variable and cp_seq_length are interconnected
         if self.cp_seq_length_is_variable is None:
-            self.cp_seq_length_is_variable = os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE", True)
+            self.cp_seq_length_is_variable = os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE", "false").lower() == "true"
 
         if not self.cp_seq_length_is_variable and self.cp_seq_length is None:
             if "PARALLELISM_CONFIG_CP_SEQ_LENGTH" not in os.environ:
                 raise ValueError(
                     "when `cp_seq_length_is_variable` is false `cp_seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_CP_SEQ_LENGTH"
                 )
-            self.cp_seq_length = int(os.environ["PARALLELISM_CONFIG_CP_SEQ_LENGTH"])
+            else:
+                self.cp_seq_length = os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH")
+                self.cp_seq_length = None if self.cp_seq_length == "None" else int(self.cp_seq_length)
 
         if self.cp_attn_implementation is None:
             self.cp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION", None)
