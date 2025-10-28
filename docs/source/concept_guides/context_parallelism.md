@@ -24,9 +24,9 @@ With sequence length of 128k, the memory requirement of the attention matrix is 
 
 Context parallelism allows us to shard the inputs to the attention computation along the sequence dimension and compute the attention in parallel on multiple GPUs. With this, we can train models with long sequences, scaling potentially to 1M+ sequence length.
 
-## Supported backends
+## Supported context parallelism backends
 
-Multiple backends are currently supported
+Multiple context parallelism backends are currently supported
 
 1. `torch`: PyTorch/FSDP2,which implements several of Ring Attention context parallel protocols [tutorial](https://docs.pytorch.org/tutorials/unstable/context_parallel.html) and [api](https://docs.pytorch.org/docs/stable/distributed.tensor.html#torch.distributed.tensor.experimental.context_parallel).
 2. `deepspeed`: DeepSpeed/ALST/UlyssesSP, which implements sequence parallelism using attention head parallelism: [tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/) and [paper](https://arxiv.org/abs/2506.13996)
@@ -55,11 +55,11 @@ By default the `torch` backend is selected, but you can select the deepspeed bac
 
 ```python
 parallelism_config = ParallelismConfig(
-    backend="deepspeed",
+    cp_backend="deepspeed",
     cp_size=4,
     cp_handler=DeepSpeedContextParallelConfig(
-        seq_length=256,
-        attn_implementation="sdpa"
+        cp_seq_length_is_variable: true,
+        cp_attn_implementation="sdpa",
     ),
 )
 ```
@@ -128,12 +128,12 @@ To configure the `deepspeed` backend:
 
 ```python
 parallelism_config = ParallelismConfig(
-    backend="deepspeed",
+    cp_backend="deepspeed",
     cp_size=4,
     cp_handler=DeepSpeedContextParallelConfig(
-        seq_length=256,
-        seq_length_is_variable=True,
-        attn_implementation="sdpa",
+        cp_seq_length=256,
+        cp_seq_length_is_variable=True,
+        cp_attn_implementation="sdpa",
     ),
 )
 accelerator = Accelerator(
@@ -142,22 +142,42 @@ accelerator = Accelerator(
 )
 ```
 
+- `cp_backend`: set to `deepspeed` here
 - `cp_size` is the degree of the sequence parallelism - in the above example it's 4, therefore 4 gpus will be used to process a single batch.
-- `seq_length` and `seq_length_is_variable` are used to deal with sequence lengths. If `seq_length_is_variable=True` the backend will work with a sequence length that may change between batches, in which case `seq_length` value can be set to anything divisible by the context parallel degree or not set at all. In this case on every `forward` the sequence variables will be derived from input. If `False` then `seq_length` needs to match the batch's sequence length dimension, which then will have to be padded to be always the same. The default is `True`.
-- `attn_implementation` is one of `sdpa`, `flash_attention_2` or `flash_attention_3`. This sequence parallel implementation uses `position_ids` instead of `attention_mask` therefore `eager` can't work here until it'd support working with `position_ids`. Also please note that `sdpa` doesn't handle correctly multiple samples combined into one, it'd attend to the whole sample as one. If the samples aren't combined `sdpa` will work correctly. Therefore Flash Attention should be the ideal choice as it always works.
+- `cp_seq_length` and `cp_seq_length_is_variable` are used to deal with sequence lengths. If `cp_seq_length_is_variable=True` the backend will work with a sequence length that may change between batches, in which case `cp_seq_length` value can be set to anything divisible by the context parallel degree or not set at all. In this case on every `forward` the sequence variables will be derived from input. If `False` then `seq_length` needs to match the batch's sequence length dimension, which then will have to be padded to be always the same. The default is `True`.
+- `cp_attn_implementation` is one of `sdpa`, `flash_attention_2` or `flash_attention_3`. This sequence parallel implementation uses `position_ids` instead of `attention_mask` therefore `eager` can't work here until it'd support working with `position_ids`. Also please note that `sdpa` doesn't handle correctly multiple samples combined into one, it'd attend to the whole sample as one. If the samples aren't combined `sdpa` will work correctly. Therefore Flash Attention should be the ideal choice as it always works.
 
 Instead of setting these values in `DeepSpeedContextParallelConfig` object, you can also use the environment variables to accomplish the same - here they are correspondingly to the end of the list above.
+- `PARALLELISM_CONFIG_CP_BACKEND`
 - `PARALLELISM_CONFIG_CP_SEQ_LENGTH`
 - `PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE`
 - `PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION`
 
-If not passed in the code `cp_size` can be set via `--parallelism_config_cp_size` CLI argument.
+If not passed in the code `cp_size` can be set via `--parallelism_config_cp_size` CLI argument. SAme for other arguments. You can also do the accelerate config file style config, e.f. for 2 gpus:
+
+```yaml
+distributed_type: DEEPSPEED
+deepspeed_config:
+  deepspeed_config_file: path/to/ds_config.json
+machine_rank: 0
+num_machines: 1
+num_processes: {world_size}
+parallelism_config:
+  parallelism_config_dp_replicate_size: 1
+  parallelism_config_dp_shard_size: 1
+  parallelism_config_tp_size: 1
+  parallelism_config_cp_size: 2
+  parallelism_config_cp_backend: deepspeed
+  parallelism_config_cp_seq_length_is_variable: true
+  parallelism_config_cp_attn_implementation: sdpa
+
+```
 
 Ulysses sequence parallelism can be combined with data parallelism:
 
 ```python
 parallelism_config = ParallelismConfig(
-    backend="deepspeed",
+    cp_backend="deepspeed",
     cp_size=2,
     dp_shard_size=2,
     cp_handler=DeepSpeedContextParallelConfig(...),
@@ -170,7 +190,7 @@ Please note that a lot of magic is hidden inside [UlyssesSPDataLoaderAdapter](ht
 Now the only remaining piece to start using ALST/UlyssesSP is to aggregate the loss across ranks using a differentiable `all_gather` to get the grads right. The following code does it, while also exlcuding any masked out with `-100` tokens, to get the correct average:
 
 ```python
-cp_size = parallelism_config.cp_size if parallelism_config else 1
+cp_size = parallelism_config.cp_size if parallelism_config is not None else 1
 if cp_size > 1:
     sp_group = accelerator.torch_device_mesh["cp"].get_group()
     sp_world_size = parallelism_config.cp_size
