@@ -559,7 +559,7 @@ def broadcast(tensor, from_process: int = 0):
 
 def broadcast_object_list(object_list, from_process: int = 0):
     """
-    Broadcast a list of picklable objects form one process to the others.
+    Broadcast a list of picklable objects from one process to the others.
 
     Args:
         object_list (list of picklable objects):
