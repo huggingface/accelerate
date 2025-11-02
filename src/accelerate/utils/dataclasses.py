@@ -2768,7 +2768,7 @@ class BnbQuantizationConfig:
             Enable 8bit quantization.
         llm_int8_threshold (`float`, defaults to `6.0`):
             Value of the outliner threshold. Only relevant when `load_in_8bit=True`.
-        load_in_4_bit (`bool`, defaults to `False`):
+        load_in_4bit (`bool`, defaults to `False`):
             Enable 4bit quantization.
         bnb_4bit_quant_type (`str`, defaults to `fp4`):
             Set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','np4'}.
