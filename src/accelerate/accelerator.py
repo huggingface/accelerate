@@ -307,6 +307,7 @@ class Accelerator:
         if project_dir is not None and self.project_dir is None:
             self.project_configuration.set_directories(project_dir)
 
+        print(f"********* Initializing Accelerator with mixed_precision={mixed_precision} *********")
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -475,7 +476,7 @@ class Accelerator:
             self.parallelism_config._validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
-
+        print(f"********* FP8 enabled: {self.fp8_enabled}, {self.state.mixed_precision}, {mixed_precision} ")
         # Check for automatic FP8 recipe creation
         if self.fp8_enabled and not self.has_fp8_handler:
             if self.fp8_backend == FP8BackendType.AO:
@@ -2040,7 +2041,15 @@ class Accelerator:
 
         # Invariant: with FSDP2, optimizer is always passed to `prepare()` together with model
         # We only precompute scales if float8 all gather is enabled, possibly can add a flag for this later
-        if self.is_fsdp2 and len(optimizers) > 0 and self.ao_recipe_handler.config.enable_fsdp_float8_all_gather:
+        should_precompute_scales = False
+        if self.is_fsdp2 and len(optimizers) > 0 and self.ao_recipe_handler is not None:
+            # If config is None, default to enabling float8 all-gather for better memory efficiency
+            if self.ao_recipe_handler.config is None:
+                should_precompute_scales = True
+            else:
+                should_precompute_scales = self.ao_recipe_handler.config.enable_fsdp_float8_all_gather
+        
+        if should_precompute_scales:
             from torchao.float8 import precompute_float8_dynamic_scale_for_fsdp
 
             optimizers[0].register_step_post_hook(

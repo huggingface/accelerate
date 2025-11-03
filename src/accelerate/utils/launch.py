@@ -173,6 +173,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
         )
 
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
+    print(f"****** launch utils: mixed_precision: {args.mixed_precision}, {mixed_precision}")
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
@@ -282,6 +283,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
 
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
+    print(f"****** launch utils: mixed_precision: {args.mixed_precision}, {mixed_precision}")
+
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(

@@ -918,6 +918,7 @@ class AcceleratorState:
             self.torch_tp_plugin = torch_tp_plugin
             self.parallelism_config = parallelism_config
             self.device_mesh = None
+            print(f"***** AcceleratorState initializing mixed precision...{parse_choice_from_env('ACCELERATE_MIXED_PRECISION', 'no')}")
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
