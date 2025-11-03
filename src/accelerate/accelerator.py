@@ -2041,15 +2041,12 @@ class Accelerator:
 
         # Invariant: with FSDP2, optimizer is always passed to `prepare()` together with model
         # We only precompute scales if float8 all gather is enabled, possibly can add a flag for this later
-        should_precompute_scales = False
-        if self.is_fsdp2 and len(optimizers) > 0 and self.ao_recipe_handler is not None:
-            # If config is None, default to enabling float8 all-gather for better memory efficiency
-            if self.ao_recipe_handler.config is None:
-                should_precompute_scales = True
-            else:
-                should_precompute_scales = self.ao_recipe_handler.config.enable_fsdp_float8_all_gather
-        
-        if should_precompute_scales:
+        if (
+            self.is_fsdp2
+            and len(optimizers) > 0
+            and self.ao_recipe_handler is not None
+            and self.ao_recipe_handler.config.enable_fsdp_float8_all_gather
+        ):
             from torchao.float8 import precompute_float8_dynamic_scale_for_fsdp
 
             optimizers[0].register_step_post_hook(
