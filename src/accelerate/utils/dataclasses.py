@@ -314,9 +314,14 @@ class AORecipeKwargs(KwargsHandler):
 
     Args:
         config (`torchao.float8.Float8LinearConfig`, *optional*, default to `None`):
-            The configuration for the FP8 training. If `None`, a default config with `pad_inner_dim=True` will be
-            created automatically. The padding is required for `torch._scaled_mm` operations which need dimensions
-            divisible by 16.
+            The configuration for the FP8 training. If `None`, a default config will be created with sensible
+            defaults for most use cases:
+            - `pad_inner_dim=True`: Pads matrix dimensions to be divisible by 16, required for `torch._scaled_mm`
+              operations to prevent runtime errors.
+            - `enable_fsdp_float8_all_gather=True`: Enables FP8 all-gather for FSDP2. This provides memory bandwidth
+              savings by casting parameters before the all-gather operation, saving 50% bandwidth compared to BF16.
+            
+            You can override these defaults by providing your own `Float8LinearConfig` instance.
         module_filter_func (`Callable`, *optional*, default to `None`):
             Optional function that must take in a module and layer name, and returns a boolean indicating whether the
             module should be converted to FP8. Defaults to `accelerate.utils.ao.filter_linear_layers`. See it for an
@@ -327,8 +332,6 @@ class AORecipeKwargs(KwargsHandler):
     module_filter_func: Optional[Callable] = None
 
     def __post_init__(self):
-        # Create default config with pad_inner_dim=True if not provided
-        # This is required for torch._scaled_mm operations which need dimensions divisible by 16
         if self.config is None:
             from torchao.float8 import Float8LinearConfig
 
