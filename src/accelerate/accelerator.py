@@ -307,7 +307,6 @@ class Accelerator:
         if project_dir is not None and self.project_dir is None:
             self.project_configuration.set_directories(project_dir)
 
-        print(f"********* Initializing Accelerator with mixed_precision={mixed_precision} *********")
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -476,7 +475,6 @@ class Accelerator:
             self.parallelism_config._validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
-        print(f"********* FP8 enabled: {self.fp8_enabled}, {self.state.mixed_precision}, {mixed_precision} ")
         # Check for automatic FP8 recipe creation
         if self.fp8_enabled and not self.has_fp8_handler:
             if self.fp8_backend == FP8BackendType.AO:
