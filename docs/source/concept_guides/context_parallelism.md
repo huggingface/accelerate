@@ -153,7 +153,7 @@ Instead of setting these values in `DeepSpeedContextParallelConfig` object, you 
 - `PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE`
 - `PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION`
 
-If not passed in the code `cp_size` can be set via `--parallelism_config_cp_size` CLI argument. SAme for other arguments. You can also do the accelerate config file style config, e.f. for 2 gpus:
+If not passed in the code `cp_size` can be set via `--parallelism_config_cp_size` CLI argument. Same for other arguments. You can also do the accelerate config file style config, e.f. for 2 gpus:
 
 ```yaml
 distributed_type: DEEPSPEED

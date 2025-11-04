@@ -265,7 +265,7 @@ class ParallelismConfig:
 
         if self.tp_size > 1:
             if self.tp_handler is None:
-                self.tp_handler = TorchTensorParallelConfig() if self.cp_backend == "torch" else None
+                self.tp_handler = TorchTensorParallelConfig()
 
         if self.cp_size > 1:
             if self.cp_handler is None:
