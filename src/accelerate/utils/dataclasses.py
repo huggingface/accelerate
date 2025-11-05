@@ -2216,7 +2216,7 @@ class DeepSpeedContextParallelConfig:
         # cp_seq_length_is_variable and cp_seq_length are interconnected
         if self.cp_seq_length_is_variable is None:
             self.cp_seq_length_is_variable = (
-                os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE", "false").lower() == "true"
+                os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE", "true").lower() == "true"
             )
 
         if not self.cp_seq_length_is_variable and self.cp_seq_length is None:

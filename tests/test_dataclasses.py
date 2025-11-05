@@ -258,7 +258,7 @@ class TestParallelismConfig:
         cp_handler = DeepSpeedContextParallelConfig()
         pc = ParallelismConfig(cp_backend="deepspeed", cp_size=2, cp_handler=cp_handler)
         assert pc.cp_handler is not None, "CP handler should be set"
-        assert pc.cp_handler.seq_length_is_variable is True, "by default we set to expect a variable seqlen"
+        assert pc.cp_handler.cp_seq_length_is_variable is True, "by default we set to expect a variable seqlen"
 
         with pytest.raises(
             ValueError,
@@ -266,8 +266,8 @@ class TestParallelismConfig:
         ):
             pc = ParallelismConfig(cp_backend="torch", cp_size=2, cp_handler=cp_handler)
 
-        with pytest.raises(ValueError, match="Invalid attn_implementation"):
-            DeepSpeedContextParallelConfig(attn_implementation="foobar")
+        with pytest.raises(ValueError, match="Invalid cp_attn_implementation"):
+            DeepSpeedContextParallelConfig(cp_attn_implementation="foobar")
 
     def test_tp_handler(self):
         assert True, "Tensor parallelism handler doesn't hold any logic yet"
