@@ -2323,7 +2323,7 @@ class Accelerator:
                         f"In order to use the configured {cp_size=} with DeepSpeed, you need to configure cp_backend='deepspeed', yet you configured it to be {cp_backend=}."
                     )
 
-                ver_min_required = "0.18.1"
+                ver_min_required = "0.18.2"
                 if not compare_versions("deepspeed", ">=", ver_min_required):
                     raise ImportError(
                         f"Deepspeed ALST/Ulysses requires deepspeed>={ver_min_required}. Please update DeepSpeed via `pip install deepspeed -U`."
