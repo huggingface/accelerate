@@ -2080,7 +2080,7 @@ class Accelerator:
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         tp_size = deepspeed_plugin.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0)
 
-        cp_backend = self.parallelism_config.cp_backend if self.parallelism_config else 1
+        cp_backend = self.parallelism_config.cp_backend if self.parallelism_config else None
         cp_size = self.parallelism_config.cp_size if self.parallelism_config else 1
         cp_handler = self.parallelism_config.cp_handler if self.parallelism_config else None
 
