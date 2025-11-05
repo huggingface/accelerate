@@ -2319,7 +2319,9 @@ class Accelerator:
             mpu = None
             if cp_size > 1:
                 if cp_backend != "deepspeed":
-                    raise ValueError("In order to use the configured {cp_size=} with DeepSpeed, you need to configure cp_backend='deepspeed', yet you configured it to be {cp_backend=}.")
+                    raise ValueError(
+                        "In order to use the configured {cp_size=} with DeepSpeed, you need to configure cp_backend='deepspeed', yet you configured it to be {cp_backend=}."
+                    )
 
                 ver_min_required = "0.18.1"
                 if not compare_versions("deepspeed", ">=", ver_min_required):
