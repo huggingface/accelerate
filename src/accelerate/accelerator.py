@@ -2080,6 +2080,7 @@ class Accelerator:
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         tp_size = deepspeed_plugin.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0)
 
+        cp_backend = self.parallelism_config.cp_backend if self.parallelism_config else 1
         cp_size = self.parallelism_config.cp_size if self.parallelism_config else 1
         cp_handler = self.parallelism_config.cp_handler if self.parallelism_config else None
 
@@ -2317,6 +2318,9 @@ class Accelerator:
 
             mpu = None
             if cp_size > 1:
+                if cp_backend != "deepspeed":
+                    raise ValueError("In order to use the configured {cp_size=} with DeepSpeed, you need to configure cp_backend='deepspeed', yet you configured it to be {cp_backend=}.")
+
                 ver_min_required = "0.18.1"
                 if not compare_versions("deepspeed", ">=", ver_min_required):
                     raise ImportError(
@@ -2333,15 +2337,10 @@ class Accelerator:
                         "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
                     )
 
-                # XXX: probably can move this logic to Deepspeed as well later
-                # if cp_handler.cp_seq_length_is_variable is True seq_length can be set to anything divisible by cp_size
-                # a fixed seq_length and seq_length_is_variable=False will avoid recalculating a few variables on each `forward`
-                cp_seq_length = cp_handler.cp_seq_length if cp_handler.cp_seq_length is not None else cp_size
-
                 mpu = UlyssesSPAttentionHF.register_with_transformers(
                     model_name_or_path=model,
                     sequence_parallel_size=cp_size,
-                    max_length=cp_seq_length,
+                    seq_length=cp_handler.cp_seq_length,
                     seq_length_is_variable=cp_handler.cp_seq_length_is_variable,
                     core_attn_implementation=cp_handler.cp_attn_implementation,
                     micro_batch_size=batch_size_per_device,
