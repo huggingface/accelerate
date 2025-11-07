@@ -53,7 +53,7 @@ Each Parameter of the original `Layer` is sharded across the 0th dimension, and 
 
 `FSDP2` is a new and improved version of PyTorch's fully-sharded data parallel training API. Its main advantage is using `DTensor` to represent sharded parameters. Compared to `FSDP1`, it offers:
 - Simpler internal implementation, where each `Parameter` is a separate `DTensor`
-- Enables simple partial parameter freezing because of the above, which makes methods as [`LORA`](https://arxiv.org/abs/2106.09685) work out of the box
+- Enables simple partial parameter freezing because of the above, which makes methods as [`LORA`](https://huggingface.co/papers/2106.09685) work out of the box
 - With `DTensor`, `FSDP2` supports mixing `fp8` and other parameter types in the same model out of the box
 - Faster and simpler checkpointing without extra communication across ranks using `SHARDED_STATE_DICT` and [`torch.distributed.checkpoint`](https://pytorch.org/docs/stable/distributed.checkpoint.html), this way, each rank only saves its own shard and corresponding metadata
 - For loading, it uses a `state_dict` of the sharded model to directly load the sharded parameters
