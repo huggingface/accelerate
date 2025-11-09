@@ -470,7 +470,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
     import torch.distributed as dist
-    from torch.distributed.tensor import distribute_tensor
+    from torch.distributed.tensor import DTensor, distribute_tensor
 
     # Model was previously copied to meta device
     meta_sharded_sd = model.state_dict()
@@ -506,7 +506,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         for (param_name, full_param), sharded_param in zip(full_sd.items(), meta_sharded_sd.values()):
             device_mesh = sharded_param.device_mesh
             full_param = full_param.detach().to(device_mesh.device_type)
-            full_param = full_param.to_local()
+            if isinstance(full_param, DTensor):
+                full_param = full_param.to_local()
             dist.broadcast(full_param, src=0, group=dist.group.WORLD)
             sharded_tensor = distribute_tensor(full_param, device_mesh, sharded_param.placements)
             to_contiguous, casting_dtype = _infer_parameter_dtype(

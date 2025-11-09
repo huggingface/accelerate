@@ -1614,13 +1614,13 @@ class Accelerator:
                 if not isinstance(dp, torch.nn.Parameter):
                     dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
                 setattr(module_to_tp, param_type, dp)
-        
+
         new_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=False))
         # Build a map from old to new params
         mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
 
         def _get_tensor_address(p):
-            if isinstance(p,DTensor):
+            if isinstance(p, DTensor):
                 return p._local_tensor.data_ptr()
             return p.data_ptr()
 
@@ -1628,7 +1628,7 @@ class Accelerator:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
                     param_group["params"] = [mapping[_get_tensor_address(p)] for p in param_group["params"]]
-        
+
         return args
 
     def _prepare_cp(self, *args):
