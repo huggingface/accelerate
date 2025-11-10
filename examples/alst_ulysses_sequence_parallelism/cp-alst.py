@@ -30,13 +30,13 @@ model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 micro_batch_size = 1
 
 parallelism_config = ParallelismConfig(
-    backend="deepspeed",
+    cp_backend="deepspeed",
     cp_size=4,
     # dp_shard_size=1, # set if dp is wanted as well
     cp_handler=DeepSpeedContextParallelConfig(
-        seq_length=256,
-        seq_length_is_variable=True,
-        attn_implementation="sdpa",
+        cp_seq_length=256,
+        cp_seq_length_is_variable=True,
+        cp_attn_implementation="sdpa",
     ),
 )
 

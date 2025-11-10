@@ -1,6 +1,6 @@
 # Deepspeed's ALST/Ulysses sequence parallelism
 
-This is an example of the use of Ulysses Sequence Parallelism, which uses attention head parallelism and which is part of the Arctic Long Sequence Training project at [ArcticTraining](https://github.com/snowflakedb/ArcticTraining). [This paper](https://arxiv.org/abs/2506.13996) goes into the details of this protocol.
+This is an example of the use of Ulysses Sequence Parallelism, which uses attention head parallelism and is part of the Arctic Long Sequence Training project at [ArcticTraining](https://github.com/snowflakedb/ArcticTraining). [This paper](https://arxiv.org/abs/2506.13996) goes into the details of this protocol.
 
 For nuances of usage please refer to the main HF Accelerate tutorial on [Context Parallelism](https://huggingface.co/docs/accelerate/en/concept_guides/context_parallelism).
 

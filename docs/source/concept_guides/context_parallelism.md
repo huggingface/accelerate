@@ -28,7 +28,7 @@ Context parallelism allows us to shard the inputs to the attention computation a
 
 Multiple context parallelism backends are currently supported
 
-1. `torch`: PyTorch/FSDP2,which implements several of Ring Attention context parallel protocols [tutorial](https://docs.pytorch.org/tutorials/unstable/context_parallel.html) and [api](https://docs.pytorch.org/docs/stable/distributed.tensor.html#torch.distributed.tensor.experimental.context_parallel).
+1. `torch`: PyTorch/FSDP2, which implements several of Ring Attention context parallel protocols [tutorial](https://docs.pytorch.org/tutorials/unstable/context_parallel.html) and [api](https://docs.pytorch.org/docs/stable/distributed.tensor.html#torch.distributed.tensor.experimental.context_parallel).
 2. `deepspeed`: DeepSpeed/ALST/UlyssesSP, which implements sequence parallelism using attention head parallelism: [tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/) and [paper](https://arxiv.org/abs/2506.13996)
 
 ## How to use context parallelism?
@@ -120,9 +120,9 @@ This can scale your context size to 1M+ sequence length potentially. Below, we s
 
 ## DeepSpeed/ALST/UlyssesSP backend
 
-ALST/UlyssesSP implements a sequence parallelism using attention head parallelism as explained in [this paper](https://arxiv.org/abs/2506.13996) - for simplicity we re-use the concept and the setup of context parallelism, which from the user's end of view is the same - multiple gpus are used to process a single batch.
+ALST/UlyssesSP implements sequence parallelism using attention head parallelism, as explained in [this paper](https://arxiv.org/abs/2506.13996). For simplicity, we reuse the concept and setup of context parallelism, which, from the user's perspective, is the same: multiple GPUs are used to process a single batch.
 
-To give a sense of what ALST made possible - it allowed us to train in bf16 with 500K tokens on a single H100 GPU, 3.7M on a single node, and 15M on Llama-8B using just four nodes. This feature of HF Accelerate enables only 1 of the 3 ALST components so the achievable sequence length will be smaller. You'd want TiledMLP, Activation checkpoint offload to CPU and a few other things enabled to get the full power of ALST, for details please refer to [this tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
+To give a sense of what ALST made possible - it allowed us to train in bf16 with 500K tokens on a single H100 GPU, 3.7M on a single node, and 15M on Llama-8B using just four nodes. This feature of HF Accelerate enables only 1 of the 3 ALST components, so the achievable sequence length will be smaller. You'd want TiledMLP, Activation checkpoint offload to CPU, and a few other things enabled to get the full power of ALST. For details, please refer to [this tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
 
 To configure the `deepspeed` backend:
 
@@ -145,7 +145,7 @@ accelerator = Accelerator(
 - `cp_backend`: set to `deepspeed` here
 - `cp_size` is the degree of the sequence parallelism - in the above example it's 4, therefore 4 gpus will be used to process a single batch.
 - `cp_seq_length` and `cp_seq_length_is_variable` are used to deal with sequence lengths. If `cp_seq_length_is_variable=True` the backend will work with a sequence length that may change between batches, in which case `cp_seq_length` value can be set to anything divisible by the context parallel degree or not set at all. In this case on every `forward` the sequence variables will be derived from input. If `False` then `seq_length` needs to match the batch's sequence length dimension, which then will have to be padded to be always the same. The default is `True`.
-- `cp_attn_implementation` is one of `sdpa`, `flash_attention_2` or `flash_attention_3`. This sequence parallel implementation uses `position_ids` instead of `attention_mask` therefore `eager` can't work here until it'd support working with `position_ids`. Also please note that `sdpa` doesn't handle correctly multiple samples combined into one, it'd attend to the whole sample as one. If the samples aren't combined `sdpa` will work correctly. Therefore Flash Attention should be the ideal choice as it always works.
+- `cp_attn_implementation` is one of `sdpa`, `flash_attention_2` or `flash_attention_3`. This sequence parallel implementation uses `position_ids` instead of `attention_mask` therefore, `eager` can't work here until it supports working with `position_ids`. Also, please note that `sdpa` doesn't handle multiple samples combined into one correctly; it will attend to the whole sample as one. If the samples aren't combined, `sdpa` will work correctly. Therefore, Flash Attention should be the ideal choice as it always works.
 
 Instead of setting these values in `DeepSpeedContextParallelConfig` object, you can also use the environment variables to accomplish the same - here they are correspondingly to the end of the list above.
 - `PARALLELISM_CONFIG_CP_BACKEND`
@@ -153,7 +153,7 @@ Instead of setting these values in `DeepSpeedContextParallelConfig` object, you 
 - `PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE`
 - `PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION`
 
-If not passed in the code `cp_size` can be set via `--parallelism_config_cp_size` CLI argument. Same for other arguments. You can also do the accelerate config file style config, e.f. for 2 gpus:
+If not passed in the code, `cp_size` can be set via `--parallelism_config_cp_size` CLI argument. Same for other arguments. You can also do the accelerate config file style config, e.g., for 2 GPUs:
 
 ```yaml
 distributed_type: DEEPSPEED
@@ -187,7 +187,7 @@ Here we use 4 gpus, with 2 sequence parallelism replicas. Deepspeed-ZeRO is what
 
 Please note that a lot of magic is hidden inside [UlyssesSPDataLoaderAdapter](https://github.com/deepspeedai/DeepSpeed/blob/64c0052fa08438b4ecf4cae30af15091a92d2108/deepspeed/runtime/sequence_parallel/ulysses_sp.py#L442). It's used behind the scenes, wrapping your original DataLoader object, but you should be aware of it should you run into any problems. It also automatically injects the correct `shift_labels` into the batch dictionary, before the batch gets sharded across the participating ranks.
 
-Now the only remaining piece to start using ALST/UlyssesSP is to aggregate the loss across ranks using a differentiable `all_gather` to get the grads right. The following code does it, while also exlcuding any masked out with `-100` tokens, to get the correct average:
+Now the only remaining piece to start using ALST/UlyssesSP is to aggregate the loss across ranks using a differentiable `all_gather` to get the grads right. The following code does it, while also excluding any masked out with `-100` tokens, to get the correct average:
 
 ```python
 cp_size = parallelism_config.cp_size if parallelism_config is not None else 1
@@ -240,7 +240,7 @@ If you want to see what HF Accelerate did behind the scenes please read [this fu
 For an example of an Accelerate training loop with enabled ALST/UlyssesSP see [examples/alst_ulysses_sequence_parallelism](https://github.com/huggingface/accelerate/blob/main/examples/alst_ulysses_sequence_parallelism).
 
 [!Warning]
-> This API is quite new and still in its experimental stage. While we strive to provide a stable API, it's possible some small parts of the public API will change in the future.
+> This API is quite new and still in its experimental stage. While we strive to provide a stable API, some small parts of the public API may change in the future.
 
 Since this is a Deepspeed backend the usual Deepspeed configuration applies, so you can combine sequence parallelism with optimizer states and/or weights offloading as well to liberate more gpu memory and enable an even longer sequence length. This technology has been tested to work with DeepSpeed ZeRO stage 2 and 3.
 
