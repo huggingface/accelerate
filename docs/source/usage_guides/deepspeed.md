@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed
 
-[DeepSpeed](https://github.com/deepspeedai/DeepSpeed) implements everything described in the [ZeRO paper](https://arxiv.org/abs/1910.02054). Some of the salient optimizations are:
+[DeepSpeed](https://github.com/deepspeedai/DeepSpeed) implements everything described in the [ZeRO paper](https://huggingface.co/papers/1910.02054). Some of the salient optimizations are:
 
 1. Optimizer state partitioning (ZeRO stage 1)
 2. Gradient partitioning (ZeRO stage 2)
@@ -25,8 +25,8 @@ rendered properly in your Markdown viewer.
 6. ZeRO-Offload to CPU and Disk/NVMe
 7. Hierarchical partitioning of model parameters (ZeRO++)
 
-ZeRO-Offload has its own dedicated paper: [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840). And NVMe-support is described in the paper [ZeRO-Infinity: Breaking the GPU
-Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857).
+ZeRO-Offload has its own dedicated paper: [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://huggingface.co/papers/2101.06840). And NVMe-support is described in the paper [ZeRO-Infinity: Breaking the GPU
+Memory Wall for Extreme Scale Deep Learning](https://huggingface.co/papers/2104.07857).
 
 DeepSpeed ZeRO-2 is primarily used only for training, as its features are of no use to inference.
 
@@ -728,10 +728,10 @@ The documentation for the internals related to deepspeed can be found [here](../
 
 Papers:
 
-- [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models](https://arxiv.org/abs/1910.02054)
-- [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)
-- [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857)
-- [ZeRO++: Extremely Efficient Collective Communication for Giant Model Training](https://arxiv.org/abs/2306.10209)
+- [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models](https://huggingface.co/papers/1910.02054)
+- [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://huggingface.co/papers/2101.06840)
+- [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://huggingface.co/papers/2104.07857)
+- [ZeRO++: Extremely Efficient Collective Communication for Giant Model Training](https://huggingface.co/papers/2306.10209)
 
 
 Finally, please, remember that `Accelerate` only integrates DeepSpeed, therefore if you
