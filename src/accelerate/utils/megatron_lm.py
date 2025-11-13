@@ -85,6 +85,34 @@ if is_megatron_lm_available():
     )
     from megatron.training.gpt_builders import gpt_builder
 
+import torch
+
+def mask_target_turn_torch(input_ids: torch.Tensor, turn_ids: list, target_turn: int):
+    """
+    Args:
+        input_ids: LongTensor of shape (seq_len,)
+        turn_ids: list of int, tokens that separate turns
+        target_turn: int, the turn token whose following tokens we want to mask
+    Returns:
+        mask: ByteTensor (or BoolTensor) of shape (seq_len,) with 1 for masked tokens, 0 otherwise
+    """
+    batch_size, seq_len = input_ids.size()
+    mask = torch.zeros(batch_size, seq_len, dtype=torch.bool, device=input_ids.device)
+    for b in range(batch_size):
+        i = 0
+        j = 0
+        while i < seq_len:
+            if input_ids[b, i].item() == target_turn:
+                # Start masking after this token
+                with_target_turn = True
+                j = i + 1
+                while j < seq_len and input_ids[b, j].item() not in turn_ids:
+                    mask[b, j] = True
+                    j += 1
+                i = j  # skip to next turn
+            else:
+                i += 1
+    return mask
 
 # model utilities
 def model_provider_func(pre_process=True, post_process=True, add_encoder=True, add_decoder=True):
@@ -95,9 +123,9 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
     args.recompute_num_layers = 1
     # args.use_torch_fsdp2 = True
     args.use_custom_fsdp = True
-    args.sequence_parallel = True
+    args.sequence_parallel = False
     args.attention_backend = True
-    args.expert_model_parallel_size = 1
+    args.expert_model_parallel_size = 4
     # args.data_parallel_sharding_strategy = "optim_grads_params"
     mode = "pre-training" if args.pretraining_flag else "fine-tuning"
     logging.info(f"in model_provider_func with args: {args}")
@@ -608,13 +636,18 @@ class GPTTrainStep(AbstractTrainStep):
         self.get_batch = self.get_batch_func(accelerator, args.megatron_dataset_flag)
         self.loss_func = self.get_loss_func(accelerator)
         self.forward_step = self.get_forward_step_func()
-        self.eod_token = args.padded_vocab_size - 1
+        # self.eod_token = args.padded_vocab_size - 1
         if args.vocab_file is not None:
             tokenizer = get_tokenizer()
             self.eod_token = tokenizer.eod
+        self.eod_token = args.eos_token_id
+        self.pad_token = args.eos_token_id
         self.reset_position_ids = args.reset_position_ids
         self.reset_attention_mask = args.reset_attention_mask
         self.eod_mask_loss = args.eod_mask_loss
+        if args.original_model_type == "glm4_moe":
+            self.turn_ids = [151335, 151336,151337,151338]
+            self.target_turn = 151337
         if not args.model_return_dict:
             self.model_output_class = None
         else:
@@ -645,7 +678,14 @@ class GPTTrainStep(AbstractTrainStep):
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
                 tokens, eod_token=self.eod_token, pad_token=self.eod_token, reset_position_ids=self.reset_position_ids, reset_attention_mask=self.reset_attention_mask, eod_mask_loss=self.eod_mask_loss, pad_mask_loss=True,
             )
-
+            # print(f"I am in get_batch_megatron, labels: {labels}, tokens: {tokens}, loss_mask: {loss_mask}, attention_mask: {attention_mask}, position_ids: {position_ids}")
+            if self.turn_ids is not None and self.target_turn is not None:
+                logging.info(f"I am in get_batch_megatron, tokens: {tokens}, turn_ids: {self.turn_ids}, target_turn: {self.target_turn}")
+                turn_mask = mask_target_turn_torch(tokens, self.turn_ids, self.target_turn)
+                loss_mask = loss_mask * turn_mask
+                if torch.sum(loss_mask) == 0:
+                    logging.info(f"I am in get_batch_megatron, loss_mask is all zeros, meaning that this data doesn't contain the assistant's turn, this could be due to the data is not properly formatted or the sequence is too short, we will skip this data")
+                # assert torch.sum(loss_mask) > 0, f"I am in get_batch_megatron, loss_mask: {loss_mask}, turn_mask: {turn_mask}"
             return tokens, labels, loss_mask, attention_mask, position_ids
 
         def get_batch_transformer(data_iterator):
@@ -662,6 +702,14 @@ class GPTTrainStep(AbstractTrainStep):
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
                 tokens, eod_token=self.eod_token, pad_token=self.eod_token, reset_position_ids=self.reset_position_ids, reset_attention_mask=self.reset_attention_mask, eod_mask_loss=self.eod_mask_loss, pad_mask_loss=True,
             )
+            # print(f"I am in get_batch_transformer, labels: {labels}, tokens: {tokens}, loss_mask: {loss_mask}, attention_mask: {attention_mask}, position_ids: {position_ids}")
+            if self.turn_ids is not None and self.target_turn is not None:
+                # logging.info(f"I am in get_batch_transformer, tokens: {tokens}, turn_ids: {self.turn_ids}, target_turn: {self.target_turn}")
+                turn_mask = mask_target_turn_torch(tokens, self.turn_ids, self.target_turn)
+                loss_mask = loss_mask * turn_mask
+                if torch.sum(loss_mask) == 0:
+                    logging.info(f"I am in get_batch_transformer, loss_mask is all zeros, meaning that this data doesn't contain the assistant's turn, this could be due to the data is not properly formatted or the sequence is too short, we will skip this data")
+                # assert torch.sum(loss_mask) > 0, f"I am in get_batch_transformer, loss_mask: {loss_mask}, turn_mask: {turn_mask}"
             return tokens, labels, loss_mask, attention_mask, position_ids
 
         if accelerator.state.megatron_lm_plugin.custom_get_batch_function is not None:
@@ -689,10 +737,12 @@ class GPTTrainStep(AbstractTrainStep):
             losses = losses.float()
             loss_mask = loss_mask.view(-1).float()
             if args.context_parallel_size > 1:
+                logging.info(f"in context_parallel_size > 1, loss value {torch.sum(losses.view(-1))} and loss_mask.sum(): {loss_mask.sum()}")
                 loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
                 torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
                 loss = loss[0] / loss[1]
             else:
+                # print(f"in context_parallel_size == 1, loss value {torch.sum(losses.view(-1))} and loss_mask.sum(): {loss_mask.sum()}")
                 loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
 
             # Check individual rank losses are not NaN prior to DP all-reduce.
@@ -722,6 +772,8 @@ class GPTTrainStep(AbstractTrainStep):
             tokens, labels, loss_mask, attention_mask, position_ids = self.get_batch(data_iterator)
             output_tensor = model(tokens, position_ids, attention_mask, labels=labels)
 
+            # logging.info(f"gpt forward_step 729: output_tensor: {output_tensor.shape}, if has nan: {torch.isnan(output_tensor).any()}")
+            # logging.info(f"gpt forward_step 731: output_tensor: {output_tensor.shape}, if has nan: {torch.isnan(output_tensor).any()}")
             return output_tensor, partial(self.loss_func, loss_mask)
 
         return forward_step
@@ -958,6 +1010,8 @@ class MegatronEngine(torch.nn.Module):
         elif args.model_type_name == "bert":
             self.train_step_handler = BertTrainStep(accelerator, args)
         elif args.model_type_name == "gpt":
+            # args.eos_token_id = model[0].config.eos_token_id[0]
+            print(f"I am in MegatronEngine, args.eos_token_id: {args.eos_token_id}")
             self.train_step_handler = GPTTrainStep(accelerator, args)
         elif args.model_type_name == "t5":
             self.train_step_handler = T5TrainStep(accelerator, args)

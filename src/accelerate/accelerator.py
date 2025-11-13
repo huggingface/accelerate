@@ -2388,8 +2388,10 @@ class Accelerator:
         if model is not None:
             megatron_lm_plugin.set_network_size_args(model, batch_data)
         if optimizer is not None:
+            logger.info(f"Setting optimizer type: {type(optimizer)}")
             megatron_lm_plugin.set_optimizer_type(optimizer)
         if scheduler is not None:
+            logger.info(f"Setting scheduler type: {type(scheduler)}")
             if not isinstance(scheduler, MegatronLMDummyScheduler):
                 raise ValueError(
                     "You can't use a custom scheduler with Megatron-LM. Please use the `accelerate.utils.MegatronLMDummyScheduler` instead."
