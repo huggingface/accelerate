@@ -302,17 +302,6 @@ class ParallelismConfig:
         if self.sp_size > 1:
             if self.sp_handler is None:
                 self.sp_handler = DeepSpeedSequenceParallelConfig()
-            else:
-                sp_backends_config_map = dict(
-                    deepspeed=DeepSpeedSequenceParallelConfig,
-                )
-                if self.sp_backend not in sp_backends_config_map or not isinstance(
-                    self.sp_handler, sp_backends_config_map[self.sp_backend]
-                ):
-                    raise ValueError(
-                        f"DeepSpeedSequenceParallelConfig requires sp_backends=deepspeed, but sp_handler was set to {type(self.sp_handler)}"
-                    )
-
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
         if self.dp_shard_size < 1:
