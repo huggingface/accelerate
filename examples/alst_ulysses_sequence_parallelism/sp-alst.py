@@ -18,7 +18,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate import Accelerator
 from accelerate.utils import ParallelismConfig, set_seed
-from accelerate.utils.dataclasses import DeepSpeedContextParallelConfig
+from accelerate.utils.dataclasses import DeepSpeedSequenceParallelConfig
 
 
 set_seed(42)
@@ -30,13 +30,13 @@ model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 micro_batch_size = 1
 
 parallelism_config = ParallelismConfig(
-    cp_backend="deepspeed",
-    cp_size=4,
+    sp_backend="deepspeed",
+    sp_size=4,
     # dp_shard_size=1, # set if dp is wanted as well
-    cp_handler=DeepSpeedContextParallelConfig(
-        cp_seq_length=256,
-        cp_seq_length_is_variable=True,
-        cp_attn_implementation="sdpa",
+    sp_handler=DeepSpeedSequenceParallelConfig(
+        sp_seq_length=256,
+        sp_seq_length_is_variable=True,
+        sp_attn_implementation="sdpa",
     ),
 )
 
@@ -112,10 +112,10 @@ model, optimizer, dl = accelerator.prepare(model, optimizer, dl)
 if rank == 0:
     print(f"DL w/ adapter: {len(dl)} samples")
 
-cp_size = parallelism_config.cp_size if parallelism_config else 1
-if cp_size > 1:
+sp_size = parallelism_config.sp_size if parallelism_config else 1
+if sp_size > 1:
     sp_group = accelerator.torch_device_mesh["cp"].get_group()
-    sp_world_size = parallelism_config.cp_size
+    sp_world_size = parallelism_config.sp_size
 
 unwrapped_model = accelerator.unwrap_model(model)
 
@@ -136,7 +136,7 @@ for iter, batch in enumerate(dl):
         vocab_size=unwrapped_model.config.vocab_size,
     )
 
-    if cp_size > 1:
+    if sp_size > 1:
         # differentiable weighted per-shard-loss aggregation across ranks
         losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
         # special dealing with SFT that has prompt tokens that aren't used in loss computation

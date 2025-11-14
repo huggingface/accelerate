@@ -2192,20 +2192,20 @@ class TorchContextParallelConfig:
 
 
 @dataclass
-class DeepSpeedContextParallelConfig:
-    cp_seq_length: Optional[int] = field(
+class DeepSpeedSequenceParallelConfig:
+    sp_seq_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `cp_seq_length_is_variable=True` and leave this field unset"
+            "help": "Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `sp_seq_length_is_variable=True` and leave this field unset"
         },
     )
-    cp_seq_length_is_variable: Optional[bool] = field(
+    sp_seq_length_is_variable: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "If `True` will work with a sequence length that may change between batches, in which case `cp_seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `cp_seq_length` needs to match the batch's sequence length dimension. The default is `True`."
+            "help": "If `True` will work with a sequence length that may change between batches, in which case `sp_seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `sp_seq_length` needs to match the batch's sequence length dimension. The default is `True`."
         },
     )
-    cp_attn_implementation: Optional[str] = field(
+    sp_attn_implementation: Optional[str] = field(
         default=None,
         metadata={
             "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`."
@@ -2213,31 +2213,31 @@ class DeepSpeedContextParallelConfig:
     )
 
     def __post_init__(self):
-        # cp_seq_length_is_variable and cp_seq_length are interconnected
-        if self.cp_seq_length_is_variable is None:
-            self.cp_seq_length_is_variable = (
-                os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH_IS_VARIABLE", "true").lower() == "true"
+        # sp_seq_length_is_variable and sp_seq_length are interconnected
+        if self.sp_seq_length_is_variable is None:
+            self.sp_seq_length_is_variable = (
+                os.environ.get("PARALLELISM_CONFIG_SP_SEQ_LENGTH_IS_VARIABLE", "true").lower() == "true"
             )
 
-        if not self.cp_seq_length_is_variable and self.cp_seq_length is None:
-            if "PARALLELISM_CONFIG_CP_SEQ_LENGTH" not in os.environ:
+        if not self.sp_seq_length_is_variable and self.sp_seq_length is None:
+            if "PARALLELISM_CONFIG_SP_SEQ_LENGTH" not in os.environ:
                 raise ValueError(
-                    "when `cp_seq_length_is_variable` is `False` `cp_seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_CP_SEQ_LENGTH"
+                    "when `sp_seq_length_is_variable` is `False` `sp_seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_SP_SEQ_LENGTH"
                 )
             else:
-                self.cp_seq_length = os.environ.get("PARALLELISM_CONFIG_CP_SEQ_LENGTH")
-                self.cp_seq_length = None if self.cp_seq_length == "None" else int(self.cp_seq_length)
+                self.sp_seq_length = os.environ.get("PARALLELISM_CONFIG_SP_SEQ_LENGTH")
+                self.sp_seq_length = None if self.sp_seq_length == "None" else int(self.sp_seq_length)
 
-        if self.cp_attn_implementation is None:
-            self.cp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_CP_ATTN_IMPLEMENTATION", None)
+        if self.sp_attn_implementation is None:
+            self.sp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_SP_ATTN_IMPLEMENTATION", None)
 
-        if self.cp_attn_implementation is not None and self.cp_attn_implementation not in [
+        if self.sp_attn_implementation is not None and self.sp_attn_implementation not in [
             "flash_attention_2",
             "flash_attention_3",
             "sdpa",
         ]:
             raise ValueError(
-                f"Invalid cp_attn_implementation: {self.cp_attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
+                f"Invalid sp_attn_implementation: {self.sp_attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
             )
 
 

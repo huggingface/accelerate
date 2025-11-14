@@ -1,6 +1,6 @@
 compute_environment: LOCAL_MACHINE
 deepspeed_config:
-  deepspeed_config_file: cp-alst.ds-config.json
+  deepspeed_config_file: sp-alst.ds-config.json
   zero3_init_flag: false
 distributed_type: DEEPSPEED
 machine_rank: 0

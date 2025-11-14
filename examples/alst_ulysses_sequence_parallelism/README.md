@@ -9,11 +9,11 @@ You need to use at least `2` gpus to enable ALST/Ulysses sequence parallelism.
 To run the example with `4` gpus:
 
 ```bash
-bash ./cp-alst.sh
+bash ./sp-alst.sh
 ```
 
 Change `4` to the desired sequence parallelism degree in these 2 files:
 ```
-cp-alst.accelerate-config.yml:num_processes: 4
-cp-alst.py:    cp_size=4,
+sp-alst.accelerate-config.yml:num_processes: 4
+sp-alst.py:    sp_size=4,
 ```

@@ -20,6 +20,7 @@ from accelerate.parallelism_config import ParallelismConfig
 from accelerate.utils import patch_environment
 from accelerate.utils.constants import (
     BETA_CP_AVAILABLE_PYTORCH_VERSION,
+    BETA_SP_AVAILABLE_DEEPSPEED_VERSION,
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
 )
@@ -30,6 +31,11 @@ from accelerate.utils.versions import compare_versions, is_torch_version
 def _should_skip_cp_test(cp_size):
     """Check if CP test should be skipped based on cp_size and torch version."""
     return cp_size > 1 and not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION)
+
+
+def _should_skip_sp_test(sp_size):
+    """Check if CP test should be skipped based on sp_size and deepspeed version."""
+    return sp_size > 1 and not compare_versions("deepspeed", ">=", BETA_SP_AVAILABLE_DEEPSPEED_VERSION)
 
 
 def _should_skip_tp_test(tp_size):
@@ -246,28 +252,28 @@ class TestParallelismConfig:
                 with pytest.raises(ValueError, match=f"Invalid cp_comm_strategy: {setting}"):
                     pc = ParallelismConfig(cp_size=2)
 
-    def test_cp_deepspeed_handler(self):
+    def test_sp_deepspeed_handler(self):
         """Test CP DeepSpeed/ALST/UlyssesSP handler with various configurations."""
 
-        # Any cp_size > 1 requires torch >= BETA_CP_AVAILABLE_PYTORCH_VERSION, we use placeholder for this check as this test doesn't depend on a specific size
-        if _should_skip_cp_test(2):
-            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
+        # Any sp_size > 1 requires torch >= BETA_sp_AVAILABLE_PYTORCH_VERSION, we use placeholder for this check as this test doesn't depend on a specific size
+        if _should_skip_sp_test(2):
+            pytest.skip(f"tests with `sp_size>1` require deepspeed >= {BETA_SP_AVAILABLE_DEEPSPEED_VERSION}")
 
-        from accelerate.utils import DeepSpeedContextParallelConfig
+        from accelerate.utils import DeepSpeedSequenceParallelConfig
 
-        cp_handler = DeepSpeedContextParallelConfig()
-        pc = ParallelismConfig(cp_backend="deepspeed", cp_size=2, cp_handler=cp_handler)
-        assert pc.cp_handler is not None, "CP handler should be set"
-        assert pc.cp_handler.cp_seq_length_is_variable is True, "by default we set to expect a variable seqlen"
+        sp_handler = DeepSpeedSequenceParallelConfig()
+        pc = ParallelismConfig(sp_backend="deepspeed", sp_size=2, sp_handler=sp_handler)
+        assert pc.sp_handler is not None, "CP handler should be set"
+        assert pc.sp_handler.sp_seq_length_is_variable is True, "by default we set to expect a variable seqlen"
 
         with pytest.raises(
             ValueError,
-            match="ParallelismConfig's cp_backend=torch requires <class 'accelerate.utils.dataclasses.TorchContextParallelConfig'>, but cp_handler was set to <class 'accelerate.utils.dataclasses.DeepSpeedContextParallelConfig'",
+            match="DeepSpeedSequenceParallelConfig requires sp_backends=deepspeed, but sp_handler was set to <class 'accelerate.utils.dataclasses.DeepSpeedSequenceParallelConfig'",
         ):
-            pc = ParallelismConfig(cp_backend="torch", cp_size=2, cp_handler=cp_handler)
+            pc = ParallelismConfig(sp_backend="torch", sp_size=2, sp_handler=sp_handler)
 
-        with pytest.raises(ValueError, match="Invalid cp_attn_implementation"):
-            DeepSpeedContextParallelConfig(cp_attn_implementation="foobar")
+        with pytest.raises(ValueError, match="Invalid sp_attn_implementation"):
+            DeepSpeedSequenceParallelConfig(sp_attn_implementation="foobar")
 
     def test_tp_handler(self):
         assert True, "Tensor parallelism handler doesn't hold any logic yet"

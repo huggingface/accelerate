@@ -371,11 +371,14 @@ def prepare_extend_env_parallelism_config(
     current_env[prefix + "TP_SIZE"] = str(args.parallelism_config_tp_size)
     current_env[prefix + "CP_SIZE"] = str(args.parallelism_config_cp_size)
     current_env[prefix + "CP_BACKEND"] = str(args.parallelism_config_cp_backend)
+    current_env[prefix + "SP_SIZE"] = str(args.parallelism_config_sp_size)
+    current_env[prefix + "SP_BACKEND"] = str(args.parallelism_config_sp_backend)
     if args.parallelism_config_cp_size > 1:
         current_env[prefix + "CP_COMM_STRATEGY"] = str(args.parallelism_config_cp_comm_strategy)
-        current_env[prefix + "CP_SEQ_LENGTH"] = str(args.parallelism_config_cp_seq_length)
-        current_env[prefix + "CP_SEQ_LENGTH_IS_VARIABLE"] = str(args.parallelism_config_cp_seq_length_is_variable)
-        current_env[prefix + "CP_ATTN_IMPLEMENTATION"] = str(args.parallelism_config_cp_attn_implementation)
+    if args.parallelism_config_sp_size > 1:
+        current_env[prefix + "SP_SEQ_LENGTH"] = str(args.parallelism_config_sp_seq_length)
+        current_env[prefix + "SP_SEQ_LENGTH_IS_VARIABLE"] = str(args.parallelism_config_sp_seq_length_is_variable)
+        current_env[prefix + "SP_ATTN_IMPLEMENTATION"] = str(args.parallelism_config_sp_attn_implementation)
 
     return current_env
 

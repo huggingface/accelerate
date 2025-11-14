@@ -1616,7 +1616,7 @@ class Accelerator:
         return args
 
     def _prepare_cp(self, *args):
-        if self.parallelism_config.cp_backend == "deepspeed":
+        if self.parallelism_config.sp_backend == "deepspeed":
             # deepspeed handles cp in a different way, configured in _prepare_deepspeed
             return args
 
@@ -2080,9 +2080,9 @@ class Accelerator:
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
         tp_size = deepspeed_plugin.deepspeed_config.get("tensor_parallel", {}).get("autotp_size", 0)
 
-        cp_backend = self.parallelism_config.cp_backend if self.parallelism_config else None
-        cp_size = self.parallelism_config.cp_size if self.parallelism_config else 1
-        cp_handler = self.parallelism_config.cp_handler if self.parallelism_config else None
+        sp_backend = self.parallelism_config.sp_backend if self.parallelism_config else None
+        sp_size = self.parallelism_config.sp_size if self.parallelism_config else 1
+        sp_handler = self.parallelism_config.sp_handler if self.parallelism_config else None
 
         if tp_size > 1:
             if not compare_versions("deepspeed", ">=", "0.16.4"):
@@ -2158,7 +2158,7 @@ class Accelerator:
                 batch_size_per_device
                 * deepspeed_plugin.get_value("gradient_accumulation_steps")
                 * self.num_processes
-                // cp_size
+                // sp_size
             )
 
         model = None
@@ -2282,7 +2282,7 @@ class Accelerator:
 
             # note: batch_size derivation is all over the map, especiall in HF Trainer, so try to fix it at the last moment if needed
             pc = self.parallelism_config
-            if pc is not None and pc.cp_backend == "deepspeed" and pc.cp_size > 1:
+            if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_size > 1:
                 self.deepspeed_config["train_batch_size"] = (
                     self.deepspeed_config["train_micro_batch_size_per_gpu"]
                     * self.deepspeed_config["gradient_accumulation_steps"]
@@ -2317,10 +2317,10 @@ class Accelerator:
                 os.environ["DEEPSPEED_USE_HPU"] = "true"
 
             mpu = None
-            if cp_size > 1:
-                if cp_backend != "deepspeed":
+            if sp_size > 1:
+                if sp_backend != "deepspeed":
                     raise ValueError(
-                        f"In order to use the configured {cp_size=} with DeepSpeed, you need to configure cp_backend='deepspeed', yet you configured it to be {cp_backend=}."
+                        f"In order to use the configured {sp_size=} with DeepSpeed, you need to configure sp_backend='deepspeed', yet you configured it to be {sp_backend=}."
                     )
 
                 ver_min_required = "0.18.2"
@@ -2341,26 +2341,26 @@ class Accelerator:
 
                 mpu = UlyssesSPAttentionHF.register_with_transformers(
                     model_name_or_path=model,
-                    sequence_parallel_size=cp_size,
-                    seq_length=cp_handler.cp_seq_length,
-                    seq_length_is_variable=cp_handler.cp_seq_length_is_variable,
-                    core_attn_implementation=cp_handler.cp_attn_implementation,
+                    sequence_parallel_size=sp_size,
+                    seq_length=sp_handler.sp_seq_length,
+                    seq_length_is_variable=sp_handler.sp_seq_length_is_variable,
+                    core_attn_implementation=sp_handler.sp_attn_implementation,
                     micro_batch_size=batch_size_per_device,
                 )
                 kwargs["mpu"] = mpu
 
                 for i in range(len(result)):
                     if isinstance(result[i], torch.utils.data.DataLoader):
-                        if cp_size > 1:
+                        if sp_size > 1:
                             # note that in case dataloader was prepared apart from model (for the external accelerator.prepare call) you'd need to call deepspeed_ulysses_dl_adapter after prepare(model) (see HF Trainer as the use-case)
-                            cp_group = mpu.get_sequence_parallel_group()
-                            cp_world_size = mpu.get_sequence_parallel_world_size()
-                            cp_rank = mpu.get_sequence_parallel_rank()
+                            sp_group = mpu.get_sequence_parallel_group()
+                            sp_world_size = mpu.get_sequence_parallel_world_size()
+                            sp_rank = mpu.get_sequence_parallel_rank()
                             result[i] = UlyssesSPDataLoaderAdapter(
                                 result[i],
-                                sp_rank=cp_rank,
-                                sp_group=cp_group,
-                                sp_world_size=cp_world_size,
+                                sp_rank=sp_rank,
+                                sp_group=sp_group,
+                                sp_world_size=sp_world_size,
                                 device=self.device,  # model.device,
                             )
 
@@ -2413,20 +2413,20 @@ class Accelerator:
 
     def deepspeed_ulysses_dl_adapter(self, dl, model):
         """this is normally called as part of `prepare` but when dataloader was prepared apart from model (for the external accelerator.prepare call) this additional call needs to be made after prepare(model) (see HF Trainer as the use-case)"""
-        cp_size = self.parallelism_config.cp_size if self.parallelism_config else 1
-        if cp_size == 1:
+        sp_size = self.parallelism_config.sp_size if self.parallelism_config else 1
+        if sp_size == 1:
             return dl
         from deepspeed.runtime.sequence_parallel.ulysses_sp import UlyssesSPDataLoaderAdapter
         from deepspeed.utils import groups
 
-        cp_group = groups._get_sequence_parallel_group()
-        cp_world_size = groups._get_sequence_parallel_world_size()
-        cp_rank = groups._get_sequence_parallel_rank()
+        sp_group = groups._get_sequence_parallel_group()
+        sp_world_size = groups._get_sequence_parallel_world_size()
+        sp_rank = groups._get_sequence_parallel_rank()
         dl = UlyssesSPDataLoaderAdapter(
             dl,
-            sp_rank=cp_rank,
-            sp_group=cp_group,
-            sp_world_size=cp_world_size,
+            sp_rank=sp_rank,
+            sp_group=sp_group,
+            sp_world_size=sp_world_size,
             device=model.device,
         )
         return dl
@@ -4102,7 +4102,7 @@ class Accelerator:
 
         <Tip warning={true}>
 
-        `context_parallel` is currently supported either with FSDP2 or Deepspeed/ALST/UlyssesSP, and requires `parallelism_config.cp_size` >
+        `context_parallel` is currently supported with FSDP2 and requires `parallelism_config.cp_size` >
         1. If either of these conditions are not met, this context manager will have no effect, though to enable fewer
         code changes it will not raise an Exception.
 
