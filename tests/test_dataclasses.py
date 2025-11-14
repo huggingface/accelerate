@@ -263,7 +263,7 @@ class TestParallelismConfig:
 
         sp_handler = DeepSpeedSequenceParallelConfig()
         pc = ParallelismConfig(sp_backend="deepspeed", sp_size=2, sp_handler=sp_handler)
-        assert pc.sp_handler is not None, "CP handler should be set"
+        assert pc.sp_handler is not None, "SP handler should be set"
         assert pc.sp_handler.sp_seq_length_is_variable is True, "by default we set to expect a variable seqlen"
 
         with pytest.raises(

@@ -841,7 +841,7 @@ def launch_command_parser(subparsers=None):
         "--parallelism_config_sp_seq_length_is_variable",
         type=bool,
         default=True,
-        help="If `True` will work with a sequence length that may change between batches, in which case `parallelism_config_sp_seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `parallelism_config_sp_seq_length` needs to match the batch's sequence length dimension. The default is `True`.",
+        help="If `True` will work with a sequence length that may change between batches, in which case `parallelism_config_sp_seq_length` value can be set to anything divisible by sp size or remain unset. If `False` then `parallelism_config_sp_seq_length` needs to match the batch's sequence length dimension. The default is `True`.",
     )
 
     parallelism_config_args.add_argument(

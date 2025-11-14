@@ -53,7 +53,7 @@ from accelerate.utils import ParallelismConfig, DeepSpeedSequenceParallelConfig
 parallelism_config = ParallelismConfig(
 +     sp_backend="deepspeed",
 +     sp_size=4,
-+     sp_handler=DeepSpeedContextParallelConfig(
++     sp_handler=DeepSpeedSequenceParallelConfig(
 +         sp_seq_length_is_variable: true,
 +         sp_attn_implementation="sdpa",
 +     ),
@@ -91,7 +91,7 @@ To configure the `deepspeed` backend:
 parallelism_config = ParallelismConfig(
     sp_backend="deepspeed",
     sp_size=4,
-    sp_handler=DeepSpeedContextParallelConfig(
+    sp_handler=DeepSpeedSequenceParallelConfig(
         sp_seq_length=256,
         sp_seq_length_is_variable=True,
         sp_attn_implementation="sdpa",
@@ -108,7 +108,7 @@ accelerator = Accelerator(
 - `sp_seq_length` and `sp_seq_length_is_variable` are used to deal with sequence lengths. If `sp_seq_length_is_variable=True` the backend will work with a sequence length that may change between batches, in which case `sp_seq_length` value can be set to anything divisible by the sequence parallel degree or not set at all. In this case on every `forward` the sequence variables will be derived from input. If `False` then `seq_length` needs to match the batch's sequence length dimension, which then will have to be padded to be always the same. The default is `True`.
 - `sp_attn_implementation` is one of `sdpa`, `flash_attention_2` or `flash_attention_3`. This sequence parallel implementation uses `position_ids` instead of `attention_mask` therefore, `eager` can't work here until it supports working with `position_ids`. Also, please note that `sdpa` doesn't handle multiple samples combined into one correctly; it will attend to the whole sample as one. If the samples aren't combined, `sdpa` will work correctly. Therefore, Flash Attention should be the ideal choice as it always works.
 
-Instead of setting these values in `DeepSpeedContextParallelConfig` object, you can also use the environment variables to accomplish the same - here they are correspondingly to the end of the list above.
+Instead of setting these values in `DeepSpeedSequenceParallelConfig` object, you can also use the environment variables to accomplish the same - here they are correspondingly to the end of the list above.
 - `PARALLELISM_CONFIG_SP_BACKEND`
 - `PARALLELISM_CONFIG_SP_SEQ_LENGTH`
 - `PARALLELISM_CONFIG_SP_SEQ_LENGTH_IS_VARIABLE`
@@ -138,7 +138,7 @@ parallelism_config = ParallelismConfig(
     dp_shard_size=2,
     sp_backend="deepspeed",
     sp_size=2,
-    sp_handler=DeepSpeedContextParallelConfig(...),
+    sp_handler=DeepSpeedSequenceParallelConfig(...),
 )
 ```
 Here we use 4 gpus, with 2 sequence parallelism replicas. Deepspeed-ZeRO is what drives the data parallelism here.

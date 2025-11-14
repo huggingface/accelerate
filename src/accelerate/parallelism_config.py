@@ -54,10 +54,9 @@ class ParallelismConfig:
         cp_backend (`str`, defaults to `torch`):
             Which CP backend to use: `torch` (FSDP2)
         sp_size (`int`, defaults to `1`):
-            The size of the context parallel group. Currently not supported, but reserved for future use and enabled
-            for downstream libraries.
+            The size of the sequence parallel group.
         sp_backend (`str`, defaults to `torch`):
-            Which CP backend to use:`deepspeed` (ALST/Ulysses)
+            Which SP backend to use:`deepspeed` (ALST/Ulysses)
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
     together:
@@ -201,7 +200,7 @@ class ParallelismConfig:
 
     @property
     def sp_enabled(self):
-        """True if context parallelism is enabled, i.e. `cp_size > 1`."""
+        """True if context parallelism is enabled, i.e. `sp_size > 1`."""
         return self.sp_size > 1
 
     @property
@@ -282,7 +281,7 @@ class ParallelismConfig:
         if self.sp_size is None:
             self.sp_size = int(os.environ.get("PARALLELISM_CONFIG_SP_SIZE", "1"))
         if self.sp_backend is None:
-            self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND", "torch")
+            self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND", "deepspeed")
 
         if self.tp_size > 1:
             if self.tp_handler is None:
