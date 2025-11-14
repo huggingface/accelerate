@@ -748,7 +748,7 @@ class GPTTrainStep(AbstractTrainStep):
             losses = losses.float()
             loss_mask = loss_mask.view(-1).float()
             if args.context_parallel_size > 1:
-                logging.info(f"in context_parallel_size > 1, loss value {torch.sum(losses.view(-1))} and loss_mask.sum(): {loss_mask.sum()}")
+                # logging.info(f"in context_parallel_size > 1, loss value {torch.sum(losses.view(-1))} and loss_mask.sum(): {loss_mask.sum()}")
                 loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
                 torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
                 loss = loss[0] / loss[1]
