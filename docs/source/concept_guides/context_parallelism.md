@@ -17,6 +17,8 @@ rendered properly in your Markdown viewer.
 
 This guide will cover basics of using context parallelism in 🤗`accelerate`, for the more curious readers, we will also cover some technicalities in the later sections.
 
+See also the very related [Guide to Sequence Parallellism](./sequence_parallelism.md).
+
 ## Why context parallelism?
 
 With the advent of large language models, and recently reasoning models, the sequence length has been growing rapidly. This, combined with quadratic memory complexity of attention, has led to a need for more efficient ways to train models with long sequences.
@@ -176,8 +178,8 @@ You can directly see this issue in the profiler output in the image below:
 
 ## Why only FSDP2?
 
-We only support context parallelism with `FSDP2`, as we create a joint mesh of `context_parallel_size` and `dp_shard_size` to 
-utilize its full potential. 
+We only support context parallelism with `FSDP2`, as we create a joint mesh of `context_parallel_size` and `dp_shard_size` to
+utilize its full potential.
 How it works is: we shard the model across the joint mesh of size `cp_size*dp_shard_size`, which maximizes the memory savings.
 This is a "free lunch" of sorts, as `FSDP` communication is fully overlapped with the computation of attention, as shown in the images below.
 
