@@ -32,7 +32,6 @@ micro_batch_size = 1
 parallelism_config = ParallelismConfig(
     sp_backend="deepspeed",
     sp_size=4,
-    # dp_shard_size=1, # set if dp is wanted as well
     sp_handler=DeepSpeedSequenceParallelConfig(
         sp_seq_length=256,
         sp_seq_length_is_variable=True,
@@ -114,7 +113,7 @@ if rank == 0:
 
 sp_size = parallelism_config.sp_size if parallelism_config else 1
 if sp_size > 1:
-    sp_group = accelerator.torch_device_mesh["cp"].get_group()
+    sp_group = accelerator.torch_device_mesh["sp"].get_group()
     sp_world_size = parallelism_config.sp_size
 
 unwrapped_model = accelerator.unwrap_model(model)
