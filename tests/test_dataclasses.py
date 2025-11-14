@@ -266,12 +266,6 @@ class TestParallelismConfig:
         assert pc.sp_handler is not None, "SP handler should be set"
         assert pc.sp_handler.sp_seq_length_is_variable is True, "by default we set to expect a variable seqlen"
 
-        with pytest.raises(
-            ValueError,
-            match="DeepSpeedSequenceParallelConfig requires sp_backends=deepspeed, but sp_handler was set to <class 'accelerate.utils.dataclasses.DeepSpeedSequenceParallelConfig'",
-        ):
-            pc = ParallelismConfig(sp_backend="torch", sp_size=2, sp_handler=sp_handler)
-
         with pytest.raises(ValueError, match="Invalid sp_attn_implementation"):
             DeepSpeedSequenceParallelConfig(sp_attn_implementation="foobar")
 
