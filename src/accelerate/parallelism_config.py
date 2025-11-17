@@ -353,7 +353,7 @@ class ParallelismConfig:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
                 f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
-                f"dp_shard_size/tp_size/cp_size."
+                f"dp_shard_size/tp_size/cp_size/sp_size."
             )
 
         if self.total_size > 1 and not (
