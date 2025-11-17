@@ -76,7 +76,7 @@ accelerate launch --parallelism-config-sp-size 8  ...
 
 > [!Tip]
 > sequence parallelism combines with data parallelism. It doesn't require additional GPUs.
-> So if you have 8 gpus you can do: `--parallelism-config-dp-size 8 --parallelism-config-sp-size 8`. Or you can use the `ParallelismConfig` class to set them programmatically.
+> So if you have 8 gpus you can do: `--parallelism-config-dp-shard-size 8 --parallelism-config-sp-size 8`. Or you can use the `ParallelismConfig` class to set them programmatically.
 
 
 ## ALST/Ulysses SP backend configuration
