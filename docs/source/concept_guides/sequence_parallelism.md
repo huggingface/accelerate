@@ -135,7 +135,7 @@ As mentioned earlier Ulysses sequence parallelism is normally overlayed with dat
 
 ```python
 parallelism_config = ParallelismConfig(
-    dp_shard_size=2,
+    dp_shard_size=4,
     sp_backend="deepspeed",
     sp_size=2,
     sp_handler=DeepSpeedSequenceParallelConfig(...),
