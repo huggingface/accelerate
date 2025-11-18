@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import os
+
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     execute_subprocess_async,
@@ -26,7 +28,6 @@ from accelerate.test_utils.testing import (
     slow,
 )
 from accelerate.utils import patch_environment
-import os
 
 
 @require_non_torch_xla
@@ -76,5 +77,3 @@ class TPIntegrationTest(TempDirTestCase):
         )
         with patch_environment(omp_num_threads=4):
             execute_subprocess_async(cmd)
-
-        
