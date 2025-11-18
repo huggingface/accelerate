@@ -253,9 +253,9 @@ class TestParallelismConfig:
                     pc = ParallelismConfig(cp_size=2)
 
     def test_sp_deepspeed_handler(self):
-        """Test CP DeepSpeed/ALST/UlyssesSP handler with various configurations."""
+        """Test SP DeepSpeed/ALST/UlyssesSP handler with various configurations."""
 
-        # Any sp_size > 1 requires torch >= BETA_sp_AVAILABLE_PYTORCH_VERSION, we use placeholder for this check as this test doesn't depend on a specific size
+        # Any sp_size > 1 requires torch >= BETA_SP_AVAILABLE_PYTORCH_VERSION, we use placeholder for this check as this test doesn't depend on a specific size
         if _should_skip_sp_test(2):
             pytest.skip(f"tests with `sp_size>1` require deepspeed >= {BETA_SP_AVAILABLE_DEEPSPEED_VERSION}")
 
