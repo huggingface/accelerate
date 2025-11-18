@@ -212,9 +212,9 @@ def prepare_model_optimizer_scheduler(accelerator):
         (model, optimizer, scheduler) = setup_model_and_optimizer(
             model_provider_func_,
             model_type,
-            no_wd_decay_cond=args.no_wd_decay_cond,
-            scale_lr_cond=args.scale_lr_cond,
-            lr_mult=args.lr_mult,
+            # no_wd_decay_cond=args.no_wd_decay_cond,
+            # scale_lr_cond=args.scale_lr_cond,
+            # lr_mult=args.lr_mult,
         )
     args.model_len = len(model)
     logging.info(f"Model length: {args.model_len}")
