@@ -118,25 +118,25 @@ def mask_target_turn_torch(input_ids: torch.Tensor, turn_ids: list, target_turn:
 def model_provider_func(pre_process=True, post_process=True, add_encoder=True, add_decoder=True):
     """Build the model."""
     args = get_args()
-    args.recompute_granularity = "full"
-    args.recompute_method = "uniform"
-    args.recompute_num_layers = 1
-    # args.use_torch_fsdp2 = True
-    # args.optimizer_cpu_offload = True
-    # args.overlap_cpu_optimizer_d2h_h2d = True
+    # args.recompute_granularity = "full"
+    # args.recompute_method = "uniform"
+    # args.recompute_num_layers = 1
+    # # args.use_torch_fsdp2 = True
+    # # args.optimizer_cpu_offload = True
+    # # args.overlap_cpu_optimizer_d2h_h2d = True
 
-    args.use_custom_fsdp = True
-    args.sequence_parallel = True
-    args.attention_backend = True
-    args.expert_model_parallel_size = 1
-    args.context_parallel_size = 2
-    args.attention_dropout = 0.0
-    args.hidden_dropout = 0.0
-    args.weight_decay = 0.1
-    args.attention_softmax_in_fp32 = True
-    args.expert_tensor_parallel_size = 1
-    args.calculate_per_token_loss = True
-    args.use_rotary_position_embeddings = True
+    # args.use_custom_fsdp = True
+    # args.sequence_parallel = True
+    # args.attention_backend = True
+    # args.expert_model_parallel_size = 1
+    # args.context_parallel_size = 2
+    # args.attention_dropout = 0.0
+    # args.hidden_dropout = 0.0
+    # args.weight_decay = 0.1
+    # args.attention_softmax_in_fp32 = True
+    # args.expert_tensor_parallel_size = 1
+    # args.calculate_per_token_loss = True
+    # args.use_rotary_position_embeddings = True
     # args.data_parallel_sharding_strategy = "optim_grads_params"
     mode = "pre-training" if args.pretraining_flag else "fine-tuning"
     logging.info(f"in model_provider_func with args: {args}")
