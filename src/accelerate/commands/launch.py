@@ -619,6 +619,12 @@ def launch_command_parser(subparsers=None):
         help="Megatron-LM's Tensor Parallelism (TP) degree. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
+        "--megatron_lm_use_custom_fsdp",
+        type=bool,
+        default=False,
+        help="Whether to use custom FSDP. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
         "--megatron_lm_pp_degree",
         type=int,
         default=1,
@@ -657,6 +663,90 @@ def launch_command_parser(subparsers=None):
         default=1.0,
         type=float,
         help="Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable). "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_recompute_granularity",
+        default=None,
+        type=str,
+        help="Megatron-LM's recompute granularity (full, selective). "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_recompute_method",
+        default=None,
+        type=str,
+        help="Megatron-LM's recompute method (uniform, block). "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_recompute_num_layers",
+        default=None,
+        type=int,
+        help="Megatron-LM's number of layers to recompute. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_attention_backend",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to enable attention backend. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_expert_model_parallel_size",
+        default=None,
+        type=int,
+        help="Megatron-LM's expert model parallel size. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_context_parallel_size",
+        default=None,
+        type=int,
+        help="Megatron-LM's context parallel size. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_attention_dropout",
+        default=None,
+        type=float,
+        help="Megatron-LM's attention dropout rate. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_hidden_dropout",
+        default=None,
+        type=float,
+        help="Megatron-LM's hidden dropout rate. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_attention_softmax_in_fp32",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to use fp32 for attention softmax. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_expert_tensor_parallel_size",
+        default=None,
+        type=int,
+        help="Megatron-LM's expert tensor parallel size. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_calculate_per_token_loss",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to calculate per token loss. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_use_rotary_position_embeddings",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to use rotary position embeddings. "
         "(useful only when `use_megatron_lm` flag is passed).",
     )
 
