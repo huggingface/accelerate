@@ -2311,6 +2311,7 @@ class MegatronLMPlugin:
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
     pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
     use_custom_fsdp: bool = field(default=None, metadata={"help": "use custom fsdp."})
+    decoder_last_pipeline_num_layers: int = field(default=None, metadata={"help": "decoder last pipeline number of layers, default None is even split of transformer layers across all pipeline stages."})
     recompute_granularity: str = field(default=None, metadata={"help": "recompute granularity (full, selective)."})
     recompute_method: str = field(default=None, metadata={"help": "recompute method (uniform, block)."})
     recompute_num_layers: int = field(default=None, metadata={"help": "number of layers to recompute."})
@@ -2498,6 +2499,11 @@ class MegatronLMPlugin:
             self.pp_degree = int(os.environ.get(prefix + "PP_DEGREE", 1))
         if self.use_custom_fsdp is None:
             self.use_custom_fsdp = str_to_bool(os.environ.get(prefix + "USE_CUSTOM_FSDP", "False")) == 1
+        if self.decoder_last_pipeline_num_layers is None:
+            if os.environ.get(prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS") is not None:
+                self.decoder_last_pipeline_num_layers = int(os.environ.get(prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS", 0))
+            else:
+                self.decoder_last_pipeline_num_layers = None
         if self.num_micro_batches is None:
             self.num_micro_batches = int(os.environ.get(prefix + "NUM_MICRO_BATCHES", 1))
         if self.gradient_clipping is None:
@@ -2564,6 +2570,7 @@ class MegatronLMPlugin:
             "eval_iters": self.eval_iters,
             "eval_interval": self.eval_interval,
             "use_custom_fsdp": self.use_custom_fsdp,
+            "decoder_last_pipeline_num_layers": self.decoder_last_pipeline_num_layers,
             "recompute_granularity": self.recompute_granularity,
             "recompute_method": self.recompute_method,
             "recompute_num_layers": self.recompute_num_layers,
@@ -3019,7 +3026,7 @@ def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["rotary_base"] = model.config.rope_theta
     megatron_lm_plugin.megatron_lm_default_args["rope_type"] = 'rope'
     megatron_lm_plugin.megatron_lm_default_args["rotary_percent"] = model.config.partial_rotary_factor
-    megatron_lm_plugin.megatron_lm_default_args["decoder_last_pipeline_num_layers"] = 1
+    # megatron_lm_plugin.megatron_lm_default_args["decoder_last_pipeline_num_layers"] = 1
     megatron_lm_plugin.megatron_lm_default_args["context_parallel_size"] = model.config.context_parallel_size
     # megatron_lm_plugin.megatron_lm_default_args["initial_loss_scale"] = 2**5
     megatron_lm_plugin.megatron_lm_default_args["norm_epsilon"] = 1e-3

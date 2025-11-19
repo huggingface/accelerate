@@ -625,6 +625,12 @@ def launch_command_parser(subparsers=None):
         help="Whether to use custom FSDP. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
+        "--megatron_lm_decoder_last_pipeline_num_layers",
+        type=int,
+        default=None,
+        help="Megatron-LM's decoder last pipeline number of layers, default None is even split of transformer layers across all pipeline stages.",
+    )    
+    megatron_lm_args.add_argument(
         "--megatron_lm_pp_degree",
         type=int,
         default=1,

@@ -336,6 +336,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         current_env["ACCELERATE_USE_MEGATRON_LM"] = "true"
         current_env[prefix + "TP_DEGREE"] = str(args.megatron_lm_tp_degree)
         current_env[prefix + "USE_CUSTOM_FSDP"] = str(args.megatron_lm_use_custom_fsdp)
+        current_env[prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS"] = str(args.megatron_lm_decoder_last_pipeline_num_layers)
         current_env[prefix + "PP_DEGREE"] = str(args.megatron_lm_pp_degree)
         current_env[prefix + "GRADIENT_CLIPPING"] = str(args.megatron_lm_gradient_clipping)
         if args.megatron_lm_num_micro_batches is not None:
