@@ -625,6 +625,24 @@ def launch_command_parser(subparsers=None):
         help="Whether to use custom FSDP. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
+        "--megatron_lm_no_save_optim",
+        type=bool,
+        default=False,
+        help="Whether to not save optimizer. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_optimizer_cpu_offload",
+        type=bool,
+        default=False,
+        help="Whether to use CPU offload for optimizer. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_use_precision_aware_optimizer",
+        type=bool,
+        default=False,
+        help="Whether to use precision aware optimizer. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
         "--megatron_lm_decoder_last_pipeline_num_layers",
         type=int,
         default=None,

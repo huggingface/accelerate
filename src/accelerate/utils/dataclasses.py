@@ -2311,6 +2311,9 @@ class MegatronLMPlugin:
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
     pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
     use_custom_fsdp: bool = field(default=None, metadata={"help": "use custom fsdp."})
+    no_save_optim: bool = field(default=None, metadata={"help": "do not save optimizer."})
+    optimizer_cpu_offload: bool = field(default=None, metadata={"help": "use CPU offload for optimizer."})
+    use_precision_aware_optimizer: bool = field(default=None, metadata={"help": "use precision aware optimizer."})
     decoder_last_pipeline_num_layers: int = field(default=None, metadata={"help": "decoder last pipeline number of layers, default None is even split of transformer layers across all pipeline stages."})
     recompute_granularity: str = field(default=None, metadata={"help": "recompute granularity (full, selective)."})
     recompute_method: str = field(default=None, metadata={"help": "recompute method (uniform, block)."})
@@ -2499,6 +2502,12 @@ class MegatronLMPlugin:
             self.pp_degree = int(os.environ.get(prefix + "PP_DEGREE", 1))
         if self.use_custom_fsdp is None:
             self.use_custom_fsdp = str_to_bool(os.environ.get(prefix + "USE_CUSTOM_FSDP", "False")) == 1
+        if self.no_save_optim is None:
+            self.no_save_optim = str_to_bool(os.environ.get(prefix + "NO_SAVE_OPTIM", "False")) == 1
+        if self.optimizer_cpu_offload is None:
+            self.optimizer_cpu_offload = str_to_bool(os.environ.get(prefix + "OPTIMIZER_CPU_OFFLOAD", "False")) == 1
+        if self.use_precision_aware_optimizer is None:
+            self.use_precision_aware_optimizer = str_to_bool(os.environ.get(prefix + "USE_PRECISION_AWARE_OPTIMIZER", "False")) == 1
         if self.decoder_last_pipeline_num_layers is None:
             if os.environ.get(prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS") is not None:
                 self.decoder_last_pipeline_num_layers = int(os.environ.get(prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS", 0))
@@ -2570,6 +2579,9 @@ class MegatronLMPlugin:
             "eval_iters": self.eval_iters,
             "eval_interval": self.eval_interval,
             "use_custom_fsdp": self.use_custom_fsdp,
+            "no_save_optim": self.no_save_optim,
+            "optimizer_cpu_offload": self.optimizer_cpu_offload,
+            "use_precision_aware_optimizer": self.use_precision_aware_optimizer,
             "decoder_last_pipeline_num_layers": self.decoder_last_pipeline_num_layers,
             "recompute_granularity": self.recompute_granularity,
             "recompute_method": self.recompute_method,

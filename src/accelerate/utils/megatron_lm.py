@@ -124,7 +124,7 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
     # # args.use_torch_fsdp2 = True
     # # args.optimizer_cpu_offload = True
     # # args.overlap_cpu_optimizer_d2h_h2d = True
-
+    # args.no_save_optim = True
     # args.use_custom_fsdp = True
     # args.sequence_parallel = True
     # args.attention_backend = True
