@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import os
+
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     execute_subprocess_async,
@@ -60,4 +62,18 @@ class TPIntegrationTest(TempDirTestCase):
             ]
         )
         with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd)
+
+    def test_working_of_tp_and_fsdp(self):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.test_file_path = os.path.join(current_dir, "fsdp2_tp_preparation.py")
+        self.test_config_path = os.path.join(current_dir, "fsdp2_tp_preparation_config.yaml")
+        cmd = get_launch_command()
+        cmd.extend(
+            [
+                f"--config_file={self.test_config_path}",
+                self.test_file_path,
+            ]
+        )
+        with patch_environment(omp_num_threads=4):
             execute_subprocess_async(cmd)
