@@ -132,6 +132,8 @@ machine_rank: 0
 num_machines: 1
 num_processes: 2
 parallelism_config:
+  parallelism_config_dp_replicate_size: 1
+  parallelism_config_dp_shard_size: 1  # Must satisfy: 1 × 1 × 2 = 2 num_processes
   parallelism_config_sp_size: 2
   parallelism_config_sp_backend: deepspeed
   parallelism_config_sp_seq_length_is_variable: true
