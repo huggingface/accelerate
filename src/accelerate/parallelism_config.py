@@ -55,7 +55,7 @@ class ParallelismConfig:
             Which CP backend to use: `torch` (FSDP2)
         sp_size (`int`, defaults to `1`):
             The size of the sequence parallel group.
-        sp_backend (`str`, defaults to `torch`):
+        sp_backend (`str`, defaults to `deepspeed`):
             Which SP backend to use:`deepspeed` (ALST/Ulysses)
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
