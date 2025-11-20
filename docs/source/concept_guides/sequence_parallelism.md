@@ -93,9 +93,12 @@ To give a sense of what ALST made possible - it allowed us to train in bf16 with
 To configure the `deepspeed` backend:
 
 ```python
+# Example: 4 GPUs with sp_size=4, dp_shard_size=1
+# Ensure: dp_replicate_size × dp_shard_size × sp_size = 1 × 1 × 4 = 4 GPUs
 parallelism_config = ParallelismConfig(
     sp_backend="deepspeed",
     sp_size=4,
+    dp_shard_size=1,  # Explicit: no data parallelism
     sp_handler=DeepSpeedSequenceParallelConfig(
         sp_seq_length=256,
         sp_seq_length_is_variable=True,
