@@ -24,10 +24,6 @@ from accelerate.utils.constants import (
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
 )
-    BETA_SP_AVAILABLE_DEEPSPEED_VERSION,
-    BETA_TP_AVAILABLE_PYTORCH_VERSION,
-    BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
-)
 from accelerate.utils.imports import is_deepspeed_available, is_transformers_available
 from accelerate.utils.versions import compare_versions, is_torch_version
 
