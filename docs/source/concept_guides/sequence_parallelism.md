@@ -77,6 +77,8 @@ accelerate launch --parallelism-config-sp-size 8  ...
 > [!Tip]
 > sequence parallelism combines with data parallelism. It doesn't require additional GPUs.
 > So if you have 8 gpus you can do: `--parallelism-config-dp-shard-size 8 --parallelism-config-sp-size 8`. Or you can use the `ParallelismConfig` class to set them programmatically.
+>
+> **Important**: You must ensure `dp_replicate_size × dp_shard_size × sp_size = num_processes`. For example, with 8 GPUs and `sp_size=8`, you need `dp_shard_size=1` (since 1 × 1 × 8 = 8). With 4 GPUs and `sp_size=2`, you could use `dp_shard_size=2` (since 1 × 2 × 2 = 4) for 2D parallelism.
 
 
 ## ALST/Ulysses SP backend configuration
