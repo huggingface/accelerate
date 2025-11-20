@@ -34,8 +34,12 @@ def _should_skip_cp_test(cp_size):
 
 
 def _should_skip_sp_test(sp_size):
-    """Check if CP test should be skipped based on sp_size and deepspeed version."""
-    return sp_size > 1 and not compare_versions("deepspeed", ">=", BETA_SP_AVAILABLE_DEEPSPEED_VERSION)
+    """Check if SP test should be skipped based on sp_size and deepspeed version."""
+    if sp_size <= 1:
+        return False
+    if not is_deepspeed_available():
+        return True
+    return not compare_versions("deepspeed", ">=", BETA_SP_AVAILABLE_DEEPSPEED_VERSION)
 
 
 def _should_skip_tp_test(tp_size):
