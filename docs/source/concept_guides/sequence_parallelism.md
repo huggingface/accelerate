@@ -144,8 +144,11 @@ parallelism_config:
 As mentioned earlier Ulysses sequence parallelism is normally overlayed with data parallelism - same ranks are used for feeding unique data streams and also perform Ulysses Sequence Parallelism. But you could also create replicas like so:
 
 ```python
+# Example: 4 GPUs with 2D parallelism (SP=2, DP=2)
+# Ensure: dp_replicate_size × dp_shard_size × sp_size = 2 × 1 × 2 = 4 GPUs
 parallelism_config = ParallelismConfig(
     dp_replicate_size=2,
+    dp_shard_size=1,  # Explicit: no sharding within replicas
     sp_size=2,
     sp_backend="deepspeed",
     sp_handler=DeepSpeedSequenceParallelConfig(...),
