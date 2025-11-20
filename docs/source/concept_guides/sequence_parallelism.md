@@ -50,9 +50,12 @@ Currently the only sequence parallelism backend is `deepspeed`, which comes from
 ```diff
 from accelerate.utils import ParallelismConfig, DeepSpeedSequenceParallelConfig
 
++# Example: 4 GPUs with sp_size=4, dp_shard_size=1
++# Ensure: dp_replicate_size × dp_shard_size × sp_size = 1 × 1 × 4 = 4 GPUs
 parallelism_config = ParallelismConfig(
 +     sp_backend="deepspeed",
 +     sp_size=4,
++     dp_shard_size=1,  # Explicit: no data parallelism
 +     sp_handler=DeepSpeedSequenceParallelConfig(
 +         sp_seq_length_is_variable: true,
 +         sp_attn_implementation="sdpa",
