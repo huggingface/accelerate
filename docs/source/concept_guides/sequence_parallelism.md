@@ -177,9 +177,11 @@ for iter, batch in enumerate(dl):
         good_tokens_per_rank = torch.distributed.nn.functional.all_gather(
             good_tokens, group=sp_group
         )
+        # Skip ranks with zero valid tokens to avoid NaN contamination (NaN * 0 = NaN)
         total_loss = sum(
             losses_per_rank[rank] * good_tokens_per_rank[rank]
             for rank in range(sp_world_size)
+            if good_tokens_per_rank[rank] > 0
         )
         total_good_tokens = sum(good_tokens_per_rank)
         loss = total_loss / max(total_good_tokens, 1)
