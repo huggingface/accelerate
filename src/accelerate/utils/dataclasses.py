@@ -2311,6 +2311,7 @@ class MegatronLMPlugin:
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
     pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
     use_custom_fsdp: bool = field(default=None, metadata={"help": "use custom fsdp."})
+    overlap_cpu_optimizer_d2h_h2d: bool = field(default=None, metadata={"help": "overlap CPU optimizer step, gradients D2H and updated parameters H2D."})
     no_save_optim: bool = field(default=None, metadata={"help": "do not save optimizer."})
     optimizer_cpu_offload: bool = field(default=None, metadata={"help": "use CPU offload for optimizer."})
     use_precision_aware_optimizer: bool = field(default=None, metadata={"help": "use precision aware optimizer."})
@@ -2506,6 +2507,8 @@ class MegatronLMPlugin:
             self.no_save_optim = str_to_bool(os.environ.get(prefix + "NO_SAVE_OPTIM", "False")) == 1
         if self.optimizer_cpu_offload is None:
             self.optimizer_cpu_offload = str_to_bool(os.environ.get(prefix + "OPTIMIZER_CPU_OFFLOAD", "False")) == 1
+        if self.overlap_cpu_optimizer_d2h_h2d is None:
+            self.overlap_cpu_optimizer_d2h_h2d = str_to_bool(os.environ.get(prefix + "OVERLAP_CPU_OPTIMIZER_D2H_H2D", "False")) == 1
         if self.use_precision_aware_optimizer is None:
             self.use_precision_aware_optimizer = str_to_bool(os.environ.get(prefix + "USE_PRECISION_AWARE_OPTIMIZER", "False")) == 1
         if self.decoder_last_pipeline_num_layers is None:
@@ -2581,6 +2584,7 @@ class MegatronLMPlugin:
             "use_custom_fsdp": self.use_custom_fsdp,
             "no_save_optim": self.no_save_optim,
             "optimizer_cpu_offload": self.optimizer_cpu_offload,
+            "overlap_cpu_optimizer_d2h_h2d": self.overlap_cpu_optimizer_d2h_h2d,
             "use_precision_aware_optimizer": self.use_precision_aware_optimizer,
             "decoder_last_pipeline_num_layers": self.decoder_last_pipeline_num_layers,
             "recompute_granularity": self.recompute_granularity,

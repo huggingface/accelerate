@@ -342,6 +342,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
             current_env[prefix + "OPTIMIZER_CPU_OFFLOAD"] = str(args.megatron_lm_optimizer_cpu_offload)
         if args.megatron_lm_use_precision_aware_optimizer is not None:
             current_env[prefix + "USE_PRECISION_AWARE_OPTIMIZER"] = str(args.megatron_lm_use_precision_aware_optimizer)
+        if args.megatron_lm_overlap_cpu_optimizer_d2h_h2d is not None:
+            current_env[prefix + "OVERLAP_CPU_OPTIMIZER_D2H_H2D"] = str(args.megatron_lm_overlap_cpu_optimizer_d2h_h2d)
         if args.megatron_lm_decoder_last_pipeline_num_layers is not None:
             current_env[prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS"] = str(args.megatron_lm_decoder_last_pipeline_num_layers)
         current_env[prefix + "PP_DEGREE"] = str(args.megatron_lm_pp_degree)

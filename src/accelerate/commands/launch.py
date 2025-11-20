@@ -625,6 +625,12 @@ def launch_command_parser(subparsers=None):
         help="Whether to use custom FSDP. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
+        "--megatron_lm_overlap_cpu_optimizer_d2h_h2d",
+        type=bool,
+        default=False,
+        help="Whether to overlap CPU optimizer step, gradients D2H and updated parameters H2D. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
         "--megatron_lm_no_save_optim",
         type=bool,
         default=False,
