@@ -1,5 +1,5 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -15,9 +15,14 @@
 import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
-from accelerate.utils.dataclasses import TorchContextParallelConfig, TorchTensorParallelConfig
+from accelerate.utils.dataclasses import (
+    DeepSpeedSequenceParallelConfig,
+    DistributedType,
+    TorchContextParallelConfig,
+    TorchTensorParallelConfig,
+)
 from accelerate.utils.versions import is_torch_version
 
 
@@ -41,11 +46,17 @@ class ParallelismConfig:
         tp_size (`int`, defaults to `1`):
             The size of the tensor parallel group. If `tp_size` is set to `1`, the tensor parallel group will not be
             used.
+        tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
+            The handler for the tensor parallel group.
         cp_size (`int`, defaults to `1`):
             The size of the context parallel group. Currently not supported, but reserved for future use and enabled
             for downstream libraries.
-        tp_handler (`~utils.TorchTensorParallelConfig`, defaults to `None`):
-            The handler for the tensor parallel group.
+        cp_backend (`str`, defaults to `torch`):
+            Which CP backend to use: `torch` (FSDP2)
+        sp_size (`int`, defaults to `1`):
+            The size of the sequence parallel group.
+        sp_backend (`str`, defaults to `deepspeed`):
+            Which SP backend to use:`deepspeed` (ALST/Ulysses)
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
     together:
@@ -60,10 +71,14 @@ class ParallelismConfig:
     dp_shard_size: Optional[int] = None
     tp_size: Optional[int] = None
     cp_size: Optional[int] = None
+    cp_backend: Literal["torch"] = None
+    sp_size: Optional[int] = None
+    sp_backend: Literal["deepspeed"] = None
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
     cp_handler: Union[None, TorchContextParallelConfig] = None
+    sp_handler: Union[None, DeepSpeedSequenceParallelConfig] = None
 
     device_mesh = None
 
@@ -74,6 +89,9 @@ class ParallelismConfig:
             f"\tdp_shard_size={self.dp_shard_size},\n"
             f"\ttp_size={self.tp_size},\n"
             f"\tcp_size={self.cp_size},\n"
+            f"\tcp_backend={self.cp_backend},\n"
+            f"\tsp_size={self.sp_size},\n"
+            f"\tsp_backend={self.sp_backend},\n"
             f"\ttotal_size={self.total_size}\n"
             f"\ttp_handler={self.tp_handler},\n"
             f"\tcp_handler={self.cp_handler})\n"
@@ -110,6 +128,8 @@ class ParallelismConfig:
             dims += ["tp"]
         if self.cp_enabled:
             dims += ["cp"]
+        if self.sp_enabled:
+            dims += ["sp"]
         return dims
 
     @property
@@ -146,12 +166,12 @@ class ParallelismConfig:
     @property
     def total_size(self):
         """The total size of the parallelism configuration, which is the product of all sizes."""
-        return self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size
+        return self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size * self.sp_size
 
     @property
     def non_data_parallel_size(self):
         """The size of the non-data parallel dimensions, which is the product of tensor and context parallel sizes."""
-        return self.tp_size * self.cp_size
+        return self.tp_size * self.cp_size * self.sp_size
 
     @property
     def data_parallel_size(self):
@@ -177,6 +197,11 @@ class ParallelismConfig:
     def cp_enabled(self):
         """True if context parallelism is enabled, i.e. `cp_size > 1`."""
         return self.cp_size > 1
+
+    @property
+    def sp_enabled(self):
+        """True if context parallelism is enabled, i.e. `sp_size > 1`."""
+        return self.sp_size > 1
 
     @property
     def active_mesh_dims(self):
@@ -234,7 +259,7 @@ class ParallelismConfig:
         mesh_dims = {parallelism: self._sizes[parallelism] for parallelism in self.active_mesh_dims}
 
         # Apply canonical ordering
-        mesh_order = ["dp_replicate", "dp_shard", "cp", "tp"]
+        mesh_order = ["dp_replicate", "dp_shard", "cp", "sp", "tp"]
         sorted_items = sorted(
             mesh_dims.items(),
             key=lambda x: (mesh_order.index(x[0])),
@@ -251,6 +276,12 @@ class ParallelismConfig:
             self.tp_size = int(os.environ.get("PARALLELISM_CONFIG_TP_SIZE", "1"))
         if self.cp_size is None:
             self.cp_size = int(os.environ.get("PARALLELISM_CONFIG_CP_SIZE", "1"))
+        if self.cp_backend is None:
+            self.cp_backend = os.environ.get("PARALLELISM_CONFIG_CP_BACKEND", "torch")
+        if self.sp_size is None:
+            self.sp_size = int(os.environ.get("PARALLELISM_CONFIG_SP_SIZE", "1"))
+        if self.sp_backend is None:
+            self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND", "deepspeed")
 
         if self.tp_size > 1:
             if self.tp_handler is None:
@@ -259,7 +290,18 @@ class ParallelismConfig:
         if self.cp_size > 1:
             if self.cp_handler is None:
                 self.cp_handler = TorchContextParallelConfig()
+            else:
+                cp_backends_config_map = dict(
+                    torch=TorchContextParallelConfig,
+                )
+                if not isinstance(self.cp_handler, cp_backends_config_map[self.cp_backend]):
+                    raise ValueError(
+                        f"ParallelismConfig's cp_backend={self.cp_backend} requires {cp_backends_config_map[self.cp_backend]}, but cp_handler was set to {type(self.cp_handler)}"
+                    )
 
+        if self.sp_size > 1:
+            if self.sp_handler is None:
+                self.sp_handler = DeepSpeedSequenceParallelConfig()
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
         if self.dp_shard_size < 1:
@@ -268,6 +310,15 @@ class ParallelismConfig:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
         if self.cp_size < 1:
             raise ValueError(f"cp_size must be at least 1, but got {self.cp_size}")
+        valid_cp_backends = ["torch"]
+        if self.cp_backend not in valid_cp_backends:
+            raise ValueError(f"cp_backend must be one of {valid_cp_backends}, but got {self.cp_backend}")
+
+        if self.sp_size < 1:
+            raise ValueError(f"sp_size must be at least 1, but got {self.sp_size}")
+        valid_sp_backends = ["deepspeed"]
+        if self.sp_backend not in valid_sp_backends:
+            raise ValueError(f"sp_backend must be one of {valid_sp_backends}, but got {self.sp_backend}")
 
         if (self.tp_size > 1 or self.cp_size > 1) and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
             raise ValueError(
@@ -280,6 +331,7 @@ class ParallelismConfig:
             "dp_shard": self.dp_shard_size,
             "tp": self.tp_size,
             "cp": self.cp_size,
+            "sp": self.sp_size,
         }
 
     def _set_size(self, parallelism: str, size: int):
@@ -301,12 +353,16 @@ class ParallelismConfig:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
                 f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
-                f"dp_shard_size/tp_size/cp_size."
+                f"dp_shard_size/tp_size/cp_size/sp_size."
             )
 
-        if self.total_size > 1 and not (accelerator.is_fsdp2 or accelerator.multi_device):
+        if self.total_size > 1 and not (
+            accelerator.is_fsdp2
+            or accelerator.multi_device
+            or accelerator.distributed_type == DistributedType.DEEPSPEED
+        ):
             raise ValueError(
-                f"ParallelismConfig is only compatible DistributedType.FSDP (version 2) or DistributedType.Multi{{Device}}, but got {accelerator.distributed_type}."
+                f"ParallelismConfig is only compatible DistributedType.FSDP (version 2) or DistributedType.Multi{{Device}} or DistributedType.DEEPSPEED, but got {accelerator.distributed_type}."
             )
 
         for parallelism, size in self._sizes.items():

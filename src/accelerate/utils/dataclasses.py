@@ -1227,6 +1227,7 @@ class DeepSpeedPlugin:
 
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
+
         if (
             isinstance(self.hf_ds_config, dict)
             or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
@@ -2170,14 +2171,65 @@ class TorchContextParallelConfig:
     def __post_init__(self):
         if not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION):
             raise ValueError(
-                f"Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                f"FSDP2-based Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
                 "Please upgrade your PyTorch version."
             )
+
         if self.cp_comm_strategy is None:
             self.cp_comm_strategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
         if self.cp_comm_strategy not in ["allgather", "alltoall"]:
             raise ValueError(
                 f"Invalid cp_comm_strategy: {self.cp_comm_strategy}. Must be one of 'allgather' or 'alltoall'."
+            )
+
+
+@dataclass
+class DeepSpeedSequenceParallelConfig:
+    sp_seq_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `sp_seq_length_is_variable=True` and leave this field unset"
+        },
+    )
+    sp_seq_length_is_variable: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "If `True` will work with a sequence length that may change between batches, in which case `sp_seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `sp_seq_length` needs to match the batch's sequence length dimension. The default is `True`."
+        },
+    )
+    sp_attn_implementation: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`."
+        },
+    )
+
+    def __post_init__(self):
+        # sp_seq_length_is_variable and sp_seq_length are interconnected
+        if self.sp_seq_length_is_variable is None:
+            self.sp_seq_length_is_variable = (
+                os.environ.get("PARALLELISM_CONFIG_SP_SEQ_LENGTH_IS_VARIABLE", "true").lower() == "true"
+            )
+
+        if not self.sp_seq_length_is_variable and self.sp_seq_length is None:
+            if "PARALLELISM_CONFIG_SP_SEQ_LENGTH" not in os.environ:
+                raise ValueError(
+                    "when `sp_seq_length_is_variable` is `False` `sp_seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_SP_SEQ_LENGTH"
+                )
+            else:
+                self.sp_seq_length = os.environ.get("PARALLELISM_CONFIG_SP_SEQ_LENGTH")
+                self.sp_seq_length = None if self.sp_seq_length == "None" else int(self.sp_seq_length)
+
+        if self.sp_attn_implementation is None:
+            self.sp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_SP_ATTN_IMPLEMENTATION", None)
+
+        if self.sp_attn_implementation is not None and self.sp_attn_implementation not in [
+            "flash_attention_2",
+            "flash_attention_3",
+            "sdpa",
+        ]:
+            raise ValueError(
+                f"Invalid sp_attn_implementation: {self.sp_attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
             )
 
 

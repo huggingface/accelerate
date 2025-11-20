@@ -42,6 +42,7 @@ from .dataclasses import (
     DataLoaderConfiguration,
     DDPCommunicationHookType,
     DeepSpeedPlugin,
+    DeepSpeedSequenceParallelConfig,
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,

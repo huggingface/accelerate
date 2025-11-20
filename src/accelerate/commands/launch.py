@@ -771,6 +771,7 @@ def launch_command_parser(subparsers=None):
         "ParallelismConfig Arguments",
         "Arguments related to the ParallelismConfig used for distributed training.",
     )
+
     parallelism_config_args.add_argument(
         "--parallelism_config_dp_replicate_size",
         type=int,
@@ -798,11 +799,56 @@ def launch_command_parser(subparsers=None):
         default=1,
         help="The number of processese for context parallel training. Defaults to 1 (no context parallelism).",
     )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_cp_backend",
+        type=str,
+        choices=["torch"],
+        default="torch",
+        help="Context Parallelism backend: torch (FSDP2) or deepspeed (ALST/Ulysses)",
+    )
+
     parallelism_config_args.add_argument(
         "--parallelism_config_cp_comm_strategy",
         type=str,
         default="allgather",
         help="The communication strategy for context parallel training. Defaults to 'allgather'. Other option is alltoall",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_size",
+        type=int,
+        default=1,
+        help="The number of processese for context parallel training. Defaults to 1 (no context parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_backend",
+        type=str,
+        choices=["deepspeed"],
+        default="deepspeed",
+        help="Sequence Parallelism backend: deepspeed (ALST/Ulysses)",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_seq_length",
+        type=str,
+        default=None,
+        help="Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `parallelism_config_sp_seq_length_is_variable=True`",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_seq_length_is_variable",
+        type=bool,
+        default=True,
+        help="If `True` will work with a sequence length that may change between batches, in which case `parallelism_config_sp_seq_length` value can be set to anything divisible by sp size or remain unset. If `False` then `parallelism_config_sp_seq_length` needs to match the batch's sequence length dimension. The default is `True`.",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_attn_implementation",
+        type=str,
+        default="sdpa",
+        help="Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`.",
     )
 
     # Other arguments of the training scripts

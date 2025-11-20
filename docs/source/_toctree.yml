@@ -94,6 +94,8 @@
     title: FSDP1 vs FSDP2
   - local: concept_guides/context_parallelism
     title: Context parallelism
+  - local: concept_guides/sequence_parallelism
+    title: Sequence parallelism
   - local: concept_guides/low_precision_training
     title: Low precision training methods
   - local: concept_guides/training_tpu
