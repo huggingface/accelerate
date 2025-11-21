@@ -2654,7 +2654,7 @@ class MegatronLMPlugin:
     def set_network_size_args(self, model, batch_data=None):
         model_config_type = model.config.model_type.lower()
         for model_type in MODEL_CONFIGS_TO_MEGATRON_PARSERS.keys():
-            if model_type == model_config_type:
+            if model_type in model_config_type:
                 MODEL_CONFIGS_TO_MEGATRON_PARSERS[model_type](self, model, batch_data)
                 return
         raise ValueError(
