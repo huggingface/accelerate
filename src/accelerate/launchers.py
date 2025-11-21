@@ -24,6 +24,7 @@ from .utils import (
     PrepareForLaunch,
     are_libraries_initialized,
     check_cuda_p2p_ib_support,
+    get_current_device_type,
     get_gpu_info,
     is_mps_available,
     is_torch_version,
@@ -203,8 +204,8 @@ def notebook_launcher(
             # process here (the other ones will be set be the launcher).
             with patch_environment(**patched_env):
                 # First dummy launch
-                device_type = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
-                distributed_type = "MULTI_XPU" if device_type == "xpu" else "MULTI_GPU"
+                # Determine device type without initializing any device (which would break fork)
+                device_type, distributed_type = get_current_device_type()
                 if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
                     launcher = PrepareForLaunch(test_launch, distributed_type=distributed_type)
                     try:

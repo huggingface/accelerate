@@ -75,6 +75,7 @@ from .environment import (
     clear_environment,
     convert_dict_to_env_variables,
     get_cpu_distributed_information,
+    get_current_device_type,
     get_gpu_info,
     get_int_from_env,
     parse_choice_from_env,
