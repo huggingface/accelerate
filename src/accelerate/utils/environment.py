@@ -120,7 +120,14 @@ def get_current_device_type() -> tuple[str, str]:
         >>> print(distributed_type)  # "MULTI_GPU"
         ```
     """
-    from .imports import is_hpu_available, is_mlu_available, is_musa_available, is_npu_available, is_sdaa_available, is_xpu_available
+    from .imports import (
+        is_hpu_available,
+        is_mlu_available,
+        is_musa_available,
+        is_npu_available,
+        is_sdaa_available,
+        is_xpu_available,
+    )
 
     if is_mlu_available():
         return "mlu", "MULTI_MLU"
