@@ -98,6 +98,56 @@ def are_libraries_initialized(*library_names: str) -> list[str]:
     return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
 
 
+def get_current_device_type() -> tuple[str, str]:
+    """
+    Determines the current device type and distributed type without initializing any device.
+
+    This is particularly important when using fork-based multiprocessing, as device initialization
+    before forking can cause errors.
+
+    The device detection order follows the same priority as state.py:_prepare_backend():
+    MLU -> SDAA -> MUSA -> NPU -> HPU -> CUDA -> XPU
+
+    Returns:
+        tuple[str, str]: A tuple of (device_type, distributed_type)
+            - device_type: The device string (e.g., "cuda", "npu", "xpu")
+            - distributed_type: The distributed type string (e.g., "MULTI_GPU", "MULTI_NPU")
+
+    Example:
+        ```python
+        >>> device_type, distributed_type = get_current_device_type()
+        >>> print(device_type)  # "cuda"
+        >>> print(distributed_type)  # "MULTI_GPU"
+        ```
+    """
+    from .imports import (
+        is_hpu_available,
+        is_mlu_available,
+        is_musa_available,
+        is_npu_available,
+        is_sdaa_available,
+        is_xpu_available,
+    )
+
+    if is_mlu_available():
+        return "mlu", "MULTI_MLU"
+    elif is_sdaa_available():
+        return "sdaa", "MULTI_SDAA"
+    elif is_musa_available():
+        return "musa", "MULTI_MUSA"
+    elif is_npu_available():
+        return "npu", "MULTI_NPU"
+    elif is_hpu_available():
+        return "hpu", "MULTI_HPU"
+    elif torch.cuda.is_available():
+        return "cuda", "MULTI_GPU"
+    elif is_xpu_available():
+        return "xpu", "MULTI_XPU"
+    else:
+        # Default to CUDA even if not available (for CPU-only scenarios where CUDA code paths are still used)
+        return "cuda", "MULTI_GPU"
+
+
 def _nvidia_smi():
     """
     Returns the right nvidia-smi command based on the system.
@@ -248,7 +298,7 @@ def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = N
 
         if not is_pynvml_available():
             raise ImportError(
-                "To set CPU affinity on CUDA GPUs the `pynvml` package must be available. (`pip install pynvml`)"
+                "To set CPU affinity on CUDA GPUs the `nvidia-ml-py` package must be available. (`pip install nvidia-ml-py`)"
             )
         import pynvml as nvml
 
