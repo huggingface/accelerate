@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) enables training large transformer language models at scale.
 It provides efficient tensor, pipeline and sequence based model parallelism for pre-training transformer based
-Language Models such as [GPT](https://arxiv.org/abs/2005.14165) (Decoder Only), [BERT](https://arxiv.org/pdf/1810.04805.pdf) (Encoder Only) and [T5](https://arxiv.org/abs/1910.10683) (Encoder-Decoder).
+Language Models such as [GPT](https://huggingface.co/papers/2005.14165) (Decoder Only), [BERT](https://huggingface.co/papers/1810.04805) (Encoder Only) and [T5](https://huggingface.co/papers/1910.10683) (Encoder-Decoder).
 For detailed information and how things work behind the scene please refer to the github [repo](https://github.com/NVIDIA/Megatron-LM).
 
 ## What is integrated?
@@ -31,7 +31,7 @@ Each tensor is split into multiple chunks with each shard residing on separate G
 independently and in parallel by each shard followed by syncing across all GPUs (`all-reduce` operation). 
 In a simple transformer layer, this leads to 2 `all-reduces` in the forward path and 2 in the backward path.
 For more details, please refer to the research paper [Megatron-LM: Training Multi-Billion Parameter Language Models Using
-Model Parallelism](https://arxiv.org/pdf/1909.08053.pdf) and 
+Model Parallelism](https://huggingface.co/papers/1909.08053) and 
 this section of blogpost [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#tensor-parallelism).
 
 
@@ -40,7 +40,7 @@ Reduces the bubble of naive PP via PipeDream-Flush schedule/1F1B schedule and In
 Layers are distributed uniformly across PP stages. For example, if a model has `24` layers and we have `4` GPUs for
 pipeline parallelism, each GPU will have `6` layers (24/4). For more details on schedules to reduce the idle time of PP,
 please refer to the research paper [Efficient Large-Scale Language Model Training on GPU Clusters
-Using Megatron-LM](https://arxiv.org/pdf/2104.04473.pdf) and 
+Using Megatron-LM](https://huggingface.co/papers/2104.04473) and 
 this section of blogpost [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#pipeline-parallelism).
 
 c. **Sequence Parallelism (SP)**: Reduces memory footprint without any additional communication. Only applicable when using TP.
@@ -50,21 +50,21 @@ As `all-reduce = reduce-scatter + all-gather`, this saves a ton of activation me
 To put it simply, it shards the outputs of each transformer layer along sequence dimension, e.g., 
 if the sequence length is `1024` and the TP size is `4`, each GPU will have `256` tokens (1024/4) for each sample. 
 This increases the batch size that can be supported for training. For more details, please refer to the research paper
-[Reducing Activation Recomputation in Large Transformer Models](https://arxiv.org/pdf/2205.05198.pdf). 
+[Reducing Activation Recomputation in Large Transformer Models](https://huggingface.co/papers/2205.05198). 
 
 d. **Data Parallelism (DP)** via Distributed Optimizer: Reduces the memory footprint by sharding optimizer states and gradients across DP ranks
 (versus the traditional method of replicating the optimizer state across data parallel ranks). 
 For example, when using Adam optimizer with mixed-precision training, each parameter accounts for 12 bytes of memory.
 This gets distributed equally across the GPUs, i.e., each parameter would account for 3 bytes (12/4) if we have 4 GPUs.
 For more details, please refer to the research paper [ZeRO: Memory Optimizations Toward Training Trillion
-Parameter Models](https://arxiv.org/pdf/1910.02054.pdf) and following section of blog 
+Parameter Models](https://huggingface.co/papers/1910.02054) and following section of blog 
 [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#zero-data-parallelism).
 
 e. **Selective Activation Recomputation**: Reduces the memory footprint of activations significantly via smart activation checkpointing.
 It doesn't store activations occupying large memory while being fast to recompute thereby achieving great tradeoff between memory and recomputation.
 For example, for GPT-3, this leads to 70% reduction in required memory for activations at the expense of
 only 2.7% FLOPs overhead for recomputation of activations. For more details, please refer to the research paper 
-[Reducing Activation Recomputation in Large Transformer Models](https://arxiv.org/pdf/2205.05198.pdf).
+[Reducing Activation Recomputation in Large Transformer Models](https://huggingface.co/papers/2205.05198).
 
 f. **Fused Kernels**: Fused Softmax, Mixed Precision Fused Layer Norm and Fused gradient accumulation to weight gradient computation of linear layer.
 PyTorch JIT compiled Fused GeLU and Fused Bias+Dropout+Residual addition.

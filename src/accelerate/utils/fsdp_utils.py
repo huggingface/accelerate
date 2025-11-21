@@ -470,7 +470,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
     import torch.distributed as dist
-    from torch.distributed.tensor import distribute_tensor
+    from torch.distributed.tensor import DTensor, distribute_tensor
 
     # Model was previously copied to meta device
     meta_sharded_sd = model.state_dict()
@@ -506,6 +506,11 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         for (param_name, full_param), sharded_param in zip(full_sd.items(), meta_sharded_sd.values()):
             device_mesh = sharded_param.device_mesh
             full_param = full_param.detach().to(device_mesh.device_type)
+            if isinstance(full_param, DTensor):
+                # dist.broadcast() only supports torch.Tensor.
+                # After prepare_tp(), model parameters may become DTensor.
+                # To broadcast such a parameter, convert it to a local tensor first.
+                full_param = full_param.to_local()
             dist.broadcast(full_param, src=0, group=dist.group.WORLD)
             sharded_tensor = distribute_tensor(full_param, device_mesh, sharded_param.placements)
             to_contiguous, casting_dtype = _infer_parameter_dtype(
@@ -630,11 +635,8 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
         "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
+        "ignored_params": get_parameters_from_modules(fsdp2_plugin.ignored_modules, model, accelerator.device),
     }
-    if fsdp2_plugin.ignored_modules is not None:
-        fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(
-            fsdp2_plugin.ignored_modules, model, accelerator.device
-        )
 
     model_has_params4bit = False
     for name, param in model.named_parameters():
@@ -808,10 +810,10 @@ def get_parameters_from_modules(
         modules (`Union[Iterable[torch.nn.Module], str]`): List of modules
 
     Returns:
-        `List[torch.nn.Parameter]`: List of parameters
+        `set[torch.nn.Parameter]`: List of parameters
     """
     if modules is None:
-        return None
+        return set()
     parameters = []
     # code taken from accelerate while preparing kwargs for FSDP
     if isinstance(modules, str):

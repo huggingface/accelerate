@@ -1227,6 +1227,7 @@ class DeepSpeedPlugin:
 
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
+
         if (
             isinstance(self.hf_ds_config, dict)
             or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
@@ -1911,6 +1912,9 @@ class FullyShardedDataParallelPlugin:
             self.cpu_ram_efficient_loading = (
                 str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")) == 1
             )
+        else:
+            # We still need to set it for transformers
+            os.environ[env_prefix + "CPU_RAM_EFFICIENT_LOADING"] = str(self.cpu_ram_efficient_loading)
         # There's no need to specify sync_module_states in FSDP2
         if self.fsdp_version == 1 and self.cpu_ram_efficient_loading and not self.sync_module_states:
             warnings.warn(
@@ -1918,17 +1922,6 @@ class FullyShardedDataParallelPlugin:
                 "Setting sync_module_states to True."
             )
             self.sync_module_states = True
-
-        if self.cpu_ram_efficient_loading != bool(
-            str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False"))
-        ):
-            env_var = env_prefix + "CPU_RAM_EFFICIENT_LOADING"
-            warnings.warn(
-                f"The `cpu_ram_efficient_loading` flag for `FullyShardedDataParallelPlugin` does not match the environment variable {env_var}. "
-                "Setting environment variable to match `cpu_ram_efficient_loading`."
-            )
-            os.environ[env_var] = str(self.cpu_ram_efficient_loading)
-
         if isinstance(self.mixed_precision_policy, str):
             # override is True since self.mixed_precision_policy is not None
             # has to be overwritten with the correct mixed precision object
@@ -2178,14 +2171,65 @@ class TorchContextParallelConfig:
     def __post_init__(self):
         if not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION):
             raise ValueError(
-                f"Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                f"FSDP2-based Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
                 "Please upgrade your PyTorch version."
             )
+
         if self.cp_comm_strategy is None:
             self.cp_comm_strategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
         if self.cp_comm_strategy not in ["allgather", "alltoall"]:
             raise ValueError(
                 f"Invalid cp_comm_strategy: {self.cp_comm_strategy}. Must be one of 'allgather' or 'alltoall'."
+            )
+
+
+@dataclass
+class DeepSpeedSequenceParallelConfig:
+    sp_seq_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `sp_seq_length_is_variable=True` and leave this field unset"
+        },
+    )
+    sp_seq_length_is_variable: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "If `True` will work with a sequence length that may change between batches, in which case `sp_seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `sp_seq_length` needs to match the batch's sequence length dimension. The default is `True`."
+        },
+    )
+    sp_attn_implementation: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`."
+        },
+    )
+
+    def __post_init__(self):
+        # sp_seq_length_is_variable and sp_seq_length are interconnected
+        if self.sp_seq_length_is_variable is None:
+            self.sp_seq_length_is_variable = (
+                os.environ.get("PARALLELISM_CONFIG_SP_SEQ_LENGTH_IS_VARIABLE", "true").lower() == "true"
+            )
+
+        if not self.sp_seq_length_is_variable and self.sp_seq_length is None:
+            if "PARALLELISM_CONFIG_SP_SEQ_LENGTH" not in os.environ:
+                raise ValueError(
+                    "when `sp_seq_length_is_variable` is `False` `sp_seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_SP_SEQ_LENGTH"
+                )
+            else:
+                self.sp_seq_length = os.environ.get("PARALLELISM_CONFIG_SP_SEQ_LENGTH")
+                self.sp_seq_length = None if self.sp_seq_length == "None" else int(self.sp_seq_length)
+
+        if self.sp_attn_implementation is None:
+            self.sp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_SP_ATTN_IMPLEMENTATION", None)
+
+        if self.sp_attn_implementation is not None and self.sp_attn_implementation not in [
+            "flash_attention_2",
+            "flash_attention_3",
+            "sdpa",
+        ]:
+            raise ValueError(
+                f"Invalid sp_attn_implementation: {self.sp_attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
             )
 
 
@@ -2848,7 +2892,7 @@ class BnbQuantizationConfig:
             Enable 8bit quantization.
         llm_int8_threshold (`float`, defaults to `6.0`):
             Value of the outliner threshold. Only relevant when `load_in_8bit=True`.
-        load_in_4_bit (`bool`, defaults to `False`):
+        load_in_4bit (`bool`, defaults to `False`):
             Enable 4bit quantization.
         bnb_4bit_quant_type (`str`, defaults to `fp4`):
             Set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','np4'}.

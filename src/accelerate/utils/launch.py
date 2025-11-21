@@ -385,18 +385,35 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     if args.enable_cpu_affinity:
         current_env["ACCELERATE_CPU_AFFINITY"] = "1"
 
-    if not args.use_parallelism_config:
-        return current_env
+    if args.use_parallelism_config:
+        current_env = prepare_extend_env_parallelism_config(args, current_env)
+
+    return current_env
+
+
+def prepare_extend_env_parallelism_config(
+    args: argparse.Namespace, current_env: dict
+) -> tuple[list[str], dict[str, str]]:
+    """
+    Extends `current_env` with context parallelism env vars if any have been set
+    """
 
     prefix = "PARALLELISM_CONFIG_"
-    if args.use_parallelism_config:
-        current_env["ACCELERATE_USE_PARALLELISM_CONFIG"] = "true"
-        current_env[prefix + "DP_REPLICATE_SIZE"] = str(args.parallelism_config_dp_replicate_size)
-        current_env[prefix + "TP_SIZE"] = str(args.parallelism_config_tp_size)
-        current_env[prefix + "CP_SIZE"] = str(args.parallelism_config_cp_size)
-        current_env[prefix + "DP_SHARD_SIZE"] = str(args.parallelism_config_dp_shard_size)
-        if args.parallelism_config_cp_size > 1:
-            current_env[prefix + "CP_COMM_STRATEGY"] = str(args.parallelism_config_cp_comm_strategy)
+
+    current_env["ACCELERATE_USE_PARALLELISM_CONFIG"] = "true"
+    current_env[prefix + "DP_REPLICATE_SIZE"] = str(args.parallelism_config_dp_replicate_size)
+    current_env[prefix + "DP_SHARD_SIZE"] = str(args.parallelism_config_dp_shard_size)
+    current_env[prefix + "TP_SIZE"] = str(args.parallelism_config_tp_size)
+    current_env[prefix + "CP_SIZE"] = str(args.parallelism_config_cp_size)
+    current_env[prefix + "CP_BACKEND"] = str(args.parallelism_config_cp_backend)
+    current_env[prefix + "SP_SIZE"] = str(args.parallelism_config_sp_size)
+    current_env[prefix + "SP_BACKEND"] = str(args.parallelism_config_sp_backend)
+    if args.parallelism_config_cp_size > 1:
+        current_env[prefix + "CP_COMM_STRATEGY"] = str(args.parallelism_config_cp_comm_strategy)
+    if args.parallelism_config_sp_size > 1:
+        current_env[prefix + "SP_SEQ_LENGTH"] = str(args.parallelism_config_sp_seq_length)
+        current_env[prefix + "SP_SEQ_LENGTH_IS_VARIABLE"] = str(args.parallelism_config_sp_seq_length_is_variable)
+        current_env[prefix + "SP_ATTN_IMPLEMENTATION"] = str(args.parallelism_config_sp_attn_implementation)
 
     return current_env
 
@@ -556,6 +573,10 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
         current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     if args.deepspeed_moe_layer_cls_names is not None:
         current_env["ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES"] = str(args.deepspeed_moe_layer_cls_names)
+
+    if args.use_parallelism_config:
+        current_env = prepare_extend_env_parallelism_config(args, current_env)
+
     return cmd, current_env
 
 

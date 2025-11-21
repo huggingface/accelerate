@@ -1,0 +1,12 @@
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
+  deepspeed_config_file: sp-alst.ds-config.json
+  zero3_init_flag: false
+distributed_type: DEEPSPEED
+machine_rank: 0
+main_training_function: main
+num_machines: 1
+num_processes: 4
+rdzv_backend: static
+same_network: true
+use_cpu: false
