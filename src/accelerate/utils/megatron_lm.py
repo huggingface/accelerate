@@ -22,6 +22,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
+
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
 from .imports import is_megatron_lm_available
@@ -704,8 +705,6 @@ class GPTTrainStep(AbstractTrainStep):
             tokens, labels, loss_mask, attention_mask, position_ids = self.get_batch(data_iterator)
             output_tensor = model(tokens, position_ids, attention_mask, labels=labels)
 
-            # logging.info(f"gpt forward_step 729: output_tensor: {output_tensor.shape}, if has nan: {torch.isnan(output_tensor).any()}")
-            # logging.info(f"gpt forward_step 731: output_tensor: {output_tensor.shape}, if has nan: {torch.isnan(output_tensor).any()}")
             return output_tensor, partial(self.loss_func, loss_mask)
 
         return forward_step
@@ -870,7 +869,7 @@ def finish_mpu_init():
 
 # initialize megatron setup
 def initialize(accelerator, extra_args_provider=None, args_defaults={}):
-    accelerator.print(f"Initializing Megatron-LM")
+    accelerator.print("Initializing Megatron-LM")
     assert torch.cuda.is_available(), "Megatron requires CUDA."
 
     # Parse arguments

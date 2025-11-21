@@ -2784,7 +2784,6 @@ def parse_bert_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
     megatron_lm_plugin.megatron_lm_default_args["num_labels"] = num_labels
-    logger.info(f"Parsed BERT config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 
 @add_model_config_to_megatron_parser("gpt2")
@@ -2818,6 +2817,7 @@ def parse_gpt2_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
 
+
 @add_model_config_to_megatron_parser("t5")
 def parse_t5_config(megatron_lm_plugin, model, batch_data):
     model_type_name = "t5"
@@ -2847,6 +2847,7 @@ def parse_t5_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
     megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+
 
 @add_model_config_to_megatron_parser("llama")
 def parse_llama_config(megatron_lm_plugin, model, batch_data):
