@@ -1541,15 +1541,15 @@ class Accelerator:
 
         if self.parallelism_config and self.parallelism_config.cp_enabled:
             args = self._prepare_cp(*args)
-
-        # if self.fp8_backend == FP8BackendType.TE:
-        #     args = self._prepare_te(*args)
-        # elif self.fp8_backend == FP8BackendType.AO:
-        #     args = self._prepare_ao(*args)
+        # for megatron-lm, we don't need to prepare TE AO at this moment
+        if self.distributed_type != DistributedType.MEGATRON_LM:
+            if self.fp8_backend == FP8BackendType.TE:
+                args = self._prepare_te(*args)
+            elif self.fp8_backend == FP8BackendType.AO:
+                args = self._prepare_ao(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
-            logger.info(f"Preparing Megatron LM model with args: {args}")
             result = self._prepare_megatron_lm(*args)
         elif self.is_fsdp2:
             result = self._prepare_fsdp2(*args)
@@ -2341,8 +2341,6 @@ class Accelerator:
 
     def _prepare_megatron_lm(self, *args):
         megatron_lm_plugin = self.state.megatron_lm_plugin
-        logger.info(f"Preparing Megatron LM model with args: {args}")
-        logger.info(f"Megatron LM plugin: {megatron_lm_plugin}")
         micro_batch_size = None
         if not megatron_lm_plugin.megatron_dataset_flag:
             batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
@@ -2365,7 +2363,6 @@ class Accelerator:
         if micro_batch_size is not None:
             dp_degree = self.num_processes // (megatron_lm_plugin.tp_degree * megatron_lm_plugin.pp_degree)
             megatron_lm_plugin.set_training_args(micro_batch_size, dp_degree)
-            logger.info(f"Setting training args: micro_batch_size: {micro_batch_size}, dp_degree: {dp_degree}")
         else:
             raise ValueError(
                 "When you do not pass the dataloader parameter, the `data_parallel_size`, "
@@ -2388,10 +2385,8 @@ class Accelerator:
         if model is not None:
             megatron_lm_plugin.set_network_size_args(model, batch_data)
         if optimizer is not None:
-            logger.info(f"Setting optimizer type: {type(optimizer)}")
             megatron_lm_plugin.set_optimizer_type(optimizer)
         if scheduler is not None:
-            logger.info(f"Setting scheduler type: {type(scheduler)}")
             if not isinstance(scheduler, MegatronLMDummyScheduler):
                 raise ValueError(
                     "You can't use a custom scheduler with Megatron-LM. Please use the `accelerate.utils.MegatronLMDummyScheduler` instead."
@@ -2399,7 +2394,6 @@ class Accelerator:
             megatron_lm_plugin.set_scheduler_args(scheduler)
 
         # initialize megatron-lm
-        logger.info(f"Initializing Megatron LM with args: {megatron_lm_plugin.megatron_lm_default_args}")
         megatron_lm_initialize(self, args_defaults=megatron_lm_plugin.megatron_lm_default_args)
 
         (model, optimizer, scheduler) = megatron_lm_prepare_model_optimizer_scheduler(self)
@@ -2421,7 +2415,6 @@ class Accelerator:
                 result.append(obj)
 
         if model is not None:
-            logger.info(f"Preparing Megatron Engine with model: {model} and size: {sum(p.numel() for p in model[0].parameters())}, optimizer: {optimizer}, scheduler: {scheduler}")
             model = MegatronEngine(self, model, optimizer, scheduler)
         if optimizer is not None:
             optimizer = MegatronLMOptimizerWrapper(optimizer)
@@ -3705,9 +3698,6 @@ class Accelerator:
             elif self.distributed_type == DistributedType.MEGATRON_LM:
                 logger.info("Loading Megatron-LM Model, Optimizer and Scheduler")
                 model.load_checkpoint(input_dir)
-                # from mbridge import AutoBridge
-                # bridge = AutoBridge.from_pretrained(input_dir, trust_remote_code=True)
-                # bridge.load_weights(model.module, input_dir)
                 logger.info(f"Megatron-LM Model , Optimizer and Scheduler loaded from input dir {input_dir}")
             else:
                 models.append(model)
