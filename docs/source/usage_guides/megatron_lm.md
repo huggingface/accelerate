@@ -109,6 +109,7 @@ cd ..
 ```
 git clone https://github.com/NVIDIA/Megatron-LM.git
 cd Megatron-LM
+git checkout 9a1c0d05c992c8a241da384ab27dce2021bb56dd
 you need to manually move gpt_builders.py to megatron/training and update
 include = [
     "megatron.core", 
