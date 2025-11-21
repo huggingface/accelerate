@@ -155,13 +155,11 @@ def prepare_model_optimizer_scheduler(accelerator):
         model_provider_func_ = model_provider_func
         if accelerator.state.megatron_lm_plugin.custom_model_provider_function is not None:
             model_provider_func_ = accelerator.state.megatron_lm_plugin.custom_model_provider_function
-        logging.info(f"Preparing model with native model provider function: {model_provider_func_}")
         (model, optimizer, scheduler) = setup_model_and_optimizer(
             model_provider_func_,
             model_type,
         )
     args.model_len = len(model)
-    logging.info(f"Model length: {args.model_len}")
     return model, optimizer, scheduler
 
 
