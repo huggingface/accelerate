@@ -1418,7 +1418,7 @@ class Accelerator:
 
     def detect_module_and_optimizer_parameter_mismatch(self, *args, debug_str=""):
         from torch.distributed.tensor import DTensor
-        
+
         param_reference_dict = {"module": [], "optimizer": [], "parameter_func": [], "dtensor": 0}
 
         def _get_tensor_address(p):
@@ -1433,12 +1433,12 @@ class Accelerator:
                     opt_tensor_addr = [_get_tensor_address(p) for p in param_group["params"]]
                     param_reference_dict["optimizer"] += opt_tensor_addr
             # Module parameters
-            if isinstance(obj, torch.nn.Module): 
-                for n,p in obj.named_parameters():
+            if isinstance(obj, torch.nn.Module):
+                for n, p in obj.named_parameters():
                     param_reference_dict["module"].append(_get_tensor_address(p))
                     if isinstance(p, DTensor):
-                        param_reference_dict["dtensor"]+=1
-                        
+                        param_reference_dict["dtensor"] += 1
+
         named_parameter = fsdp2_canonicalize_names(self._get_named_parameters(*args, drop_refs=True))
         for key, value in named_parameter.items():
             param_reference_dict["parameter_func"].append(value)
@@ -1449,16 +1449,15 @@ class Accelerator:
         # Mismatch detection using set differences
         module_vs_opt = mismatch_count(param_reference_dict["module"], param_reference_dict["optimizer"])
         func_vs_opt = mismatch_count(param_reference_dict["parameter_func"], param_reference_dict["optimizer"])
-    
+
         print(f"[{debug_str}] Parameter consistency check")
         print(f"DTensor parameters in module: {param_reference_dict['dtensor']}")
         print(f"Optimizer vs module mismatches: {module_vs_opt}")
         print(f"Optimizer vs _get_named_parameters mismatches: {func_vs_opt}")
         print(f"self.is_fsdp2={self.is_fsdp2}")
-        
+
         return param_reference_dict
 
-    
     def prepare(self, *args, device_placement=None):
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
@@ -1506,7 +1505,7 @@ class Accelerator:
         ```
         """
         param_reference_dict = self.detect_module_and_optimizer_parameter_mismatch(*args, debug_str="prepare begins")
-        self.initial_dtensor_count = param_reference_dict['dtensor']
+        self.initial_dtensor_count = param_reference_dict["dtensor"]
         if device_placement is None:
             device_placement = [None for _ in args]
         elif self.distributed_type in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM):
