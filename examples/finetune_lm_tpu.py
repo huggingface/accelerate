@@ -14,6 +14,11 @@
 # limitations under the License.
 
 # Example of fine-tuning a model on a TPU using FSDPv2, TRL and PEFT.
+#
+# Run the script with:
+# python finetune_lm_tpu.py [--model_id MODEL_ID] [--dataset_id DATASET_ID]
+#
+# This script has been tested on a TPU v5 litepod-8.
 
 import torch
 from datasets import load_dataset
