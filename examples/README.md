@@ -255,6 +255,12 @@ with `pip install runhouse`, and you can refer to
 for hardware setup instructions, or this
 [Colab tutorial](https://colab.research.google.com/drive/1qVwYyLTCPYPSdz9ZX7BZl9Qm0A3j7RJe) for a more in-depth walkthrough.
 
+## Simple fine-tuning script that works on TPU
+
+[finetune_lm_tpu.py](./finetune_lm_tpu.py) is a classical language modeling generation fine tuning script that has been
+adapted to run best on TPUs. It has been successfully run and tested on a TPU v5 litepod-8, and it shows how it is
+possible to perform a fine-tuning task on such hardware thanks to accelerate and FSDPv2, using transformers and Torch XLA.
+
 ## Finer Examples
 
 While the first two scripts are extremely barebones when it comes to what you can do with accelerate, more advanced features are documented in two other locations.
