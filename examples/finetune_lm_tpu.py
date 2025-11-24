@@ -1,4 +1,3 @@
-
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,14 +19,15 @@
 #
 # This script has been tested on a TPU v5 litepod-8.
 
-import torch
-from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import LoraConfig
-from trl import SFTTrainer, SFTConfig
 import argparse
 
+import torch
 import torch_xla.runtime as xr
+from datasets import load_dataset
+from peft import LoraConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from trl import SFTConfig, SFTTrainer
+
 
 # FSDPv2 requires SPMD to be enabled.
 xr.use_spmd()
@@ -114,18 +114,18 @@ def train(model_id, dataset):
     )
 
     sft_config = SFTConfig(
-            gradient_checkpointing=False, # Required on TPU, not supported
-            max_length=1024,
-            per_device_train_batch_size=4,
-            num_train_epochs=3,
-            max_steps=-1,
-            output_dir="./output",
-            optim="adafactor",
-            logging_steps=1,
-            dataloader_drop_last = True,  # Required for FSDPv2.
-            dataset_text_field="text",
-            packing=True,
-            **fsdp_training_args,
+        gradient_checkpointing=False,  # Required on TPU, not supported
+        max_length=1024,
+        per_device_train_batch_size=4,
+        num_train_epochs=3,
+        max_steps=-1,
+        output_dir="./output",
+        optim="adafactor",
+        logging_steps=1,
+        dataloader_drop_last=True,  # Required for FSDPv2.
+        dataset_text_field="text",
+        packing=True,
+        **fsdp_training_args,
     )
 
     # Set up the trainer
@@ -147,8 +147,16 @@ def train(model_id, dataset):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simple example of training script.")
 
-    parser.add_argument("--model_id", "-m", type=str, default="meta-llama/Llama-3.2-1B", help="Model id to use for training.")
-    parser.add_argument("--dataset_id", "-d", type=str, default="databricks/databricks-dolly-15k", help="Dataset id to use for training.")
+    parser.add_argument(
+        "--model_id", "-m", type=str, default="meta-llama/Llama-3.2-1B", help="Model id to use for training."
+    )
+    parser.add_argument(
+        "--dataset_id",
+        "-d",
+        type=str,
+        default="databricks/databricks-dolly-15k",
+        help="Dataset id to use for training.",
+    )
 
     args = parser.parse_args()
 
