@@ -154,9 +154,9 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
 
     else:
         import transformer_engine.common.recipe as te_recipe
-        import transformer_engine.pytorch as te
+        from transformer_engine.pytorch.fp8 import check_mxfp8_support
 
-        is_fp8_block_scaling_available, message = te.fp8.check_mxfp8_support()
+        is_fp8_block_scaling_available, message = check_mxfp8_support()
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
     if "fp8_format" in kwargs:
