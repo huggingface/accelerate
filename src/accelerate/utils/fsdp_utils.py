@@ -710,7 +710,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # We upcast the trainable parameters according to `deepspeed`'s implementation
         # More info about this can be found in `accelerator.py:prepare_model`s FSDP1 section
         upcasted_params = []
-        for name, param in model.parameters():
+        for name, param in model.named_parameters():
             if param.requires_grad and param.dtype != torch.float32:
                 upcasted_params.append(name)
                 param.data = param.data.to(torch.float32)
