@@ -422,6 +422,22 @@ class DataLoaderTester(AccelerateTestCase):
         for d in dataloader:
             assert isinstance(d, torch.Tensor)
 
+    def test_iterable_dataset_with_non_tensor_samples(self):
+        dataset = SimpleIterableDataset(10)
+
+        def collate_fn(features):
+            return {
+                "tensor": torch.stack(features),
+                "non_tensor": "non_tensor_value",
+            }
+
+        dataloader = DataLoader(dataset, batch_size=4, collate_fn=collate_fn)
+        accelerator = Accelerator()
+        dataloader = accelerator.prepare_data_loader(dataloader)
+        for d in dataloader:
+            assert isinstance(d["tensor"], torch.Tensor)
+            assert d["non_tensor"] == "non_tensor_value"
+
     @parameterized.expand([1, 2], name_func=parameterized_custom_name_func)
     def test_reproducibility(self, num_processes):
         set_seed(21)
