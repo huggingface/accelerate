@@ -615,9 +615,9 @@ def concatenate(data, dim=0):
         return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
     elif isinstance(data[0], Mapping):
         return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
-    elif not isinstance(data[0], torch.Tensor):
-        raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
-    return torch.cat(data, dim=dim)
+    elif isinstance(data[0], torch.Tensor):
+        return torch.cat(data, dim=dim)
+    return data[0]
 
 
 class CannotPadNestedTensorWarning(UserWarning):
