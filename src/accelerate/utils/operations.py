@@ -601,6 +601,7 @@ def slice_tensors(data, tensor_slice, process_index=None, num_processes=None):
 def concatenate(data, dim=0):
     """
     Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors with the same shape.
+    If there is only a single batch of data, it is returned as-is.
 
     Args:
         data (nested list/tuple/dictionary of lists of tensors `torch.Tensor`):
@@ -617,7 +618,10 @@ def concatenate(data, dim=0):
         return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
     elif isinstance(data[0], torch.Tensor):
         return torch.cat(data, dim=dim)
-    return data[0]
+    elif isinstance(data, (tuple, list)) and len(data) == 1:
+        return data[0]
+    else:
+        raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
 
 
 class CannotPadNestedTensorWarning(UserWarning):
