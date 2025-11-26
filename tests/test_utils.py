@@ -42,6 +42,7 @@ from accelerate.utils import (
     CannotPadNestedTensorWarning,
     check_os_kernel,
     clear_environment,
+    concatenate,
     convert_dict_to_env_variables,
     convert_outputs_to_fp32,
     convert_to_fp32,
@@ -441,6 +442,94 @@ class UtilsTester(unittest.TestCase):
         remove_hook_from_module(model)
         attach_align_device_hook(model, offload=True)
         assert has_offloaded_params(model)
+
+    def test_concatenate(self):
+        tensor1 = torch.randn(2, 3)
+        tensor2 = torch.randn(2, 3)
+        result = concatenate([tensor1, tensor2])
+        assert result.shape == torch.Size([4, 3])
+        assert torch.equal(result[:2], tensor1)
+        assert torch.equal(result[2:], tensor2)
+
+        single_tensor = torch.randn(3, 4)
+        result = concatenate([single_tensor])
+        assert result.shape == torch.Size([3, 4])
+        assert torch.equal(result, single_tensor)
+
+        # NOTE: We return as-is if there's just a single batch of data, even if it's not a tensor
+        single_value = "test_string"
+        result = concatenate([single_value])
+        assert result == single_value
+
+        data = [
+            [torch.randn(2, 3), torch.randn(2, 4)],
+            [torch.randn(2, 3), torch.randn(2, 4)],
+        ]
+        result = concatenate(data)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0].shape == torch.Size([4, 3])
+        assert result[1].shape == torch.Size([4, 4])
+
+        data = [
+            (torch.randn(2, 3), torch.randn(2, 4)),
+            (torch.randn(2, 3), torch.randn(2, 4)),
+        ]
+        result = concatenate(data)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert result[0].shape == torch.Size([4, 3])
+        assert result[1].shape == torch.Size([4, 4])
+
+        data = [
+            {"a": torch.randn(2, 3), "b": torch.randn(2, 4)},
+            {"a": torch.randn(2, 3), "b": torch.randn(2, 4)},
+        ]
+        result = concatenate(data)
+        assert isinstance(result, dict)
+        assert "a" in result and "b" in result
+        assert result["a"].shape == torch.Size([4, 3])
+        assert result["b"].shape == torch.Size([4, 4])
+
+        # NOTE: We can't merge multiple batches of non-tensor data
+        data = [
+            {"a": torch.randn(2, 3), "b": torch.randn(2, 4), "c": "test_string1"},
+            {"a": torch.randn(2, 3), "b": torch.randn(2, 4), "c": "test_string2"},
+        ]
+        with self.assertRaises(TypeError):
+            result = concatenate(data)
+
+        batch1 = torch.randn(5, 10)
+        batch2 = torch.randn(5, 10)
+        batch3 = torch.randn(5, 10)
+        result = concatenate([batch1, batch2, batch3])
+        assert result.shape == torch.Size([15, 10])
+        assert torch.equal(result[:5], batch1)
+        assert torch.equal(result[5:10], batch2)
+        assert torch.equal(result[10:], batch3)
+
+        # NOTE: We can't merge misaligned batches, the torch.cat will raise a RuntimeError
+        batch1 = torch.randn(5, 10)
+        batch2 = torch.randn(5, 12)
+        with self.assertRaises(RuntimeError):
+            result = concatenate([batch1, batch2])
+
+        tensor1 = torch.randn(3, 2, 4)
+        tensor2 = torch.randn(3, 2, 4)
+        result = concatenate([tensor1, tensor2], dim=1)
+        assert result.shape == torch.Size([3, 4, 4])
+
+        data = [
+            {"inputs": [torch.randn(2, 3), torch.randn(2, 4)], "labels": torch.randn(2, 1)},
+            {"inputs": [torch.randn(2, 3), torch.randn(2, 4)], "labels": torch.randn(2, 1)},
+            {"inputs": [torch.randn(2, 3), torch.randn(2, 4)], "labels": torch.randn(2, 1)},
+        ]
+        result = concatenate(data)
+        assert isinstance(result, dict)
+        assert isinstance(result["inputs"], list)
+        assert result["inputs"][0].shape == torch.Size([6, 3])
+        assert result["inputs"][1].shape == torch.Size([6, 4])
+        assert result["labels"].shape == torch.Size([6, 1])
 
 
 def set_dummy_accelerate_env_var():
