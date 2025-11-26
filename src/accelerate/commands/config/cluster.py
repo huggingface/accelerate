@@ -505,6 +505,11 @@ def get_cluster_input():
                 error_message="Please enter yes or no.",
             )
 
+            if fsdp_config["fsdp_activation_checkpointing"] == True and fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[2]:
+                raise ValueError(
+                    f"Invalid configuration: fsdp_auto_wrap_policy={FSDP_AUTO_WRAP_POLICY[2]} cannot be used together with fsdp_activation_checkpointing=True."
+                )
+
     parallelism_config = {}
 
     if fsdp_config.get("fsdp_version", 1) == 2:
