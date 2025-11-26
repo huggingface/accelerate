@@ -123,6 +123,7 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import (
+    DTENSOR_PYTORCH_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
@@ -4007,8 +4008,12 @@ class Accelerator:
                     from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
                     accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
+                _torch_distributed_available = torch.distributed.is_available()
+                _is_dtensor_available = _torch_distributed_available and is_torch_version(
+                    ">=", DTENSOR_PYTORCH_VERSION
+                )
                 # we know we're in FSDP2 so DTensor is available
-                if self.is_fsdp2 or self.initial_dtensor_count > 0:
+                if _is_dtensor_available:
                     from torch.distributed.tensor import DTensor
 
                     accessor_mapping[DTensor] = "_local_tensor"
