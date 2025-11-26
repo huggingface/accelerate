@@ -634,12 +634,6 @@ class Accelerator:
         # Set a flag tensor for early stopping and other breakpoints
         self.flag_tensor = None
 
-        # Count how many dTensor in the module before preparation because user might call:
-        # tp_mesh, dp_mesh = init_tensor_parallel(...)
-        # model = distribute_module(model, mesh=tp_mesh)  # <- now model has DTensor
-        # model = accelerator.prepare(model)
-        self.initial_dtensor_count = 0
-
         check_os_kernel()
 
     @property
@@ -1417,48 +1411,6 @@ class Accelerator:
         # Return the unprocessed object if previous criteria was not met
         return obj
 
-    def detect_module_and_optimizer_parameter_mismatch(self, *args, debug_str=""):
-        from torch.distributed.tensor import DTensor
-
-        param_reference_dict = {"module": [], "optimizer": [], "parameter_func": [], "dtensor": 0}
-
-        def _get_tensor_address(p):
-            if isinstance(p, DTensor):
-                return p._local_tensor.data_ptr()
-            return p.data_ptr()
-
-        for obj in args:
-            # Optimizer parameters
-            if isinstance(obj, torch.optim.Optimizer):
-                for param_group in obj.param_groups:
-                    opt_tensor_addr = [_get_tensor_address(p) for p in param_group["params"]]
-                    param_reference_dict["optimizer"] += opt_tensor_addr
-            # Module parameters
-            if isinstance(obj, torch.nn.Module):
-                for n, p in obj.named_parameters():
-                    param_reference_dict["module"].append(_get_tensor_address(p))
-                    if isinstance(p, DTensor):
-                        param_reference_dict["dtensor"] += 1
-
-        named_parameter = fsdp2_canonicalize_names(self._get_named_parameters(*args, drop_refs=True))
-        for key, value in named_parameter.items():
-            param_reference_dict["parameter_func"].append(value)
-
-        def mismatch_count(list1, list2):
-            return len([x for x in list2 if x not in list1])
-
-        # Mismatch detection using set differences
-        module_vs_opt = mismatch_count(param_reference_dict["module"], param_reference_dict["optimizer"])
-        func_vs_opt = mismatch_count(param_reference_dict["parameter_func"], param_reference_dict["optimizer"])
-
-        print(f"[{debug_str}] Parameter consistency check")
-        print(f"DTensor parameters in module: {param_reference_dict['dtensor']}")
-        print(f"Optimizer vs module mismatches: {module_vs_opt}")
-        print(f"Optimizer vs _get_named_parameters mismatches: {func_vs_opt}")
-        print(f"self.is_fsdp2={self.is_fsdp2}")
-
-        return param_reference_dict
-
     def prepare(self, *args, device_placement=None):
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
@@ -1505,8 +1457,6 @@ class Accelerator:
         ... )
         ```
         """
-        param_reference_dict = self.detect_module_and_optimizer_parameter_mismatch(*args, debug_str="prepare begins")
-        self.initial_dtensor_count = param_reference_dict["dtensor"]
         if device_placement is None:
             device_placement = [None for _ in args]
         elif self.distributed_type in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM):
@@ -1641,7 +1591,7 @@ class Accelerator:
 
         device_mesh = self.torch_device_mesh
 
-        old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
+        old_named_params = self._get_named_parameters(*tuple(result), drop_refs=True)
 
         for arg in result:
             if not isinstance(arg, torch.nn.Module):
@@ -1666,7 +1616,7 @@ class Accelerator:
                     dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
                 setattr(module_to_tp, param_type, dp)
 
-        new_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=False))
+        new_named_params = self._get_named_parameters(*tuple(result), drop_refs=False)
         # Build a map from old to new params
         mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
 
