@@ -1636,8 +1636,11 @@ class Accelerator:
         return args
 
     def _prepare_cp(self, *args):
-        if self.parallelism_config.sp_backend == "deepspeed":
-            # deepspeed handles cp in a different way, configured in _prepare_deepspeed
+        # Skip CP setup if SP (Sequence Parallelism) is actually enabled (sp_size > 1)
+        # CP and SP are mutually exclusive - they're different approaches for handling long sequences:
+        # - CP uses Ring Attention (FSDP2-based)
+        # - SP uses ALST/Ulysses (DeepSpeed-based)
+        if self.parallelism_config.sp_enabled:
             return args
 
         from torch.distributed.tensor.experimental import context_parallel
