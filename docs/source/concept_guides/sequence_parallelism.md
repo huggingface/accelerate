@@ -171,16 +171,12 @@ for iter, batch in enumerate(dl):
     optimizer.zero_grad()
 
     batch = move_to_device(batch, model.device)
-    outputs = model(**batch)
 
-    # only if not using liger-kernel
+    # The model automatically receives shift_labels via **kwargs and uses it for loss computation.
+    # Both standard transformers models and Liger-patched models handle this correctly.
+    outputs = model(**batch)
+    loss = outputs.loss
     shift_labels = batch["shift_labels"]
-    loss = unwrapped_model.loss_function(
-        logits=outputs.logits,
-        labels=None,
-        shift_labels=shift_labels,
-        vocab_size=unwrapped_model.config.vocab_size,
-    )
 
     if sp_size > 1:
         # differentiable weighted per-shard-loss aggregation across ranks
@@ -206,7 +202,7 @@ for iter, batch in enumerate(dl):
     optimizer.step()
 ```
 
-If you use [Liger Kernel](https://github.com/linkedin/Liger-Kernel) it already knows how to handle `shift_labels` so you don't need to go through manual loss calculation, just calling `model(**batch)` will already get the `loss` calculated and done in a very memory-efficient way. If you didn't know about Liger-Kernel - it's highly recommended to be used especially for long sequence length, since it liberates a lot of working GPU memory that can be used for handling longer sequences. For example, it performs a fused logit-loss computation, never manifesting the full logits tensor in memory.
+Note that models automatically handle `shift_labels` when it's present in the batch. The model's forward pass receives `shift_labels` via `**kwargs` and passes it to the loss function, which correctly computes the loss for sequence parallelism. If you use [Liger Kernel](https://github.com/linkedin/Liger-Kernel), it also handles `shift_labels` seamlessly and computes loss in a very memory-efficient way. Liger is highly recommended for long sequence lengths, as it liberates GPU memory by using fused operations (e.g., fused logit-loss computation that never materializes the full logits tensor in memory).
 
 If you want to see what HF Accelerate did behind the scenes please read [this full integration tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/).
 

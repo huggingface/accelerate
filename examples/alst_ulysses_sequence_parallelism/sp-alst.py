@@ -125,15 +125,12 @@ for iter, batch in enumerate(dl):
     if rank == 0:
         print(f"batch {iter}: seqlen: {len(batch['input_ids'][0])}")
     batch = move_to_device(batch, model.device)
-    outputs = model(**batch)
 
+    # The model automatically receives shift_labels via **kwargs and uses it for loss computation.
+    # Both standard transformers models and Liger-patched models handle this correctly.
+    outputs = model(**batch)
+    loss = outputs.loss
     shift_labels = batch["shift_labels"]
-    loss = unwrapped_model.loss_function(
-        logits=outputs.logits,
-        labels=None,
-        shift_labels=shift_labels,
-        vocab_size=unwrapped_model.config.vocab_size,
-    )
 
     if sp_size > 1:
         # differentiable weighted per-shard-loss aggregation across ranks
