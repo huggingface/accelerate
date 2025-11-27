@@ -668,7 +668,7 @@ def launch_command_parser(subparsers=None):
         "--fp8_backend",
         type=str,
         choices=["ao", "te", "msamp"],
-        help="Choose a backend to train with FP8 (ao: TorchAO,te: TransformerEngine, msamp: MS-AMP)",
+        help="Choose a backend to train with FP8 (ao: torchao, te: TransformerEngine, msamp: MS-AMP)",
     )
     fp8_args.add_argument(
         "--fp8_use_autocast_during_eval",
@@ -725,7 +725,7 @@ def launch_command_parser(subparsers=None):
         "--fp8_enable_fsdp_float8_all_gather",
         default="true",
         type=str_to_bool,
-        help="Whether to enable FSDP float8 all gather (useful only when `--fp8_backend=ao` is passed).",
+        help="Whether to enable FSDP2 float8 all gather (useful only when `--fp8_backend=ao` is passed).",
     )
     fp8_args.add_argument(
         "--fp8_pad_inner_dim",
