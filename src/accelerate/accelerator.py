@@ -123,6 +123,7 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import (
+    DTENSOR_PYTORCH_VERSION,
     FSDP2_PYTORCH_VERSION,
     FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
@@ -1590,7 +1591,7 @@ class Accelerator:
 
         device_mesh = self.torch_device_mesh
 
-        old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
+        old_named_params = self._get_named_parameters(*tuple(result), drop_refs=True)
 
         for arg in result:
             if not isinstance(arg, torch.nn.Module):
@@ -1615,7 +1616,7 @@ class Accelerator:
                     dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
                 setattr(module_to_tp, param_type, dp)
 
-        new_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=False))
+        new_named_params = self._get_named_parameters(*tuple(result), drop_refs=False)
         # Build a map from old to new params
         mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
 
@@ -3957,8 +3958,12 @@ class Accelerator:
                     from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
                     accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
+                _torch_distributed_available = torch.distributed.is_available()
+                _is_dtensor_available = _torch_distributed_available and is_torch_version(
+                    ">=", DTENSOR_PYTORCH_VERSION
+                )
                 # we know we're in FSDP2 so DTensor is available
-                if self.is_fsdp2:
+                if _is_dtensor_available:
                     from torch.distributed.tensor import DTensor
 
                     accessor_mapping[DTensor] = "_local_tensor"
