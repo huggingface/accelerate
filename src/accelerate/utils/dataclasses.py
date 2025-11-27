@@ -330,21 +330,27 @@ class AORecipeKwargs(KwargsHandler):
 
     config: Optional["Float8LinearConfig"] = None
     module_filter_func: Optional[Callable] = None
+    pad_inner_dim: Optional[bool] = None
+    enable_fsdp_float8_all_gather: Optional[bool] = None
 
     def __post_init__(self):
+        env_prefix = "ACCELERATE_FP8_"
+        if not is_torch_ao_available():
+            raise ImportError("TorchAO is not available. Please install it or use a different backend.")
+        
         if self.config is None:
             from torchao.float8 import Float8LinearConfig
 
-            env_prefix = "ACCELERATE_FP8_"
             # Check environment variables for overrides
-            pad_inner_dim = parse_flag_from_env(env_prefix + "PAD_INNER_DIM", default=True)
-            enable_fsdp_float8_all_gather = parse_flag_from_env(
-                env_prefix + "ENABLE_FSDP_FLOAT8_ALL_GATHER", default=True
-            )
-
+            if self.pad_inner_dim is None:
+                self.pad_inner_dim = parse_flag_from_env(env_prefix + "PAD_INNER_DIM", default=True)
+            if self.enable_fsdp_float8_all_gather is None:
+                self.enable_fsdp_float8_all_gather = parse_flag_from_env(
+                    env_prefix + "ENABLE_FSDP_FLOAT8_ALL_GATHER", default=True
+                )
             self.config = Float8LinearConfig(
-                pad_inner_dim=pad_inner_dim,
-                enable_fsdp_float8_all_gather=enable_fsdp_float8_all_gather,
+                pad_inner_dim=self.pad_inner_dim,
+                enable_fsdp_float8_all_gather=self.enable_fsdp_float8_all_gather,
             )
 
 
