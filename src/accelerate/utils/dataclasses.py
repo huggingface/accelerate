@@ -50,6 +50,7 @@ from .imports import (
     is_msamp_available,
     is_musa_available,
     is_npu_available,
+    is_torchao_available,
     is_transformer_engine_available,
     is_xpu_available,
 )
@@ -335,7 +336,7 @@ class AORecipeKwargs(KwargsHandler):
 
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
-        if not is_torch_ao_available():
+        if not is_torchao_available():
             raise ImportError("TorchAO is not available. Please install it or use a different backend.")
         
         if self.config is None:
