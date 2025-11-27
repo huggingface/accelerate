@@ -2042,7 +2042,6 @@ class Accelerator:
         if (
             self.is_fsdp2
             and len(optimizers) > 0
-            and self.ao_recipe_handler is not None
             and self.ao_recipe_handler.config.enable_fsdp_float8_all_gather
         ):
             from torchao.float8 import precompute_float8_dynamic_scale_for_fsdp

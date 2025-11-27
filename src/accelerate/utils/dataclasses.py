@@ -335,7 +335,17 @@ class AORecipeKwargs(KwargsHandler):
         if self.config is None:
             from torchao.float8 import Float8LinearConfig
 
-            self.config = Float8LinearConfig(pad_inner_dim=True, enable_fsdp_float8_all_gather=True)
+            env_prefix = "ACCELERATE_FP8_"
+            # Check environment variables for overrides
+            pad_inner_dim = parse_flag_from_env(env_prefix + "PAD_INNER_DIM", default=True)
+            enable_fsdp_float8_all_gather = parse_flag_from_env(
+                env_prefix + "ENABLE_FSDP_FLOAT8_ALL_GATHER", default=True
+            )
+
+            self.config = Float8LinearConfig(
+                pad_inner_dim=pad_inner_dim,
+                enable_fsdp_float8_all_gather=enable_fsdp_float8_all_gather,
+            )
 
 
 @dataclass

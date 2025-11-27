@@ -794,11 +794,11 @@ def get_cluster_input():
             )
             if mixed_precision == "fp8":
                 if not is_fp8_available():
-                    raise ValueError("FP8 (either Transformer Engine or MSAMP) is not installed on this machine.")
+                    raise ValueError("FP8 (either TorchAO, Transformer Engine or MSAMP) is not installed on this machine.")
                 fp8_config = {}
                 fp8_config["backend"] = _ask_options(
                     "Which FP8 backend do you want to use?",
-                    ["te", "msamp"],
+                    ["ao", "te", "msamp"],
                     _convert_fp8_backend,
                 )
                 if fp8_config["backend"] == "TE":
@@ -869,6 +869,20 @@ def get_cluster_input():
                         ["O1", "O2"],
                         lambda x: "O1" if x == 0 else "O2",
                         default=1,
+                    )
+                
+                elif fp8_config["backend"] == "AO":
+                    if not is_torch_ao_available():
+                        raise ValueError("TorchAO was selected, but it is not installed on this machine.")
+                    fp8_config["enable_fsdp_float8_all_gather"] = _ask_field(
+                        "Do you want to enable FSDP2 float8 all gather? This is recommended for better performance if using FSDP2. [YES/no]: ",
+                        _convert_yes_no_to_bool,
+                        default=True,
+                    )
+                    fp8_config["pad_inner_dim"] = _ask_field(
+                        "Do you want to pad the inner dimension of weight matrices to multiples of 16 before float8 matmuls? Required for _scaled_mm which has strict alignment requirements. Note: padding may cause memory spikes. [YES/no]: ",
+                        _convert_yes_no_to_bool,
+                        default=True,
                     )
 
     if use_dynamo and mixed_precision == "no" and not use_cpu:
