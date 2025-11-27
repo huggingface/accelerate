@@ -127,16 +127,15 @@ for iter, batch in enumerate(dl):
     batch = move_to_device(batch, model.device)
 
     # The model automatically receives shift_labels via **kwargs and uses it for loss computation.
-    # Both standard transformers models and Liger-patched models handle this correctly.
+    # Both standard transformer models and Liger-patched models handle this correctly.
     outputs = model(**batch)
     loss = outputs.loss
-    shift_labels = batch["shift_labels"]
 
     if sp_size > 1:
         # differentiable weighted per-shard-loss aggregation across ranks
         losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
         # special dealing with SFT that has prompt tokens that aren't used in loss computation
-        good_tokens = (shift_labels != -100).view(-1).sum()
+        good_tokens = (batch["shift_labels"] != -100).view(-1).sum()
         good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
         total_loss = sum(losses_per_rank[rank] * good_tokens_per_rank[rank] for rank in range(sp_world_size))
         total_good_tokens = sum(good_tokens_per_rank)
