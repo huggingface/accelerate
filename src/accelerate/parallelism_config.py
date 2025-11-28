@@ -320,6 +320,14 @@ class ParallelismConfig:
         if self.sp_backend not in valid_sp_backends:
             raise ValueError(f"sp_backend must be one of {valid_sp_backends}, but got {self.sp_backend}")
 
+        # CP and SP are mutually exclusive
+        if self.cp_size > 1 and self.sp_size > 1:
+            raise ValueError(
+                "Context Parallelism (CP) and Sequence Parallelism (SP) are mutually exclusive. "
+                f"Got cp_size={self.cp_size} and sp_size={self.sp_size}. "
+                "Please set either cp_size=1 or sp_size=1."
+            )
+
         if (self.tp_size > 1 or self.cp_size > 1) and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
             raise ValueError(
                 "Tensor/Context parallelism (tp/cp_size > 1) cannot be used with pure data parallelism (dp_replicate_size > 1 and dp_shard_size == 1). "
