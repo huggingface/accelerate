@@ -183,7 +183,11 @@ class PerformanceTracker:
         return {}
 
     def get_print_message(self, metrics: dict, with_memory: bool = False) -> str:
-        print_msg = f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f} | Average TFLOPS: {metrics['tflops_per_device']:.2f}\n"
+        print_msg = f" | Average steps/s: {metrics['steps_per_second']:.2f} | Average tokens/s: {metrics['tokens_per_second']:.2f}"
+        if "tflops_per_device" in metrics:
+            print_msg += f" | Average TFLOPS: {metrics['tflops_per_device']:.2f}\n"
+        else:
+            print_msg += "\n"
         if with_memory:
             print_msg += (
                 f"\tMemory (GB): active={metrics['peak_memory_active']:.1f}, "
