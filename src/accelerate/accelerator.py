@@ -1637,11 +1637,6 @@ class Accelerator:
         return args
 
     def _prepare_cp(self, *args):
-        # Skip CP setup if SP (Sequence Parallelism) is actually enabled (sp_size > 1)
-        # CP and SP are mutually exclusive
-        if self.parallelism_config.sp_enabled:
-            return args
-
         from torch.distributed.tensor.experimental import context_parallel
         from torch.distributed.tensor.experimental._attention import set_rotate_method
 
