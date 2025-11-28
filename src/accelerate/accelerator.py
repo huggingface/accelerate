@@ -1637,8 +1637,9 @@ class Accelerator:
         return args
 
     def _prepare_cp(self, *args):
-        if self.parallelism_config.sp_backend == "deepspeed":
-            # deepspeed handles cp in a different way, configured in _prepare_deepspeed
+        # Skip CP setup if SP (Sequence Parallelism) is actually enabled (sp_size > 1)
+        # CP and SP are mutually exclusive
+        if self.parallelism_config.sp_enabled:
             return args
 
         from torch.distributed.tensor.experimental import context_parallel
