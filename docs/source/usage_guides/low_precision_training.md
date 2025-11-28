@@ -134,9 +134,50 @@ fp8_config:
 
 ```{python}
 from accelerate import Accelerator
-from accelerate.utils import AORecipeKwargs
-kwargs = [AORecipeKwargs()]
-accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
+from accelerate.utils import AORecipeKwargs, TorchDynamoPlugin, FullyShardedDataParallelPlugin
+from torchao.float8 import Float8LinearConfig
+
+fsdp2_plugin = FullyShardedDataParallelPlugin(
+  fsdp_version=2,
+  cpu_ram_efficient_loading=False, # CPU RAM efficient loading CANNOT work with fp8 torchao
+  fsdp_auto_wrap_policy="TRANSFORMER_BASED_WRAP",
+)
+dynamo_plugin = TorchDynamoPlugin(
+  backend="inductor",
+  use_regional_compilation=True,
+)
+fp8_config = Float8LinearConfig(
+  enable_fsdp_float8_all_gather=True, # Use FP8 all_gather in FSDP2
+  pad_inner_dim=True,
+)
+kwargs = [AORecipeKwargs(
+  config=fp8_config
+)]
+accelerator = Accelerator(
+  mixed_precision="fp8",
+  fsdp_plugin=fsdp2_plugin,
+  dynamo_plugin=dynamo_plugin,
+  kwarg_handlers=kwargs,
+)
+```
+
+Or during `accelerate launch` via `--fp8_backend=ao ...`. Use `accelerate launch --fp8_backend=ao -h` to see relevent arguments.
+
+Similarly, this can be set in `config.yaml`:
+
+```{yaml}
+mixed_precision: fp8
+fsdp_config:
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_cpu_ram_efficient_loading: false
+  fsdp_version: 2
+fp8_config:
+  backend: AO
+  pad_inner_dim: true
+  enable_fsdp_float8_all_gather: true
+dynamo_config:
+  dynamo_backend: INDUCTOR
+  dynamo_use_regional_compilation: true
 ```
 
 To learn more about the specific parameters to be used, please see the official `torchao` repo.

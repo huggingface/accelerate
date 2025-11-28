@@ -226,6 +226,26 @@ class TestTorchAO(unittest.TestCase):
             command += ["-m", "tests.test_fp8", "--test_ao", "--from_config"]
             run_command(command)
 
+    def test_can_prepare_model_single_gpu_from_config_with_additional_params(self):
+        with tempfile.TemporaryDirectory() as dir_name:
+            config_file = Path(dir_name) / "config.yaml"
+            config_file.write_text(
+                textwrap.dedent(
+                    """
+                    distributed_type: "NO"
+                    num_processes: 1
+                    mixed_precision: fp8
+                    fp8_config:
+                      backend: AO
+                      pad_inner_dim: true
+                      enable_fsdp_float8_all_gather: false
+                    """
+                )
+            )
+            command = get_launch_command(config_file=str(config_file), monitor_interval=0.1)
+            command += ["-m", "tests.test_fp8", "--test_ao", "--from_config"]
+            run_command(command)
+
     @require_multi_device
     def test_can_prepare_model_multi_accelerator(self):
         command = get_launch_command(num_processes=2, monitor_interval=0.1)
