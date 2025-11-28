@@ -244,7 +244,9 @@ class SageMakerConfig(BaseConfig):
     profile: Optional[str] = None
     region: str = "us-east-1"
     num_machines: int = 1
+    num_processes: int = 1
     gpu_ids: str = "all"
+    parallelism_config: Optional[dict] = None
     base_job_name: str = f"accelerate-sagemaker-{num_machines}"
     pytorch_version: str = SAGEMAKER_PYTORCH_VERSION
     transformers_version: str = SAGEMAKER_TRANSFORMERS_VERSION
