@@ -1637,9 +1637,7 @@ class Accelerator:
 
     def _prepare_cp(self, *args):
         # Skip CP setup if SP (Sequence Parallelism) is actually enabled (sp_size > 1)
-        # CP and SP are mutually exclusive - they're different approaches for handling long sequences:
-        # - CP uses Ring Attention (FSDP2-based)
-        # - SP uses ALST/Ulysses (DeepSpeed-based)
+        # CP and SP are mutually exclusive
         if self.parallelism_config.sp_enabled:
             return args
 
