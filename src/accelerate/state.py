@@ -1005,6 +1005,7 @@ class AcceleratorState:
                     self.parallelism_config is not None and self.parallelism_config.cp_enabled
                 ):
                     self.distributed_type = DistributedType.FSDP
+                    self._mixed_precision = mixed_precision
                     if self._mixed_precision != "no" and fsdp_plugin is not None:
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
