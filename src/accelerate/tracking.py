@@ -259,7 +259,7 @@ class TensorBoardTracker(GeneralTracker):
         """
         values = listify(values)
         for k, v in values.items():
-            if isinstance(v, (int, float)):
+            if isinstance(v, int | float):
                 self.writer.add_scalar(k, v, global_step=step, **kwargs)
             elif isinstance(v, str):
                 self.writer.add_text(k, v, global_step=step, **kwargs)
@@ -582,7 +582,7 @@ class CometMLTracker(GeneralTracker):
         if step is not None:
             self.writer.set_step(step)
         for k, v in values.items():
-            if isinstance(v, (int, float)):
+            if isinstance(v, int | float):
                 self.writer.log_metric(k, v, step=step, **kwargs)
             elif isinstance(v, str):
                 self.writer.log_other(k, v, **kwargs)
@@ -834,7 +834,7 @@ class MLflowTracker(GeneralTracker):
         """
         metrics = {}
         for k, v in values.items():
-            if isinstance(v, (int, float)):
+            if isinstance(v, int | float):
                 metrics[k] = v
             else:
                 logger.warning_once(
@@ -980,7 +980,7 @@ class ClearMLTracker(GeneralTracker):
         """
         clearml_logger = self.task.get_logger()
         for k, v in values.items():
-            if not isinstance(v, (int, float)):
+            if not isinstance(v, int | float):
                 logger.warning_once(
                     "Accelerator is attempting to log a value of "
                     f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
@@ -1299,7 +1299,7 @@ def filter_trackers(
     """
     loggers = []
     if log_with is not None:
-        if not isinstance(log_with, (list, tuple)):
+        if not isinstance(log_with, list | tuple):
             log_with = [log_with]
         if "all" in log_with or LoggerType.ALL in log_with:
             loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()

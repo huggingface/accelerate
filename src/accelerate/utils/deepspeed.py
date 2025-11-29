@@ -50,7 +50,7 @@ def map_pytorch_optim_to_deepspeed(optimizer):
         if is_bnb_available() and not is_adaw:
             import bitsandbytes.optim as bnb_opt
 
-            if isinstance(optimizer, (bnb_opt.AdamW, bnb_opt.AdamW32bit)):
+            if isinstance(optimizer, bnb_opt.AdamW | bnb_opt.AdamW32bit):
                 try:
                     is_adaw = optimizer.optim_bits == 32
                 except AttributeError:
@@ -70,7 +70,7 @@ def map_pytorch_optim_to_deepspeed(optimizer):
         if is_bnb_available() and not is_ada:
             import bitsandbytes.optim as bnb_opt
 
-            if isinstance(optimizer, (bnb_opt.Adagrad, bnb_opt.Adagrad32bit)):
+            if isinstance(optimizer, bnb_opt.Adagrad | bnb_opt.Adagrad32bit):
                 try:
                     is_ada = optimizer.optim_bits == 32
                 except AttributeError:
@@ -84,7 +84,7 @@ def map_pytorch_optim_to_deepspeed(optimizer):
     if is_bnb_available(min_version="0.38.0") and compare_versions("deepspeed", ">=", "0.11.0"):
         from bitsandbytes.optim import Lion, Lion32bit
 
-        if isinstance(optimizer, (Lion, Lion32bit)):
+        if isinstance(optimizer, Lion | Lion32bit):
             try:
                 is_bnb_32bits = optimizer.optim_bits == 32
             except AttributeError:

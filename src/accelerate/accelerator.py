@@ -2184,9 +2184,9 @@ class Accelerator:
         for obj in result:
             if isinstance(obj, torch.nn.Module):
                 model = obj
-            elif isinstance(obj, (torch.optim.Optimizer, DummyOptim)):
+            elif isinstance(obj, torch.optim.Optimizer | DummyOptim):
                 optimizer = obj
-            elif (isinstance(obj, (LRScheduler, DummyScheduler))) or (
+            elif (isinstance(obj, LRScheduler | DummyScheduler)) or (
                 type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
             ):
                 scheduler = obj
@@ -2405,9 +2405,9 @@ class Accelerator:
             for i in range(len(result)):
                 if isinstance(result[i], torch.nn.Module):
                     result[i] = engine
-                elif isinstance(result[i], (torch.optim.Optimizer, DummyOptim)):
+                elif isinstance(result[i], torch.optim.Optimizer | DummyOptim):
                     result[i] = optimizer
-                elif (isinstance(result[i], (LRScheduler, DummyScheduler))) or (
+                elif (isinstance(result[i], LRScheduler | DummyScheduler)) or (
                     type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
                 ):
                     result[i] = scheduler
@@ -2488,7 +2488,7 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
-            elif isinstance(obj, (LRScheduler, MegatronLMDummyScheduler)):
+            elif isinstance(obj, LRScheduler | MegatronLMDummyScheduler):
                 scheduler = obj
 
         if model is not None:
@@ -2757,7 +2757,7 @@ class Accelerator:
             from lomo_optim import AdaLomo, Lomo
 
             # Support multiple optimizers: https://github.com/huggingface/accelerate/pull/2695#discussion_r1589164607
-            self.has_lomo_optimizer |= isinstance(optimizer, (Lomo, AdaLomo))
+            self.has_lomo_optimizer |= isinstance(optimizer, Lomo | AdaLomo)
 
         # Ensure we can't double wrap an optimizer due to `find_batch_size`
         if getattr(optimizer, "_is_accelerate_prepared", False):
@@ -2935,7 +2935,7 @@ class Accelerator:
             if optimizer is None:
                 # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
                 optimizer = self._optimizers
-            elif not isinstance(optimizer, (tuple, list)):
+            elif not isinstance(optimizer, tuple | list):
                 optimizer = [optimizer]
             for opt in optimizer:
                 while isinstance(opt, AcceleratedOptimizer):
@@ -4324,7 +4324,7 @@ class Accelerator:
         _backward_called = False
 
         for optimizer in self._optimizers:
-            if isinstance(optimizer.optimizer, (Lomo, AdaLomo)):
+            if isinstance(optimizer.optimizer, Lomo | AdaLomo):
                 optimizer.optimizer.fused_backward(loss, learning_rate)
                 _backward_called = True
 

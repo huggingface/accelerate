@@ -26,7 +26,7 @@ if is_torch_xla_available():
 
 
 def move_to_device(state, device):
-    if isinstance(state, (list, tuple)):
+    if isinstance(state, list | tuple):
         return honor_type(state, (move_to_device(t, device) for t in state))
     elif isinstance(state, dict):
         return type(state)({k: move_to_device(v, device) for k, v in state.items()})
@@ -156,7 +156,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
         if is_lomo_available():
             #  `step` should be a no-op for LOMO optimizers.
-            if isinstance(self.optimizer, (Lomo, AdaLomo)):
+            if isinstance(self.optimizer, Lomo | AdaLomo):
                 return
 
         if self.gradient_state.sync_gradients:

@@ -1000,7 +1000,7 @@ def get_balanced_memory(
     # - the mean of the layer sizes
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple)):
+    elif not isinstance(no_split_module_classes, list | tuple):
         no_split_module_classes = [no_split_module_classes]
 
     # Identify the size of the no_split_block modules
@@ -1089,7 +1089,7 @@ def _init_infer_auto_device_map(
     max_memory = get_max_memory(max_memory)
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple)):
+    elif not isinstance(no_split_module_classes, list | tuple):
         no_split_module_classes = [no_split_module_classes]
 
     devices = list(max_memory.keys())

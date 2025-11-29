@@ -293,7 +293,7 @@ def estimate_command(args):
     data = gather_data(args)
     for row in data:
         for i, item in enumerate(row):
-            if isinstance(item, (int, float)):
+            if isinstance(item, int | float):
                 row[i] = convert_bytes(item)
             elif isinstance(item, dict):
                 training_usage = max(item.values())

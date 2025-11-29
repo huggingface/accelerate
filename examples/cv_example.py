@@ -81,7 +81,7 @@ def training_function(config, args):
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
     image_size = config["image_size"]
-    if not isinstance(image_size, (list, tuple)):
+    if not isinstance(image_size, list | tuple):
         image_size = (image_size, image_size)
 
     # Grab all the image filenames

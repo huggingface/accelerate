@@ -200,11 +200,11 @@ class MegatronLMDummyDataLoader:
             setattr(args, key, value)
 
     def get_train_valid_test_datasets_provider(self, accelerator):
-        def train_valid_test_datasets_provider(train_val_test_num_samples):
+        def _default_train_valid_test_datasets_provider(train_val_test_num_samples):
             """Build train, valid, and test datasets."""
             args = get_args()
             dataset_args = {
-                "data_prefix": args.data_path if isinstance(args.data_path, (list, tuple)) else [args.data_path],
+                "data_prefix": args.data_path if isinstance(args.data_path, list | tuple) else [args.data_path],
                 "splits_string": args.split,
                 "train_valid_test_num_samples": train_val_test_num_samples,
                 "seed": args.seed,
@@ -257,7 +257,7 @@ class MegatronLMDummyDataLoader:
                 return train_valid_test_datasets_provider
         except ImportError:
             pass
-        return train_valid_test_datasets_provider
+        return _default_train_valid_test_datasets_provider
 
     def build_train_valid_test_data_iterators(self, accelerator):
         args = get_args()

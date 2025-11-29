@@ -466,7 +466,7 @@ class PartialState:
         end_index = start_index + num_samples_per_process + (1 if self.process_index < num_extras else 0)
 
         def _split_values(inputs, start_index, end_index):
-            if isinstance(inputs, (list, tuple, torch.Tensor)):
+            if isinstance(inputs, list | tuple | torch.Tensor):
                 if start_index >= len(inputs):
                     result = inputs[-1:]
                 else:

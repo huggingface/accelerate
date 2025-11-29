@@ -104,7 +104,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     Returns:
         The same data structure as `data` with `func` applied to every object of type `main_type`.
     """
-    if isinstance(data, (tuple, list)):
+    if isinstance(data, tuple | list):
         return honor_type(
             data,
             (
@@ -166,7 +166,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
             return tensor.to(device)
-    elif isinstance(tensor, (tuple, list)):
+    elif isinstance(tensor, tuple | list):
         return honor_type(
             tensor, (send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys) for t in tensor)
         )
@@ -245,10 +245,10 @@ def find_batch_size(data):
     Returns:
         `int`: The batch size.
     """
-    if isinstance(data, (tuple, list, Mapping)) and (len(data) == 0):
+    if isinstance(data, tuple | list | Mapping) and (len(data) == 0):
         raise ValueError(f"Cannot find the batch size from empty {type(data)}.")
 
-    if isinstance(data, (tuple, list)):
+    if isinstance(data, tuple | list):
         return find_batch_size(data[0])
     elif isinstance(data, Mapping):
         for k in data.keys():
@@ -470,7 +470,7 @@ def _gpu_broadcast(data, src=0):
 
 
 def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
-    if isinstance(tensor, (list, tuple)):
+    if isinstance(tensor, list | tuple):
         return honor_type(tensor, (_tpu_broadcast(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
     elif isinstance(tensor, Mapping):
         return type(tensor)({k: _tpu_broadcast(v, name=f"{name}_{k}") for k, v in tensor.items()})
@@ -612,13 +612,13 @@ def concatenate(data, dim=0):
     Returns:
         The same data structure as `data` with all the tensors concatenated.
     """
-    if isinstance(data[0], (tuple, list)):
+    if isinstance(data[0], tuple | list):
         return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
     elif isinstance(data[0], Mapping):
         return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
     elif isinstance(data[0], torch.Tensor):
         return torch.cat(data, dim=dim)
-    elif isinstance(data, (tuple, list)) and len(data) == 1:
+    elif isinstance(data, tuple | list) and len(data) == 1:
         return data[0]
     else:
         raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
@@ -840,7 +840,7 @@ def find_device(data):
             device = find_device(obj)
             if device is not None:
                 return device
-    elif isinstance(data, (tuple, list)):
+    elif isinstance(data, tuple | list):
         for obj in data:
             device = find_device(obj)
             if device is not None:
