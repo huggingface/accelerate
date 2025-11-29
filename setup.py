@@ -25,7 +25,6 @@ extras["test_dev"] = [
     "diffusers",
     "evaluate",
     "torchdata>=0.8.0",
-    "torchpippy>=0.2.0",
     "transformers",
     "scipy",
     "scikit-learn",
