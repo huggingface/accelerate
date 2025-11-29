@@ -819,8 +819,10 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
                         number_of_samples_per_dp_group = number_of_samples_in_ebs // dp_degree
                         batches = []
                         for i in range(dp_degree):
-                            portion = slice(i*number_of_samples_per_dp_group, (i+1) * number_of_samples_per_dp_group)
-                            dp_batch = self.slice_fn(batch,portion)
+                            portion = slice(
+                                i * number_of_samples_per_dp_group, (i + 1) * number_of_samples_per_dp_group
+                            )
+                            dp_batch = self.slice_fn(batch, portion)
                             for _ in range(cp_degree):
                                 batches.append(dp_batch)
                         batch = concatenate(batches, dim=0)
