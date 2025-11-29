@@ -774,6 +774,11 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         self.submesh_tp = None
         self.submesh_dp = None
         self.submesh_fsdp = None
+        self.submesh_cp = None
+        if self.torch_device_mesh and "cp" in self.torch_device_mesh.mesh_dim_names:
+            self.submesh_cp = self.torch_device_mesh["cp"]
+            if "tp" in self.torch_device_mesh.mesh_dim_names:
+                raise ValueError("TP + CP combination is not yet supported in dispatch mode.")
         if self.torch_device_mesh and "tp" in self.torch_device_mesh.mesh_dim_names:
             self.submesh_tp = self.torch_device_mesh["tp"]
             if "dp" in self.torch_device_mesh.mesh_dim_names:
@@ -805,10 +810,35 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
                         )
                     self._update_state_dict()
                     batch = next(iterator)
+                    # per_device_train_batch_size is batch size per cp group
+                    # multiplied by number of cp groups (dp degree).
+                    if self.submesh_cp:
+                        cp_degree = self.submesh_cp.size()
+                        dp_degree = self.torch_device_mesh.size() // cp_degree
+                        number_of_samples_in_ebs = find_batch_size(batch)
+                        number_of_samples_per_dp_group = number_of_samples_in_ebs // dp_degree
+                        batches = []
+                        for i in range(dp_degree):
+                            portion = slice(i*number_of_samples_per_dp_group, (i+1) * number_of_samples_per_dp_group)
+                            dp_batch = self.slice_fn(batch,portion)
+                            for _ in range(cp_degree):
+                                batches.append(dp_batch)
+                        batch = concatenate(batches, dim=0)
                 else:
                     # num_processes batches of the main iterator are concatenated then dispatched and split.
                     # We add the batches one by one so we have the remainder available when drop_last=False.
                     batches = []
+                    if self.submesh_cp:
+                        cp_degree = self.submesh_cp.size()
+                        dp_degree = self.torch_device_mesh.size() // cp_degree
+                        for _ in range(dp_degree):
+                            self._update_state_dict()
+                            # it is assumed that dataset provides batch
+                            # for each dp group and the same batch is replicated
+                            # for each rank in the cp group.
+                            batch = next(iterator)
+                            for _ in range(cp_degree):
+                                batches.append(batch)
                     if self.submesh_tp:
                         # when tp, extract single batch and then replicate
                         self._update_state_dict()
