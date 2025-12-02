@@ -2640,7 +2640,7 @@ class MegatronLMPlugin:
             "attention_dropout": self.attention_dropout,
             "hidden_dropout": self.hidden_dropout,
             "attention_softmax_in_fp32": self.attention_softmax_in_fp32,
-            # "expert_tensor_parallel_size": self.expert_tensor_parallel_size,
+            "expert_tensor_parallel_size": self.expert_tensor_parallel_size,
             "calculate_per_token_loss": self.calculate_per_token_loss,
             "use_rotary_position_embeddings": self.use_rotary_position_embeddings,
         }
