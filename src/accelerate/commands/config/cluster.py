@@ -28,6 +28,7 @@ from ...utils import (
     is_musa_available,
     is_npu_available,
     is_sdaa_available,
+    is_torchao_available,
     is_transformer_engine_available,
     is_transformers_available,
     is_xpu_available,
@@ -794,7 +795,9 @@ def get_cluster_input():
             )
             if mixed_precision == "fp8":
                 if not is_fp8_available():
-                    raise ValueError("FP8 (either torchao, Transformer Engine or MSAMP) is not installed on this machine.")
+                    raise ValueError(
+                        "FP8 (either torchao, Transformer Engine or MSAMP) is not installed on this machine."
+                    )
                 fp8_config = {}
                 fp8_config["backend"] = _ask_options(
                     "Which FP8 backend do you want to use?",
@@ -870,9 +873,9 @@ def get_cluster_input():
                         lambda x: "O1" if x == 0 else "O2",
                         default=1,
                     )
-                
+
                 elif fp8_config["backend"] == "AO":
-                    if not is_torch_ao_available():
+                    if not is_torchao_available():
                         raise ValueError("torchao was selected, but it is not installed on this machine.")
                     fp8_config["enable_fsdp_float8_all_gather"] = _ask_field(
                         "Do you want to enable FSDP2 float8 all gather? This is recommended for better performance if using FSDP2. [YES/no]: ",

@@ -321,7 +321,7 @@ class AORecipeKwargs(KwargsHandler):
               operations to prevent runtime errors.
             - `enable_fsdp_float8_all_gather=True`: Enables FP8 all-gather for FSDP2. This provides memory bandwidth
               savings by casting parameters before the all-gather operation, saving 50% bandwidth compared to BF16.
-            
+
             You can override these defaults by providing your own `Float8LinearConfig` instance.
         module_filter_func (`Callable`, *optional*, default to `None`):
             Optional function that must take in a module and layer name, and returns a boolean indicating whether the
@@ -338,7 +338,7 @@ class AORecipeKwargs(KwargsHandler):
         env_prefix = "ACCELERATE_FP8_"
         if not is_torchao_available():
             raise ImportError("TorchAO is not available. Please install it or use a different backend.")
-        
+
         if self.config is None:
             from torchao.float8 import Float8LinearConfig
 
