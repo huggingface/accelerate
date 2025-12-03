@@ -59,19 +59,19 @@ This gets distributed equally across the GPUs, i.e., each parameter would accoun
 For more details, please refer to the research paper [ZeRO: Memory Optimizations Toward Training Trillion
 Parameter Models](https://huggingface.co/papers/1910.02054) and following section of blog 
 [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#zero-data-parallelism).
-
-e. **Selective Activation Recomputation**: Reduces the memory footprint of activations significantly via smart activation checkpointing.
+e. **Expert Parallelism (EP)** Expert parallelism in Megatron-LM is used for Mixture-of-Experts (MoE) layers, where many “experts” (small feed-forward networks) exist but only a few are activated for each token. Instead of putting all experts on every GPU, Megatron distributes different experts across different GPUs—this is expert parallelism. During training, tokens are routed to the GPUs that host their selected experts, computed there, and then sent back, reducing memory cost. It often combines with tensor/pipeline parallelism for large-scale models.
+f. **Full Activation Recomputation**: Reduces the memory footprint of activations significantly via smart activation checkpointing.
 It doesn't store activations occupying large memory while being fast to recompute thereby achieving great tradeoff between memory and recomputation.
 For example, for GPT-3, this leads to 70% reduction in required memory for activations at the expense of
 only 2.7% FLOPs overhead for recomputation of activations. For more details, please refer to the research paper 
 [Reducing Activation Recomputation in Large Transformer Models](https://huggingface.co/papers/2205.05198).
 
-f. **Fused Kernels**: Fused Softmax, Mixed Precision Fused Layer Norm and Fused gradient accumulation to weight gradient computation of linear layer.
+g. **Fused Kernels**: Fused Softmax, Mixed Precision Fused Layer Norm and Fused gradient accumulation to weight gradient computation of linear layer.
 PyTorch JIT compiled Fused GeLU and Fused Bias+Dropout+Residual addition.
 
-g. **Support for Indexed datasets**: Efficient binary format of datasets for large scale training. Support for the `mmap`, `cached` index file and the `lazy` loader format.
+h. **Support for Indexed datasets**: Efficient binary format of datasets for large scale training. Support for the `mmap`, `cached` index file and the `lazy` loader format.
 
-h. **Checkpoint reshaping and interoperability**: Utility for reshaping Megatron-LM checkpoints of variable 
+i. **Checkpoint reshaping and interoperability**: Utility for reshaping Megatron-LM checkpoints of variable 
 tensor and pipeline parallel sizes to the beloved Transformers sharded checkpoints as it has great support with plethora of tools
 such as Accelerate Big Model Inference, Megatron-DeepSpeed Inference etc. 
 Support is also available for converting Transformers sharded checkpoints to Megatron-LM checkpoint of variable tensor and pipeline parallel sizes
@@ -109,7 +109,17 @@ cd ..
 ```
 git clone https://github.com/NVIDIA/Megatron-LM.git
 cd Megatron-LM
-git checkout core_r0.5.0
+git checkout 9a1c0d05c992c8a241da384ab27dce2021bb56dd
+you need to manually move gpt_builders.py to megatron/training and update
+include = [
+    "megatron.core", 
+    "megatron.core.*",
+    "megatron.training",
+    "megatron.training.*",
+    "megatron.legacy",
+    "megatron.legacy.*",
+]
+in pyproject.toml file to unblock yourself from using Megatron
 pip install --no-use-pep517 -e .
 ```
 

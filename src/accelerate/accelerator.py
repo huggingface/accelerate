@@ -1543,11 +1543,12 @@ class Accelerator:
 
         if self.parallelism_config and self.parallelism_config.cp_enabled:
             args = self._prepare_cp(*args)
-
-        if self.fp8_backend == FP8BackendType.TE:
-            args = self._prepare_te(*args)
-        elif self.fp8_backend == FP8BackendType.AO:
-            args = self._prepare_ao(*args)
+        # for megatron-lm, we don't need to prepare TE AO at this moment
+        if self.distributed_type != DistributedType.MEGATRON_LM:
+            if self.fp8_backend == FP8BackendType.TE:
+                args = self._prepare_te(*args)
+            elif self.fp8_backend == FP8BackendType.AO:
+                args = self._prepare_ao(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:

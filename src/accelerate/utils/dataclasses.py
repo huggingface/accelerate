@@ -2354,6 +2354,31 @@ class MegatronLMPlugin:
 
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
     pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
+    use_custom_fsdp: bool = field(default=None, metadata={"help": "use custom fsdp."})
+    overlap_cpu_optimizer_d2h_h2d: bool = field(
+        default=None, metadata={"help": "overlap CPU optimizer step, gradients D2H and updated parameters H2D."}
+    )
+    no_save_optim: bool = field(default=None, metadata={"help": "do not save optimizer."})
+    optimizer_cpu_offload: bool = field(default=None, metadata={"help": "use CPU offload for optimizer."})
+    use_precision_aware_optimizer: bool = field(default=None, metadata={"help": "use precision aware optimizer."})
+    decoder_last_pipeline_num_layers: int = field(
+        default=None,
+        metadata={
+            "help": "decoder last pipeline number of layers, default None is even split of transformer layers across all pipeline stages."
+        },
+    )
+    recompute_granularity: str = field(default=None, metadata={"help": "recompute granularity (full, selective)."})
+    recompute_method: str = field(default=None, metadata={"help": "recompute method (uniform, block)."})
+    recompute_num_layers: int = field(default=None, metadata={"help": "number of layers to recompute."})
+    attention_backend: bool = field(default=None, metadata={"help": "enable attention backend."})
+    expert_model_parallel_size: int = field(default=None, metadata={"help": "expert model parallel size."})
+    context_parallel_size: int = field(default=None, metadata={"help": "context parallel size."})
+    attention_dropout: float = field(default=None, metadata={"help": "attention dropout rate."})
+    hidden_dropout: float = field(default=None, metadata={"help": "hidden dropout rate."})
+    attention_softmax_in_fp32: bool = field(default=None, metadata={"help": "use fp32 for attention softmax."})
+    expert_tensor_parallel_size: int = field(default=None, metadata={"help": "expert tensor parallel size."})
+    calculate_per_token_loss: bool = field(default=None, metadata={"help": "calculate per token loss."})
+    use_rotary_position_embeddings: bool = field(default=None, metadata={"help": "use rotary position embeddings."})
     num_micro_batches: int = field(default=None, metadata={"help": "number of micro-batches."})
     gradient_clipping: float = field(
         default=None,
@@ -2527,6 +2552,27 @@ class MegatronLMPlugin:
             self.tp_degree = int(os.environ.get(prefix + "TP_DEGREE", 1))
         if self.pp_degree is None:
             self.pp_degree = int(os.environ.get(prefix + "PP_DEGREE", 1))
+        if self.use_custom_fsdp is None:
+            self.use_custom_fsdp = str_to_bool(os.environ.get(prefix + "USE_CUSTOM_FSDP", "False")) == 1
+        if self.no_save_optim is None:
+            self.no_save_optim = str_to_bool(os.environ.get(prefix + "NO_SAVE_OPTIM", "False")) == 1
+        if self.optimizer_cpu_offload is None:
+            self.optimizer_cpu_offload = str_to_bool(os.environ.get(prefix + "OPTIMIZER_CPU_OFFLOAD", "False")) == 1
+        if self.overlap_cpu_optimizer_d2h_h2d is None:
+            self.overlap_cpu_optimizer_d2h_h2d = (
+                str_to_bool(os.environ.get(prefix + "OVERLAP_CPU_OPTIMIZER_D2H_H2D", "False")) == 1
+            )
+        if self.use_precision_aware_optimizer is None:
+            self.use_precision_aware_optimizer = (
+                str_to_bool(os.environ.get(prefix + "USE_PRECISION_AWARE_OPTIMIZER", "False")) == 1
+            )
+        if self.decoder_last_pipeline_num_layers is None:
+            if os.environ.get(prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS") is not None:
+                self.decoder_last_pipeline_num_layers = int(
+                    os.environ.get(prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS", 0)
+                )
+            else:
+                self.decoder_last_pipeline_num_layers = None
         if self.num_micro_batches is None:
             self.num_micro_batches = int(os.environ.get(prefix + "NUM_MICRO_BATCHES", 1))
         if self.gradient_clipping is None:
@@ -2539,6 +2585,36 @@ class MegatronLMPlugin:
             )
         if self.sequence_parallelism is None:
             self.sequence_parallelism = str_to_bool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
+        if self.recompute_granularity is None:
+            self.recompute_granularity = os.environ.get(prefix + "RECOMPUTE_GRANULARITY", "full")
+        if self.recompute_method is None:
+            self.recompute_method = os.environ.get(prefix + "RECOMPUTE_METHOD", "uniform")
+        if self.recompute_num_layers is None:
+            self.recompute_num_layers = int(os.environ.get(prefix + "RECOMPUTE_NUM_LAYERS", 1))
+        if self.attention_backend is None:
+            self.attention_backend = str_to_bool(os.environ.get(prefix + "ATTENTION_BACKEND", "True")) == 1
+        if self.expert_model_parallel_size is None:
+            self.expert_model_parallel_size = int(os.environ.get(prefix + "EXPERT_MODEL_PARALLEL_SIZE", 1))
+        if self.context_parallel_size is None:
+            self.context_parallel_size = int(os.environ.get(prefix + "CONTEXT_PARALLEL_SIZE", 2))
+        if self.attention_dropout is None:
+            self.attention_dropout = float(os.environ.get(prefix + "ATTENTION_DROPOUT", "0.0"))
+        if self.hidden_dropout is None:
+            self.hidden_dropout = float(os.environ.get(prefix + "HIDDEN_DROPOUT", "0.0"))
+        if self.attention_softmax_in_fp32 is None:
+            self.attention_softmax_in_fp32 = (
+                str_to_bool(os.environ.get(prefix + "ATTENTION_SOFTMAX_IN_FP32", "True")) == 1
+            )
+        if self.expert_tensor_parallel_size is None:
+            self.expert_tensor_parallel_size = int(os.environ.get(prefix + "EXPERT_TENSOR_PARALLEL_SIZE", 1))
+        if self.calculate_per_token_loss is None:
+            self.calculate_per_token_loss = (
+                str_to_bool(os.environ.get(prefix + "CALCULATE_PER_TOKEN_LOSS", "True")) == 1
+            )
+        if self.use_rotary_position_embeddings is None:
+            self.use_rotary_position_embeddings = (
+                str_to_bool(os.environ.get(prefix + "USE_ROTARY_POSITION_EMBEDDINGS", "True")) == 1
+            )
 
         if self.pp_degree > 1 or self.use_distributed_optimizer:
             self.DDP_impl = "local"
@@ -2568,9 +2644,25 @@ class MegatronLMPlugin:
             "megatron_dataset_flag": self.megatron_dataset_flag,
             "eval_iters": self.eval_iters,
             "eval_interval": self.eval_interval,
+            "use_custom_fsdp": self.use_custom_fsdp,
+            "no_save_optim": self.no_save_optim,
+            "optimizer_cpu_offload": self.optimizer_cpu_offload,
+            "overlap_cpu_optimizer_d2h_h2d": self.overlap_cpu_optimizer_d2h_h2d,
+            "use_precision_aware_optimizer": self.use_precision_aware_optimizer,
+            "decoder_last_pipeline_num_layers": self.decoder_last_pipeline_num_layers,
+            "recompute_granularity": self.recompute_granularity,
+            "recompute_method": self.recompute_method,
+            "recompute_num_layers": self.recompute_num_layers,
+            "attention_backend": self.attention_backend,
+            "expert_model_parallel_size": self.expert_model_parallel_size,
+            "context_parallel_size": self.context_parallel_size,
+            "attention_dropout": self.attention_dropout,
+            "hidden_dropout": self.hidden_dropout,
+            "attention_softmax_in_fp32": self.attention_softmax_in_fp32,
+            "expert_tensor_parallel_size": self.expert_tensor_parallel_size,
+            "calculate_per_token_loss": self.calculate_per_token_loss,
+            "use_rotary_position_embeddings": self.use_rotary_position_embeddings,
         }
-        if self.recompute_activations:
-            self.megatron_lm_default_args["recompute_granularity"] = "selective"
         if self.tensorboard_dir is not None:
             self.megatron_lm_default_args["tensorboard_dir"] = self.tensorboard_dir
             if self.set_all_logging_options:

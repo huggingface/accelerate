@@ -21,7 +21,6 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
@@ -39,13 +38,8 @@ if is_megatron_lm_available():
     from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_model_parallel_src_rank
     from megatron.core.pipeline_parallel import get_forward_backward_func
     from megatron.core.utils import get_model_config
-    from megatron.inference.text_generation.communication import broadcast_int_list, broadcast_tensor
-    from megatron.inference.text_generation.generation import (
-        beam_search_and_return_on_first_stage,
-        generate_tokens_probs_and_return_on_first_stage,
-    )
     from megatron.legacy.data.dataset_utils import build_train_valid_test_datasets
-    from megatron.legacy.model import BertModel, Float16Module, GPTModel, T5Model
+    from megatron.legacy.model import BertModel, T5Model
     from megatron.legacy.model.classification import Classification
     from megatron.training import (
         get_args,
@@ -62,6 +56,7 @@ if is_megatron_lm_available():
     )
     from megatron.training.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
     from megatron.training.global_vars import set_global_variables
+    from megatron.training.gpt_builders import gpt_builder
     from megatron.training.initialize import (
         _compile_dependencies,
         _init_autoresume,
@@ -83,7 +78,6 @@ if is_megatron_lm_available():
         average_losses_across_data_parallel_group,
         calc_params_l2_norm,
         get_ltor_masks_and_position_ids,
-        unwrap_model,
     )
 
 
@@ -119,13 +113,9 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
                 post_process=post_process,
             )
     elif args.model_type_name == "gpt":
-        model = GPTModel(
-            config=config,
-            num_tokentypes=0,
-            parallel_output=True,
-            pre_process=pre_process,
-            post_process=post_process,
-        )
+        # use the latest gpt builder to build the model and set use_legacy_models to False
+        args.use_legacy_models = False
+        model = gpt_builder(args, pre_process, post_process, vp_stage=None, config=None)
     elif args.model_type_name == "t5":
         model = T5Model(
             config=config,
@@ -163,9 +153,6 @@ def prepare_model_optimizer_scheduler(accelerator):
         (model, optimizer, scheduler) = setup_model_and_optimizer(
             model_provider_func_,
             model_type,
-            no_wd_decay_cond=args.no_wd_decay_cond,
-            scale_lr_cond=args.scale_lr_cond,
-            lr_mult=args.lr_mult,
         )
     args.model_len = len(model)
     return model, optimizer, scheduler
@@ -597,10 +584,11 @@ class GPTTrainStep(AbstractTrainStep):
         self.get_batch = self.get_batch_func(accelerator, args.megatron_dataset_flag)
         self.loss_func = self.get_loss_func(accelerator)
         self.forward_step = self.get_forward_step_func()
-        self.eod_token = args.padded_vocab_size - 1
         if args.vocab_file is not None:
             tokenizer = get_tokenizer()
             self.eod_token = tokenizer.eod
+        self.eod_token = args.eos_token_id
+        self.pad_token = args.eos_token_id
         self.reset_position_ids = args.reset_position_ids
         self.reset_attention_mask = args.reset_attention_mask
         self.eod_mask_loss = args.eod_mask_loss
@@ -632,9 +620,14 @@ class GPTTrainStep(AbstractTrainStep):
 
             # Get the masks and position ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, self.eod_token, self.reset_position_ids, self.reset_attention_mask, self.eod_mask_loss
+                tokens,
+                eod_token=self.eod_token,
+                pad_token=self.eod_token,
+                reset_position_ids=self.reset_position_ids,
+                reset_attention_mask=self.reset_attention_mask,
+                eod_mask_loss=self.eod_mask_loss,
+                pad_mask_loss=True,
             )
-
             return tokens, labels, loss_mask, attention_mask, position_ids
 
         def get_batch_transformer(data_iterator):
@@ -649,7 +642,13 @@ class GPTTrainStep(AbstractTrainStep):
             tokens = tokens_[:, :-1].contiguous()
             # Get the masks and position ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, self.eod_token, self.reset_position_ids, self.reset_attention_mask, True
+                tokens,
+                eod_token=self.eod_token,
+                pad_token=self.eod_token,
+                reset_position_ids=self.reset_position_ids,
+                reset_attention_mask=self.reset_attention_mask,
+                eod_mask_loss=self.eod_mask_loss,
+                pad_mask_loss=True,
             )
             return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -865,7 +864,7 @@ def finish_mpu_init():
     # torch.distributed initialization
     args = get_args()
     # Pytorch distributed.
-    _initialize_distributed()
+    _initialize_distributed(None, None, None)
 
     # Random seeds for reproducibility.
     if args.rank == 0:
@@ -899,7 +898,7 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
 
     # set global args, build tokenizer, and set adlr-autoresume,
     # tensorboard-writer, and timers.
-    set_global_variables(args)
+    set_global_variables(args, build_tokenizer=False)
 
     # Megatron's MPU is the master. Complete initialization right away.
     finish_mpu_init()
@@ -1041,13 +1040,14 @@ class MegatronEngine(torch.nn.Module):
 
         batch_data_iterator = self.get_batch_data_iterator(batch_data)
 
-        loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad = train_step(
+        loss_reduced, skipped_iter, _, _, _, grad_norm, num_zeros_in_grad = train_step(
             forward_step_func=self.train_step_handler.forward_step,
             data_iterator=batch_data_iterator,
             model=self.module,
             optimizer=self.optimizer,
             opt_param_scheduler=self.scheduler,
             config=self.module_config,
+            forward_backward_func=get_forward_backward_func(),
         )
 
         self.optimizer.skipped_iter = skipped_iter == 1
@@ -1209,184 +1209,6 @@ class MegatronEngine(torch.nn.Module):
         self.num_floating_point_operations_so_far = num_floating_point_operations_so_far
         if args.fp16 and self.iteration == 0:
             self.optimizer.reload_model_params()
-
-    def megatron_generate(
-        self,
-        inputs,
-        attention_mask=None,
-        max_length=None,
-        max_new_tokens=None,
-        num_beams=None,
-        temperature=None,
-        top_k=None,
-        top_p=None,
-        length_penalty=None,
-        **kwargs,
-    ):
-        """
-        Generate method for GPT2 model. This method is used for inference. Supports both greedy and beam search along
-        with sampling. Refer the Megatron-LM repo for more details
-
-        Args:
-            inputs (torch.Tensor): input ids
-            attention_mask (torch.Tensor, optional): attention mask. Defaults to None.
-            max_length (int, optional): max length of the generated sequence. Defaults to None.
-            Either this or max_new_tokens should be provided.
-            max_new_tokens (int, optional): max number of tokens to be generated. Defaults to None.
-            Either this or max_length should be provided.
-            num_beams (int, optional): number of beams to use for beam search. Defaults to None.
-            temperature (float, optional): temperature for sampling. Defaults to 1.0.
-            top_k (int, optional): top k tokens to consider for sampling. Defaults to 0.0.
-            top_p (float, optional): tokens in top p probability are considered for sampling. Defaults to 0.0.
-            length_penalty (float, optional): length penalty for beam search. Defaults to None.
-            kwargs: additional key-value arguments
-        """
-
-        # checking if required arguments are passed
-        args = get_args()
-        if args.model_type_name != "gpt":
-            raise NotImplementedError("Generate method is not implemented for this model")
-
-        if args.data_parallel_size > 1:
-            raise ValueError("Generate method requires data parallelism to be 1")
-
-        if args.sequence_parallel:
-            raise ValueError("Generate method requires sequence parallelism to be False")
-
-        if args.recompute_granularity is not None:
-            raise ValueError("Checkpoint activations cannot be set for inference")
-
-        if args.vocab_file is None:
-            raise ValueError("Vocab file is required for inference")
-
-        # Prepare inputs
-        if max_length is None and max_new_tokens is None:
-            raise ValueError("`max_length` or `max_new_tokens` are required for inference")
-
-        if temperature is None:
-            temperature = 1.0
-        elif not (0.0 < temperature <= 100.0):
-            raise ValueError("temperature must be a positive number less than or equal to 100.0")
-
-        if top_k is None:
-            top_k = 0
-        elif not (0 <= top_k <= 1000):
-            raise ValueError("top_k must be a positive number less than or equal to 1000")
-
-        if top_p is None:
-            top_p = 0.0
-        elif top_p > 0.0 and top_k > 0.0:
-            raise ValueError("top_p and top_k sampling cannot be set together")
-        else:
-            if not (0.0 <= top_p <= 1.0):
-                raise ValueError("top_p must be less than or equal to 1.0")
-
-        top_p_decay = kwargs.get("top_p_decay", 0.0)
-        if not (0.0 <= top_p_decay <= 1.0):
-            raise ValueError("top_p_decay must be less than or equal to 1.0")
-
-        top_p_bound = kwargs.get("top_p_bound", 0.0)
-        if not (0.0 <= top_p_bound <= 1.0):
-            raise ValueError("top_p_bound must be less than or equal to 1.0")
-
-        add_BOS = kwargs.get("add_BOS", False)
-        if not (isinstance(add_BOS, bool)):
-            raise ValueError("add_BOS must be a boolean")
-
-        beam_width = num_beams
-        if beam_width is not None:
-            if not isinstance(beam_width, int):
-                raise ValueError("beam_width must be an integer")
-            if beam_width < 1:
-                raise ValueError("beam_width must be greater than 0")
-            if inputs.shape[0] > 1:
-                return "When doing beam_search, batch size must be 1"
-
-        tokenizer = get_tokenizer()
-
-        stop_token = kwargs.get("stop_token", tokenizer.eod)
-        if stop_token is not None:
-            if not isinstance(stop_token, int):
-                raise ValueError("stop_token must be an integer")
-
-        if length_penalty is None:
-            length_penalty = 1.0
-
-        sizes_list = None
-        prompts_tokens_tensor = None
-        prompts_length_tensor = None
-        if torch.distributed.get_rank() == 0:
-            # Get the prompts length.
-            if attention_mask is None:
-                prompts_length_tensor = torch.cuda.LongTensor([inputs.shape[1]] * inputs.shape[0])
-            else:
-                prompts_length_tensor = attention_mask.sum(axis=-1).cuda()
-
-            if max_new_tokens is None:
-                max_new_tokens = max_length - inputs.shape[1]
-            if max_new_tokens <= 0:
-                raise ValueError("max_new_tokens must be greater than 0")
-
-            if add_BOS:
-                max_length = max_new_tokens + inputs.shape[1] + 1
-                # making sure that `max_length` is a multiple of 4 to leverage fused kernels
-                max_length = 4 * math.ceil(max_length / 4)
-                max_new_tokens = max_length - (inputs.shape[1] + 1)
-                padding = torch.cuda.LongTensor([[tokenizer.eod] * max_new_tokens] * inputs.shape[0])
-                prompts_tokens_tensor = torch.concat(
-                    [torch.unsqueeze(padding[:, 0], axis=-1), inputs.cuda(), padding], axis=-1
-                )
-            else:
-                # making sure that `max_length` is a multiple of 4 to leverage fused kernels
-                max_length = max_new_tokens + inputs.shape[1]
-                max_length = 4 * math.ceil(max_length / 4)
-                max_new_tokens = max_length - inputs.shape[1]
-                padding = torch.cuda.LongTensor([[tokenizer.eod] * max_new_tokens] * inputs.shape[0])
-                prompts_tokens_tensor = torch.concat([inputs.cuda(), padding], axis=-1)
-
-            # We need the sizes of these tensors for the broadcast
-            sizes_list = [
-                prompts_tokens_tensor.size(0),  # Batch size
-                prompts_tokens_tensor.size(1),
-            ]  # Sequence length
-
-        # First, broadcast the sizes.
-        sizes_tensor = broadcast_int_list(2, int_list=sizes_list, rank=0)
-
-        # Now that we have the sizes, we can broadcast the tokens
-        # and length tensors.
-        sizes = sizes_tensor.tolist()
-        context_tokens_tensor = broadcast_tensor(sizes, torch.int64, tensor=prompts_tokens_tensor, rank=0)
-        context_length_tensor = broadcast_tensor(sizes[0], torch.int64, tensor=prompts_length_tensor, rank=0)
-
-        # Run the inference
-        random_seed = kwargs.get("random_seed", 0)
-        torch.random.manual_seed(random_seed)
-        unwrapped_model = unwrap_model(self.base_model, (torchDDP, LocalDDP, Float16Module))
-        if beam_width is not None:
-            tokens, _ = beam_search_and_return_on_first_stage(
-                unwrapped_model,
-                context_tokens_tensor,
-                context_length_tensor,
-                beam_width,
-                stop_token=stop_token,
-                num_return_gen=1,
-                length_penalty=length_penalty,
-            )
-        else:
-            tokens, _, _ = generate_tokens_probs_and_return_on_first_stage(
-                unwrapped_model,
-                context_tokens_tensor,
-                context_length_tensor,
-                return_output_log_probs=False,
-                top_k=top_k,
-                top_p=top_p,
-                top_p_decay=top_p_decay,
-                top_p_bound=top_p_bound,
-                temperature=temperature,
-                use_eod_token_for_early_termination=True,
-            )
-        return tokens
 
 
 # other utilities
