@@ -21,7 +21,6 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
@@ -39,11 +38,8 @@ if is_megatron_lm_available():
     from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_model_parallel_src_rank
     from megatron.core.pipeline_parallel import get_forward_backward_func
     from megatron.core.utils import get_model_config
-
-    from megatron.core.inference.communication_utils import broadcast_int_list, broadcast_tensor
     from megatron.legacy.data.dataset_utils import build_train_valid_test_datasets
     from megatron.legacy.model import BertModel, T5Model
-    from megatron.core.transformer.module import Float16Module
     from megatron.legacy.model.classification import Classification
     from megatron.training import (
         get_args,
@@ -60,6 +56,7 @@ if is_megatron_lm_available():
     )
     from megatron.training.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
     from megatron.training.global_vars import set_global_variables
+    from megatron.training.gpt_builders import gpt_builder
     from megatron.training.initialize import (
         _compile_dependencies,
         _init_autoresume,
@@ -81,9 +78,7 @@ if is_megatron_lm_available():
         average_losses_across_data_parallel_group,
         calc_params_l2_norm,
         get_ltor_masks_and_position_ids,
-        unwrap_model,
     )
-    from megatron.training.gpt_builders import gpt_builder
 
 
 # model utilities
@@ -625,7 +620,13 @@ class GPTTrainStep(AbstractTrainStep):
 
             # Get the masks and position ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, eod_token=self.eod_token, pad_token=self.eod_token, reset_position_ids=self.reset_position_ids, reset_attention_mask=self.reset_attention_mask, eod_mask_loss=self.eod_mask_loss, pad_mask_loss=True,
+                tokens,
+                eod_token=self.eod_token,
+                pad_token=self.eod_token,
+                reset_position_ids=self.reset_position_ids,
+                reset_attention_mask=self.reset_attention_mask,
+                eod_mask_loss=self.eod_mask_loss,
+                pad_mask_loss=True,
             )
             return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -641,7 +642,13 @@ class GPTTrainStep(AbstractTrainStep):
             tokens = tokens_[:, :-1].contiguous()
             # Get the masks and position ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, eod_token=self.eod_token, pad_token=self.eod_token, reset_position_ids=self.reset_position_ids, reset_attention_mask=self.reset_attention_mask, eod_mask_loss=self.eod_mask_loss, pad_mask_loss=True,
+                tokens,
+                eod_token=self.eod_token,
+                pad_token=self.eod_token,
+                reset_position_ids=self.reset_position_ids,
+                reset_attention_mask=self.reset_attention_mask,
+                eod_mask_loss=self.eod_mask_loss,
+                pad_mask_loss=True,
             )
             return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -1040,7 +1047,7 @@ class MegatronEngine(torch.nn.Module):
             optimizer=self.optimizer,
             opt_param_scheduler=self.scheduler,
             config=self.module_config,
-            forward_backward_func=get_forward_backward_func()
+            forward_backward_func=get_forward_backward_func(),
         )
 
         self.optimizer.skipped_iter = skipped_iter == 1

@@ -345,7 +345,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         if args.megatron_lm_overlap_cpu_optimizer_d2h_h2d is not None:
             current_env[prefix + "OVERLAP_CPU_OPTIMIZER_D2H_H2D"] = str(args.megatron_lm_overlap_cpu_optimizer_d2h_h2d)
         if args.megatron_lm_decoder_last_pipeline_num_layers is not None:
-            current_env[prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS"] = str(args.megatron_lm_decoder_last_pipeline_num_layers)
+            current_env[prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS"] = str(
+                args.megatron_lm_decoder_last_pipeline_num_layers
+            )
         current_env[prefix + "PP_DEGREE"] = str(args.megatron_lm_pp_degree)
         current_env[prefix + "GRADIENT_CLIPPING"] = str(args.megatron_lm_gradient_clipping)
         if args.megatron_lm_num_micro_batches is not None:
@@ -379,7 +381,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         if args.megatron_lm_calculate_per_token_loss is not None:
             current_env[prefix + "CALCULATE_PER_TOKEN_LOSS"] = str(args.megatron_lm_calculate_per_token_loss)
         if args.megatron_lm_use_rotary_position_embeddings is not None:
-            current_env[prefix + "USE_ROTARY_POSITION_EMBEDDINGS"] = str(args.megatron_lm_use_rotary_position_embeddings)
+            current_env[prefix + "USE_ROTARY_POSITION_EMBEDDINGS"] = str(
+                args.megatron_lm_use_rotary_position_embeddings
+            )
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if args.enable_cpu_affinity:

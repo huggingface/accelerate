@@ -653,7 +653,7 @@ def launch_command_parser(subparsers=None):
         type=int,
         default=None,
         help="Megatron-LM's decoder last pipeline number of layers, default None is even split of transformer layers across all pipeline stages.",
-    )    
+    )
     megatron_lm_args.add_argument(
         "--megatron_lm_pp_degree",
         type=int,
@@ -706,15 +706,13 @@ def launch_command_parser(subparsers=None):
         "--megatron_lm_recompute_method",
         default=None,
         type=str,
-        help="Megatron-LM's recompute method (uniform, block). "
-        "(useful only when `use_megatron_lm` flag is passed).",
+        help="Megatron-LM's recompute method (uniform, block). (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_recompute_num_layers",
         default=None,
         type=int,
-        help="Megatron-LM's number of layers to recompute. "
-        "(useful only when `use_megatron_lm` flag is passed).",
+        help="Megatron-LM's number of layers to recompute. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_attention_backend",
@@ -727,29 +725,25 @@ def launch_command_parser(subparsers=None):
         "--megatron_lm_expert_model_parallel_size",
         default=None,
         type=int,
-        help="Megatron-LM's expert model parallel size. "
-        "(useful only when `use_megatron_lm` flag is passed).",
+        help="Megatron-LM's expert model parallel size. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_context_parallel_size",
         default=None,
         type=int,
-        help="Megatron-LM's context parallel size. "
-        "(useful only when `use_megatron_lm` flag is passed).",
+        help="Megatron-LM's context parallel size. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_attention_dropout",
         default=None,
         type=float,
-        help="Megatron-LM's attention dropout rate. "
-        "(useful only when `use_megatron_lm` flag is passed).",
+        help="Megatron-LM's attention dropout rate. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_hidden_dropout",
         default=None,
         type=float,
-        help="Megatron-LM's hidden dropout rate. "
-        "(useful only when `use_megatron_lm` flag is passed).",
+        help="Megatron-LM's hidden dropout rate. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_attention_softmax_in_fp32",
@@ -762,8 +756,7 @@ def launch_command_parser(subparsers=None):
         "--megatron_lm_expert_tensor_parallel_size",
         default=None,
         type=int,
-        help="Megatron-LM's expert tensor parallel size. "
-        "(useful only when `use_megatron_lm` flag is passed).",
+        help="Megatron-LM's expert tensor parallel size. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_calculate_per_token_loss",
