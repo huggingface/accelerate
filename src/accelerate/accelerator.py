@@ -476,7 +476,6 @@ class Accelerator:
             self.parallelism_config._validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
-
         # Check for automatic FP8 recipe creation
         if self.fp8_enabled and not self.has_fp8_handler:
             if self.fp8_backend == FP8BackendType.AO:

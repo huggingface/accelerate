@@ -104,7 +104,7 @@ def _convert_sagemaker_distributed_mode(value):
 
 def _convert_fp8_backend(value):
     value = int(value)
-    return FP8BackendType(["TE", "MSAMP"][value])
+    return FP8BackendType(["AO", "TE", "MSAMP"][value])
 
 
 def _convert_yes_no_to_bool(value):

@@ -50,6 +50,7 @@ from .imports import (
     is_msamp_available,
     is_musa_available,
     is_npu_available,
+    is_torchao_available,
     is_transformer_engine_available,
     is_xpu_available,
 )
@@ -314,7 +315,14 @@ class AORecipeKwargs(KwargsHandler):
 
     Args:
         config (`torchao.float8.Float8LinearConfig`, *optional*, default to `None`):
-            The configuration for the FP8 training. In general, the default config should be sufficient.
+            The configuration for the FP8 training. If `None`, a default config will be created with sensible
+            defaults for most use cases:
+            - `pad_inner_dim=True`: Pads matrix dimensions to be divisible by 16, required for `torch._scaled_mm`
+              operations to prevent runtime errors.
+            - `enable_fsdp_float8_all_gather=True`: Enables FP8 all-gather for FSDP2. This provides memory bandwidth
+              savings by casting parameters before the all-gather operation, saving 50% bandwidth compared to BF16.
+
+            You can override these defaults by providing your own `Float8LinearConfig` instance.
         module_filter_func (`Callable`, *optional*, default to `None`):
             Optional function that must take in a module and layer name, and returns a boolean indicating whether the
             module should be converted to FP8. Defaults to `accelerate.utils.ao.filter_linear_layers`. See it for an
@@ -323,6 +331,28 @@ class AORecipeKwargs(KwargsHandler):
 
     config: Optional["Float8LinearConfig"] = None
     module_filter_func: Optional[Callable] = None
+    pad_inner_dim: Optional[bool] = None
+    enable_fsdp_float8_all_gather: Optional[bool] = None
+
+    def __post_init__(self):
+        env_prefix = "ACCELERATE_FP8_"
+        if not is_torchao_available():
+            raise ImportError("TorchAO is not available. Please install it or use a different backend.")
+
+        if self.config is None:
+            from torchao.float8 import Float8LinearConfig
+
+            # Check environment variables for overrides
+            if self.pad_inner_dim is None:
+                self.pad_inner_dim = parse_flag_from_env(env_prefix + "PAD_INNER_DIM", default=True)
+            if self.enable_fsdp_float8_all_gather is None:
+                self.enable_fsdp_float8_all_gather = parse_flag_from_env(
+                    env_prefix + "ENABLE_FSDP_FLOAT8_ALL_GATHER", default=True
+                )
+            self.config = Float8LinearConfig(
+                pad_inner_dim=self.pad_inner_dim,
+                enable_fsdp_float8_all_gather=self.enable_fsdp_float8_all_gather,
+            )
 
 
 @dataclass
