@@ -149,7 +149,7 @@ def notebook_launcher(
         launcher = PrepareForLaunch(function, distributed_type="XLA")
         print("Launching a training on TPU cores.")
         xmp.spawn(launcher, args=args, start_method="fork")
-    elif in_colab and get_gpu_info()[1] < 2:
+    elif in_colab and (not torch.cuda.is_available() or get_gpu_info()[1] < 2):
         # No need for a distributed launch otherwise as it's either CPU or one GPU.
         if torch.cuda.is_available():
             print("Launching training on one GPU.")
