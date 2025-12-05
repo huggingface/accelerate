@@ -24,8 +24,8 @@ from accelerate.utils import set_seed
 
 if version.parse(accelerate_version) > version.parse("0.33.0"):
     raise RuntimeError(
-        "Using encoder/decoder models is not supported with the `torch.pipelining` integration or accelerate>=0.34.0. "
-        "Please use a lower accelerate version and `torchpippy`, which this example uses."
+        "Using encoder/decoder models is not supported with the `torch.distributed.pipelining` integration or accelerate>=0.34.0. "
+        "Please use a lower accelerate version. Note: `torchpippy` has been merged into PyTorch 2.4.0+ as `torch.distributed.pipelining`."
     )
 
 
