@@ -2625,6 +2625,12 @@ class Accelerator:
             return self.torch_device_mesh
 
     def _prepare_msamp(self, *args, device_placement):
+        warnings.warn(
+            "MS-AMP is deprecated and will be removed in a future version of Accelerate. "
+            "Please use `'te'` (Transformer Engine) or `'torchao'` as the backend for FP8 "
+            "mixed precision training instead.",
+            FutureWarning,
+        )
         if not is_msamp_available():
             raise ImportError(
                 "MS-AMP was not found on your system. Please ensure that MS-AMP is available "
