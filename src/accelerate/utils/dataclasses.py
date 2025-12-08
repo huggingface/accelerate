@@ -2385,9 +2385,13 @@ class MegatronLMPlugin:
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
     pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
     use_custom_fsdp: bool = field(default=None, metadata={"help": "use custom fsdp."})
+<<<<<<< HEAD
     overlap_cpu_optimizer_d2h_h2d: bool = field(
         default=None, metadata={"help": "overlap CPU optimizer step, gradients D2H and updated parameters H2D."}
     )
+=======
+    no_load_optim: bool = field(default=None, metadata={"help": "do not load optimizer."})
+>>>>>>> b1e58a3 (no load optimizer state)
     eod_mask_loss: bool = field(default=None, metadata={"help": "use eod mask loss."})
     no_save_optim: bool = field(default=None, metadata={"help": "do not save optimizer."})
     optimizer_cpu_offload: bool = field(default=None, metadata={"help": "use CPU offload for optimizer."})
@@ -2585,6 +2589,8 @@ class MegatronLMPlugin:
             self.pp_degree = int(os.environ.get(prefix + "PP_DEGREE", 1))
         if self.use_custom_fsdp is None:
             self.use_custom_fsdp = str_to_bool(os.environ.get(prefix + "USE_CUSTOM_FSDP", "False")) == 1
+        if self.no_load_optim is None:
+            self.no_load_optim = str_to_bool(os.environ.get(prefix + "NO_LOAD_OPTIM", "False")) == 1
         if self.eod_mask_loss is None:
             self.eod_mask_loss = str_to_bool(os.environ.get(prefix + "EOD_MASK_LOSS", "False")) == 1
         if self.no_save_optim is None:
@@ -2678,6 +2684,7 @@ class MegatronLMPlugin:
             "eval_iters": self.eval_iters,
             "eval_interval": self.eval_interval,
             "use_custom_fsdp": self.use_custom_fsdp,
+            "no_load_optim": self.no_load_optim,
             "eod_mask_loss": self.eod_mask_loss,
             "no_save_optim": self.no_save_optim,
             "optimizer_cpu_offload": self.optimizer_cpu_offload,

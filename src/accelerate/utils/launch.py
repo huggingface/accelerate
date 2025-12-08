@@ -336,6 +336,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         current_env["ACCELERATE_USE_MEGATRON_LM"] = "true"
         current_env[prefix + "TP_DEGREE"] = str(args.megatron_lm_tp_degree)
         current_env[prefix + "USE_CUSTOM_FSDP"] = str(args.megatron_lm_use_custom_fsdp)
+        if args.megatron_lm_no_load_optim is not None:
+            current_env[prefix + "NO_LOAD_OPTIM"] = str(args.megatron_lm_no_load_optim)
         if args.megatron_lm_eod_mask_loss is not None:
             current_env[prefix + "EOD_MASK_LOSS"] = str(args.megatron_lm_eod_mask_loss)
         if args.megatron_lm_no_save_optim is not None:
