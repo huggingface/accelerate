@@ -625,6 +625,12 @@ def launch_command_parser(subparsers=None):
         help="Whether to use custom FSDP. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
+        "--megatron_lm_eod_mask_loss",
+        type=bool,
+        default=False,
+        help="Whether to use eod mask loss. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
         "--megatron_lm_overlap_cpu_optimizer_d2h_h2d",
         type=bool,
         default=False,
