@@ -1716,8 +1716,26 @@ class Accelerator:
 
         # Get new params and canonicalize
         new_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*result))
-        # Build a map from old to new params
-        mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+        # Build a map from old to new params and handle missings gracefully
+        mapping = {}
+        missing_params = []
+        for n, p in old_named_params.items():
+            if n in new_named_params:
+                mapping[p] = new_named_params[n]
+            else:
+                missing_params.append(n)
+
+        if missing_params:
+            # Common tied embedding parameter names
+            tied_weight_names = ["lm_head.weight", "model.embed_tokens.weight", "transformer.wte.weight"]
+            if any(name in missing_params for name in tied_weight_names):
+                raise ValueError(
+                    f"FSDP2 mapping failed (missing: {missing_params}). This is likely due to tied embeddings "
+                    f"(config has tie_word_embeddings=True but checkpoint has separate weights).\n"
+                    f"To fix, try: Set `model.config.tie_word_embeddings = False` after loading the model.\n"
+                )
+            raise KeyError(f"Parameters missing after FSDP2 wrapping: {missing_params}")
+
         # Update the optimizer parameters
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
