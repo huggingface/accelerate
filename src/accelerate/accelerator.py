@@ -2840,9 +2840,12 @@ class Accelerator:
         """
         learning_rate = kwargs.get("learning_rate")
 
-        if self.distributed_type != DistributedType.DEEPSPEED:
-            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
-            loss = loss / self.gradient_accumulation_steps
+        # Scale loss by gradient_accumulation_steps for all backends
+        # Note: DeepSpeed does NOT automatically scale loss during backward for all ZeRO stages,
+        # particularly ZeRO-2 where gradient partitioning can cause incorrect accumulation
+        # if the loss is not pre-scaled. This ensures consistent behavior across all ZeRO stages.
+        loss = loss / self.gradient_accumulation_steps
+
         if self.distributed_type == DistributedType.DEEPSPEED:
             self.deepspeed_engine_wrapped.backward(loss, sync_gradients=self.sync_gradients, **kwargs)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
