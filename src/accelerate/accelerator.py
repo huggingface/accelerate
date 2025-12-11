@@ -97,7 +97,6 @@ from .utils import (
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
-    is_ipex_available,
     is_lomo_available,
     is_megatron_lm_available,
     is_mlu_available,
@@ -1527,16 +1526,6 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args, drop_refs=False)
 
-        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if (
-                is_torch_version("<", "2.7.0")
-                and (self.device.type == "cpu" or self.device.type == "xpu")
-                and self.state.use_ipex
-            ):
-                logger.warning(
-                    "You are using lower version of PyTorch(< 2.7.0) with ipex acceleration on Intel CPU or XPU, Intel has upstreamed most of the optimizations into stock PyTorch from 2.7.0, we encourage you to install the latest stock PyTorch and enjoy the out-of-experience on Intel CPU/XPU."
-                )
-                args = self._prepare_ipex(*args)
         if self.parallelism_config and self.parallelism_config.tp_enabled:
             args = self._prepare_tp(*args)
 
@@ -2569,65 +2558,6 @@ class Accelerator:
 
         return tuple(result)
 
-    def _prepare_ipex(self, *args):
-        """
-        Prepares model and optimizer for training with IPEX on CPU/XPU. This covers 3 cases, IPEX compiled with CPU
-        only support, IPEX compiled with XPU support and training with XPU pytorch backend available in stock pytorch
-        starting from version 2.4.
-        """
-
-        # ipex.optimize() is available only for IPEX, both IPEX-CPU and IPEX-XPU
-        if is_ipex_available():
-            import intel_extension_for_pytorch as ipex
-        else:
-            raise ImportError(
-                "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-
-        models = []
-        optimizers = []
-        result = [obj for obj in args]
-        for i, obj in enumerate(result):
-            if isinstance(obj, torch.nn.Module):
-                model = obj
-                model.train()
-                models.append((i, model))
-            elif isinstance(obj, (torch.optim.Optimizer)):
-                optimizers.append((i, obj))
-
-        # Impossible to determine what to do if multiple models and/or optimizers are provided
-        if len(optimizers) > 1 or (len(models) > 1 and len(optimizers) == 1):
-            raise ValueError(
-                "Prepare with IPEX expects either 1+ models and no optimizer OR a single model-optimizer pair."
-            )
-
-        # Nothing to do
-        if len(models) == 0 and len(optimizers) == 0:
-            return result
-
-        dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
-        # Multiple models and no optimizer (inference) are provided
-        if len(models) > 0 and len(optimizers) == 0:
-            for i, model in models:
-                if self.device.type == "xpu" and next(model.parameters()).device.type == "cpu":
-                    model = model.to(self.device)
-                    model, _ = ipex.optimize(model, optimizer=None, dtype=dtype, inplace=True, level="O1")
-                    # Replace in result
-                    result[i] = model
-
-        # A single model-optimizer pair (training) is provided
-        if len(models) == 1 and len(optimizers) == 1:
-            i_model, model = models[0]
-            i_optimizer, optimizer = optimizers[0]
-            if self.device.type == "xpu" and next(model.parameters()).device.type == "cpu":
-                model = model.to(self.device)
-            model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
-            # Replace in result
-            result[i_model] = model
-            result[i_optimizer] = optimizer
-
-        return tuple(result)
 
     def _prepare_device_mesh(self):
         """

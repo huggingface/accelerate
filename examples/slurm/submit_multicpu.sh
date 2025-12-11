@@ -43,8 +43,7 @@ else
     --rdzv_backend c10d \
     --main_process_ip $head_node_ip \
     --main_process_port $MASTER_PORT \
-    --mpirun_hostfile $HOSTFILE_PATH \
-    --mpirun_ccl $CCL_WORKER_COUNT"
+    --mpirun_hostfile $HOSTFILE_PATH
 fi
 
 # This step is necessary because accelerate launch does not handle multiline arguments properly

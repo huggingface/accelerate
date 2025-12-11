@@ -711,8 +711,6 @@ class DynamoBackend(str, BaseEnum):
           more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
         - **TORCHXLA_TRACE_ONCE** -- Uses Pytorch/XLA with TorchDynamo optimization, for inference. [Read
           more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
-        - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
-          more](https://github.com/intel/intel-extension-for-pytorch).
         - **TVM** -- Uses Apache TVM for inference optimizations. [Read more](https://tvm.apache.org/)
         - **HPU_BACKEND** -- Uses HPU backend for inference optimizations.
 
@@ -732,7 +730,6 @@ class DynamoBackend(str, BaseEnum):
     TENSORRT = "TENSORRT"
     AOT_TORCHXLA_TRACE_ONCE = "AOT_TORCHXLA_TRACE_ONCE"
     TORCHXLA_TRACE_ONCE = "TORCHXLA_TRACE_ONCE"
-    IPEX = "IPEX"
     TVM = "TVM"
     HPU_BACKEND = "HPU_BACKEND"
 
