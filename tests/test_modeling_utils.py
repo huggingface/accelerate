@@ -52,6 +52,7 @@ from accelerate.utils.modeling import (
     retie_parameters,
     set_module_tensor_to_device,
 )
+from accelerate.utils.other import extract_model_from_parallel
 
 
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
@@ -1065,3 +1066,24 @@ class ModelingUtilsTester(unittest.TestCase):
             with align_module_device(module, align_device):
                 for param in model.parameters(recurse=False):
                     assert param.device == align_device
+
+    def test_extract_model_from_parallel_partial_compile(self):
+        """Partial torch.compile on a submodule should not crash and should preserve the compiled wrapper."""
+        model = ModelForTest()
+        model.linear2 = torch.compile(model.linear2)
+
+        # Precondition: top is not compiled, only submodule is
+        assert not hasattr(model, "_orig_mod")
+        assert hasattr(model.linear2, "_orig_mod")
+
+        # Standard extraction
+        extracted = extract_model_from_parallel(model)
+        x = torch.randn(2, 3)
+        torch.testing.assert_close(model(x), extracted(x))
+        assert isinstance(extracted, ModelForTest)
+        assert hasattr(extracted.linear2, "_orig_mod")
+
+        # Extraction with keep_torch_compile=False
+        extracted_no_keep = extract_model_from_parallel(model, keep_torch_compile=False)
+        assert hasattr(extracted_no_keep.linear2, "_orig_mod")
+        torch.testing.assert_close(model(x), extracted_no_keep(x))
