@@ -329,6 +329,7 @@ def is_mps_available(min_version="1.12"):
     # With torch 2.0.0, you can use torch.mps
     return is_torch_version(">=", min_version) and torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
+
 @lru_cache
 def is_mlu_available(check_device=False):
     """

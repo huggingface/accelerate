@@ -2558,7 +2558,6 @@ class Accelerator:
 
         return tuple(result)
 
-
     def _prepare_device_mesh(self):
         """
         Prepare the device mesh for distributed training. The dataloader will determine how to load data based on the

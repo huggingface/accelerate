@@ -792,9 +792,13 @@ class PartialState:
                     backend = "xccl"
                 distributed_type = DistributedType.MULTI_XPU
 
-        if distributed_type is None and cpu and (
-            int(os.environ.get("LOCAL_RANK", -1)) != -1
-            or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
+        if (
+            distributed_type is None
+            and cpu
+            and (
+                int(os.environ.get("LOCAL_RANK", -1)) != -1
+                or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
+            )
         ):
             distributed_type = DistributedType.MULTI_CPU
 
