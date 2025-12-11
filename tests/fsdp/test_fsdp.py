@@ -21,7 +21,7 @@ import torch
 from transformers import AutoModel
 
 from accelerate.accelerator import Accelerator
-from accelerate.state import AcceleratorState
+from accelerate.state import AcceleratorState, DistributedType
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
@@ -425,6 +425,51 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
+
+    def test_param_mapping_error_handling(self):
+        """Test FSDP2's defensive error handling for parameter mapping failures in tied/non-tied cases."""
+        from unittest.mock import Mock, patch
+
+        fsdp_plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+        accelerator = Accelerator()
+        accelerator.state.distributed_type = DistributedType.FSDP
+        accelerator.state.fsdp_plugin = fsdp_plugin
+
+        mock_model = Mock(spec=torch.nn.Module)
+        mock_model.config = Mock(tie_word_embeddings=True)
+        mock_optimizer = Mock(spec=torch.optim.Optimizer)
+        mock_optimizer.param_groups = []
+        result = [mock_model, mock_optimizer]
+
+        # Tied case
+        old_named_params = {"model.embed_tokens.weight": 12345, "lm_head.weight": 67890, "other.weight": 11111}
+        new_named_params = {"model.embed_tokens.weight": 12345, "other.weight": 11111}
+        with patch.object(accelerator, "_get_named_parameters", side_effect=[old_named_params, new_named_params]):
+            with patch("accelerate.accelerator.fsdp2_canonicalize_names", side_effect=lambda x: x):
+                with patch("accelerate.accelerator.fsdp2_prepare_model", return_value=mock_model):
+                    with patch.object(accelerator.state.fsdp_plugin, "set_auto_wrap_policy"):
+                        with self.assertRaises(ValueError) as cm:
+                            accelerator._prepare_fsdp2(*result)
+                        error_msg = str(cm.exception)
+                        self.assertIn("FSDP2 mapping failed", error_msg)
+                        self.assertIn("tied embeddings", error_msg)
+                        self.assertIn("lm_head.weight", error_msg)
+                        self.assertIn("tie_word_embeddings = False", error_msg)
+
+        # Non-tied case
+        old_named_params = {"layer1.weight": 12345, "some_other.weight": 67890}
+        new_named_params = {"layer1.weight": 12345}
+        with patch.object(accelerator, "_get_named_parameters", side_effect=[old_named_params, new_named_params]):
+            with patch("accelerate.accelerator.fsdp2_canonicalize_names", side_effect=lambda x: x):
+                with patch("accelerate.accelerator.fsdp2_prepare_model", return_value=mock_model):
+                    with patch.object(accelerator.state.fsdp_plugin, "set_auto_wrap_policy"):
+                        with self.assertRaises(KeyError) as cm:
+                            accelerator._prepare_fsdp2(*result)
+                        error_msg = str(cm.exception)
+                        self.assertIn("Parameters missing after FSDP2 wrapping", error_msg)
+                        self.assertIn("some_other.weight", error_msg)
+
+        AcceleratorState._reset_state(True)
 
 
 @run_first
