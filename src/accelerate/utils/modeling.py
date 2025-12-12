@@ -43,7 +43,7 @@ from .imports import (
     is_torch_xla_available,
     is_xpu_available,
 )
-from .memory import clear_device_cache, get_xpu_available_memory
+from .memory import clear_device_cache
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import is_torch_version

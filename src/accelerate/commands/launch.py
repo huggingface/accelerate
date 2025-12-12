@@ -1351,12 +1351,6 @@ def _validate_launch_command(args):
                     f"\t`--num_cpu_threads_per_process` was set to `{args.num_cpu_threads_per_process}` to improve out-of-box performance when training on CPUs"
                 )
 
-    if args.use_xpu is not None:
-        logger.warning(
-            "use_xpu is deprecated and ignored, will be removed in Accelerate v1.20. "
-            "XPU is a PyTorch native citizen now, we don't need extra argument to enable it any more."
-        )
-
     if any(warned):
         message = "The following values were not passed to `accelerate launch` and had defaults used instead:\n"
         message += "\n".join(warned)
