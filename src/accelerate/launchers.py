@@ -206,10 +206,12 @@ def notebook_launcher(
                 # First dummy launch
                 # Determine device type without initializing any device (which would break fork)
                 device_type, distributed_type = get_current_device_type()
+                # XPU requires spawn instead of fork
+                start_method = "spawn" if device_type == "xpu" else "fork"
                 if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
                     launcher = PrepareForLaunch(test_launch, distributed_type=distributed_type)
                     try:
-                        start_processes(launcher, args=(), nprocs=num_processes, start_method="fork")
+                        start_processes(launcher, args=(), nprocs=num_processes, start_method=start_method)
                     except ProcessRaisedException as e:
                         err = "An issue was found when verifying a stable environment for the notebook launcher."
                         if f"Cannot re-initialize {device_type.upper()} in forked subprocess" in e.args[0]:
@@ -241,7 +243,7 @@ def notebook_launcher(
                         rdzv_configs=rdzv_conf,
                         max_restarts=max_restarts,
                         monitor_interval=monitor_interval,
-                        start_method="fork",
+                        start_method=start_method,
                     )
                     if is_torch_version(">=", ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION):
                         launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template

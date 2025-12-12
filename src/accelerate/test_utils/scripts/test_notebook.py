@@ -17,14 +17,14 @@ Test file to ensure that in general certain situational setups for notebooks wor
 
 import os
 import time
-from multiprocessing import Queue
+import torch
 
 from pytest import mark, raises
 from torch.distributed.elastic.multiprocessing.errors import ChildFailedError
 
 from accelerate import PartialState, notebook_launcher
 from accelerate.test_utils import require_bnb
-from accelerate.utils import is_bnb_available
+from accelerate.utils import is_bnb_available, is_xpu_available
 
 
 def basic_function():
@@ -32,7 +32,7 @@ def basic_function():
     print(f"PartialState:\n{PartialState()}")
 
 
-def tough_nut_function(queue: Queue):
+def tough_nut_function(queue):
     if queue.empty():
         return
     trial = queue.get()
@@ -70,7 +70,15 @@ def test_c10d_rdzv_backend():
 
 @mark.skipif(NUM_PROCESSES < 2, reason="Need at least 2 processes to test fault tolerance")
 def test_fault_tolerant(max_restarts: int = 3):
-    queue = Queue()
+    # Use torch.multiprocessing to get the right context for the current device
+    import torch.multiprocessing as mp
+
+    # Get appropriate context - 'spawn' for XPU, 'fork' for others
+    if is_xpu_available():
+        ctx = mp.get_context("spawn")
+    else:
+        ctx = mp.get_context("fork")
+    queue = ctx.Queue()
     queue.put(max_restarts)
     notebook_launcher(tough_nut_function, (queue,), num_processes=NUM_PROCESSES, max_restarts=max_restarts)
 
