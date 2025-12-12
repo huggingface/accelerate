@@ -34,13 +34,11 @@ from .utils import (
     deepspeed_required,
     get_cpu_distributed_information,
     get_int_from_env,
-    is_ccl_available,
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
     is_habana_gaudi1,
     is_hpu_available,
-    is_ipex_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
@@ -216,9 +214,9 @@ class PartialState:
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
                         use_deepspeed = True
-                    # Deal with all other backends but XPU and CPU, that gets handled special later
+                    # Deal with all other backends but CPU, that gets handled special later
                     elif (
-                        self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU)
+                        self.distributed_type is not DistributedType.MULTI_CPU
                         and not torch.distributed.is_initialized()
                     ):
                         if self.backend == "tccl":
@@ -233,10 +231,19 @@ class PartialState:
                             )
                         ):
                             self.backend = "cuda:nccl,cpu:gloo"
+                        if (
+                            self.backend == "xccl"
+                            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+                            and (
+                                os.environ.get("FSDP_OFFLOAD_PARAMS", "false").lower() == "true"
+                                or os.environ.get("FSDP_STATE_DICT_TYPE", "SHARDED_STATE_DICT") == "FULL_STATE_DICT"
+                            )
+                        ):
+                            self.backend = "xpu:xccl,cpu:gloo"
                         torch.distributed.init_process_group(backend=self.backend, **kwargs)
 
-            # XPU and CPU require special env configs to be set
-            if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
+            # CPU require special env configs to be set
+            if self.distributed_type == DistributedType.MULTI_CPU:
                 dist_information = get_cpu_distributed_information()
                 os.environ["RANK"] = str(dist_information.rank)
                 os.environ["WORLD_SIZE"] = str(dist_information.world_size)
@@ -785,24 +792,17 @@ class PartialState:
                     backend = "xccl"
                 distributed_type = DistributedType.MULTI_XPU
 
-        if distributed_type is None and (
-            int(os.environ.get("LOCAL_RANK", -1)) != -1
-            or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
+        if (
+            distributed_type is None
+            and cpu
+            and (
+                int(os.environ.get("LOCAL_RANK", -1)) != -1
+                or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
+            )
         ):
-            if not cpu and is_xpu_available():
-                distributed_type = DistributedType.MULTI_XPU
-            else:
-                distributed_type = DistributedType.MULTI_CPU
+            distributed_type = DistributedType.MULTI_CPU
 
-            if (
-                backend in (None, "ccl")
-                and is_ccl_available()
-                and (get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU)
-            ):
-                import oneccl_bindings_for_pytorch  # noqa: F401
-
-                backend = "ccl"
-            elif backend in (None, "mpi") and torch.distributed.is_mpi_available():
+            if backend in (None, "mpi") and torch.distributed.is_mpi_available():
                 backend = "mpi"
             else:
                 backend = "gloo"
@@ -886,7 +886,6 @@ class AcceleratorState:
     _shared_state = SharedDict()
     _known_attrs = PartialState._known_attrs + [
         "deepspeed_plugin",
-        "use_ipex",
         "fsdp_plugin",
         "megatron_lm_plugin",
         "dynamo_plugin",
@@ -914,7 +913,6 @@ class AcceleratorState:
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
             self.deepspeed_plugins = None
-            self.use_ipex = None
             self.torch_tp_plugin = torch_tp_plugin
             self.parallelism_config = parallelism_config
             self.device_mesh = None
@@ -1016,12 +1014,6 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
-            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-                if is_ipex_available():
-                    # check if user disables it explicitly
-                    self.use_ipex = parse_flag_from_env("ACCELERATE_USE_IPEX", default=True)
-                else:
-                    self.use_ipex = False
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"

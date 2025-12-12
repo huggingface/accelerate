@@ -140,15 +140,7 @@ def get_cluster_input():
     else:
         use_cpu = False
 
-    ipex_config = {}
     mpirun_config = {}
-    if use_cpu or is_xpu_available():
-        ipex_config["ipex"] = _ask_field(
-            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU/XPU? [yes/NO]:",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
 
     if use_cpu:
         if distributed_type == DistributedType.MULTI_CPU:
@@ -165,7 +157,6 @@ def get_cluster_input():
                     default="~/hostfile",
                 )
                 mpirun_config["mpirun_hostfile"] = os.path.expanduser(mpirun_hostfile.strip())
-                mpirun_config["mpirun_ccl"] = _ask_field("Enter the number of oneCCL worker threads [1]: ", default=1)
 
     dynamo_config = {}
     use_dynamo = _ask_field(
@@ -915,7 +906,6 @@ def get_cluster_input():
         fsdp_config=fsdp_config,
         parallelism_config=parallelism_config,
         megatron_lm_config=megatron_lm_config,
-        ipex_config=ipex_config,
         mpirun_config=mpirun_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,

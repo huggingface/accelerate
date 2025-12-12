@@ -947,7 +947,7 @@ class BigModelingTester(unittest.TestCase):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
         from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
-        from transformers.utils.bitsandbytes import replace_with_bnb_linear
+        from transformers.integrations.bitsandbytes import replace_with_bnb_linear
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
@@ -978,7 +978,7 @@ class BigModelingTester(unittest.TestCase):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
         from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
-        from transformers.utils.bitsandbytes import replace_with_bnb_linear
+        from transformers.integrations.bitsandbytes import replace_with_bnb_linear
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
@@ -1041,7 +1041,7 @@ class BigModelingTester(unittest.TestCase):
         """Tests that `dispatch_model` quantizes fp4 layers"""
         from huggingface_hub import hf_hub_download
         from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
-        from transformers.utils.bitsandbytes import replace_with_bnb_linear
+        from transformers.integrations.bitsandbytes import replace_with_bnb_linear
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))

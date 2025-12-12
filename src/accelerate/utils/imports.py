@@ -66,25 +66,7 @@ def is_torch_distributed_available() -> bool:
 def is_xccl_available():
     if is_torch_version(">=", "2.7.0"):
         return torch.distributed.distributed_c10d.is_xccl_available()
-    if is_ipex_available():
-        return False
     return False
-
-
-def is_ccl_available():
-    try:
-        pass
-    except ImportError:
-        print(
-            "Intel(R) oneCCL Bindings for PyTorch* is required to run DDP on Intel(R) XPUs, but it is not"
-            " detected. If you see \"ValueError: Invalid backend: 'ccl'\" error, please install Intel(R) oneCCL"
-            " Bindings for PyTorch*."
-        )
-    return importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
-
-
-def get_ccl_version():
-    return importlib.metadata.version("oneccl_bind_pt")
 
 
 def is_import_timer_available():
@@ -348,31 +330,6 @@ def is_mps_available(min_version="1.12"):
     return is_torch_version(">=", min_version) and torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
 
-def is_ipex_available():
-    "Checks if ipex is installed."
-
-    def get_major_and_minor_from_version(full_version):
-        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
-
-    _torch_version = importlib.metadata.version("torch")
-    if importlib.util.find_spec("intel_extension_for_pytorch") is None:
-        return False
-    _ipex_version = "N/A"
-    try:
-        _ipex_version = importlib.metadata.version("intel_extension_for_pytorch")
-    except importlib.metadata.PackageNotFoundError:
-        return False
-    torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
-    ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
-    if torch_major_and_minor != ipex_major_and_minor:
-        warnings.warn(
-            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
-            f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
-        )
-        return False
-    return True
-
-
 @lru_cache
 def is_mlu_available(check_device=False):
     """
@@ -479,19 +436,16 @@ def is_habana_gaudi1():
 @lru_cache
 def is_xpu_available(check_device=False):
     """
-    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and
+    Checks if XPU acceleration is available via stock PyTorch (>=2.7) and
     potentially if a XPU is in the environment
     """
 
-    if is_ipex_available():
-        import intel_extension_for_pytorch  # noqa: F401
-    else:
-        if is_torch_version("<=", "2.3"):
-            return False
+    if is_torch_version("<=", "2.6"):
+        return False
 
     if check_device:
         try:
-            # Will raise a RuntimeError if no XPU  is found
+            # Will raise a RuntimeError if no XPU is found
             _ = torch.xpu.device_count()
             return torch.xpu.is_available()
         except RuntimeError:

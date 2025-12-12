@@ -40,7 +40,6 @@ DYNAMO_BACKENDS = [
     "TENSORRT",
     "AOT_TORCHXLA_TRACE_ONCE",
     "TORHCHXLA_TRACE_ONCE",
-    "IPEX",
     "TVM",
 ]
 

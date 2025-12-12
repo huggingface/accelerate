@@ -30,7 +30,6 @@ from packaging import version
 from .imports import (
     is_cuda_available,
     is_hpu_available,
-    is_ipex_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
@@ -183,28 +182,3 @@ def find_executable_batch_size(
                     raise
 
     return decorator
-
-
-def get_xpu_available_memory(device_index: int):
-    if version.parse(torch.__version__).release >= version.parse("2.6").release:
-        # torch.xpu.mem_get_info API is available starting from PyTorch 2.6
-        # It further requires PyTorch built with the SYCL runtime which supports API
-        # to query available device memory. If not available, exception will be
-        # raised. Version of SYCL runtime used to build PyTorch is being reported
-        # with print(torch.version.xpu) and corresponds to the version of Intel DPC++
-        # SYCL compiler. First version to support required feature is 20250001.
-        try:
-            return torch.xpu.mem_get_info(device_index)[0]
-        except Exception:
-            pass
-    elif is_ipex_available():
-        ipex_version = version.parse(importlib.metadata.version("intel_extension_for_pytorch"))
-        if compare_versions(ipex_version, ">=", "2.5"):
-            from intel_extension_for_pytorch.xpu import mem_get_info
-
-            return mem_get_info(device_index)[0]
-
-    warnings.warn(
-        "The XPU `mem_get_info` API is available in IPEX version >=2.5 or PyTorch >=2.6. The current returned available memory is incorrect. Please consider upgrading your IPEX or PyTorch version."
-    )
-    return torch.xpu.max_memory_allocated(device_index)
