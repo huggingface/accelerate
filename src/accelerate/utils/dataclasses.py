@@ -2939,6 +2939,81 @@ def parse_llama_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
 
+@add_model_config_to_megatron_parser("glm4_moe")
+def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "gpt"
+    num_layers = model.config.num_hidden_layers
+    pretraining_flag = False
+    hidden_size = model.config.hidden_size
+    num_attention_heads = model.config.num_attention_heads
+    orig_vocab_size = model.config.vocab_size
+
+    max_position_embeddings = model.config.max_position_embeddings
+    seq_length = getattr(model.config, "max_sequence_length", None)
+    if megatron_lm_plugin.seq_length is None:
+        if seq_length is not None:
+            megatron_lm_plugin.seq_length = seq_length
+        elif megatron_lm_plugin.decoder_seq_length is not None:
+            megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+        elif batch_data is not None:
+            megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+        else:
+            megatron_lm_plugin.seq_length = max_position_embeddings
+
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "HuggingFaceTokenizer"
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["kv_channels"] = model.config.head_dim
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = 'rope'
+    megatron_lm_plugin.megatron_lm_default_args["original_model_type"] = model.config.model_type
+    megatron_lm_plugin.megatron_lm_default_args["qk_layernorm"] = model.config.use_qk_norm  # this is true for glm4.5 but False for glm4.5-air.
+    megatron_lm_plugin.megatron_lm_default_args["add_bias_linear"] = False
+    megatron_lm_plugin.megatron_lm_default_args["group_query_attention"] = True
+    megatron_lm_plugin.megatron_lm_default_args["num_query_groups"] = model.config.num_key_value_heads
+    megatron_lm_plugin.megatron_lm_default_args["ffn_hidden_size"] = model.config.intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["add_qkv_bias"] = True
+    megatron_lm_plugin.megatron_lm_default_args["normalization"] = 'RMSNorm'
+    megatron_lm_plugin.megatron_lm_default_args["rotary-percent"] = 0.5
+    megatron_lm_plugin.megatron_lm_default_args["swiglu"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_ffn_hidden_size"] = model.config.moe_intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["moe_shared_expert_intermediate_size"] = model.config.moe_intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_pre_softmax"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_score_function"] = "sigmoid"
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_enable_expert_bias"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_bias_update_rate"] = 0
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_load_balancing_type"] = "seq_aux_loss"
+    megatron_lm_plugin.megatron_lm_default_args["moe_token_dispatcher_type"] = "alltoall"
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_topk"] = model.config.num_experts_per_tok
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_topk_scaling_factor"] = model.config.routed_scaling_factor
+    megatron_lm_plugin.megatron_lm_default_args["moe_layer_freq"] = [0] * model.config.first_k_dense_replace + [1] * (model.config.num_hidden_layers - model.config.first_k_dense_replace)
+    megatron_lm_plugin.megatron_lm_default_args["num_experts"] = model.config.n_routed_experts
+    megatron_lm_plugin.megatron_lm_default_args["moe_grouped_gemm"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_dtype"] = "fp32"
+    megatron_lm_plugin.megatron_lm_default_args["moe_permute_fusion"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_aux_loss_coeff"] = 0
+    megatron_lm_plugin.megatron_lm_default_args["rotary_base"] = model.config.rope_theta
+    megatron_lm_plugin.megatron_lm_default_args["rope_type"] = 'rope'
+    megatron_lm_plugin.megatron_lm_default_args["rotary_percent"] = model.config.partial_rotary_factor
+    megatron_lm_plugin.megatron_lm_default_args["norm_epsilon"] = 1e-3
+    megatron_lm_plugin.megatron_lm_default_args["use_flash_attn"] = True
+    megatron_lm_plugin.megatron_lm_default_args["eos_token_id"] = model.config.eos_token_id
+    if model.config.fp8_param:
+        megatron_lm_plugin.megatron_lm_default_args["fp8"] = model.config.fp8
+        megatron_lm_plugin.megatron_lm_default_args["fp8_param"] = model.config.fp8_param
+        megatron_lm_plugin.megatron_lm_default_args["fp8_param_gather"] = model.config.fp8_param_gather
+        megatron_lm_plugin.megatron_lm_default_args["fp8_recipe"] = model.config.fp8_recipe
+    megatron_lm_plugin.megatron_lm_default_args["bf16"] = model.config.bf16
+    megatron_lm_plugin.megatron_lm_default_args["untie_embeddings_and_output_weights"] = not model.config.tie_word_embeddings
+    logger.info(f"Parsed GLM4 MoE config: {megatron_lm_plugin.megatron_lm_default_args}")
+
 
 @dataclass
 class BnbQuantizationConfig:
