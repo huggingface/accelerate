@@ -2385,13 +2385,10 @@ class MegatronLMPlugin:
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
     pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
     use_custom_fsdp: bool = field(default=None, metadata={"help": "use custom fsdp."})
-<<<<<<< HEAD
     overlap_cpu_optimizer_d2h_h2d: bool = field(
         default=None, metadata={"help": "overlap CPU optimizer step, gradients D2H and updated parameters H2D."}
     )
-=======
     no_load_optim: bool = field(default=None, metadata={"help": "do not load optimizer."})
->>>>>>> b1e58a3 (no load optimizer state)
     eod_mask_loss: bool = field(default=None, metadata={"help": "use eod mask loss."})
     no_save_optim: bool = field(default=None, metadata={"help": "do not save optimizer."})
     optimizer_cpu_offload: bool = field(default=None, metadata={"help": "use CPU offload for optimizer."})
