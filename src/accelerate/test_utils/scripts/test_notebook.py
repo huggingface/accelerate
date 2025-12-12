@@ -73,7 +73,6 @@ def test_fault_tolerant(max_restarts: int = 3):
     import torch.multiprocessing as mp
 
     # Get appropriate context - 'spawn' for XPU, 'fork' for others
-    # This must match what notebook_launcher uses internally
     if is_xpu_available():
         ctx = mp.get_context("spawn")
     else:
