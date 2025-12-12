@@ -35,6 +35,7 @@ import torch
 import transformers
 from datasets import load_dataset
 from huggingface_hub import HfApi
+from accelerate import init_empty_weights
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformers import (
@@ -370,11 +371,18 @@ def main():
         )
 
     if args.model_name_or_path:
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path,
-            from_tf=bool(".ckpt" in args.model_name_or_path),
-            config=config,
-        )
+        # if we are using Megatron-LM, we can use init_empty_weights to load the model without initializing the weights
+        # since the weights are loaded later.
+        if accelerator.distributed_type == DistributedType.MEGATRON_LM:
+            assert config is not None, "config should not be None for Megatron-LM"
+            with init_empty_weights():
+                model = AutoModelForCausalLM.from_config(config)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                args.model_name_or_path,
+                from_tf=bool(".ckpt" in args.model_name_or_path),
+                config=config,
+            )
     else:
         logger.info("Training new model from scratch")
         model = AutoModelForCausalLM.from_config(config)
