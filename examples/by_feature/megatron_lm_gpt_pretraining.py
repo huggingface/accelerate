@@ -206,6 +206,12 @@ def parse_args():
         help="If the training should continue from a checkpoint folder.",
     )
     parser.add_argument(
+        "--megatron_lm_checkpoint",
+        type=str,
+        default=None,
+        help="If the training should start from a Megatron-LM checkpoint.",
+    )
+    parser.add_argument(
         "--with_tracking",
         action="store_true",
         help="Whether to enable experiment trackers for logging.",
@@ -375,6 +381,7 @@ def main():
         # since the weights are loaded later.
         if accelerator.distributed_type == DistributedType.MEGATRON_LM:
             assert config is not None, "config should not be None for Megatron-LM"
+            assert args.resume_from_checkpoint is not None or args.megatron_lm_checkpoint is not None, "resume_from_checkpoint or megatron_lm_checkpoint should be provided for Megatron-LM since we need to load the weights from the checkpoint later on"
             with init_empty_weights():
                 model = AutoModelForCausalLM.from_config(config)
         else:
@@ -584,6 +591,11 @@ def main():
             starting_epoch = resume_step // len(train_dataloader)
             resume_step -= starting_epoch * len(train_dataloader)
 
+    if args.megatron_lm_checkpoint:
+        assert accelerator.distributed_type == DistributedType.MEGATRON_LM, "megatron_lm_checkpoint should only be used with Megatron-LM"
+        assert args.resume_from_checkpoint is None, "resume_from_checkpoint should not be provided when megatron_lm_checkpoint is provided"
+        accelerator.print(f"Loading Megatron-LM checkpoint: {args.megatron_lm_checkpoint}")
+        accelerator.load_state(args.megatron_lm_checkpoint)
     # update the progress_bar if load from checkpoint
     progress_bar.update(starting_epoch * num_update_steps_per_epoch)
     completed_steps = starting_epoch * num_update_steps_per_epoch
