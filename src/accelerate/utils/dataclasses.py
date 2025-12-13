@@ -3005,7 +3005,7 @@ def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["norm_epsilon"] = 1e-3
     megatron_lm_plugin.megatron_lm_default_args["use_flash_attn"] = True
     megatron_lm_plugin.megatron_lm_default_args["eos_token_id"] = model.config.eos_token_id
-    if model.config.fp8_param:
+    if getattr(model.config, "fp8_param", False):
         megatron_lm_plugin.megatron_lm_default_args["fp8"] = model.config.fp8
         megatron_lm_plugin.megatron_lm_default_args["fp8_param"] = model.config.fp8_param
         megatron_lm_plugin.megatron_lm_default_args["fp8_param_gather"] = model.config.fp8_param_gather
