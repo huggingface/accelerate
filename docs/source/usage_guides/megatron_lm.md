@@ -59,6 +59,7 @@ This gets distributed equally across the GPUs, i.e., each parameter would accoun
 For more details, please refer to the research paper [ZeRO: Memory Optimizations Toward Training Trillion
 Parameter Models](https://huggingface.co/papers/1910.02054) and following section of blog 
 [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed#zero-data-parallelism).
+
 e. **Expert Parallelism (EP)** Expert parallelism in Megatron-LM is used for Mixture-of-Experts (MoE) layers, where many “experts” (small feed-forward networks) exist but only a few are activated for each token. Instead of putting all experts on every GPU, Megatron distributes different experts across different GPUs—this is expert parallelism. During training, tokens are routed to the GPUs that host their selected experts, computed there, and then sent back, reducing memory cost. It often combines with tensor/pipeline parallelism for large-scale models.
 f. **Full Activation Recomputation**: Reduces the memory footprint of activations significantly via smart activation checkpointing.
 It doesn't store activations occupying large memory while being fast to recompute thereby achieving great tradeoff between memory and recomputation.
@@ -122,6 +123,19 @@ include = [
 in pyproject.toml file to unblock yourself from using Megatron
 pip install --no-use-pep517 -e .
 ```
+
+## Prepare Megaton-LM checkpoint
+If you want to fine-tune a model, make sure you have a torch dist format checkpoint ready. If you only have access to the huggingface model, please consider converting it to a torch dist format checkpoint acceptable to Megatron. One examle can be using slime's script, take GLM models as an example:
+```
+source /your/path/to/slime/scripts/models/glm4.5-355B-A32B.sh
+srun torchrun --nproc-per-node 8 \
+   /your/path/to/slime/tools/convert_hf_to_torch_dist.py \
+    ${MODEL_ARGS[@]} \
+    --hf-checkpoint /your/path/to/huggingface/models/GLM4.5-355B-A32B \
+    --save /your/path/to/megatron/models/GLM4.5-355B-A32B_torch_dist
+
+```
+After the conversion, make sure: 1. under /your/path/to/megatron/models/GLM4.5-355B-A32B_torch_dist: change the latest_checkpointed_iteration.txt's content from release to 0 and rename the directory release to iter_0000000; 2: in the config: make sure megatron_lm_no_load_optim to be true so that no optimizer states are needed.
 
 ## Accelerate Megatron-LM Plugin
 
