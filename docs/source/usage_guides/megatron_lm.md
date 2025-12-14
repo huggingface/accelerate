@@ -135,7 +135,7 @@ srun torchrun --nproc-per-node 8 \
     --save /your/path/to/megatron/models/GLM4.5-355B-A32B_torch_dist
 
 ```
-After the conversion, make sure: 1. under /your/path/to/megatron/models/GLM4.5-355B-A32B_torch_dist: change the latest_checkpointed_iteration.txt's content from release to 0 and rename the directory release to iter_0000000; 2: in the config: make sure megatron_lm_no_load_optim to be true so that no optimizer states are needed.
+After the conversion, make sure: 1. under `/your/path/to/megatron/models/GLM4.5-355B-A32B_torch_dist`: change the `latest_checkpointed_iteration.txt`'s content from `release` to `0` and rename the directory `release` to `iter_0000000`; 2: in the config, make sure `megatron_lm_no_load_optim` to be true so that no optimizer states are needed.
 
 ## Accelerate Megatron-LM Plugin
 
