@@ -595,6 +595,15 @@ def main():
         assert accelerator.distributed_type == DistributedType.MEGATRON_LM, "megatron_lm_checkpoint should only be used with Megatron-LM"
         assert args.resume_from_checkpoint is None, "resume_from_checkpoint should not be provided when megatron_lm_checkpoint is provided"
         accelerator.print(f"Loading Megatron-LM checkpoint: {args.megatron_lm_checkpoint}")
+        checkpoint_dir = args.megatron_lm_checkpoint
+        latest_iter_file = os.path.join(checkpoint_dir, "latest_checkpointed_iteration.txt")
+        assert os.path.isfile(latest_iter_file), f"{latest_iter_file} does not exist in {checkpoint_dir}"
+        with open(latest_iter_file, "r") as f:
+            contents = f.read().strip()
+        assert contents == "1", f"latest_checkpointed_iteration.txt in {checkpoint_dir} must contain only '1' (found '{contents}'), please mannually change it to '1' and rename the directory release to iter_0000001, also make sure megatron_lm_no_load_optim is set to true in the config file"
+        # Also assert iter_0000001 directory exists
+        iter1_dir = os.path.join(checkpoint_dir, "iter_0000001")
+        assert os.path.isdir(iter1_dir), f"{iter1_dir} directory does not exist in {checkpoint_dir}, please rename the release directory to iter_0000001"
         accelerator.load_state(args.megatron_lm_checkpoint)
     # update the progress_bar if load from checkpoint
     progress_bar.update(starting_epoch * num_update_steps_per_epoch)
