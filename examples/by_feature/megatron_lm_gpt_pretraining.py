@@ -379,9 +379,8 @@ def main():
     if args.model_name_or_path:
         # if we are using Megatron-LM, we can use init_empty_weights to load the model without initializing the weights
         # since the weights are loaded later.
-        if accelerator.distributed_type == DistributedType.MEGATRON_LM:
+        if args.resume_from_checkpoint is not None or args.initial_megatron_lm_checkpoint is not None:
             assert config is not None, "config should not be None for Megatron-LM"
-            assert args.resume_from_checkpoint is not None or args.initial_megatron_lm_checkpoint is not None, "resume_from_checkpoint or initial_megatron_lm_checkpoint should be provided for Megatron-LM since we need to load the weights from the checkpoint later on"
             with init_empty_weights():
                 model = AutoModelForCausalLM.from_config(config)
         else:
