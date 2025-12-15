@@ -19,13 +19,10 @@ A collection of utilities for ensuring that training can always occur. Heavily i
 
 import functools
 import gc
-import importlib
 import inspect
-import warnings
 from typing import Optional
 
 import torch
-from packaging import version
 
 from .imports import (
     is_cuda_available,
@@ -37,7 +34,6 @@ from .imports import (
     is_sdaa_available,
     is_xpu_available,
 )
-from .versions import compare_versions
 
 
 def clear_device_cache(garbage_collection=False):
