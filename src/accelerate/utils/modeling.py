@@ -43,7 +43,7 @@ from .imports import (
     is_torch_xla_available,
     is_xpu_available,
 )
-from .memory import clear_device_cache, get_xpu_available_memory
+from .memory import clear_device_cache
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import is_torch_version
@@ -786,7 +786,7 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
             for i in range(torch.xpu.device_count()):
                 try:
                     _ = torch.tensor(0, device=torch.device("xpu", i))
-                    max_memory[i] = get_xpu_available_memory(i)
+                    max_memory[i] = torch.xpu.mem_get_info(i)[0]
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue

@@ -87,7 +87,6 @@ from .environment import (
 )
 from .imports import (
     deepspeed_required,
-    get_ccl_version,
     is_4bit_bnb_available,
     is_8bit_bnb_available,
     is_aim_available,
@@ -95,7 +94,6 @@ from .imports import (
     is_bitsandbytes_multi_backend_available,
     is_bnb_available,
     is_boto3_available,
-    is_ccl_available,
     is_clearml_available,
     is_comet_ml_available,
     is_cuda_available,
@@ -107,7 +105,6 @@ from .imports import (
     is_habana_gaudi1,
     is_hpu_available,
     is_import_timer_available,
-    is_ipex_available,
     is_lomo_available,
     is_matplotlib_available,
     is_megatron_lm_available,

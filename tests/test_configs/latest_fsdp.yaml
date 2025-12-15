@@ -9,13 +9,13 @@ fsdp_config:
   fsdp_backward_prefetch: BACKWARD_PRE
   fsdp_cpu_ram_efficient_loading: true
   fsdp_forward_prefetch: false
+  fsdp_ignored_modules: null
   fsdp_offload_params: false
   fsdp_sharding_strategy: FULL_SHARD
   fsdp_state_dict_type: SHARDED_STATE_DICT
   fsdp_sync_module_states: true
   fsdp_transformer_layer_cls_to_wrap: BertLayer
   fsdp_use_orig_params: true
-  fsdp_ignored_modules: null
 machine_rank: 0
 main_training_function: main
 mixed_precision: 'no'

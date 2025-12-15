@@ -275,13 +275,6 @@ def launch_command_parser(subparsers=None):
         help="Whether to use Megatron-LM.",
     )
 
-    paradigm_args.add_argument(
-        "--use_xpu",
-        default=None,
-        action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU specifically. This argument is deprecated and ignored, will be removed in Accelerate v1.20.",
-    )
-
     # distributed GPU training arguments
     distributed_args = parser.add_argument_group("Distributed GPUs", "Arguments related to distributed GPU training.")
     distributed_args.add_argument(
@@ -884,12 +877,6 @@ def launch_command_parser(subparsers=None):
         help="Location for a hostfile for using Accelerate to launch a multi-CPU training job with mpirun. This will "
         "get passed to the MPI --hostfile or -f parameter, depending on which MPI program is installed.",
     )
-    mpirun_args.add_argument(
-        "--mpirun_ccl",
-        type=int,
-        default=1,
-        help="The number of oneCCL worker threads when using Accelerate to launch multi-CPU training with mpirun.",
-    )
 
     # ParallelismConfig arguments
     parallelism_config_args = parser.add_argument_group(
@@ -1363,12 +1350,6 @@ def _validate_launch_command(args):
                 warned.append(
                     f"\t`--num_cpu_threads_per_process` was set to `{args.num_cpu_threads_per_process}` to improve out-of-box performance when training on CPUs"
                 )
-
-    if args.use_xpu is not None:
-        logger.warning(
-            "use_xpu is deprecated and ignored, will be removed in Accelerate v1.20. "
-            "XPU is a PyTorch native citizen now, we don't need extra argument to enable it any more."
-        )
 
     if any(warned):
         message = "The following values were not passed to `accelerate launch` and had defaults used instead:\n"
