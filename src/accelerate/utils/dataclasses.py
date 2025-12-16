@@ -2939,6 +2939,7 @@ def parse_llama_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
 
+
 @add_model_config_to_megatron_parser("glm4_moe")
 def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
     model_type_name = "gpt"
@@ -2972,19 +2973,23 @@ def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
     megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
-    megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = 'rope'
+    megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = "rope"
     megatron_lm_plugin.megatron_lm_default_args["original_model_type"] = model.config.model_type
-    megatron_lm_plugin.megatron_lm_default_args["qk_layernorm"] = model.config.use_qk_norm  # this is true for glm4.5 but False for glm4.5-air.
+    megatron_lm_plugin.megatron_lm_default_args["qk_layernorm"] = (
+        model.config.use_qk_norm
+    )  # this is true for glm4.5 but False for glm4.5-air.
     megatron_lm_plugin.megatron_lm_default_args["add_bias_linear"] = False
     megatron_lm_plugin.megatron_lm_default_args["group_query_attention"] = True
     megatron_lm_plugin.megatron_lm_default_args["num_query_groups"] = model.config.num_key_value_heads
     megatron_lm_plugin.megatron_lm_default_args["ffn_hidden_size"] = model.config.intermediate_size
     megatron_lm_plugin.megatron_lm_default_args["add_qkv_bias"] = True
-    megatron_lm_plugin.megatron_lm_default_args["normalization"] = 'RMSNorm'
+    megatron_lm_plugin.megatron_lm_default_args["normalization"] = "RMSNorm"
     megatron_lm_plugin.megatron_lm_default_args["rotary-percent"] = 0.5
     megatron_lm_plugin.megatron_lm_default_args["swiglu"] = True
     megatron_lm_plugin.megatron_lm_default_args["moe_ffn_hidden_size"] = model.config.moe_intermediate_size
-    megatron_lm_plugin.megatron_lm_default_args["moe_shared_expert_intermediate_size"] = model.config.moe_intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["moe_shared_expert_intermediate_size"] = (
+        model.config.moe_intermediate_size
+    )
     megatron_lm_plugin.megatron_lm_default_args["moe_router_pre_softmax"] = True
     megatron_lm_plugin.megatron_lm_default_args["moe_router_score_function"] = "sigmoid"
     megatron_lm_plugin.megatron_lm_default_args["moe_router_enable_expert_bias"] = True
@@ -2993,14 +2998,16 @@ def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["moe_token_dispatcher_type"] = "alltoall"
     megatron_lm_plugin.megatron_lm_default_args["moe_router_topk"] = model.config.num_experts_per_tok
     megatron_lm_plugin.megatron_lm_default_args["moe_router_topk_scaling_factor"] = model.config.routed_scaling_factor
-    megatron_lm_plugin.megatron_lm_default_args["moe_layer_freq"] = [0] * model.config.first_k_dense_replace + [1] * (model.config.num_hidden_layers - model.config.first_k_dense_replace)
+    megatron_lm_plugin.megatron_lm_default_args["moe_layer_freq"] = [0] * model.config.first_k_dense_replace + [1] * (
+        model.config.num_hidden_layers - model.config.first_k_dense_replace
+    )
     megatron_lm_plugin.megatron_lm_default_args["num_experts"] = model.config.n_routed_experts
     megatron_lm_plugin.megatron_lm_default_args["moe_grouped_gemm"] = True
     megatron_lm_plugin.megatron_lm_default_args["moe_router_dtype"] = "fp32"
     megatron_lm_plugin.megatron_lm_default_args["moe_permute_fusion"] = True
     megatron_lm_plugin.megatron_lm_default_args["moe_aux_loss_coeff"] = 0
     megatron_lm_plugin.megatron_lm_default_args["rotary_base"] = model.config.rope_theta
-    megatron_lm_plugin.megatron_lm_default_args["rope_type"] = 'rope'
+    megatron_lm_plugin.megatron_lm_default_args["rope_type"] = "rope"
     megatron_lm_plugin.megatron_lm_default_args["rotary_percent"] = model.config.partial_rotary_factor
     megatron_lm_plugin.megatron_lm_default_args["norm_epsilon"] = 1e-3
     megatron_lm_plugin.megatron_lm_default_args["use_flash_attn"] = True
@@ -3011,7 +3018,9 @@ def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
         megatron_lm_plugin.megatron_lm_default_args["fp8_param_gather"] = model.config.fp8_param_gather
         megatron_lm_plugin.megatron_lm_default_args["fp8_recipe"] = model.config.fp8_recipe
     megatron_lm_plugin.megatron_lm_default_args["bf16"] = model.config.bf16
-    megatron_lm_plugin.megatron_lm_default_args["untie_embeddings_and_output_weights"] = not model.config.tie_word_embeddings
+    megatron_lm_plugin.megatron_lm_default_args[
+        "untie_embeddings_and_output_weights"
+    ] = not model.config.tie_word_embeddings
     logger.info(f"Parsed GLM4 MoE config: {megatron_lm_plugin.megatron_lm_default_args}")
 
 

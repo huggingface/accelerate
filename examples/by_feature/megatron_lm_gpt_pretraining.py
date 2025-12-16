@@ -35,7 +35,6 @@ import torch
 import transformers
 from datasets import load_dataset
 from huggingface_hub import HfApi
-from accelerate import init_empty_weights
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformers import (
@@ -51,7 +50,7 @@ from transformers import (
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
-from accelerate import Accelerator, DistributedType
+from accelerate import Accelerator, DistributedType, init_empty_weights
 from accelerate.logging import get_logger
 from accelerate.utils import MegatronLMDummyScheduler, set_seed
 
@@ -591,18 +590,28 @@ def main():
             resume_step -= starting_epoch * len(train_dataloader)
 
     if args.initial_megatron_lm_checkpoint:
-        assert accelerator.distributed_type == DistributedType.MEGATRON_LM, "initial_megatron_lm_checkpoint should only be used with Megatron-LM"
-        assert args.resume_from_checkpoint is None, "resume_from_checkpoint should not be provided when initial_megatron_lm_checkpoint is provided"
-        accelerator.print(f"Loading Megatron-LM checkpoint from the initial checkpoint (directly from the release directory converted using megatron bridge): {args.initial_megatron_lm_checkpoint}")
+        assert accelerator.distributed_type == DistributedType.MEGATRON_LM, (
+            "initial_megatron_lm_checkpoint should only be used with Megatron-LM"
+        )
+        assert args.resume_from_checkpoint is None, (
+            "resume_from_checkpoint should not be provided when initial_megatron_lm_checkpoint is provided"
+        )
+        accelerator.print(
+            f"Loading Megatron-LM checkpoint from the initial checkpoint (directly from the release directory converted using megatron bridge): {args.initial_megatron_lm_checkpoint}"
+        )
         checkpoint_dir = args.initial_megatron_lm_checkpoint
         latest_iter_file = os.path.join(checkpoint_dir, "latest_checkpointed_iteration.txt")
         assert os.path.isfile(latest_iter_file), f"{latest_iter_file} does not exist in {checkpoint_dir}"
-        with open(latest_iter_file, "r") as f:
+        with open(latest_iter_file) as f:
             contents = f.read().strip()
-        assert contents == "0", f"latest_checkpointed_iteration.txt in {checkpoint_dir} must contain only '0' (found '{contents}'), please mannually change it to '0' and rename the directory release to iter_0000000, also make sure megatron_lm_no_load_optim is set to true in the config file"
+        assert contents == "0", (
+            f"latest_checkpointed_iteration.txt in {checkpoint_dir} must contain only '0' (found '{contents}'), please mannually change it to '0' and rename the directory release to iter_0000000, also make sure megatron_lm_no_load_optim is set to true in the config file"
+        )
         # Also assert iter_0000000 directory exists
         iter0_dir = os.path.join(checkpoint_dir, "iter_0000000")
-        assert os.path.isdir(iter0_dir), f"{iter0_dir} directory does not exist in {checkpoint_dir}, please rename the release directory to iter_0000000"
+        assert os.path.isdir(iter0_dir), (
+            f"{iter0_dir} directory does not exist in {checkpoint_dir}, please rename the release directory to iter_0000000"
+        )
         accelerator.load_state(args.initial_megatron_lm_checkpoint)
     # update the progress_bar if load from checkpoint
     progress_bar.update(starting_epoch * num_update_steps_per_epoch)
