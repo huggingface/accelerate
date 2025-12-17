@@ -594,7 +594,7 @@ class SwanLabTrackingTest(TempDirTestCase, MockingTestCase):
                 if record is None:
                     continue
                 models_parser.parse_record(record)
-        header, project, experiment, logs, runtime, columns, scalars, medias, footer = models_parser.get_parsed()
+        header, project, experiment, logs, runtime, _columns, scalars, medias, _footer = models_parser.get_parsed()
 
         # test file header
         assert header.backup_type == "DEFAULT"

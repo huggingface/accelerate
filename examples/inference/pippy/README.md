@@ -1,6 +1,6 @@
-# Distributed inference examples with PiPPy
+# Distributed inference examples with Pipeline Parallelism
 
-This repo contains a variety of tutorials for using the [PiPPy](https://github.com/PyTorch/PiPPy) pipeline parallelism library with accelerate. You will find examples covering:
+This repo contains a variety of tutorials for using PyTorch's built-in pipeline parallelism (`torch.distributed.pipelining`) with accelerate. You will find examples covering:
 
 1. How to trace the model using `accelerate.prepare_pippy`
 2. How to specify inputs based on what the model expects (when to use `kwargs`, `args`, and such)
@@ -8,11 +8,13 @@ This repo contains a variety of tutorials for using the [PiPPy](https://github.c
 
 ## Installation
 
-This requires the `main` branch of accelerate (or a version at least 0.27.0),  `pippy` version of 0.2.0 or greater, and at least python 3.9. Please install using `pip install .` to pull from the `setup.py` in this repo, or run manually:
+This requires the `main` branch of accelerate (or a version at least 0.27.0), PyTorch 2.4.0 or later (which includes `torch.distributed.pipelining`), and at least python 3.9. Please install using `pip install .` to pull from the `setup.py` in this repo, or run manually:
 
 ```bash
-pip install 'accelerate>=0.27.0' 'torchpippy>=0.2.0'
+pip install 'accelerate>=0.27.0' 'torch>=2.4.0'
 ```
+
+Note: The `torchpippy` package has been merged into PyTorch 2.4.0+ as `torch.distributed.pipelining`. If you're using PyTorch 2.4.0 or later, no additional package installation is needed.
 
 ## Running code
 
