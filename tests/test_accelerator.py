@@ -256,7 +256,10 @@ class AcceleratorTester(AccelerateTestCase):
         def noop(*args, **kwargs):
             pass
 
-        with patch(f"torch.{torch_device}.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE=f"{torch_device}:64"):
+        with (
+            patch(f"torch.{torch_device}.set_device", noop),
+            patch_environment(ACCELERATE_TORCH_DEVICE=f"{torch_device}:64"),
+        ):
             accelerator = Accelerator()
             assert str(accelerator.state.device) == f"{torch_device}:64"
 

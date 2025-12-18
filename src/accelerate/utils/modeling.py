@@ -81,7 +81,7 @@ def is_peft_model(model):
 
 def check_device_same(first_device, second_device):
     """
-    Utility method to check if two `torch` devices are similar. When dealingtorch accelerator devices(e.g. cuda, xpu),
+    Utility method to check if two `torch` devices are similar. When dealing torch accelerator devices(e.g. cuda, xpu),
     torch throws `False` for `torch.device("cuda") == torch.device("cuda:0")` whereas they should be the same
 
     Args:

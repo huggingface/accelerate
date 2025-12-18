@@ -188,7 +188,9 @@ def estimate_command_parser(subparsers=None):
     if subparsers is not None:
         parser = subparsers.add_parser("estimate-memory")
     else:
-        parser = CustomArgumentParser(description="Model size estimator for fitting a model onto device(e.g. cuda, xpu) memory.")
+        parser = CustomArgumentParser(
+            description="Model size estimator for fitting a model onto device(e.g. cuda, xpu) memory."
+        )
 
     parser.add_argument("model_name", type=str, help="The model name on the Hugging Face Hub.")
     parser.add_argument(
