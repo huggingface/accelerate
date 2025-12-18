@@ -71,13 +71,15 @@ def train_baseline():
             last_linear = name
 
     func = partial(filter_linear_layers, first_layer_name=first_linear, last_layer_name=last_linear)
-    model.to("cuda")
+    accelerator = Accelerator()
+    device = accelerator.device
+    model.to(device)
     convert_to_float8_training(model, module_filter_fn=func)
     base_model_results = evaluate_model(model, eval_dataloader, METRIC)
     model.train()
 
     for batch in train_dataloader:
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
             outputs = model(**batch)
             loss = outputs.loss
             loss.backward()

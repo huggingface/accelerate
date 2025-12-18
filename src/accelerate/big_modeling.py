@@ -108,10 +108,12 @@ def init_on_device(device: torch.device, include_buffers: Optional[bool] = None)
 
     ```python
     import torch.nn as nn
-    from accelerate import init_on_device
+    from accelerate import Accelerator, init_on_device
 
-    with init_on_device(device=torch.device("cuda")):
-        tst = nn.Linear(100, 100)  # on `cuda` device
+    accelerator = Accelerator()
+
+    with init_on_device(device=torch.device(accelerator.device)):
+        tst = nn.Linear(100, 100)  # on specified device
     ```
     """
     if include_buffers is None:
@@ -231,7 +233,7 @@ def cpu_offload_with_hook(
             The model to offload.
         execution_device(`str`, `int` or `torch.device`, *optional*):
             The device on which the model should be executed. Will default to the MPS device if it's available, then
-            GPU 0 if there is a GPU, and finally to the CPU.
+            device 0 if there is an accelerator device, and finally to the CPU.
         prev_module_hook (`UserCpuOffloadHook`, *optional*):
             The hook sent back by this function for a previous model in the pipeline you are running. If passed, its
             offload method will be called just before the forward of the model to which this hook is attached.
@@ -239,9 +241,9 @@ def cpu_offload_with_hook(
     Example:
 
     ```py
-    model_1, hook_1 = cpu_offload_with_hook(model_1, cuda_device)
-    model_2, hook_2 = cpu_offload_with_hook(model_2, cuda_device, prev_module_hook=hook_1)
-    model_3, hook_3 = cpu_offload_with_hook(model_3, cuda_device, prev_module_hook=hook_2)
+    model_1, hook_1 = cpu_offload_with_hook(model_1, device)
+    model_2, hook_2 = cpu_offload_with_hook(model_2, device, prev_module_hook=hook_1)
+    model_3, hook_3 = cpu_offload_with_hook(model_3, device, prev_module_hook=hook_2)
 
     hid_1 = model_1(input)
     for i in range(50):
@@ -446,7 +448,7 @@ def dispatch_model(
         # Attaching the hook may break tied weights, so we retie them
         retie_parameters(model, tied_params)
 
-        # add warning to cuda and to method
+        # add warning on `to` method
         def add_warning(fn, model):
             @wraps(fn)
             def wrapper(*args, **kwargs):

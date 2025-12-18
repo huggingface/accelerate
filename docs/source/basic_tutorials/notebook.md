@@ -32,13 +32,13 @@ Before any training can be performed, an Accelerate config file must exist in th
 accelerate config
 ```
 
-However, if general defaults are fine and you are *not* running on a TPU, Accelerate has a utility to quickly write your GPU configuration into a config file via [`utils.write_basic_config`].
+However, if general defaults are fine and you are *not* running on a TPU, Accelerate has a utility to quickly write your device configuration into a config file via [`utils.write_basic_config`].
 
-The following code will restart Jupyter after writing the configuration, as CUDA code was called to perform this. 
+The following code will restart Jupyter after writing the configuration, as CUDA runtime or XPU runtime was called to perform this. 
 
 <Tip warning={true}>
 
-    CUDA can't be initialized more than once on a multi-GPU system. It's fine to debug in the notebook and have calls to CUDA, but in order to finally train a full cleanup and restart will need to be performed.
+    CUDA and XPU can't be initialized more than once on a multi-device system. It's fine to debug in the notebook and have calls to CUDA/XPU, but in order to finally train a full cleanup and restart will need to be performed.
     
 </Tip>
 
@@ -462,15 +462,15 @@ accelerate launch
 
 ## Debugging 
 
-A common issue when running the `notebook_launcher` is receiving a CUDA has already been initialized issue. This usually stems
-from an import or prior code in the notebook that makes a call to the PyTorch `torch.cuda` sublibrary. To help narrow down what went wrong,
+A common issue when running the `notebook_launcher` is receiving a CUDA/XPU has already been initialized issue. This usually stems
+from an import or prior code in the notebook that makes a call to the PyTorch `torch.cuda` or `torch.xpu` sublibrary. To help narrow down what went wrong,
 you can launch the `notebook_launcher` with `ACCELERATE_DEBUG_MODE=yes` in your environment and an additional check
-will be made when spawning that a regular process can be created and utilize CUDA without issue. (Your CUDA code can still be ran afterwards).
+will be made when spawning that a regular process can be created and utilize CUDA/XPU without issue. (Your CUDA/XPU code can still be ran afterwards).
 
 ## Conclusion
 
 This notebook showed how to perform distributed training from inside of a Jupyter Notebook. Some key notes to remember:
 
-- Make sure to save any code that use CUDA (or CUDA imports) for the function passed to [`notebook_launcher`]
-- Set the `num_processes` to be the number of devices used for training (such as number of GPUs, CPUs, TPUs, etc)
+- Make sure to save any code that use CUDA/XPU (or CUDA/XPU imports) for the function passed to [`notebook_launcher`]
+- Set the `num_processes` to be the number of devices used for training (such as number of GPUs, XPUs, CPUs, TPUs, etc)
 - If using the TPU, declare your model outside the training loop function

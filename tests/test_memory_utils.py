@@ -26,7 +26,7 @@ from accelerate.utils.memory import find_executable_batch_size, release_memory
 
 
 def raise_fake_out_of_memory():
-    raise RuntimeError("CUDA out of memory.")
+    raise RuntimeError(f"{torch_device.upper()} out of memory.")
 
 
 class ModelForTest(nn.Module):
