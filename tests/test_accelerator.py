@@ -244,7 +244,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert len(accelerator._schedulers) == 0
         assert len(accelerator._dataloaders) == 0
 
-        # The less-than comes *specifically* from CUDA CPU things/won't be present on CPU builds
+        # The less-than comes *specifically* from device CPU things/won't be present on CPU builds
         assert free_cpu_ram_after <= free_cpu_ram_before
 
     @require_non_torch_xla
@@ -252,13 +252,13 @@ class AcceleratorTester(AccelerateTestCase):
         """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
         PartialState._reset_state()
 
-        # Mock torch.cuda.set_device to avoid an exception as the device doesn't exist
+        # Mock torch's set_device call to avoid an exception as the device doesn't exist
         def noop(*args, **kwargs):
             pass
 
-        with patch("torch.cuda.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE="cuda:64"):
+        with patch(f"torch.{torch_device}.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE=f"{torch_device}:64"):
             accelerator = Accelerator()
-            assert str(accelerator.state.device) == "cuda:64"
+            assert str(accelerator.state.device) == f"{torch_device}:64"
 
     @parameterized.expand([(True, True), (True, False), (False, False)], name_func=parameterized_custom_name_func)
     def test_save_load_model(self, use_safetensors, tied_weights):
