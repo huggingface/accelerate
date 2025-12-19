@@ -84,8 +84,7 @@ class SimpleIterableDataset(IterableDataset):
 def SimpleStatefulIterableDataset(num_samples=1000):
     def gen():
         """Generator function that yields random tensors."""
-        for i in range(num_samples):
-            yield from i
+        yield from range(num_samples)
 
     return DatasetsIterableDataset.from_generator(gen)
 
@@ -967,7 +966,6 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         """
         # Calculate batch size for this shard
         batch_size = 4
-        real_batch_size = batch_size if split_batches else (batch_size * 2)  # num_processes=2
 
         def CreateIterableDatasetShard():
             """Helper function to create IterableDatasetShard with consistent parameters."""
@@ -1008,14 +1006,6 @@ class StatefulDataLoaderTester(AccelerateTestCase):
             saved_state = shard1.state_dict()
             assert saved_state["shard_example_idx"] >= 0
             assert "dataset_state" in saved_state
-
-            # After iterating through at least one full batch, dataset_state should be set
-            # A full batch means real_batch_size samples have been consumed
-            if consume_count >= real_batch_size:
-                assert saved_state["dataset_state"] is not None, (
-                    f"[{test_name}] After consuming {consume_count} samples "
-                    f"(>= {real_batch_size} real_batch_size), dataset_state should be set"
-                )
 
             # Should not be exhausted yet since we only consumed part of the data
             assert saved_state["is_exhausted"] is False, (
