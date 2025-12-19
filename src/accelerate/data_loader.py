@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import importlib
 import math
 from contextlib import suppress
+from itertools import islice
 from typing import Callable, Optional, Union
 
 import torch
@@ -316,6 +318,7 @@ class IterableDatasetShard(IterableDataset):
         self.num_processes = num_processes
         self.process_index = process_index
         self.split_batches = split_batches
+        self._init_state_dict()
 
     def set_epoch(self, epoch):
         self.epoch = epoch
@@ -329,7 +332,31 @@ class IterableDatasetShard(IterableDataset):
         else:
             return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
 
+    def _init_state_dict(self) -> dict:
+        self._state_dict = None
+        if is_torchdata_stateful_dataloader_available():
+            from torchdata.stateful_dataloader.stateful import Stateful
+
+            if isinstance(self.dataset, Stateful):
+                self._state_dict = {
+                    "dataset_state": None,
+                    "shard_example_idx": 0,
+                    "is_exhausted": False,
+                    "type": self.__class__.__name__,
+                }
+
+    def load_state_dict(self, state_dict: dict) -> dict:
+        self._state_dict = copy.deepcopy(state_dict)
+        if self._state_dict["dataset_state"] is not None:
+            self.dataset.load_state_dict(self._state_dict["dataset_state"])
+
+    def state_dict(self) -> dict:
+        return copy.deepcopy(self._state_dict)
+
     def __iter__(self):
+        if self._state_dict and self._state_dict["is_exhausted"]:
+            return
+
         if (
             not hasattr(self.dataset, "set_epoch")
             and hasattr(self.dataset, "generator")
@@ -340,14 +367,23 @@ class IterableDatasetShard(IterableDataset):
         process_batch_size = (self.batch_size // self.num_processes) if self.split_batches else self.batch_size
         process_slice = range(self.process_index * process_batch_size, (self.process_index + 1) * process_batch_size)
 
+        shard_example_idx_start = self._state_dict["shard_example_idx"] if self._state_dict else 0
+
         first_batch = None
         current_batch = []
         for element in self.dataset:
             current_batch.append(element)
             # Wait to have a full batch before yielding elements.
             if len(current_batch) == real_batch_size:
-                for i in process_slice:
+                for i in islice(process_slice, shard_example_idx_start, None):
+                    if self._state_dict:
+                        next_idx = i + 1
+                        self._state_dict["shard_example_idx"] = next_idx
+                        if next_idx >= process_batch_size:
+                            self._state_dict["shard_example_idx"] = 0
+                            self._state_dict["dataset_state"] = self.dataset.state_dict()
                     yield current_batch[i]
+                shard_example_idx_start = 0
                 if first_batch is None:
                     first_batch = current_batch.copy()
                 current_batch = []
@@ -358,8 +394,16 @@ class IterableDatasetShard(IterableDataset):
                 first_batch = current_batch.copy()
             while len(current_batch) < real_batch_size:
                 current_batch += first_batch
-            for i in process_slice:
+            for i in islice(process_slice, shard_example_idx_start, None):
+                if self._state_dict:
+                    next_idx = i + 1
+                    self._state_dict["shard_example_idx"] = next_idx
+                    if next_idx >= process_batch_size:
+                        self._state_dict["shard_example_idx"] = 0
+                        self._state_dict["dataset_state"] = self.dataset.state_dict()
                 yield current_batch[i]
+        if self._state_dict:
+            self._state_dict["is_exhausted"] = True
 
 
 class DataLoaderStateMixin:

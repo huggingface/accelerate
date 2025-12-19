@@ -17,6 +17,7 @@ import weakref
 
 import pytest
 import torch
+from datasets import IterableDataset as DatasetsIterableDataset
 from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
@@ -78,6 +79,15 @@ class SimpleIterableDataset(IterableDataset):
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+
+
+def SimpleStatefulIterableDataset(num_samples=1000):
+    def gen():
+        """Generator function that yields random tensors."""
+        for i in range(num_samples):
+            yield from i
+
+    return DatasetsIterableDataset.from_generator(gen)
 
 
 class SimpleBatchSampler(BatchSampler):
@@ -911,3 +921,142 @@ class StatefulDataLoaderTester(AccelerateTestCase):
 
         gradient_state = GradientState()
         assert gradient_state.active_dataloader is None
+
+    @parameterized.expand(
+        [
+            # (split_batches, drop_last, dataset_size, consume_count, test_exhaustion, test_name)
+            # Basic scenarios
+            (False, False, 40, 5, False, "basic_mid_iteration"),
+            (True, False, 32, 4, False, "split_batches_mid_iteration"),
+            # Boundary scenarios for drop_last=False
+            (False, False, 40, 1, False, "after_first_sample"),  # Minimum save point, idx=1
+            (False, False, 40, 2, False, "before_first_batch"),  # Before completing first batch
+            (False, False, 40, 4, False, "complete_process_batch"),  # Critical: idx=4→0 reset
+            (False, False, 40, 8, False, "complete_one_batch"),  # Exactly 1 batch (batch_size=4 * num_processes=2)
+            (False, False, 40, 10, False, "mid_second_batch"),  # Middle of 2nd batch
+            # Boundary scenarios for drop_last=True
+            (False, True, 30, 3, False, "drop_last_before_batch"),  # Before first batch with drop_last
+            (False, True, 30, 8, False, "drop_last_complete_batch"),  # Complete batch with drop_last
+            (False, True, 30, 10, False, "drop_last_mid_batch"),  # Mid batch with drop_last
+            # Exhaustion scenarios
+            (False, False, 8, None, True, "exhausted_no_drop"),  # Consume all without drop_last
+            (False, True, 8, None, True, "exhausted_with_drop"),  # Consume all with drop_last
+            # Edge case: very small dataset
+            (False, False, 3, 1, False, "tiny_dataset"),  # Dataset smaller than one batch
+            # Split batches boundary (process_batch_size=2)
+            (True, False, 32, 1, False, "split_after_first_sample"),  # Minimum save point, idx=1
+            (True, False, 32, 2, False, "split_one_process_batch"),  # Critical: idx=2→0 reset
+            (True, False, 32, 8, False, "split_complete_batch"),  # split_batches, complete batch
+        ]
+    )
+    def test_iterable_dataset_shard_save_and_resume(
+        self, split_batches, drop_last, dataset_size, consume_count, test_exhaustion, test_name
+    ):
+        """
+        Test that IterableDatasetShard can save state and resume from it.
+        Tests initialization, progress tracking, state restoration, and exhaustion handling
+        across different configurations and boundary conditions.
+
+        Args:
+            split_batches: Whether to split batches across processes
+            drop_last: Whether to drop the last incomplete batch
+            dataset_size: Number of samples in the dataset
+            consume_count: Number of samples to consume before saving state (None means consume all)
+            test_exhaustion: Whether to test exhaustion behavior
+            test_name: Descriptive name for the test scenario
+        """
+        # Calculate batch size for this shard
+        batch_size = 4
+        real_batch_size = batch_size if split_batches else (batch_size * 2)  # num_processes=2
+
+        def CreateIterableDatasetShard():
+            """Helper function to create IterableDatasetShard with consistent parameters."""
+            dataset = SimpleStatefulIterableDataset(dataset_size)
+            return IterableDatasetShard(
+                dataset,
+                batch_size=batch_size,
+                drop_last=drop_last,
+                num_processes=2,
+                process_index=0,
+                split_batches=split_batches,
+            )
+
+        shard1 = CreateIterableDatasetShard()
+
+        # Iterate through the dataset
+        iterator1 = iter(shard1)
+        samples_before = []
+
+        if test_exhaustion:
+            # Consume all elements for exhaustion test
+            samples_before = list(iterator1)
+            assert len(samples_before) > 0
+
+            # Check exhaustion state
+            state = shard1.state_dict()
+            assert state["is_exhausted"] is True
+
+            # Second iteration should return nothing if exhausted
+            samples2 = list(iter(shard1))
+            assert len(samples2) == 0
+        else:
+            # Consume specified number of elements for save/resume test
+            for i in range(consume_count):
+                samples_before.append(next(iterator1))
+
+            # Save state and verify progress is tracked
+            saved_state = shard1.state_dict()
+            assert saved_state["shard_example_idx"] >= 0
+            assert "dataset_state" in saved_state
+
+            # After iterating through at least one full batch, dataset_state should be set
+            # A full batch means real_batch_size samples have been consumed
+            if consume_count >= real_batch_size:
+                assert saved_state["dataset_state"] is not None, (
+                    f"[{test_name}] After consuming {consume_count} samples "
+                    f"(>= {real_batch_size} real_batch_size), dataset_state should be set"
+                )
+
+            # Should not be exhausted yet since we only consumed part of the data
+            assert saved_state["is_exhausted"] is False, (
+                f"[{test_name}] Should not be exhausted after consuming {consume_count} samples"
+            )
+
+            # Create new shard and continue iteration
+            shard2 = CreateIterableDatasetShard()
+            shard2.load_state_dict(saved_state)
+
+            # Continue from where we left off
+            iterator2 = iter(shard2)
+            samples_after = list(iterator2)
+
+            # Get the full iteration without save/resume for comparison
+            shard_reference = CreateIterableDatasetShard()
+            full_samples = list(iter(shard_reference))
+
+            # Combine samples from save/resume workflow
+            combined_samples = samples_before + samples_after
+
+            # Verify 1: Same total count (no duplication, no missing data)
+            assert len(combined_samples) == len(full_samples), (
+                f"[{test_name}] Save/resume should yield same total samples: "
+                f"got {len(combined_samples)} (before={len(samples_before)} + after={len(samples_after)}), "
+                f"expected {len(full_samples)}. "
+                f"Config: split_batches={split_batches}, drop_last={drop_last}, "
+                f"dataset_size={dataset_size}, consume_count={consume_count}"
+            )
+
+            # Verify 2: Same values and order (data consistency)
+            for idx, (sample, reference) in enumerate(zip(combined_samples, full_samples)):
+                assert sample == reference, (
+                    f"[{test_name}] Sample mismatch at index {idx}: "
+                    f"got {sample}, expected {reference}. "
+                    f"Save/resume should produce identical data sequence. "
+                    f"Saved after consuming {consume_count} samples."
+                )
+
+            # After consuming all, should be exhausted
+            state_after = shard2.state_dict()
+            assert state_after["is_exhausted"] is True, (
+                f"[{test_name}] Should be exhausted after consuming all samples"
+            )
