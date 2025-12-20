@@ -24,7 +24,7 @@ jobs:
       image: huggingface/accelerate:gpu-fp8-transformerengine-nightly-${{ needs.set-prev-day.outputs.prev-day }}
       options: --gpus all --shm-size "16gb"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Install the library
         run: |
             pip install -e .[test_prod,test_fp8]
