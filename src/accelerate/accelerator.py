@@ -1814,7 +1814,7 @@ class Accelerator:
                 if self.device.type == "cpu" and is_bitsandbytes_multi_backend_available():
                     # bnb with multi-backend supports CPU which don't need to check index.
                     pass
-                elif torch.device(current_device_index) != self.device:
+                elif torch.device(self.device.type, current_device_index) != self.device:
                     # if on the first device (GPU 0) we don't care
                     if (self.device.index is not None) or (current_device_index != 0):
                         raise ValueError(
