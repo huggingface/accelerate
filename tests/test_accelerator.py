@@ -44,6 +44,7 @@ from accelerate.test_utils import (
 )
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
+    assert_exception,
     require_cuda,
     require_non_torch_xla,
     require_torchdata_stateful_dataloader,
@@ -861,3 +862,27 @@ class AcceleratorTester(AccelerateTestCase):
             #       weight is on the meta device, we need a `value` to put in on 0
             x = torch.randn(1, 2)
             my_model(x)
+
+    @require_non_torch_xla
+    def test_prepare_model_8bit_cpu_offload_raises_valueerror_not_typeerror(self):
+        class ModelForTest(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.l = torch.nn.Linear(2, 2)
+
+            def forward(self, x):
+                return self.l(x)
+
+        accelerator = Accelerator()
+        model = ModelForTest()
+
+        # Trigger the 8-bit/4-bit + hf_device_map code path.
+        model.is_loaded_in_8bit = True
+        model.hf_device_map = {"": "cpu"}
+
+        with (
+            patch("accelerate.accelerator.is_bitsandbytes_multi_backend_available", return_value=False),
+            patch("accelerate.accelerator.is_xpu_available", return_value=False),
+        ):
+            with assert_exception(ValueError, "CPU or disk offload"):
+                accelerator.prepare_model(model)
