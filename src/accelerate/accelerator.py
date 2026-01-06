@@ -1570,13 +1570,7 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def _prepare_tp(self, *args):
-        # First pass: prepare everything except schedulers (and model, which is prepared separately below)
-        result = [
-            self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj for obj in args
-        ]
-
-        # Second pass: prepare schedulers
-        result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
+        result = list(args)
 
         device_mesh = self.torch_device_mesh
 

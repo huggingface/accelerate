@@ -31,6 +31,7 @@ from utils import (
     PerformanceTracker,
     create_collate_fn,
     get_dataset,
+    get_model_flops_per_token,
     setup_tokenizer,
 )
 
@@ -123,6 +124,7 @@ def train(args):
 
     total_num_steps = min(args.num_steps, len(dataloader))
     performance_tracker = PerformanceTracker(warmup_steps=5)
+    model_flops_per_token = get_model_flops_per_token(model, args.sequence_length)
 
     accelerator.print("Starting training...")
     for step, batch in enumerate(dataloader):
@@ -132,7 +134,9 @@ def train(args):
         loss = forward(model, batch, optimizer, accelerator)
 
         # We report TPS per device, so we divide by the number of devices in the non-data parallel dimension
-        metrics = performance_tracker.step(batch["input_ids"].shape[1] / parallelism_config.non_data_parallel_size)
+        metrics = performance_tracker.step(
+            batch["input_ids"].shape[1] / parallelism_config.non_data_parallel_size, model_flops_per_token
+        )
 
         print_msg = f"Step {step}/{total_num_steps}, Loss: {loss.item():.4f}"
         if "warmup_completed" in metrics:
