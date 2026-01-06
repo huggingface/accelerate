@@ -526,7 +526,7 @@ def launch_command_parser(subparsers=None):
     fsdp_args.add_argument(
         "--fsdp_min_num_params",
         type=int,
-        default=1e8,
+        default=int(1e8),
         help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
     )
     # We enable this for backwards compatibility, throw a warning if this is set in `FullyShardedDataParallelPlugin`
