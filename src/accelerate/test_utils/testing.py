@@ -766,10 +766,8 @@ def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet
     for i, c in enumerate(cmd):
         if isinstance(c, Path):
             cmd[i] = str(c)
-    loop = asyncio.get_event_loop()
-    result = loop.run_until_complete(
-        _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
-    )
+
+    result = asyncio.run(_stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo))
 
     cmd_str = " ".join(cmd)
     if result.returncode > 0:
