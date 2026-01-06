@@ -74,7 +74,7 @@ def forward(model, batch, optimizer, accelerator: Accelerator):
         loss = outputs.loss
         accelerator.backward(loss)
         optimizer.step()
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=False)
         dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
 
     return loss
