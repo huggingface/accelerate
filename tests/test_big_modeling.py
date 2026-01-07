@@ -411,7 +411,7 @@ class BigModelingTester(unittest.TestCase):
             "linear4": device_0,
         }
 
-        # Just to initialize CUDA context.
+        # Just to initialize device context.
         a = torch.rand(5).to(device_0)  # noqa: F841
 
         free_memory_bytes = torch_accelerator_module.mem_get_info(device_0)[0]
