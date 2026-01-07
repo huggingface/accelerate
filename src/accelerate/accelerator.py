@@ -1570,7 +1570,13 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def _prepare_tp(self, *args):
-        result = list(args)
+        # First pass: prepare everything except schedulers (and model, which is prepared separately below)
+        result = [
+            self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj for obj in args
+        ]
+
+        # Second pass: prepare schedulers
+        result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
 
         device_mesh = self.torch_device_mesh
 
@@ -1617,7 +1623,14 @@ class Accelerator:
                     # so that the optimizer can correctly update the model parameters.
                     param_group["params"] = [mapping[_get_tensor_address(p)] for p in param_group["params"]]
 
-        return args
+        for item in result:
+            if any(
+                item in container
+                for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
+            ):
+                item._is_accelerate_prepared = True
+
+        return result
 
     def _prepare_cp(self, *args):
         from torch.distributed.tensor.experimental import context_parallel
