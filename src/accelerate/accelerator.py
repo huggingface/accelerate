@@ -1528,6 +1528,12 @@ class Accelerator:
 
         if self.parallelism_config and self.parallelism_config.tp_enabled:
             args = self._prepare_tp(*args)
+            for item in args:
+                if any(
+                    item in container
+                    for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
+                ):
+                    item._is_accelerate_prepared = True
 
         if self.parallelism_config and self.parallelism_config.cp_enabled:
             args = self._prepare_cp(*args)
@@ -1622,13 +1628,6 @@ class Accelerator:
                     # Therefore, we remap the parameter references to their new DTensor addresses
                     # so that the optimizer can correctly update the model parameters.
                     param_group["params"] = [mapping[_get_tensor_address(p)] for p in param_group["params"]]
-
-        for item in result:
-            if any(
-                item in container
-                for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
-            ):
-                item._is_accelerate_prepared = True
 
         return result
 
