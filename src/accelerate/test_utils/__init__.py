@@ -42,6 +42,7 @@ from .testing import (
     require_non_hpu,
     require_non_torch_xla,
     require_non_xpu,
+    require_qaic,
     require_npu,
     require_pippy,
     require_sdaa,

@@ -55,6 +55,7 @@ from ..utils import (
     is_mlu_available,
     is_mps_available,
     is_musa_available,
+    is_qaic_available,
     is_npu_available,
     is_pandas_available,
     is_pippy_available,
@@ -95,6 +96,8 @@ def get_backend():
         return "sdaa", torch.sdaa.device_count(), torch.sdaa.memory_allocated
     elif is_musa_available():
         return "musa", torch.musa.device_count(), torch.musa.memory_allocated
+    elif is_qaic_available():
+        return "qaic", torch.qaic.device_count(), torch.qaic.memory_allocated
     elif is_npu_available():
         return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
@@ -275,6 +278,13 @@ def require_musa(test_case):
     Decorator marking a test that requires MUSA. These tests are skipped when there are no MUSA available.
     """
     return unittest.skipUnless(is_musa_available(), "test require a MUSA")(test_case)
+
+
+def require_qaic(test_case):
+    """
+    Decorator marking a test that requires QAIC. These tests are skipped when there are no QAIC available.
+    """
+    return unittest.skipUnless(is_qaic_available(), "test require a QAIC")(test_case)
 
 
 def require_npu(test_case):

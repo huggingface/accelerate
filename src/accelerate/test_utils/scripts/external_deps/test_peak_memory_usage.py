@@ -27,6 +27,7 @@ from accelerate.utils import (
     is_hpu_available,
     is_mlu_available,
     is_musa_available,
+    is_qaic_available,
     is_npu_available,
     is_sdaa_available,
     is_xpu_available,
@@ -63,6 +64,10 @@ class TorchTracemalloc:
             torch.musa.empty_cache()
             torch.musa.reset_max_memory_allocated()  # reset the peak gauge to zero
             self.begin = torch.musa.memory_allocated()
+        elif is_qaic_available():
+            torch.qaic.empty_cache()
+            torch.qaic.reset_max_memory_allocated()  # reset the peak gauge to zero
+            self.begin = torch.qaic.memory_allocated()
         elif is_npu_available():
             torch.npu.empty_cache()
             torch.npu.reset_max_memory_allocated()  # reset the peak gauge to zero
@@ -95,6 +100,10 @@ class TorchTracemalloc:
             torch.musa.empty_cache()
             self.end = torch.musa.memory_allocated()
             self.begin = torch.musa.max_memory_allocated()
+        elif is_qaic_available():
+            torch.qaic.empty_cache()
+            self.end = torch.qaic.memory_allocated()
+            self.peak = torch.qaic.max_memory_allocated()
         elif is_npu_available():
             torch.npu.empty_cache()
             self.end = torch.npu.memory_allocated()

@@ -26,6 +26,7 @@ from ...utils import (
     is_mps_available,
     is_msamp_available,
     is_musa_available,
+    is_qaic_available,
     is_npu_available,
     is_sdaa_available,
     is_torchao_available,
@@ -64,6 +65,7 @@ def get_cluster_input():
             "multi-XPU",
             "multi-HPU",
             "multi-GPU",
+            "multi-QAIC",
             "multi-NPU",
             "multi-MLU",
             "multi-SDAA",
@@ -88,6 +90,7 @@ def get_cluster_input():
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
+        DistributedType.MULTI_QAIC,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_CPU,
@@ -130,7 +133,7 @@ def get_cluster_input():
 
     if distributed_type == DistributedType.NO:
         use_cpu = _ask_field(
-            "Do you want to run your training on CPU only (even if a GPU / Apple Silicon / Ascend NPU device is available)? [yes/NO]:",
+            "Do you want to run your training on CPU only (even if a GPU / Apple Silicon / QAic / Ascend NPU device is available)? [yes/NO]:",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
@@ -214,6 +217,7 @@ def get_cluster_input():
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_HPU,
+            DistributedType.MULTI_QAIC,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
@@ -370,6 +374,7 @@ def get_cluster_input():
 
     if distributed_type in [
         DistributedType.MULTI_GPU,
+        DistributedType.MULTI_QAIC,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
@@ -623,6 +628,7 @@ def get_cluster_input():
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
+        DistributedType.MULTI_QAIC,
         DistributedType.MULTI_NPU,
         DistributedType.XLA,
     ]:
@@ -661,6 +667,7 @@ def get_cluster_input():
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_QAIC,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_HPU,
@@ -669,7 +676,9 @@ def get_cluster_input():
         and not use_cpu
         and not use_mps
     ):
-        if is_npu_available():
+        if is_qaic_available():
+            machine_type = "QAIC(s)"
+        elif is_npu_available():
             machine_type = "NPU(s)"
         elif is_mlu_available():
             machine_type = "MLU(s)"
