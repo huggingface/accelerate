@@ -1528,6 +1528,12 @@ class Accelerator:
 
         if self.parallelism_config and self.parallelism_config.tp_enabled:
             args = self._prepare_tp(*args)
+            for item in args:
+                if any(
+                    item in container
+                    for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
+                ):
+                    item._is_accelerate_prepared = True
 
         if self.parallelism_config and self.parallelism_config.cp_enabled:
             args = self._prepare_cp(*args)
@@ -1623,7 +1629,7 @@ class Accelerator:
                     # so that the optimizer can correctly update the model parameters.
                     param_group["params"] = [mapping[_get_tensor_address(p)] for p in param_group["params"]]
 
-        return args
+        return result
 
     def _prepare_cp(self, *args):
         from torch.distributed.tensor.experimental import context_parallel
