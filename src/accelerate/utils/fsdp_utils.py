@@ -719,7 +719,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         for name, param in model.named_parameters():
             if param.requires_grad and param.dtype != torch.float32:
                 upcasted_params.append(name)
-                param.data = param.data.to(torch.float32)
+                param = param.to(torch.float32)
         if accelerator.is_main_process and upcasted_params:
             warnings.warn(
                 "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints. "
