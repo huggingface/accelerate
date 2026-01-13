@@ -108,11 +108,10 @@ def init_on_device(device: torch.device, include_buffers: Optional[bool] = None)
 
     ```python
     import torch.nn as nn
-    from accelerate import Accelerator, init_on_device
+    from accelerate import init_on_device
 
-    accelerator = Accelerator()
-
-    with init_on_device(device=torch.device(accelerator.device)):
+    # init model on specified device(e.g., "cuda", "xpu" and so on)
+    with init_on_device(device=torch.device("cuda")):
         tst = nn.Linear(100, 100)  # on specified device
     ```
     """
