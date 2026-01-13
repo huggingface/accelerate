@@ -357,7 +357,7 @@ def dispatch_model(
     # We need to force hook for quantized model that can't be moved with to()
     if getattr(model, "quantization_method", "bitsandbytes") == "bitsandbytes":
         # since bnb 0.43.2, we can move 4-bit model
-        if getattr(model, "is_loaded_in_8bit", False and not is_bnb_available(min_version="0.48")) or (
+        if getattr(model, "is_loaded_in_8bit", False and not is_bnb_available(min_version="0.48.0")) or (
             getattr(model, "is_loaded_in_4bit", False) and not is_bnb_available(min_version="0.43.2")
         ):
             force_hooks = True
