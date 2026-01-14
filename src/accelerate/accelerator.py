@@ -1588,32 +1588,38 @@ class Accelerator:
 
         old_named_params = self._get_named_parameters(*tuple(result), drop_refs=True)
 
-        for arg in result:
-            if not isinstance(arg, torch.nn.Module):
-                continue
+        from torch.distributed.tensor import DTensor
 
-            from torch.distributed.tensor import DTensor, Replicate
-            from transformers.integrations.tensor_parallel import ReplicateParallel
-
-            model: torch.nn.Module = arg
-            tp_plan = ReplicateParallel
-
-            for name, param in model.named_parameters():
-                if isinstance(param, DTensor):
+        if self.is_fsdp2:
+            for arg in result:
+                if not isinstance(arg, torch.nn.Module):
                     continue
 
-                dp = DTensor.from_local(param, device_mesh=device_mesh["tp"], placements=[Replicate()])
-                param_name, param_type = name.rsplit(".", 1)
-                module_to_tp = model.get_submodule(param_name)
+                from torch.distributed.tensor import Replicate
+                from transformers.integrations.tensor_parallel import ReplicateParallel
 
-                tp_plan().prepare_module_tp(module_to_tp, device_mesh["tp"])
-                if not isinstance(dp, torch.nn.Parameter):
-                    dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
-                setattr(module_to_tp, param_type, dp)
+                model: torch.nn.Module = arg
+                tp_plan = ReplicateParallel
+
+                for name, param in model.named_parameters():
+                    if isinstance(param, DTensor):
+                        continue
+
+                    dp = DTensor.from_local(param, device_mesh=device_mesh["tp"], placements=[Replicate()])
+                    param_name, param_type = name.rsplit(".", 1)
+                    module_to_tp = model.get_submodule(param_name)
+
+                    tp_plan().prepare_module_tp(module_to_tp, device_mesh["tp"])
+                    if not isinstance(dp, torch.nn.Parameter):
+                        dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
+                    setattr(module_to_tp, param_type, dp)
 
         new_named_params = self._get_named_parameters(*tuple(result), drop_refs=False)
         # Build a map from old to new params
         mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+
+        if not mapping:
+            return result
 
         def _get_tensor_address(p):
             if isinstance(p, DTensor):
