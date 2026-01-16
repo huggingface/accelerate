@@ -1849,7 +1849,7 @@ class Accelerator:
             if self.multi_device and not (self.parallelism_config and self.parallelism_config.tp_enabled):
                 if model_has_dtensor(model):
                     raise ValueError(
-                        "Your model contains `DTensor` parameters, which is incompatible with DDP. Maybe you loaded your model with `device_map='auto'`? Specify `device_map='cuda'` or 'cpu' instead."
+                        "Your model contains `DTensor` parameters, which is incompatible with DDP. Maybe you loaded your model with `device_map='auto'`? Specify `device_map='cuda'` or 'xpu' or 'cpu' instead."
                     )
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}

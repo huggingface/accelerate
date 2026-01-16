@@ -81,8 +81,8 @@ def is_peft_model(model):
 
 def check_device_same(first_device, second_device):
     """
-    Utility method to check if two `torch` devices are similar. When dealing with CUDA devices, torch throws `False`
-    for `torch.device("cuda") == torch.device("cuda:0")` whereas they should be the same
+    Utility method to check if two `torch` devices are similar. When dealing torch accelerator devices(e.g. cuda, xpu),
+    torch throws `False` for `torch.device("cuda") == torch.device("cuda:0")` whereas they should be the same
 
     Args:
         first_device (`torch.device`):
@@ -94,12 +94,12 @@ def check_device_same(first_device, second_device):
         return False
 
     if first_device.type != "cpu" and first_device.index is None:
-        # In case the first_device is a cuda device and have
+        # In case the first_device is an torch accelerator device(e.g. cuda, xpu) and have
         # the index attribute set to `None`, default it to `0`
         first_device = torch.device(first_device.type, index=0)
 
     if second_device.type != "cpu" and second_device.index is None:
-        # In case the second_device is a cuda device and have
+        # In case the second_device is an torch accelerator device(e.g. cuda, xpu) and have
         # the index attribute set to `None`, default it to `0`
         second_device = torch.device(second_device.type, index=0)
 
@@ -307,7 +307,7 @@ def set_module_tensor_to_device(
 
     device_quantization = None
     with torch.no_grad():
-        # leave it on cpu first before moving them to cuda
+        # leave it on cpu first before moving them to device
         # # fix the case where the device is meta, we don't want to put it on cpu because there is no data =0
         if (
             param is not None
@@ -385,23 +385,23 @@ def set_module_tensor_to_device(
                 and str(module.weight.device) != "meta"
             ):
                 # quantize only if necessary
-                device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
+                device_index = torch.device(device).index if torch.device(device).type in ["cuda", "xpu"] else None
                 if not getattr(module.weight, "SCB", None) and device_index is not None:
                     if module.bias is not None and module.bias.device.type != "meta":
                         # if a bias exists, we need to wait until the bias is set on the correct device
-                        module = module.cuda(device_index)
+                        module = module.to(device_index)
                     elif module.bias is None:
                         # if no bias exists, we can quantize right away
-                        module = module.cuda(device_index)
+                        module = module.to(device_index)
             elif (
                 module.__class__.__name__ == "Linear4bit"
                 and getattr(module.weight, "quant_state", None) is None
                 and str(module.weight.device) != "meta"
             ):
                 # quantize only if necessary
-                device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
+                device_index = torch.device(device).index if torch.device(device).type in ["cuda", "xpu"] else None
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
-                    module.weight = module.weight.cuda(device_index)
+                    module.weight = module.weight.to(device_index)
 
     # clean pre and post forward hook
     if clear_cache and device not in ("cpu", "meta"):
@@ -749,7 +749,7 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
 
     if max_memory is None:
         max_memory = {}
-        # Make sure CUDA is initialized on each GPU to have the right memory info.
+        # Make sure device is initialized on each device to have the right memory info.
         if is_npu_available():
             for i in range(torch.npu.device_count()):
                 try:

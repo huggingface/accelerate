@@ -19,8 +19,11 @@ from transformers import AutoModelForSeq2SeqLM
 
 from accelerate import PartialState, prepare_pippy
 from accelerate import __version__ as accelerate_version
+from accelerate.test_utils import torch_device
 from accelerate.utils import set_seed
 
+
+synchronize_func = getattr(torch, torch_device, torch.cuda).synchronize
 
 if version.parse(accelerate_version) > version.parse("0.33.0"):
     raise RuntimeError(
@@ -70,25 +73,25 @@ model = prepare_pippy(
 
 # The model expects a tuple during real inference
 # with the data on the first device
-args = (example_inputs["input_ids"].to("cuda:0"), example_inputs["decoder_input_ids"].to("cuda:0"))
+args = (example_inputs["input_ids"].to(0), example_inputs["decoder_input_ids"].to(0))
 
 # Take an average of 5 times
 # Measure first batch
-torch.cuda.synchronize()
+synchronize_func()
 start_time = time.time()
 with torch.no_grad():
     output = model(*args)
-torch.cuda.synchronize()
+synchronize_func()
 end_time = time.time()
 first_batch = end_time - start_time
 
-# Now that CUDA is init, measure after
-torch.cuda.synchronize()
+# Now that device is init, measure after
+synchronize_func()
 start_time = time.time()
 for i in range(5):
     with torch.no_grad():
         output = model(*args)
-torch.cuda.synchronize()
+synchronize_func()
 end_time = time.time()
 
 # The outputs are only on the final process by default
