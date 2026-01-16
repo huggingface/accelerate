@@ -26,6 +26,7 @@ from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
 from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import is_xpu_available
 
+
 ########################################################################
 # This is a fully working simple example to use Accelerate
 #
