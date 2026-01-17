@@ -590,22 +590,20 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     """
 
     from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+        CheckpointImpl,
+        apply_activation_checkpointing,
         checkpoint_wrapper,
     )
 
-    auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(accelerator.state.fsdp_plugin, model)
-
-    for layer_name, layer in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
-        if len(layer_name.split(".")) > 1:
-            parent_name, child_name = layer_name.rsplit(".", 1)
-        else:
-            parent_name = None
-            child_name = layer_name
-
-        parent_module = model.get_submodule(parent_name) if parent_name else model
-        if auto_wrap_policy_func(parent_module):
-            layer = checkpoint_wrapper(layer, preserve_rng_state=False)
-            parent_module.register_module(child_name, layer)
+    # Apply activation checkpointing to each module that matches the auto-wrap policy
+    apply_activation_checkpointing(
+        model,
+        checkpoint_wrapper_fn=functools.partial(
+            checkpoint_wrapper,
+            checkpoint_impl=CheckpointImpl.NO_REENTRANT,
+        ),
+        auto_wrap_policy=accelerator.state.fsdp_plugin.auto_wrap_policy,
+    )
 
     return model
 
