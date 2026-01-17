@@ -42,5 +42,3 @@ rendered properly in your Markdown viewer.
 ## fsdp2_prepare_model
 
 [[autodoc]] utils.fsdp2_prepare_model
-
-## fsdp2_prepare_auto_wrap_policy

@@ -628,8 +628,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     fsdp2_plugin = accelerator.state.fsdp_plugin
 
-    fsdp2_plugin.set_auto_wrap_policy(model)
-
     original_sd = model.state_dict()
     mesh = getattr(accelerator, "torch_device_mesh", None)
 
@@ -671,11 +669,11 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
-    if auto_wrap_policy_func is not None:
+    if fsdp2_plugin.auto_wrap_policy is not None:
+        model_numel = sum(p.numel() for p in model.parameters())
         # We skip the model itself, as that one is always wrapped
         for module in get_module_children_bottom_up(model)[:-1]:
-            if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
+            if fsdp2_plugin.auto_wrap_policy(module, recurse=False, nonwrapped_numel=model_numel) and not isinstance(module, FSDPModule):
                 fully_shard(module, **fsdp2_kwargs)
 
     if not isinstance(model, FSDPModule):
@@ -724,59 +722,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 f"This effects {len(upcasted_params)} parameters: {upcasted_params}..."
             )
     return model
-
-
-def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool]:
-    """Prepares the auto wrap policy based on its type, done to mimic the behaviour of FSDP1 auto wrap policy.
-
-    Args:
-        fsdp2_plugin (`FullyShardedDataParallelPlugin`):
-            Instance of `FullyShardedDataParallelPlugin` containing the configuration options
-        auto_wrap_policy_type (`str`):
-            Either `transformer` or `size`
-        model (`torch.nn.Module`):
-            The model to wrap
-
-    Returns:
-        `Callable[[torch.nn.Module], bool]`:
-            The auto wrap policy function to be applied to the model
-    """
-    from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
-
-    fn = fsdp2_plugin.auto_wrap_policy
-
-    if isinstance(fn, functools.partial):
-        fn = fn.func
-
-    if fn is transformer_auto_wrap_policy:
-        no_split_modules = getattr(model, "_no_split_modules", None)
-        if no_split_modules is None:
-            no_split_modules = []
-        transformer_cls_names_to_wrap = list(no_split_modules)
-        if fsdp2_plugin.transformer_cls_names_to_wrap is not None:
-            transformer_cls_names_to_wrap = fsdp2_plugin.transformer_cls_names_to_wrap
-        transformer_cls_to_wrap = set()
-
-        for layer_class in transformer_cls_names_to_wrap:
-            transformer_cls = get_module_class_from_name(model, layer_class)
-            if transformer_cls is None:
-                raise ValueError(f"Could not find the transformer layer class {layer_class} in the model.")
-            transformer_cls_to_wrap.add(transformer_cls)
-
-        def policy(module: torch.nn.Module) -> bool:
-            if fsdp2_plugin.transformer_cls_names_to_wrap is None:
-                return False
-            return isinstance(module, tuple(transformer_cls_to_wrap))
-
-    elif fn is size_based_auto_wrap_policy:
-
-        def policy(module: torch.nn.Module) -> bool:
-            module_num_params = sum(p.numel() for p in module.parameters())
-            return module_num_params > fsdp2_plugin.min_num_params
-    else:
-        return None
-
-    return policy
 
 
 def get_fsdp2_grad_scaler(**kwargs):
