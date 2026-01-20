@@ -464,7 +464,7 @@ def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.d
     return param_init_fn_tied_param
 
 
-def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict):
+def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict, cpu_offload: bool = False):
     """
     Loads the full state dict (could be only on rank 0) into the sharded model. This is done by broadcasting the
     parameters from rank 0 to all other ranks. This function modifies the model in-place.
@@ -474,6 +474,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         model (`torch.nn.Module`):
             The model to load the state dict into, expected to be on meta device or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
+        cpu_offload (`bool`, defaults to `False`):
+            If True, move sharded parameters to CPU after distribution. Required when FSDP CPU offloading is enabled.
     """
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, distribute_tensor
@@ -525,6 +527,9 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                 full_param,
             )
             sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
+            # When CPU offloading is enabled, FSDP2's lazy_init expects parameters on CPU
+            if cpu_offload:
+                sharded_tensor = sharded_tensor.to("cpu")
             sharded_sd[param_name] = sharded_tensor
     # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
     else:
@@ -539,6 +544,9 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                 full_tensor,
             )
             sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
+            # When CPU offloading is enabled, FSDP2's lazy_init expects parameters on CPU
+            if cpu_offload:
+                sharded_tensor = sharded_tensor.to("cpu")
             sharded_sd[param_name] = sharded_tensor
 
     # we set `assign=True` because our params are on meta device
@@ -686,7 +694,8 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     if fsdp2_plugin.cpu_ram_efficient_loading:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
         # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
-        fsdp2_load_full_state_dict(accelerator, model, original_sd)
+        # When CPU offloading is enabled, parameters need to stay on CPU after distribution
+        fsdp2_load_full_state_dict(accelerator, model, original_sd, cpu_offload=bool(fsdp2_plugin.cpu_offload))
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # We re-register the buffers, as they may not be in the state_dict
