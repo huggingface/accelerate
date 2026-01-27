@@ -2043,10 +2043,10 @@ class FullyShardedDataParallelPlugin:
             transformer_auto_wrap_policy,
         )
 
-        # First base off of `_no_split_modules`
-        no_split_modules = getattr(model, "_no_split_modules", None)
-        default_transformer_cls_names_to_wrap = list(no_split_modules) if no_split_modules is not None else []
         if self.auto_wrap_policy == transformer_auto_wrap_policy:
+            # First base off of `_no_split_modules`
+            no_split_modules = getattr(model, "_no_split_modules", None)
+            default_transformer_cls_names_to_wrap = list(no_split_modules) if no_split_modules is not None else []
             if self.transformer_cls_names_to_wrap is None:
                 self.transformer_cls_names_to_wrap = default_transformer_cls_names_to_wrap
             transformer_cls_to_wrap = set()
