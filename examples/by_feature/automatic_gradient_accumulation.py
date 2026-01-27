@@ -133,7 +133,7 @@ def training_function(config, args):
 
     # New Code #
     # We use the `find_executable_batch_size` decorator, passing in the desired observed batch size
-    # to train on. If a CUDA OOM error occurs, it will retry this loop cutting the batch size in
+    # to train on. If a device OOM error occurs, it will retry this loop cutting the batch size in
     # half each time. From this, we can calculate the number of gradient accumulation steps needed
     # and modify the Accelerator object as a result
     @find_executable_batch_size(starting_batch_size=int(observed_batch_size))
@@ -234,7 +234,7 @@ def main():
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
     # New Code #
-    # We modify the starting batch size to be an observed batch size of 256, to guarentee an initial CUDA OOM
+    # We modify the starting batch size to be an observed batch size of 256, to guarentee an initial device OOM
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 256}
     training_function(config, args)
 

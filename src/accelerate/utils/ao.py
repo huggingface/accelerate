@@ -124,9 +124,12 @@ def convert_model_to_fp8_ao(
 
     ```python
     from accelerate.utils.ao import convert_model_to_fp8_ao
+    from accelerate import Accelerator
+
+    accelerator = Accelerator(
 
     model = MyModel()
-    model.to("cuda")
+    model.to(accelerator.device)
     convert_to_float8_training(model)
 
     model.train()

@@ -95,7 +95,7 @@ def train_baseline():
     model.train()
 
     for batch in train_dataloader:
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
             batch = batch.to(device)
             outputs = model(**batch)
         loss = outputs.loss

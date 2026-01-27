@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Model memory estimator
 
-One very difficult aspect when exploring potential models to use on your machine is knowing just how big of a model will *fit* into memory with your current graphics card (such as loading the model onto CUDA).
+One very difficult aspect when exploring potential models to use on your machine is knowing just how big of a model will *fit* into memory with your current device (such as loading the model onto CUDA or XPU).
 
 To help alleviate this, Accelerate has a CLI interface through `accelerate estimate-memory`. This tutorial will 
 help walk you through using it, what to expect, and at the end link to the interactive demo hosted on the Hub which will 
