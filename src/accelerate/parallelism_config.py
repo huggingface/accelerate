@@ -215,6 +215,11 @@ class ParallelismConfig:
         Args:
             device_type (`str`): The type of device for which to build the mesh, e
         """
+        # Skip mesh creation for DeepSpeed SP - DeepSpeed handles its own SP groups
+        # Only skip when SP is actually enabled (sp_size > 1), otherwise user might still want TP/CP/FSDP
+        if self.sp_backend == "deepspeed" and self.sp_size > 1:
+            return None
+
         if is_torch_version(">=", "2.2.0"):
             from torch.distributed.device_mesh import init_device_mesh
         else:
