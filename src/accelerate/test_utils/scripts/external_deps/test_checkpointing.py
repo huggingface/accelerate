@@ -32,7 +32,7 @@ EVAL_BATCH_SIZE = 32
 
 def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: str = "bert-base-cased"):
     """
-    Creates a set of `DataLoader`s for the `glue` dataset.
+    Creates a set of `DataLoader`s for the `nyu-mll/glue` dataset.
 
     Args:
         accelerator (`Accelerator`):
@@ -42,7 +42,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: 
         model_name (`str`, *optional*):
     """
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    datasets = load_dataset("glue", "mrpc")
+    datasets = load_dataset("nyu-mll/glue", "mrpc")
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)

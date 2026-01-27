@@ -140,7 +140,7 @@ def training_function(config, args):
     # New Code #
     test_predictions = []
     # Download the dataset
-    datasets = load_dataset("glue", "mrpc")
+    datasets = load_dataset("nyu-mll/glue", "mrpc")
     # Create our splits
     kfold = StratifiedKFold(n_splits=int(args.num_folds))
     # Initialize accelerator

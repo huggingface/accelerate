@@ -48,7 +48,7 @@ EVAL_BATCH_SIZE = 32
 
 def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
     """
-    Creates a set of `DataLoader`s for the `glue` dataset,
+    Creates a set of `DataLoader`s for the `nyu-mll/glue` dataset,
     using "bert-base-cased" as the tokenizer.
 
     Args:
@@ -58,7 +58,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
             The batch size for the train and validation DataLoaders.
     """
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    datasets = load_dataset("glue", "mrpc")
+    datasets = load_dataset("nyu-mll/glue", "mrpc")
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
