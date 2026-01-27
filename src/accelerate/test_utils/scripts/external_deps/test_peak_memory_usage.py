@@ -120,7 +120,7 @@ def get_dataloaders(
     n_val: int = 160,
 ):
     """
-    Creates a set of `DataLoader`s for the `glue` dataset.
+    Creates a set of `DataLoader`s for the `nyu-mll/glue` dataset.
 
     Args:
         accelerator (`Accelerator`):
@@ -136,7 +136,7 @@ def get_dataloaders(
     """
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     datasets = load_dataset(
-        "glue", "mrpc", split={"train": f"train[:{n_train}]", "validation": f"validation[:{n_val}]"}
+        "nyu-mll/glue", "mrpc", split={"train": f"train[:{n_train}]", "validation": f"validation[:{n_val}]"}
     )
 
     def tokenize_function(examples):

@@ -86,7 +86,7 @@ def training_function(config, args):
         accelerator.init_trackers(run, config)
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    datasets = load_dataset("glue", "mrpc")
+    datasets = load_dataset("nyu-mll/glue", "mrpc")
     metric = evaluate.load("glue", "mrpc")
 
     def tokenize_function(examples):
