@@ -2383,6 +2383,7 @@ class Accelerator:
                     seq_length_is_variable=sp_handler.sp_seq_length_is_variable,
                     core_attn_implementation=sp_handler.sp_attn_implementation,
                     micro_batch_size=batch_size_per_device,
+                    disable_in_eval=True,
                 )
                 kwargs["mpu"] = mpu
 
