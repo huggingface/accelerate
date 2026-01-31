@@ -142,7 +142,12 @@ with distributed_state.split_between_processes(["a dog", "a cat", "a chicken"], 
 On the first GPU, the prompts will be `["a dog", "a cat"]`, and on the second GPU it will be `["a chicken", "a chicken"]`.
 Make sure to drop the final sample, as it will be a duplicate of the previous one.
 
-You can find more complex examples [here](https://github.com/huggingface/accelerate/tree/main/examples/inference/distributed) such as how to use it with LLMs.
+You can find more complex examples in the [distributed inference examples folder](https://github.com/huggingface/accelerate/tree/main/examples/inference/distributed), including:
+
+- LLM text generation (`phi2.py`)
+- Diffusers image generation (`stable_diffusion.py`, `distributed_image_generation.py`)
+- Image captioning (`florence2.py`)
+- Speech generation / TTS (`distributed_speech_generation.py`)
 
 ## Memory-efficient pipeline parallelism (experimental)
 
