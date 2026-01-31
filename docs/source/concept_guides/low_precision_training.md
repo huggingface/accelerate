@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 # Low precision training methods
 
 The release of new kinds of hardware led to the emergence of new training paradigms that better utilize them. Currently, this is in the form of training
-in 8-bit precision using packages such as [TransformersEngine](https://github.com/NVIDIA/TransformerEngine) (TE) or [MS-AMP](https://github.com/Azure/MS-AMP/tree/main).
+in 8-bit precision using packages such as [TransformersEngine](https://github.com/NVIDIA/TransformerEngine) (TE) or [torchao](https://github.com/pytorch/ao/tree/main/torchao/float8). There is also [MS-AMP](https://github.com/Azure/MS-AMP/tree/main), but it is no longer actively maintained.
 
 For an introduction to the topics discussed today, we recommend reviewing the [low-precision usage guide](../usage_guides/low_precision_training) as this documentation will reference it regularly. 
 
