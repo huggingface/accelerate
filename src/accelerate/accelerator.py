@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import inspect
 import json
 import math
 import os
@@ -2376,6 +2377,11 @@ class Accelerator:
                         "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
                     )
 
+                kwagrs = {}
+                signature = inspect.signature(UlyssesSPAttentionHF.register_with_transformers)
+                if "disable_in_eval" in signature.parameters.keys():
+                    kwagrs["disable_in_eval"] = True
+
                 mpu = UlyssesSPAttentionHF.register_with_transformers(
                     model_name_or_path=model,
                     sequence_parallel_size=sp_size,
@@ -2383,7 +2389,7 @@ class Accelerator:
                     seq_length_is_variable=sp_handler.sp_seq_length_is_variable,
                     core_attn_implementation=sp_handler.sp_attn_implementation,
                     micro_batch_size=batch_size_per_device,
-                    disable_in_eval=True,
+                    **kwagrs,
                 )
                 kwargs["mpu"] = mpu
 
