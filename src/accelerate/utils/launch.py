@@ -23,7 +23,6 @@ from typing import Any
 
 import torch
 
-from . import parse_flag_from_env
 from ..commands.config.config_args import SageMakerConfig
 from ..utils import (
     DynamoBackend,
@@ -40,6 +39,7 @@ from ..utils import (
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from ..utils.other import get_free_port, is_port_in_use, merge_dicts
 from ..utils.versions import compare_versions
+from . import parse_flag_from_env
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
