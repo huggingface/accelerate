@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Low Precision Training Methods
 
-Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine`, `MS-AMP`, and `torchao` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training. 
+Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine`, `torchao`, and (legacy) `MS-AMP` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training.
 
 ## What training on FP8 means
 
@@ -69,7 +69,14 @@ fp8_config:
 
 <Tip warning={true}>
 
-MS-AMP is no longer actively maintained and has known compatibility issues with newer CUDA versions (12.x+) and PyTorch builds. We recommend using `TransformersEngine` or `torchao` instead for FP8 training.
+MS-AMP is no longer actively maintained and has known compatibility issues with newer CUDA versions (12.x+) and PyTorch builds.
+
+In practice, this commonly means:
+
+- The easiest way to use MS-AMP is via a container image that already includes it; the upstream images are often pinned to older CUDA versions (for example 11.8/12.1).
+- Multi-GPU FP8 can require MSCCL (a fork of NCCL) that may be out of date, leading to NCCL symbol/version conflicts with recent PyTorch wheels.
+
+For new projects, we recommend using `TransformersEngine` or `torchao` instead for FP8 training.
 
 </Tip>
 
