@@ -362,7 +362,14 @@ class ParallelismConfig:
         if self.total_size == 1:
             self._set_size("dp_replicate", accelerator.num_processes)
 
-        if self.total_size != accelerator.num_processes:
+        # For DeepSpeed SP, DeepSpeed handles global process groups internally.
+        # Skip the total_size == num_processes validation since:
+        # 1. DeepSpeed manages SP groups globally via initialize_sequence_parallel()
+        # 2. num_processes is per-node in multi-node, but total_size is local parallelism config
+        # 3. The actual global parallelism (SP × DP) is handled by DeepSpeed's process groups
+        if self.sp_backend == "deepspeed" and self.sp_size > 1:
+            pass
+        elif self.total_size != accelerator.num_processes:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
                 f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
