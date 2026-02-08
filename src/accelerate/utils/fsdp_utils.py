@@ -467,7 +467,11 @@ def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.d
 def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict, cpu_offload: bool = False):
     """
     Loads the full state dict (could be only on rank 0) into the sharded model. This is done by broadcasting the
-    parameters from rank 0 to all other ranks. This function modifies the model in-place.
+    parameters and buffers from rank 0 to all other ranks. This function modifies the model in-place.
+
+    Handles both parameters (sharded as DTensor) and buffers (plain Tensor): parameters are distributed via
+    the FSDP device mesh; buffers are broadcast and stored as plain tensors so models with `register_buffer`
+    work correctly with `cpu_ram_efficient_loading=True` (see issue #3898).
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
@@ -513,6 +517,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     if accelerator.is_main_process:
         for param_name, sharded_param in meta_sharded_sd.items():
             full_param = full_sd[param_name].detach()
+            # Parameters are DTensor (sharded); buffers are plain Tensor and must be broadcast, not distributed
             if isinstance(sharded_param, DTensor):
                 device_mesh = sharded_param.device_mesh
                 full_param = full_param.to(device_mesh.device_type)
@@ -543,6 +548,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
     else:
         for param_name, sharded_param in meta_sharded_sd.items():
+            # Parameters are DTensor; buffers are plain Tensor (same branching as main process to avoid deadlock)
             if isinstance(sharded_param, DTensor):
                 device_mesh = sharded_param.device_mesh
                 full_tensor = torch.empty(
