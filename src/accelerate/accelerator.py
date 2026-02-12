@@ -30,7 +30,6 @@ from types import MethodType
 from typing import Any, Callable, Union
 
 import torch
-import torch.amp
 import torch.utils.hooks as hooks
 from huggingface_hub import split_torch_state_dict_into_shards
 
