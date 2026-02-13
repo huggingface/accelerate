@@ -472,7 +472,7 @@ class Accelerator:
         )
 
         if self.parallelism_config:
-            self.state.device_mesh = parallelism_config.get_device_mesh(self.device.type)
+            self.state.device_mesh = self.parallelism_config.get_device_mesh(self.device.type)
             self.parallelism_config._validate_accelerator(self)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
