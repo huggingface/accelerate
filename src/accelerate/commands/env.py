@@ -26,7 +26,7 @@ import torch
 from accelerate import __version__ as version
 from accelerate.commands.config import default_config_file, load_config_from_file
 
-from ..utils import is_mlu_available, is_musa_available, is_npu_available, is_sdaa_available, is_xpu_available
+from ..utils import is_mlu_available, is_musa_available, is_qaic_available, is_npu_available, is_sdaa_available, is_xpu_available
 
 
 def env_command_parser(subparsers=None):
@@ -51,6 +51,7 @@ def env_command(args):
     pt_mlu_available = is_mlu_available()
     pt_sdaa_available = is_sdaa_available()
     pt_musa_available = is_musa_available()
+    pt_qaic_available = is_qaic_available()
     pt_npu_available = is_npu_available()
 
     accelerator = "N/A"
@@ -64,6 +65,8 @@ def env_command(args):
         accelerator = "SDAA"
     elif pt_musa_available:
         accelerator = "MUSA"
+    elif pt_qaic_available:
+        accelerator = "QAIC"
     elif pt_npu_available:
         accelerator = "NPU"
 
@@ -101,6 +104,8 @@ def env_command(args):
         info["SDAA type"] = torch.sdaa.get_device_name()
     elif pt_musa_available:
         info["MUSA type"] = torch.musa.get_device_name()
+    elif pt_qaic_available:
+        info["QAIC type"] = torch.qaic.get_device_name()
     elif pt_npu_available:
         info["CANN version"] = torch.version.cann
 
