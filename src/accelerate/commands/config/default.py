@@ -22,8 +22,8 @@ from ...utils import (
     is_hpu_available,
     is_mlu_available,
     is_musa_available,
-    is_qaic_available,
     is_npu_available,
+    is_qaic_available,
     is_sdaa_available,
     is_xpu_available,
 )
@@ -118,7 +118,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         if num_qaics > 1:
             config["distributed_type"] = "MULTI_QAIC"
         else:
-            config['distributed_type'] = "NO"
+            config["distributed_type"] = "NO"
     elif is_npu_available():
         num_npus = torch.npu.device_count()
         config["num_processes"] = num_npus

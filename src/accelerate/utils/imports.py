@@ -365,6 +365,7 @@ def is_musa_available(check_device=False):
             return False
     return hasattr(torch, "musa") and torch.musa.is_available()
 
+
 @lru_cache
 def is_qaic_available(check_device=False):
     "Checks if `torch_qaic` is installed and potentially if QAic is in the environment"
@@ -381,6 +382,7 @@ def is_qaic_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "qaic") and torch.qaic.is_available()
+
 
 @lru_cache
 def is_npu_available(check_device=False):

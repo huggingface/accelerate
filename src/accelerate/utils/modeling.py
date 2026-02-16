@@ -37,9 +37,9 @@ from .imports import (
     is_mlu_available,
     is_mps_available,
     is_musa_available,
-    is_qaic_available,
     is_npu_available,
     is_peft_available,
+    is_qaic_available,
     is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
@@ -51,7 +51,7 @@ from .versions import is_torch_version
 
 
 if is_qaic_available(check_device=False):
-    import torch_qaic # noqa: F401
+    import torch_qaic  # noqa: F401
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401

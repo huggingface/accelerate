@@ -41,8 +41,6 @@ from accelerate.utils import (
     is_hpu_available,
     is_mps_available,
     is_pytest_available,
-    is_qaic_available,
-    is_xpu_available,
     set_seed,
     synchronize_rng_states,
 )

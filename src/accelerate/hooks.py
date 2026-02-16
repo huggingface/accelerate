@@ -30,8 +30,8 @@ from .utils import (
 from .utils.imports import (
     is_mlu_available,
     is_musa_available,
-    is_qaic_available,
     is_npu_available,
+    is_qaic_available,
 )
 from .utils.memory import clear_device_cache
 from .utils.modeling import get_non_persistent_buffers
