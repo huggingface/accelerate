@@ -341,6 +341,7 @@ def main():
         test_noop_sync(accelerator)
     if state.distributed_type in (
         DistributedType.MULTI_GPU,
+        DistributedType.MULTI_QAIC,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
@@ -356,6 +357,7 @@ def main():
         test_distributed_sync_multiple_fwd(accelerator)
     if state.distributed_type in (
         DistributedType.MULTI_GPU,
+        DistributedType.MULTI_QAIC,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
@@ -381,6 +383,7 @@ def main():
     test_gradient_accumulation_with_opt_and_scheduler()
     if state.distributed_type in (
         DistributedType.MULTI_GPU,
+        DistributedType.MULTI_QAIC,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,

@@ -104,6 +104,7 @@ from .utils import (
     is_msamp_available,
     is_musa_available,
     is_npu_available,
+    is_qaic_available,
     is_torch_version,
     is_torch_xla_available,
     is_torchao_available,
@@ -162,6 +163,9 @@ if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
 
+
+if is_qaic_available(check_device=False):
+    import torch_qaic  # noqa: F401
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
@@ -567,7 +571,7 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            supported_device = ("xpu", "cuda", "npu", "xla", "mlu", "musa", "hpu", "sdaa", "mps")
+            supported_device = ("xpu", "cuda", "qaic", "npu", "xla", "mlu", "musa", "hpu", "sdaa", "mps")
             if self.device.type not in supported_device or is_torch_xla_available(check_is_tpu=True):
                 raise ValueError(
                     f"fp16 mixed precision requires a device in {supported_device} (not {self.device.type!r})."
@@ -661,6 +665,7 @@ class Accelerator:
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_QAIC,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_HPU,

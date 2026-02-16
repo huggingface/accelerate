@@ -43,6 +43,7 @@ from .utils import (
     is_mlu_available,
     is_musa_available,
     is_npu_available,
+    is_qaic_available,
     is_sdaa_available,
     is_xpu_available,
     load_checkpoint_in_model,
@@ -467,7 +468,9 @@ def dispatch_model(
 
         # Make sure to update _accelerate_added_attributes in hooks.py if you add any hook
         model.to = add_warning(model.to, model)
-        if is_npu_available():
+        if is_qaic_available():
+            model.qaic = add_warning(model.qaic, model)
+        elif is_npu_available():
             model.npu = add_warning(model.npu, model)
         elif is_mlu_available():
             model.mlu = add_warning(model.mlu, model)
@@ -490,8 +493,10 @@ def dispatch_model(
             )
     else:
         device = list(device_map.values())[0]
+        if is_qaic_available() and isinstance(device, int):
+            device = f"qaic:{device}"
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if is_npu_available() and isinstance(device, int):
+        elif is_npu_available() and isinstance(device, int):
             device = f"npu:{device}"
         elif is_mlu_available() and isinstance(device, int):
             device = f"mlu:{device}"

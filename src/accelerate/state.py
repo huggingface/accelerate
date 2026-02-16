@@ -43,6 +43,7 @@ from .utils import (
     is_mps_available,
     is_musa_available,
     is_npu_available,
+    is_qaic_available,
     is_sdaa_available,
     is_torch_xla_available,
     is_xccl_available,
@@ -66,6 +67,9 @@ if is_sdaa_available(check_device=False):
 
 if is_musa_available(check_device=False):
     import torch_musa  # noqa: F401
+
+if is_qaic_available(check_device=False):
+    import torch_qaic  # noqa: F401
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
@@ -400,6 +404,7 @@ class PartialState:
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_QAIC,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
@@ -724,6 +729,7 @@ class PartialState:
         - MLU if `is_mlu_available()`
         - SDAA if `is_sdaa_available()`
         - MUSA if `is_musa_available()`
+        - QAIC if `is_qaic_available()`
         - NPU if `is_npu_available()`
         - HPU if `is_hpu_available()`
         - CPU otherwise
@@ -737,6 +743,8 @@ class PartialState:
             return torch.device("sdaa")
         elif is_musa_available():
             return torch.device("musa")
+        elif is_qaic_available():
+            return torch.device("qaic")
         # NPU should be checked before CUDA when using `transfer_to_npu`
         # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
         elif is_npu_available():
@@ -774,6 +782,9 @@ class PartialState:
             elif is_musa_available():
                 backend = "mccl"
                 distributed_type = DistributedType.MULTI_MUSA
+            elif is_qaic_available():
+                backend = "qccl"
+                distributed_type = DistributedType.MULTI_QAIC
             # NPU should be checked before CUDA when using `transfer_to_npu`
             # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
             elif is_npu_available():
@@ -821,7 +832,7 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "qaic", "npu", "xpu", "xla", "hpu", "sdaa"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
@@ -981,6 +992,7 @@ class AcceleratorState:
                 DistributedType.MULTI_MLU,
                 DistributedType.MULTI_SDAA,
                 DistributedType.MULTI_MUSA,
+                DistributedType.MULTI_QAIC,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,
