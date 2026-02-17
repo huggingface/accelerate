@@ -29,7 +29,6 @@ from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import (
     is_npu_available,
-    is_qaic_available,
     is_torch_distributed_available,
     is_torch_xla_available,
 )
@@ -148,22 +147,17 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
     if is_torch_tensor(tensor) or hasattr(tensor, "to"):
-        if device == "qaic":
-            device = "qaic:0"
         # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
-        elif device == "npu":
+        if device == "npu":
             device = "npu:0"
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
             return tensor.to(device)
         except AssertionError as error:
-            if is_qaic_available():
-                if isinstance(device, int):
-                    device = f"qaic:{device}"
             # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
             # This call is inside the try-block since is_npu_available is not supported by torch.compile.
-            elif is_npu_available():
+            if is_npu_available():
                 if isinstance(device, int):
                     device = f"npu:{device}"
             else:

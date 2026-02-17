@@ -31,14 +31,13 @@ from .utils.imports import (
     is_mlu_available,
     is_musa_available,
     is_npu_available,
-    is_qaic_available,
 )
 from .utils.memory import clear_device_cache
 from .utils.modeling import get_non_persistent_buffers
 from .utils.other import recursive_getattr
 
 
-_accelerate_added_attributes = ["to", "cuda", "qaic", "npu", "xpu", "mlu", "sdaa", "musa"]
+_accelerate_added_attributes = ["to", "cuda", "npu", "xpu", "mlu", "sdaa", "musa"]
 
 
 class ModelHook:
@@ -392,9 +391,7 @@ class AlignDevicesHook(ModelHook):
             # this dictionary to allow the garbage collector to do its job.
             for value_pointer, device in self.tied_pointers_to_remove:
                 if isinstance(device, int):
-                    if is_qaic_available():
-                        device = f"qaic:{device}"
-                    elif is_npu_available():
+                    if is_npu_available():
                         device = f"npu:{device}"
                     elif is_mlu_available():
                         device = f"mlu:{device}"
