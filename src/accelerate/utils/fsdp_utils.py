@@ -467,7 +467,11 @@ def ensure_weights_retied(param_init_fn, model: torch.nn.Module, device: torch.d
 def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict, cpu_offload: bool = False):
     """
     Loads the full state dict (could be only on rank 0) into the sharded model. This is done by broadcasting the
-    parameters from rank 0 to all other ranks. This function modifies the model in-place.
+    parameters and buffers from rank 0 to all other ranks. This function modifies the model in-place.
+
+    Handles both parameters (sharded as DTensor) and buffers (plain Tensor): parameters are distributed via
+    the FSDP device mesh; buffers are broadcast and stored as plain tensors so models with `register_buffer`
+    work correctly with `cpu_ram_efficient_loading=True` (see issue #3898).
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
@@ -511,43 +515,69 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         return tensor
 
     if accelerator.is_main_process:
-        for (param_name, full_param), sharded_param in zip(full_sd.items(), meta_sharded_sd.values()):
-            device_mesh = sharded_param.device_mesh
-            full_param = full_param.detach().to(device_mesh.device_type)
-            if isinstance(full_param, DTensor):
-                # dist.broadcast() only supports torch.Tensor.
-                # After prepare_tp(), model parameters may become DTensor.
-                # To broadcast such a parameter, convert it to a local tensor first.
-                full_param = full_param.to_local()
-            dist.broadcast(full_param, src=0, group=dist.group.WORLD)
-            sharded_tensor = distribute_tensor(full_param, device_mesh, sharded_param.placements)
-            to_contiguous, casting_dtype = _infer_parameter_dtype(
-                model,
-                param_name,
-                full_param,
-            )
-            sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
-            # When CPU offloading is enabled, FSDP2's lazy_init expects parameters on CPU
-            if cpu_offload:
-                sharded_tensor = sharded_tensor.to("cpu")
-            sharded_sd[param_name] = sharded_tensor
+        for param_name, sharded_param in meta_sharded_sd.items():
+            full_param = full_sd[param_name].detach()
+            # Parameters are DTensor (sharded); buffers are plain Tensor and must be broadcast, not distributed
+            if isinstance(sharded_param, DTensor):
+                device_mesh = sharded_param.device_mesh
+                full_param = full_param.to(device_mesh.device_type)
+                if isinstance(full_param, DTensor):
+                    full_param = full_param.to_local()
+                dist.broadcast(full_param, src=0, group=dist.group.WORLD)
+                sharded_tensor = distribute_tensor(full_param, device_mesh, sharded_param.placements)
+                to_contiguous, casting_dtype = _infer_parameter_dtype(
+                    model,
+                    param_name,
+                    full_param,
+                )
+                sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
+                if cpu_offload:
+                    sharded_tensor = sharded_tensor.to("cpu")
+                sharded_sd[param_name] = sharded_tensor
+            else:
+                # Buffer (plain Tensor): broadcast and store as-is
+                full_param = full_param.to(accelerator.device)
+                if isinstance(full_param, DTensor):
+                    full_param = full_param.to_local()
+                dist.broadcast(full_param, src=0, group=dist.group.WORLD)
+                to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, full_param)
+                full_param = _cast_and_contiguous(full_param, to_contiguous, casting_dtype)
+                if cpu_offload:
+                    full_param = full_param.to("cpu")
+                sharded_sd[param_name] = full_param
     # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
     else:
         for param_name, sharded_param in meta_sharded_sd.items():
-            device_mesh = sharded_param.device_mesh
-            full_tensor = torch.empty(sharded_param.size(), device=device_mesh.device_type, dtype=sharded_param.dtype)
-            dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
-            sharded_tensor = distribute_tensor(full_tensor, device_mesh, sharded_param.placements)
-            to_contiguous, casting_dtype = _infer_parameter_dtype(
-                model,
-                param_name,
-                full_tensor,
-            )
-            sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
-            # When CPU offloading is enabled, FSDP2's lazy_init expects parameters on CPU
-            if cpu_offload:
-                sharded_tensor = sharded_tensor.to("cpu")
-            sharded_sd[param_name] = sharded_tensor
+            # Parameters are DTensor; buffers are plain Tensor (same branching as main process to avoid deadlock)
+            if isinstance(sharded_param, DTensor):
+                device_mesh = sharded_param.device_mesh
+                full_tensor = torch.empty(
+                    sharded_param.size(), device=device_mesh.device_type, dtype=sharded_param.dtype
+                )
+                dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
+                sharded_tensor = distribute_tensor(full_tensor, device_mesh, sharded_param.placements)
+                to_contiguous, casting_dtype = _infer_parameter_dtype(
+                    model,
+                    param_name,
+                    full_tensor,
+                )
+                sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
+                if cpu_offload:
+                    sharded_tensor = sharded_tensor.to("cpu")
+                sharded_sd[param_name] = sharded_tensor
+            else:
+                # Buffer: receive broadcast into plain tensor
+                full_tensor = torch.empty(
+                    sharded_param.size(),
+                    device=accelerator.device,
+                    dtype=sharded_param.dtype,
+                )
+                dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
+                to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, full_tensor)
+                full_tensor = _cast_and_contiguous(full_tensor, to_contiguous, casting_dtype)
+                if cpu_offload:
+                    full_tensor = full_tensor.to("cpu")
+                sharded_sd[param_name] = full_tensor
 
     # we set `assign=True` because our params are on meta device
     model.load_state_dict(sharded_sd, assign=True)
