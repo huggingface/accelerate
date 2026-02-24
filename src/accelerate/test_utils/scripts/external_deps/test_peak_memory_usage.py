@@ -27,6 +27,7 @@ from accelerate.utils import (
     is_hpu_available,
     is_mlu_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_xpu_available,
@@ -75,6 +76,10 @@ class TorchTracemalloc:
             # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
             torch.hpu.reset_peak_memory_stats()  # reset the peak gauge to zero
             self.begin = torch.hpu.memory_allocated()
+        elif is_neuron_available():
+            torch.neuron.empty_cache()
+            torch.neuron.reset_peak_memory_stats()  # reset the peak gauge to zero
+            self.begin = torch.neuron.memory_allocated()
         return self
 
     def __exit__(self, *exc):
@@ -107,6 +112,10 @@ class TorchTracemalloc:
             # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
             self.end = torch.hpu.memory_allocated()
             self.peak = torch.hpu.max_memory_allocated()
+        elif is_neuron_available():
+            torch.neuron.empty_cache()
+            self.end = torch.neuron.memory_allocated()
+            self.peak = torch.neuron.max_memory_allocated()
         self.used = b2mb(self.end - self.begin)
         self.peaked = b2mb(self.peak - self.begin)
         # print(f"delta used/peak {self.used:4d}/{self.peaked:4d}")
