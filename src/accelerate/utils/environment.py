@@ -124,6 +124,7 @@ def get_current_device_type() -> tuple[str, str]:
         is_hpu_available,
         is_mlu_available,
         is_musa_available,
+        is_neuron_available,
         is_npu_available,
         is_sdaa_available,
         is_xpu_available,
@@ -143,6 +144,8 @@ def get_current_device_type() -> tuple[str, str]:
         return "cuda", "MULTI_GPU"
     elif is_xpu_available():
         return "xpu", "MULTI_XPU"
+    elif is_neuron_available():
+        return "neuron", "MULTI_NEURON"
     else:
         # Default to CUDA even if not available (for CPU-only scenarios where CUDA code paths are still used)
         return "cuda", "MULTI_GPU"
