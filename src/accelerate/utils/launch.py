@@ -31,6 +31,7 @@ from ..utils import (
     is_hpu_available,
     is_mlu_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_torch_xla_available,
@@ -145,6 +146,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_hpu_available():
             current_env["HABANA_VISIBLE_MODULES"] = args.gpu_ids
+        elif is_neuron_available():
+            current_env["NEURON_RT_VISIBLE_CORES"] = args.gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if num_machines > 1:
@@ -268,6 +271,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         elif is_hpu_available():
             current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
+        elif is_neuron_available():
+            current_env["NEURON_RT_VISIBLE_CORES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -537,6 +542,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         elif is_hpu_available():
             current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
+        elif is_neuron_available():
+            current_env["NEURON_RT_VISIBLE_CORES"] = gpu_ids
         else:
             current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
@@ -808,6 +815,7 @@ class PrepareForLaunch:
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
+            DistributedType.MULTI_NEURON,
         ):
             # Prepare the environment for torch.distributed
             os.environ["LOCAL_RANK"] = str(index)
