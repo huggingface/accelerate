@@ -300,6 +300,8 @@ def load_accelerator_state(
             torch.sdaa.set_rng_state_all(states["torch_sdaa_manual_seed"])
         elif is_musa_available():
             torch.musa.set_rng_state_all(states["torch_musa_manual_seed"])
+        elif is_hpu_available():
+            torch.hpu.set_rng_state_all(states["torch_hpu_manual_seed"])
         else:
             torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
         if is_torch_xla_available():
