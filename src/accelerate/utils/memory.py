@@ -30,6 +30,7 @@ from .imports import (
     is_mlu_available,
     is_mps_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_xpu_available,
@@ -61,6 +62,9 @@ def clear_device_cache(garbage_collection=False):
     elif is_hpu_available():
         # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
         pass
+    elif is_neuron_available():
+        # Not sure it actually does something, but adding for consistency with other backends
+        torch.neuron.empty_cache()
 
 
 def release_memory(*objects):
