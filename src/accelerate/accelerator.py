@@ -664,6 +664,7 @@ class Accelerator:
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_HPU,
+            DistributedType.MULTI_NEURON,
         )
 
     @property
