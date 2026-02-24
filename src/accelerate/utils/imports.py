@@ -453,6 +453,24 @@ def is_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
+@lru_cache
+def is_neuron_available(check_device=False):
+    if importlib.util.find_spec("torch_neuronx") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_neuronx  # noqa: F401
+
+            # Will raise a RuntimeError if no Neuron is found
+            _ = torch.neuron.device_count()
+            return torch.neuron.is_available()
+        except RuntimeError:
+            return False
+
+    return hasattr(torch, "neuron") and torch.neuron.is_available()
+
+
 def is_dvclive_available():
     return _is_package_available("dvclive")
 
