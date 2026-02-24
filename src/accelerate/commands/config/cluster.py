@@ -26,6 +26,7 @@ from ...utils import (
     is_mps_available,
     is_msamp_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_torchao_available,
@@ -68,6 +69,7 @@ def get_cluster_input():
             "multi-MLU",
             "multi-SDAA",
             "multi-MUSA",
+            "multi-NEURON",
             "TPU",
         ],
         _convert_distributed_mode,
@@ -92,6 +94,7 @@ def get_cluster_input():
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_CPU,
         DistributedType.MULTI_HPU,
+        DistributedType.MULTI_NEURON,
     ]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
@@ -218,6 +221,7 @@ def get_cluster_input():
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_NEURON,
             DistributedType.NO,
         ]
         and not use_mps
@@ -229,6 +233,9 @@ def get_cluster_input():
             error_message="Please enter yes or no.",
         )
         if use_deepspeed:
+            if distributed_type is DistributedType.MULTI_NEURON:
+                raise RuntimeError("DeepSpeed is not supported on Neuron devices.")
+
             distributed_type = DistributedType.DEEPSPEED
             assert is_deepspeed_available(), (
                 "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
@@ -376,6 +383,7 @@ def get_cluster_input():
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_HPU,
+        DistributedType.MULTI_NEURON,
     ]:
         use_fsdp = _ask_field(
             "Do you want to use FullyShardedDataParallel? [yes/NO]: ",
@@ -384,7 +392,10 @@ def get_cluster_input():
             error_message="Please enter yes or no.",
         )
         if use_fsdp:
+            if distributed_type is DistributedType.MULTI_NEURON:
+                raise NotImplementedError("FSDP is not currently supported on Neuron devices.")
             distributed_type = DistributedType.FSDP
+
         if distributed_type == DistributedType.FSDP:
             fsdp_config["fsdp_version"] = _ask_options(
                 "What should be your FSDP version? [2]: ",
@@ -624,10 +635,11 @@ def get_cluster_input():
         DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
         DistributedType.MULTI_NPU,
+        DistributedType.MULTI_NEURON,
         DistributedType.XLA,
     ]:
         machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
-        if machine_type == "TPU":
+        if machine_type in ["TPU", "NEURON"]:
             machine_type += " cores"
         elif machine_type == "CPU":
             machine_type = "processes"
@@ -664,6 +676,7 @@ def get_cluster_input():
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_HPU,
+            DistributedType.MULTI_NEURON,
             DistributedType.NO,
         ]
         and not use_cpu
@@ -681,6 +694,8 @@ def get_cluster_input():
             machine_type = "XPU(s)"
         elif is_hpu_available():
             machine_type = "HPU(s)"
+        elif is_neuron_available():
+            machine_type = "Neuron cores"
         else:
             machine_type = "GPU(s)"
         gpu_ids = _ask_field(
