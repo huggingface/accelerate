@@ -35,6 +35,7 @@ from .utils import (
     is_hpu_available,
     is_mlu_available,
     is_musa_available,
+    is_neuron_available,
     is_sdaa_available,
     is_torch_version,
     is_torch_xla_available,
@@ -167,6 +168,8 @@ def save_accelerator_state(
         states["torch_musa_manual_seed"] = torch.musa.get_rng_state_all()
     if is_hpu_available():
         states["torch_hpu_manual_seed"] = torch.hpu.get_rng_state_all()
+    if is_neuron_available():
+        states["torch_neuron_manual_seed"] = torch.neuron.get_rng_state_all()
     if is_cuda_available():
         states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
     if is_torch_xla_available():
@@ -300,6 +303,8 @@ def load_accelerator_state(
             torch.sdaa.set_rng_state_all(states["torch_sdaa_manual_seed"])
         elif is_musa_available():
             torch.musa.set_rng_state_all(states["torch_musa_manual_seed"])
+        elif is_neuron_available():
+            torch.neuron.set_rng_state_all(states["torch_neuron_manual_seed"])
         else:
             torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
         if is_torch_xla_available():
