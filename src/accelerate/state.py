@@ -42,6 +42,7 @@ from .utils import (
     is_mlu_available,
     is_mps_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_torch_xla_available,
@@ -404,6 +405,7 @@ class PartialState:
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_HPU,
+            DistributedType.MULTI_NEURON,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
@@ -726,6 +728,7 @@ class PartialState:
         - MUSA if `is_musa_available()`
         - NPU if `is_npu_available()`
         - HPU if `is_hpu_available()`
+        - NEURON if `is_neuron_available()`
         - CPU otherwise
         """
         if is_mps_available():
@@ -747,6 +750,8 @@ class PartialState:
             return torch.device("cuda")
         elif is_xpu_available():
             return torch.device("xpu")
+        elif is_neuron_available():
+            return torch.device("neuron")
         else:
             return torch.device("cpu")
 
@@ -791,6 +796,9 @@ class PartialState:
                 if backend is None:
                     backend = "xccl"
                 distributed_type = DistributedType.MULTI_XPU
+            elif is_neuron_available():
+                backend = "neuron"
+                distributed_type = DistributedType.MULTI_NEURON
 
         if (
             distributed_type is None
@@ -984,6 +992,7 @@ class AcceleratorState:
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,
+                DistributedType.MULTI_NEURON,
             ]:
                 # TODO: Siro - remove when axolotl fixes their side
                 if not os.environ.get("ACCELERATE_ALLOW_CP_STANDALONE", "false").lower() == "true":
