@@ -612,6 +612,7 @@ class DistributedType(str, enum.Enum):
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **MULTI_HPU** -- Distributed on multiple HPUs.
+        - **MULTI_NEURON** -- Distributed on multiple Neuron cores.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **XLA** -- Using TorchXLA.
     """
@@ -630,6 +631,7 @@ class DistributedType(str, enum.Enum):
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
     MULTI_HPU = "MULTI_HPU"
+    MULTI_NEURON = "MULTI_NEURON"
 
 
 class SageMakerDistributedType(str, enum.Enum):
