@@ -42,6 +42,7 @@ from .utils import (
     is_bnb_available,
     is_mlu_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_xpu_available,
@@ -477,6 +478,8 @@ def dispatch_model(
             model.musa = add_warning(model.musa, model)
         elif is_xpu_available():
             model.xpu = add_warning(model.xpu, model)
+        elif is_neuron_available():
+            model.neuron = add_warning(model.neuron, model)
         else:
             model.cuda = add_warning(model.cuda, model)
 
@@ -499,6 +502,8 @@ def dispatch_model(
             device = f"sdaa:{device}"
         elif is_musa_available() and isinstance(device, int):
             device = f"musa:{device}"
+        elif is_neuron_available() and isinstance(device, int):
+            device = f"neuron:{device}"
         if device != "disk":
             model.to(device)
         else:
