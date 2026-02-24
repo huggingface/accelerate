@@ -143,7 +143,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         torch.musa.set_rng_state(rng_state)
     elif rng_type == RNGType.XPU:
         torch.xpu.set_rng_state(rng_state)
-    elif rng_state == RNGType.HPU:
+    elif rng_type == RNGType.HPU:
         torch.hpu.set_rng_state(rng_state)
     elif rng_type == RNGType.XLA:
         xm.set_rng_state(rng_state.item())
