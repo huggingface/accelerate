@@ -790,6 +790,7 @@ class RNGType(BaseEnum):
     XLA = "xla"
     XPU = "xpu"
     HPU = "hpu"
+    NEURON = "neuron"
     GENERATOR = "generator"
 
 
