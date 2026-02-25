@@ -43,7 +43,9 @@ from . import parse_flag_from_env
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
-def _filter_args(args, parser, default_args=[]):
+def _filter_args(args, parser, default_args=None):
+    if default_args is None:
+        default_args = []
     """
     Filters out all `accelerate` specific args
     """
