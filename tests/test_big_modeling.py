@@ -242,6 +242,27 @@ class BigModelingTester(unittest.TestCase):
         output = model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    def test_cpu_offload_with_multihead_attention(self):
+        """Test that cpu_offload works with nn.MultiheadAttention without requiring preload_module_classes.
+
+        MultiheadAttention has out_proj as a child submodule, but accesses out_proj.weight and
+        out_proj.bias directly in forward via F.multi_head_attention_forward. This means the child
+        hook never fires, so the parent hook must load child weights. See issue #3542.
+        """
+        embed_dim = 4
+        num_heads = 2
+        mha = nn.MultiheadAttention(embed_dim=embed_dim, num_heads=num_heads, batch_first=True)
+        x = torch.randn(1, 3, embed_dim)
+        expected, _ = mha(x, x, x)
+
+        device = torch.device(torch_device)
+
+        # Without the fix for #3542, this forward call would raise:
+        # RuntimeError: Tensor on device meta is not on the expected device cuda:0!
+        cpu_offload(mha, execution_device=device)
+        output, _ = mha(x, x, x)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
     @slow
     @require_non_cpu
     def test_cpu_offload_gpt2(self):

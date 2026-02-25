@@ -503,11 +503,25 @@ def attach_align_device_hook(
     """
     # Attach the hook on this module if it has any direct tensor.
     directs = named_module_tensors(module)
+    directs_list = list(directs)
     full_offload = (
         offload and preload_module_classes is not None and module.__class__.__name__ in preload_module_classes
     )
 
-    if len(list(directs)) > 0 or full_offload:
+    # Auto-detect modules that have both direct parameters and child submodules with
+    # their own parameters (e.g. torch.nn.MultiheadAttention whose out_proj is a child
+    # module but its weights are accessed directly in forward via F.multi_head_attention_forward).
+    # In this case child forward hooks never fire, so the parent must load child weights too.
+    place_submodules = full_offload
+    if offload and not full_offload and len(directs_list) > 0:
+        has_child_params = any(
+            any(p is not None for p in child.parameters(recurse=False))
+            for child in module.children()
+        )
+        if has_child_params:
+            place_submodules = True
+
+    if len(directs_list) > 0 or full_offload:
         if weights_map is not None:
             prefix = f"{module_name}." if len(module_name) > 0 else ""
             prefixed_weights_map = PrefixedDataset(weights_map, prefix)
@@ -518,7 +532,7 @@ def attach_align_device_hook(
             offload=offload,
             weights_map=prefixed_weights_map,
             offload_buffers=offload_buffers,
-            place_submodules=full_offload,
+            place_submodules=place_submodules,
             skip_keys=skip_keys,
             tied_params_map=tied_params_map,
         )
