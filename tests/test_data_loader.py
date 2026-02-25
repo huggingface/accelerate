@@ -358,6 +358,56 @@ class DataLoaderTester(AccelerateTestCase):
         assert list(batch_sampler_shards[0]) == [[0, 1, 2], [5, 6, 7, 8], [12, 13]]
         assert list(batch_sampler_shards[1]) == [[3, 4], [9, 10, 11]]
 
+    def test_batch_sampler_with_drop_last_no_len(self):
+        """
+        Test that BatchSamplerShard works correctly with custom batch samplers that don't have
+        __len__ (i.e., are generators) and have drop_last=True.
+
+        This tests the fix for issue #3814 where deadlocks could occur when using custom
+        batch samplers with drop_last=True in multi-process scenarios.
+
+        The fix ensures that when we can't determine the batch count (last_batch_idx < 0)
+        and drop_last=True, each process yields its last batch immediately without waiting
+        for synchronization with other processes.
+        """
+
+        class CustomBatchSamplerNoLen:
+            """Custom batch sampler that doesn't have __len__ (generator-based)."""
+
+            def __init__(self, batches, batch_size, drop_last):
+                self.batches = batches
+                self.batch_size = batch_size
+                self.drop_last = drop_last
+
+            def __iter__(self):
+                for batch in self.batches:
+                    if self.drop_last and len(batch) < self.batch_size:
+                        continue
+                    yield batch
+
+        # Simulate two processes with different numbers of batches
+        # Process 0 has 3 batches: [[0,1,2], [3,4,5], [6,7,8]]
+        # Process 1 has 2 batches: [[0,1,2], [3,4,5]]
+        # This simulates a scenario where different processes have different batch counts
+        batches_process_0 = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
+        batches_process_1 = [[0, 1, 2], [3, 4, 5]]
+
+        batch_sampler_0 = CustomBatchSamplerNoLen(batches_process_0, batch_size=3, drop_last=True)
+        batch_sampler_1 = CustomBatchSamplerNoLen(batches_process_1, batch_size=3, drop_last=True)
+
+        # Create shards for two processes
+        shard_0 = BatchSamplerShard(batch_sampler_0, num_processes=2, process_index=0, even_batches=False)
+        shard_1 = BatchSamplerShard(batch_sampler_1, num_processes=2, process_index=1, even_batches=False)
+
+        # Both should iterate without deadlock
+        result_0 = list(shard_0)
+        result_1 = list(shard_1)
+
+        # Process 0 should get batches at indices 0 and 2 (every 2nd batch starting from 0)
+        assert result_0 == [[0, 1, 2], [6, 7, 8]]
+        # Process 1 should get batch at index 1 (every 2nd batch starting from 1)
+        assert result_1 == [[3, 4, 5]]
+
     def check_iterable_dataset_shards(
         self, dataset, seed, batch_size, drop_last=False, num_processes=2, split_batches=False
     ):

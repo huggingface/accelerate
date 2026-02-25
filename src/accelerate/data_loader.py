@@ -218,6 +218,13 @@ class BatchSamplerShard(BatchSampler):
     def _iter_with_no_split(self):
         initial_data = []
         batch_to_yield = []
+        # Get the total number of batches, if available
+        try:
+            last_batch_idx = len(self.batch_sampler) - 1 if len(self.batch_sampler) > 0 else -1
+        except TypeError:
+            # If batch_sampler doesn't have __len__, we can't determine the last batch
+            # This can happen with custom batch samplers that are generators
+            last_batch_idx = -1
         for idx, batch in enumerate(self.batch_sampler):
             # We gather the initial indices in case we need to circle back at the end.
             if not self.drop_last and idx < self.num_processes:
@@ -226,6 +233,25 @@ class BatchSamplerShard(BatchSampler):
             # yielding it.
             if idx % self.num_processes == self.process_index:
                 batch_to_yield = batch
+            # Check if we should yield without waiting for synchronization
+            # This prevents deadlocks when:
+            # 1. We can't determine the batch count (custom batch sampler without __len__), OR
+            # 2. We're at the last batch and it's incomplete (would be dropped with drop_last=True)
+            is_last_batch_incomplete = self.batch_size is not None and len(batch) < self.batch_size
+            at_last_batch = last_batch_idx >= 0 and idx == last_batch_idx
+            should_yield_immediately = (last_batch_idx < 0) or (at_last_batch and is_last_batch_incomplete)
+
+            if should_yield_immediately and self.drop_last:
+                if idx % self.num_processes == self.process_index:
+                    yield batch_to_yield
+                # If we know the batch count, break at the last batch
+                # Otherwise continue to see if there are more batches
+                if last_batch_idx >= 0:
+                    break
+                # For generators (last_batch_idx < 0), continue to next iteration
+                continue
+
+            # Normal yield logic: wait for synchronization point
             if idx % self.num_processes == self.num_processes - 1 and (
                 self.batch_size is None or len(batch) == self.batch_size
             ):
