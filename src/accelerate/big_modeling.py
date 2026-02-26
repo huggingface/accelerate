@@ -133,6 +133,10 @@ def init_on_device(device: torch.device, include_buffers: Optional[bool] = None)
             param_cls = type(module._parameters[name])
             kwargs = module._parameters[name].__dict__
             kwargs["requires_grad"] = param.requires_grad
+
+            # Prevent the "unexpected keyword argument" error when initializing the empty parameter object.
+            kwargs.pop("_is_hf_initialized", None)
+
             module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
 
     def register_empty_buffer(module, name, buffer, persistent=True):
