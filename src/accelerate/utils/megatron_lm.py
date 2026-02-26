@@ -873,7 +873,9 @@ def finish_mpu_init():
 
 
 # initialize megatron setup
-def initialize(accelerator, extra_args_provider=None, args_defaults={}):
+def initialize(accelerator, extra_args_provider=None, args_defaults=None):
+    if args_defaults is None:
+        args_defaults = {}
     accelerator.print("Initializing Megatron-LM")
     assert torch.cuda.is_available(), "Megatron requires CUDA."
 

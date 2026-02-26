@@ -82,7 +82,7 @@ def is_repeated_blocks(module: torch.nn.Module) -> bool:
     is useful to determine whether we should apply regional compilation to the module.
     """
 
-    return isinstance(module, torch.nn.ModuleList) and all(isinstance(m, module[0].__class__) for m in module)
+    return isinstance(module, torch.nn.ModuleList) and len(module) > 0 and all(isinstance(m, module[0].__class__) for m in module)
 
 
 def has_repeated_blocks(module: torch.nn.Module) -> bool:
