@@ -829,7 +829,7 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa", "neuron"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
