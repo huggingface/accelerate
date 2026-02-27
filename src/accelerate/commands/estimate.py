@@ -90,11 +90,11 @@ def create_empty_model(
     model_info = verify_on_hub(model_name, access_token)
     # Simplified errors
     if model_info == "gated":
-        raise GatedRepoError(
+        raise OSError(
             f"Repo for model `{model_name}` is gated. You must be authenticated to access it. Please run `huggingface-cli login`."
         )
     elif model_info == "repo":
-        raise RepositoryNotFoundError(
+        raise OSError(
             f"Repo for model `{model_name}` does not exist on the Hub. If you are trying to access a private repo,"
             " make sure you are authenticated via `huggingface-cli login` and have access."
         )
