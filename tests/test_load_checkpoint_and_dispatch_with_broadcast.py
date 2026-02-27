@@ -42,7 +42,6 @@ from accelerate.utils.imports import is_hpu_available, is_transformers_available
 
 if is_transformers_available():
     from transformers import AutoConfig, AutoModel
-    from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
 
 def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -78,6 +77,8 @@ def load_checkpoint_and_dispatch_fsdp2():
         fsdp2_model = AutoModel.from_config(config)
         fsdp2_model.tie_weights()
         assert isinstance(fsdp2_model, nn.Module)
+
+    from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
     mesh = init_device_mesh(device.type, (dist.get_world_size(),))
     fsdp2_model, _ = _recursive_wrap(
