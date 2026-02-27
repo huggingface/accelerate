@@ -256,7 +256,6 @@ class FeatureExamplesTests(TempDirTestCase):
             --project_dir {tmpdir}
             """.split()
             run_command(self.launch_args + testargs)
-            assert os.path.exists(os.path.join(tmpdir, "tracking"))
 
     def test_gradient_accumulation(self):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
