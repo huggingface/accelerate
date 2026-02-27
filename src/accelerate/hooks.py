@@ -20,23 +20,6 @@ import torch
 import torch.nn as nn
 
 from .state import PartialState
-
-
-def _compiler_disable(fn):
-    """
-    Lazy version of `torch.compiler.disable` that avoids importing `torch._dynamo` at decoration time.
-    `torch.compiler.disable` eagerly imports `torch._dynamo` which adds ~4s to import time.
-    """
-
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not hasattr(wrapper, "_compiled_fn"):
-            wrapper._compiled_fn = torch.compiler.disable(fn)
-        return wrapper._compiled_fn(*args, **kwargs)
-
-    return wrapper
-
-
 from .utils import (
     PrefixedDataset,
     find_device,
@@ -52,6 +35,21 @@ from .utils.imports import (
 from .utils.memory import clear_device_cache
 from .utils.modeling import get_non_persistent_buffers
 from .utils.other import recursive_getattr
+
+
+def _compiler_disable(fn):
+    """
+    Lazy version of `torch.compiler.disable` that avoids importing `torch._dynamo` at decoration time.
+    `torch.compiler.disable` eagerly imports `torch._dynamo` which adds ~4s to import time.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not hasattr(wrapper, "_compiled_fn"):
+            wrapper._compiled_fn = torch.compiler.disable(fn)
+        return wrapper._compiled_fn(*args, **kwargs)
+
+    return wrapper
 
 
 _accelerate_added_attributes = ["to", "cuda", "npu", "xpu", "mlu", "sdaa", "musa"]
