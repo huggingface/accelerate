@@ -240,10 +240,12 @@ def extract_model_from_parallel(
     is_compiled = is_compiled_module(model)
     has_compiled = has_compiled_regions(model)
 
+    has_top_level_orig_mod = "_orig_mod" in model.__dict__
+
     if is_compiled:
         compiled_model = model
         model = model._orig_mod
-    elif has_compiled:
+    elif has_compiled and has_top_level_orig_mod:
         compiled_model = model
         model = model.__dict__["_orig_mod"]
 
@@ -293,7 +295,7 @@ def extract_model_from_parallel(
         if is_compiled:
             compiled_model._orig_mod = model
             model = compiled_model
-        elif has_compiled:
+        elif has_compiled and has_top_level_orig_mod:
             compiled_model.__dict__["_orig_mod"] = model
             model = compiled_model
 

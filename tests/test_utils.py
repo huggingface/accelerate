@@ -260,6 +260,17 @@ class UtilsTester(unittest.TestCase):
 
         assert compiled_model._orig_mod == compiled_model_unwrapped
 
+    def test_dynamo_extract_model_submodule_compile_does_not_require_top_level_orig_mod(self):
+        model = RegressionModel()
+        model.a = torch.compile(model.a)
+        distributed_model = torch.nn.parallel.DataParallel(model)
+
+        unwrapped_keep_compile = extract_model_from_parallel(distributed_model, keep_torch_compile=True)
+        unwrapped_remove_compile = extract_model_from_parallel(distributed_model, keep_torch_compile=False)
+
+        assert unwrapped_keep_compile is model
+        assert unwrapped_remove_compile is model
+
     def test_find_device(self):
         assert find_device([1, "a", torch.tensor([1, 2, 3])]) == torch.device("cpu")
         assert find_device({"a": 1, "b": torch.tensor([1, 2, 3])}) == torch.device("cpu")
