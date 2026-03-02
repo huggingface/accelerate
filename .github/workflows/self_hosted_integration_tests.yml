@@ -112,7 +112,7 @@ jobs:
           cd skorch;
           git config --global --add safe.directory '*'
           git checkout master && git pull
-          pip install .[testing]
+          pip install .[test]
           pip install flaky
 
       - name: Show installed libraries

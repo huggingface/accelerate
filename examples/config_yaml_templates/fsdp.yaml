@@ -1,8 +1,8 @@
-# Since we are doing FSDP (even though it's multi-GPU), we need to specify the distributed type as FSDP
+# Since we are doing FSDP (even though it's multi-accelerator), we need to specify the distributed type as FSDP
 distributed_type: FSDP
 # Can be one of "no", "fp16", or "bf16" (see `transformer_engine.yaml` for `fp8`, but it works for FSDP as well)
 mixed_precision: 'bf16'
-# Specify the number of GPUs to use
+# Specify the number of accelerators to use
 num_processes: 2
 # Then we can specify the FSDP config
 fsdp_config:

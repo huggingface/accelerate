@@ -50,7 +50,13 @@ def map_pytorch_optim_to_deepspeed(optimizer):
         if is_bnb_available() and not is_adaw:
             import bitsandbytes.optim as bnb_opt
 
-            is_adaw = isinstance(optimizer, (bnb_opt.AdamW, bnb_opt.AdamW32bit)) and optimizer.optim_bits == 32
+            if isinstance(optimizer, (bnb_opt.AdamW, bnb_opt.AdamW32bit)):
+                try:
+                    is_adaw = optimizer.optim_bits == 32
+                except AttributeError:
+                    is_adaw = optimizer.args.optim_bits == 32
+            else:
+                is_adaw = False
 
         if is_adaw:
             defaults["adamw_mode"] = True
@@ -64,7 +70,11 @@ def map_pytorch_optim_to_deepspeed(optimizer):
         if is_bnb_available() and not is_ada:
             import bitsandbytes.optim as bnb_opt
 
-            is_ada = isinstance(optimizer, (bnb_opt.Adagrad, bnb_opt.Adagrad32bit)) and optimizer.optim_bits == 32
+            if isinstance(optimizer, (bnb_opt.Adagrad, bnb_opt.Adagrad32bit)):
+                try:
+                    is_ada = optimizer.optim_bits == 32
+                except AttributeError:
+                    is_ada = optimizer.args.optim_bits == 32
         if is_ada:
             from deepspeed.ops.adagrad import DeepSpeedCPUAdagrad
 
@@ -74,10 +84,15 @@ def map_pytorch_optim_to_deepspeed(optimizer):
     if is_bnb_available(min_version="0.38.0") and compare_versions("deepspeed", ">=", "0.11.0"):
         from bitsandbytes.optim import Lion, Lion32bit
 
-        if isinstance(optimizer, (Lion, Lion32bit)) and optimizer.optim_bits == 32:
-            from deepspeed.ops.lion import DeepSpeedCPULion
+        if isinstance(optimizer, (Lion, Lion32bit)):
+            try:
+                is_bnb_32bits = optimizer.optim_bits == 32
+            except AttributeError:
+                is_bnb_32bits = optimizer.args.optim_bits == 32
+            if is_bnb_32bits:
+                from deepspeed.ops.lion import DeepSpeedCPULion
 
-            optimizer_class = DeepSpeedCPULion
+                optimizer_class = DeepSpeedCPULion
 
     return optimizer_class(optimizer.param_groups, **defaults)
 
@@ -128,8 +143,13 @@ class HfDeepSpeedConfig:
                 config = json.load(f)
         else:
             try:
-                config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode("utf-8")
-                config = json.loads(config_decoded)
+                try:
+                    # First try parsing as JSON directly
+                    config = json.loads(config_file_or_dict)
+                except json.JSONDecodeError:
+                    # If that fails, try base64 decoding
+                    config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode("utf-8")
+                    config = json.loads(config_decoded)
             except (UnicodeDecodeError, AttributeError, ValueError):
                 raise ValueError(
                     f"Expected a string path to an existing deepspeed config, or a dictionary, or a base64 encoded string. Received: {config_file_or_dict}"
@@ -241,21 +261,35 @@ class DeepSpeedEngineWrapper:
     def __init__(self, engine):
         self.engine = engine
 
-    def backward(self, loss, **kwargs):
+    def backward(self, loss, sync_gradients=True, **kwargs):
+        # Set gradient accumulation boundary based on Accelerate's sync_gradients state
+        # This tells DeepSpeed whether this is the final micro-batch before gradient sync
+        self.engine.set_gradient_accumulation_boundary(is_boundary=sync_gradients)
+
         # runs backpropagation and handles mixed precision
         self.engine.backward(loss, **kwargs)
 
-        # Deepspeed's `engine.step` performs the following operations:
-        # - gradient accumulation check
-        # - gradient clipping
-        # - optimizer step
-        # - zero grad
-        # - checking overflow
-        # - lr_scheduler step (only if engine.lr_scheduler is not None)
-        self.engine.step()
+        # Only perform step and related operations at gradient accumulation boundaries
+        if sync_gradients:
+            # Deepspeed's `engine.step` performs the following operations:
+            # - gradient accumulation check
+            # - gradient clipping
+            # - optimizer step
+            # - zero grad
+            # - checking overflow
+            # - lr_scheduler step (only if engine.lr_scheduler is not None)
+            self.engine.step()
         # and this plugin overrides the above calls with no-ops when Accelerate runs under
         # Deepspeed, but allows normal functionality for non-Deepspeed cases thus enabling a simple
         # training loop that works transparently under many training regimes.
+
+    def get_global_grad_norm(self):
+        """Get the global gradient norm from DeepSpeed engine."""
+        grad_norm = self.engine.get_global_grad_norm()
+        # Convert to scalar if it's a tensor
+        if hasattr(grad_norm, "item"):
+            return grad_norm.item()
+        return grad_norm
 
 
 class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):

@@ -61,6 +61,12 @@ If we notice in the chart mentioned earlier, TE simply casts the computation lay
 
 ## `MS-AMP`
 
+<Tip warning={true}>
+
+MS-AMP is no longer actively maintained and has known compatibility issues with newer CUDA versions (12.x+) and PyTorch builds. We recommend using `TransformersEngine` or `torchao` instead for FP8 training.
+
+</Tip>
+
 MS-AMP takes a different approach to `TransformersEngine` by providing three different optimization levels to convert more operations in FP8 or FP16.
 
 * The base optimization level (`O1`), passes communications of the weights (such as in DDP) in FP8, stores the weights of the model in FP16, and leaves the optimizer states in FP32. The main benefit of this optimization level is that we can reduce the communication bandwidth by essentially half. Additionally, more GPU memory is saved due to 1/2 of everything being cast in FP8, and the weights being cast to FP16. Notably, both the optimizer states remain in FP32.

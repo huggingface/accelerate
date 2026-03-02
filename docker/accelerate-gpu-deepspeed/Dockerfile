@@ -4,7 +4,6 @@
 # Use base conda image to reduce time
 FROM continuumio/miniconda3:latest AS compile-image
 # Specify py version
-# Note: DeepSpeed beyond v0.12.6 requires py 3.10
 ENV PYTHON_VERSION=3.10
 # Install apt libs
 RUN apt-get update && \
@@ -25,12 +24,12 @@ RUN source activate accelerate && conda install -c conda-forge mpi4py
 RUN source activate accelerate && \
     python3 -m pip install --no-cache-dir \
     git+https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers,deepspeed] \
-    --extra-index-url https://download.pytorch.org/whl/cu117
+    --extra-index-url https://download.pytorch.org/whl/cu126
 
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
 # Stage 2
-FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu20.04 AS build-image
+FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04 AS build-image
 COPY --from=compile-image /opt/conda /opt/conda
 ENV PATH /opt/conda/bin:$PATH
 

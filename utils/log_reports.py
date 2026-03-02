@@ -56,7 +56,7 @@ for log in Path().glob("*.log"):
             if line.get("nodeid", "") != "":
                 test = line["nodeid"]
                 if line.get("duration", None) is not None:
-                    duration = f'{line["duration"]:.4f}'
+                    duration = f"{line['duration']:.4f}"
                     if line.get("outcome", "") == "failed":
                         section_num_failed += 1
                         failed.append([test, duration, log.name.split("_")[0]])
@@ -136,7 +136,7 @@ if os.environ.get("TEST_TYPE", "") != "":
                     "text": "Check Action results",
                     "emoji": True,
                 },
-                "url": f'https://github.com/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{os.environ["GITHUB_RUN_ID"]}',
+                "url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
             },
         }
         payload.append(action_button)

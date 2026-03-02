@@ -17,7 +17,6 @@
 import pickle
 import tempfile
 import warnings
-from typing import List
 from unittest.mock import Mock
 
 import torch
@@ -102,8 +101,8 @@ def verify_dataloader_batch_sizes(
     accelerator: Accelerator,
     dataset_size: int,
     batch_size: int,
-    process_0_expected_batch_sizes: List[int],
-    process_1_expected_batch_sizes: List[int],
+    process_0_expected_batch_sizes: list[int],
+    process_1_expected_batch_sizes: list[int],
 ):
     """
     A helper function for verifying the batch sizes coming from a prepared dataloader in each process
@@ -271,9 +270,9 @@ def test_data_loader(data_loader, accelerator):
     sorted_all_examples = sorted(all_examples)
 
     # Check if all elements are present in the sorted list of iterated samples
-    assert (
-        len(set(sorted_all_examples)) == NUM_ELEMENTS
-    ), "Not all the dataset elements have been iterated in an epoch due to duplication of samples across processes."
+    assert len(set(sorted_all_examples)) == NUM_ELEMENTS, (
+        "Not all the dataset elements have been iterated in an epoch due to duplication of samples across processes."
+    )
 
 
 def test_stateful_dataloader(accelerator):
@@ -383,20 +382,21 @@ def main():
     test_pickle_accelerator()
 
     dataset = DummyDataset()
-    # Conventional Dataloader with shuffle=False
+
+    accelerator.print("Test DataLoader with shuffle=False")
     loader = DataLoader(dataset, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
     test_data_loader(loader, accelerator)
 
-    # Conventional Dataloader with shuffle=True
+    accelerator.print("Test DataLoader with shuffle=True")
     loader = DataLoader(dataset, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
     test_data_loader(loader, accelerator)
 
-    # Dataloader with batch_sampler
+    accelerator.print("Test DataLoader with batch_sampler")
     sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
     loader = DataLoader(dataset, batch_sampler=sampler, num_workers=NUM_WORKERS)
     test_data_loader(loader, accelerator)
 
-    # Dataloader with sampler as an instance of `BatchSampler`
+    accelerator.print("Test DataLoader with sampler as an instance of `BatchSampler`")
     sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
     loader = DataLoader(dataset, sampler=sampler, batch_size=None, collate_fn=default_collate, num_workers=NUM_WORKERS)
     test_data_loader(loader, accelerator)

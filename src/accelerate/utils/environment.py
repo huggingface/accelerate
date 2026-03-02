@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache, wraps
 from shutil import which
-from typing import List, Optional
+from typing import Optional, Union
 
 import torch
 from packaging.version import parse
@@ -56,7 +56,7 @@ def convert_dict_to_env_variables(current_env: dict):
     return valid_env_items
 
 
-def str_to_bool(value) -> int:
+def str_to_bool(value, to_bool: bool = False) -> Union[int, bool]:
     """
     Converts a string representation of truth to `True` (1) or `False` (0).
 
@@ -64,9 +64,9 @@ def str_to_bool(value) -> int:
     """
     value = value.lower()
     if value in ("y", "yes", "t", "true", "on", "1"):
-        return 1
+        return 1 if not to_bool else True
     elif value in ("n", "no", "f", "false", "off", "0"):
-        return 0
+        return 0 if not to_bool else False
     else:
         raise ValueError(f"invalid truth value {value}")
 
@@ -91,11 +91,64 @@ def parse_choice_from_env(key, default="no"):
     return value
 
 
-def are_libraries_initialized(*library_names: str) -> List[str]:
+def are_libraries_initialized(*library_names: str) -> list[str]:
     """
     Checks if any of `library_names` are imported in the environment. Will return any names that are.
     """
     return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
+
+
+def get_current_device_type() -> tuple[str, str]:
+    """
+    Determines the current device type and distributed type without initializing any device.
+
+    This is particularly important when using fork-based multiprocessing, as device initialization
+    before forking can cause errors.
+
+    The device detection order follows the same priority as state.py:_prepare_backend():
+    MLU -> SDAA -> MUSA -> NPU -> HPU -> CUDA -> XPU
+
+    Returns:
+        tuple[str, str]: A tuple of (device_type, distributed_type)
+            - device_type: The device string (e.g., "cuda", "npu", "xpu")
+            - distributed_type: The distributed type string (e.g., "MULTI_GPU", "MULTI_NPU")
+
+    Example:
+        ```python
+        >>> device_type, distributed_type = get_current_device_type()
+        >>> print(device_type)  # "cuda"
+        >>> print(distributed_type)  # "MULTI_GPU"
+        ```
+    """
+    from .imports import (
+        is_hpu_available,
+        is_mlu_available,
+        is_musa_available,
+        is_neuron_available,
+        is_npu_available,
+        is_sdaa_available,
+        is_xpu_available,
+    )
+
+    if is_mlu_available():
+        return "mlu", "MULTI_MLU"
+    elif is_sdaa_available():
+        return "sdaa", "MULTI_SDAA"
+    elif is_musa_available():
+        return "musa", "MULTI_MUSA"
+    elif is_npu_available():
+        return "npu", "MULTI_NPU"
+    elif is_hpu_available():
+        return "hpu", "MULTI_HPU"
+    elif torch.cuda.is_available():
+        return "cuda", "MULTI_GPU"
+    elif is_xpu_available():
+        return "xpu", "MULTI_XPU"
+    elif is_neuron_available():
+        return "neuron", "MULTI_NEURON"
+    else:
+        # Default to CUDA even if not available (for CPU-only scenarios where CUDA code paths are still used)
+        return "cuda", "MULTI_GPU"
 
 
 def _nvidia_smi():
@@ -149,7 +202,7 @@ def check_cuda_p2p_ib_support():
     Checks if the devices being used have issues with P2P and IB communications, namely any consumer GPU hardware after
     the 3090.
 
-    Noteably uses `nvidia-smi` instead of torch to not initialize CUDA.
+    Notably uses `nvidia-smi` instead of torch to not initialize CUDA.
     """
     try:
         device_names, device_count = get_gpu_info()
@@ -172,14 +225,26 @@ def check_cuda_p2p_ib_support():
     return True
 
 
-def check_fp8_capability():
+@lru_cache
+def check_cuda_fp8_capability():
     """
-    Checks if all the current GPUs available support FP8.
+    Checks if the current GPU available supports FP8.
 
-    Notably must initialize `torch.cuda` to check.
+    Notably might initialize `torch.cuda` to check.
     """
-    cuda_device_capacity = torch.cuda.get_device_capability()
-    return cuda_device_capacity >= (8, 9)
+
+    try:
+        # try to get the compute capability from nvidia-smi
+        output = subprocess.check_output(
+            [_nvidia_smi(), "--query-gpu=compute_capability", "--format=csv,noheader"], universal_newlines=True
+        )
+        output = output.strip()
+        # we take the first GPU's compute capability
+        compute_capability = tuple(map(int, output.split(os.linesep)[0].split(".")))
+    except Exception:
+        compute_capability = torch.cuda.get_device_capability()
+
+    return compute_capability >= (8, 9)
 
 
 @dataclass
@@ -236,7 +301,7 @@ def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = N
 
         if not is_pynvml_available():
             raise ImportError(
-                "To set CPU affinity on CUDA GPUs the `pynvml` package must be available. (`pip install pynvml`)"
+                "To set CPU affinity on CUDA GPUs the `nvidia-ml-py` package must be available. (`pip install nvidia-ml-py`)"
             )
         import pynvml as nvml
 

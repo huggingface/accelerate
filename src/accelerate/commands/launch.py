@@ -39,12 +39,14 @@ from accelerate.utils import (
     convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
+    is_hpu_available,
     is_mlu_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
-    is_torch_version,
+    is_sdaa_available,
     is_torch_xla_available,
     is_xpu_available,
     patch_environment,
@@ -181,13 +183,6 @@ def launch_command_parser(subparsers=None):
     hardware_args.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
-    hardware_args.add_argument(
-        "--ipex",
-        default=False,
-        action="store_true",
-        help="Whether or not this should launch a Intel PyTorch Extension (IPEX) training.",
-    )
-
     # Resource selection arguments
     resource_args = parser.add_argument_group(
         "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
@@ -245,6 +240,12 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether to enable dynamic shape tracing.",
     )
+    resource_args.add_argument(
+        "--dynamo_use_regional_compilation",
+        default=False,
+        action="store_true",
+        help="Whether to enable regional compilation.",
+    )
 
     # Training Paradigm arguments
     paradigm_args = parser.add_argument_group(
@@ -263,16 +264,16 @@ def launch_command_parser(subparsers=None):
         help="Whether to use fsdp.",
     )
     paradigm_args.add_argument(
+        "--use_parallelism_config",
+        default=False,
+        action="store_true",
+        help="Whether to use the parallelism config to configure the N-d distributed training.",
+    )
+    paradigm_args.add_argument(
         "--use_megatron_lm",
         default=False,
         action="store_true",
         help="Whether to use Megatron-LM.",
-    )
-    paradigm_args.add_argument(
-        "--use_xpu",
-        default=False,
-        action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
     )
 
     # distributed GPU training arguments
@@ -280,7 +281,7 @@ def launch_command_parser(subparsers=None):
     distributed_args.add_argument(
         "--gpu_ids",
         default=None,
-        help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
+        help="What GPUs (by id) should be used for training on this machine as a comma-separated list",
     )
     distributed_args.add_argument(
         "--same_network",
@@ -486,19 +487,19 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_exclusion_filter",
         default=None,
         type=str,
-        help="DeepSpeed exclusion filter string when using mutli-node setup.",
+        help="DeepSpeed exclusion filter string when using multi-node setup.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_inclusion_filter",
         default=None,
         type=str,
-        help="DeepSpeed inclusion filter string when using mutli-node setup.",
+        help="DeepSpeed inclusion filter string when using multi-node setup.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_multinode_launcher",
         default=None,
         type=str,
-        help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
+        help="DeepSpeed multi-node launcher to use, e.g. `pdsh`, `standard`, `openmpi`, `mvapich`, `mpich`, `slurm`, `nossh` (requires DeepSpeed >= 0.14.5). If unspecified, will default to `pdsh`.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_moe_layer_cls_names",
@@ -511,6 +512,13 @@ def launch_command_parser(subparsers=None):
     # fsdp arguments
     fsdp_args = parser.add_argument_group("FSDP Arguments", "Arguments related to Fully Shared Data Parallelism.")
     fsdp_args.add_argument(
+        "--fsdp_version",
+        type=str,
+        default="1",
+        choices=["1", "2"],
+        help="FSDP version to use. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
         "--fsdp_offload_params",
         default="false",
         type=str,
@@ -519,14 +527,21 @@ def launch_command_parser(subparsers=None):
     fsdp_args.add_argument(
         "--fsdp_min_num_params",
         type=int,
-        default=1e8,
+        default=int(1e8),
         help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
     )
+    # We enable this for backwards compatibility, throw a warning if this is set in `FullyShardedDataParallelPlugin`
     fsdp_args.add_argument(
         "--fsdp_sharding_strategy",
         type=str,
         default="FULL_SHARD",
-        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
+        help="FSDP's sharding strategy. (useful only when `use_fsdp` flag is passed and `fsdp_version=1`).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_reshard_after_forward",
+        type=str,
+        default="true",
+        help="FSDP's Reshard After Forward Strategy. (useful only when `use_fsdp` flag is passed). Supports either boolean (FSDP2) or `FULL_SHARD | SHARD_GRAD_OP | NO_RESHARD` (FSDP1).",
     )
     fsdp_args.add_argument(
         "--fsdp_auto_wrap_policy",
@@ -564,7 +579,7 @@ def launch_command_parser(subparsers=None):
         "--fsdp_use_orig_params",
         default="true",
         type=str,
-        help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres."
+        help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable parameters."
         " (useful only when `use_fsdp` flag is passed).",
     )
     fsdp_args.add_argument(
@@ -596,6 +611,54 @@ def launch_command_parser(subparsers=None):
         type=int,
         default=1,
         help="Megatron-LM's Tensor Parallelism (TP) degree. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_use_custom_fsdp",
+        type=bool,
+        default=False,
+        help="Whether to use custom FSDP. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_no_load_optim",
+        type=bool,
+        default=False,
+        help="Whether to not load optimizer. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_eod_mask_loss",
+        type=bool,
+        default=False,
+        help="Whether to use eod mask loss. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_overlap_cpu_optimizer_d2h_h2d",
+        type=bool,
+        default=False,
+        help="Whether to overlap CPU optimizer step, gradients D2H and updated parameters H2D. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_no_save_optim",
+        type=bool,
+        default=False,
+        help="Whether to not save optimizer. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_optimizer_cpu_offload",
+        type=bool,
+        default=False,
+        help="Whether to use CPU offload for optimizer. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_use_precision_aware_optimizer",
+        type=bool,
+        default=False,
+        help="Whether to use precision aware optimizer. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_decoder_last_pipeline_num_layers",
+        type=int,
+        default=None,
+        help="Megatron-LM's decoder last pipeline number of layers, default None is even split of transformer layers across all pipeline stages.",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_pp_degree",
@@ -638,6 +701,83 @@ def launch_command_parser(subparsers=None):
         help="Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable). "
         "(useful only when `use_megatron_lm` flag is passed).",
     )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_recompute_granularity",
+        default=None,
+        type=str,
+        help="Megatron-LM's recompute granularity (full, selective). "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_recompute_method",
+        default=None,
+        type=str,
+        help="Megatron-LM's recompute method (uniform, block). (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_recompute_num_layers",
+        default=None,
+        type=int,
+        help="Megatron-LM's number of layers to recompute. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_attention_backend",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to enable attention backend. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_expert_model_parallel_size",
+        default=None,
+        type=int,
+        help="Megatron-LM's expert model parallel size. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_context_parallel_size",
+        default=None,
+        type=int,
+        help="Megatron-LM's context parallel size. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_attention_dropout",
+        default=None,
+        type=float,
+        help="Megatron-LM's attention dropout rate. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_hidden_dropout",
+        default=None,
+        type=float,
+        help="Megatron-LM's hidden dropout rate. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_attention_softmax_in_fp32",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to use fp32 for attention softmax. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_expert_tensor_parallel_size",
+        default=None,
+        type=int,
+        help="Megatron-LM's expert tensor parallel size. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_calculate_per_token_loss",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to calculate per token loss. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_use_rotary_position_embeddings",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to use rotary position embeddings. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
 
     # FP8 arguments
     fp8_args = parser.add_argument_group(
@@ -646,8 +786,8 @@ def launch_command_parser(subparsers=None):
     fp8_args.add_argument(
         "--fp8_backend",
         type=str,
-        choices=["te", "msamp"],
-        help="Choose a backend to train with FP8 (te: TransformerEngine, msamp: MS-AMP)",
+        choices=["ao", "te", "msamp"],
+        help="Choose a backend to train with FP8 (ao: torchao, te: TransformerEngine, msamp: MS-AMP)",
     )
     fp8_args.add_argument(
         "--fp8_use_autocast_during_eval",
@@ -670,8 +810,8 @@ def launch_command_parser(subparsers=None):
     fp8_args.add_argument(
         "--fp8_format",
         type=str,
-        default="E4M3",
-        choices=["E4M3", "HYBRID"],
+        default="HYBRID",
+        choices=["HYBRID", "E4M3", "E5M2"],
         help="The format to use for the FP8 recipe (useful only when `--fp8_backend=te` is passed).",
     )
     fp8_args.add_argument(
@@ -691,7 +831,7 @@ def launch_command_parser(subparsers=None):
         "--fp8_override_linear_precision",
         type=lambda x: tuple(map(str_to_bool, x.split(","))),
         default=(False, False, False),
-        help="Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision. Should be passed in a comma-seperated string of booleans (useful only when `--fp8_backend=te` is passed).",
+        help="Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision. Should be passed in a comma-separated string of booleans (useful only when `--fp8_backend=te` is passed).",
     )
     fp8_args.add_argument(
         "--fp8_opt_level",
@@ -699,6 +839,18 @@ def launch_command_parser(subparsers=None):
         default="O2",
         choices=["O1", "O2"],
         help="What level of 8-bit collective communication should be used with MS-AMP (useful only when `--fp8_backend=msamp` is passed).",
+    )
+    fp8_args.add_argument(
+        "--fp8_enable_fsdp_float8_all_gather",
+        default="true",
+        type=str_to_bool,
+        help="Whether to enable FSDP2 float8 all gather (useful only when `--fp8_backend=ao` is passed).",
+    )
+    fp8_args.add_argument(
+        "--fp8_pad_inner_dim",
+        default="true",
+        type=str_to_bool,
+        help="Whether to pad the inner dimension for FP8 GEMMs (useful only when `--fp8_backend=ao` is passed).",
     )
 
     # AWS arguments
@@ -738,11 +890,90 @@ def launch_command_parser(subparsers=None):
         help="Location for a hostfile for using Accelerate to launch a multi-CPU training job with mpirun. This will "
         "get passed to the MPI --hostfile or -f parameter, depending on which MPI program is installed.",
     )
-    mpirun_args.add_argument(
-        "--mpirun_ccl",
+
+    # ParallelismConfig arguments
+    parallelism_config_args = parser.add_argument_group(
+        "ParallelismConfig Arguments",
+        "Arguments related to the ParallelismConfig used for distributed training.",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_dp_replicate_size",
         type=int,
         default=1,
-        help="The number of oneCCL worker threads when using Accelerate to launch multi-CPU training with mpirun.",
+        help="The number of processes for data parallel training. Defaults to 1 (no data parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_dp_shard_size",
+        type=int,
+        default=1,
+        help="The number of processes for FSDP sharding. Defaults to 1 (No FSDP sharding).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_tp_size",
+        type=int,
+        default=1,
+        help="The number of processes for tensor parallel training. Defaults to 1 (no tensor parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_cp_size",
+        type=int,
+        default=1,
+        help="The number of processese for context parallel training. Defaults to 1 (no context parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_cp_backend",
+        type=str,
+        choices=["torch"],
+        default="torch",
+        help="Context Parallelism backend: torch (FSDP2) or deepspeed (ALST/Ulysses)",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_cp_comm_strategy",
+        type=str,
+        default="allgather",
+        help="The communication strategy for context parallel training. Defaults to 'allgather'. Other option is alltoall",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_size",
+        type=int,
+        default=1,
+        help="The number of processese for context parallel training. Defaults to 1 (no context parallelism).",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_backend",
+        type=str,
+        choices=["deepspeed"],
+        default="deepspeed",
+        help="Sequence Parallelism backend: deepspeed (ALST/Ulysses)",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_seq_length",
+        type=str,
+        default=None,
+        help="Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `parallelism_config_sp_seq_length_is_variable=True`",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_seq_length_is_variable",
+        type=bool,
+        default=True,
+        help="If `True` will work with a sequence length that may change between batches, in which case `parallelism_config_sp_seq_length` value can be set to anything divisible by sp size or remain unset. If `False` then `parallelism_config_sp_seq_length` needs to match the batch's sequence length dimension. The default is `True`.",
+    )
+
+    parallelism_config_args.add_argument(
+        "--parallelism_config_sp_attn_implementation",
+        type=str,
+        default="sdpa",
+        help="Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`.",
     )
 
     # Other arguments of the training scripts
@@ -881,7 +1112,7 @@ def tpu_launcher(args):
 
     main_function = getattr(mod, args.main_training_function)
     with patch_environment(**current_env):
-        xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
+        xmp.spawn(PrepareForLaunch(main_function), args=())
 
 
 def tpu_pod_launcher(args):
@@ -972,6 +1203,9 @@ def _validate_launch_command(args):
     if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
 
+    if (not args.use_fsdp or args.fsdp_version == 1) and args.use_parallelism_config:
+        raise ValueError("You cannot use `--use_parallelism_config` without `--use_fsdp` and `--fsdp_version=2`. ")
+
     defaults = None
     warned = []
     mp_from_config_flag = False
@@ -994,8 +1228,11 @@ def _validate_launch_command(args):
                     DistributedType.MULTI_GPU,
                     DistributedType.MULTI_NPU,
                     DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_SDAA,
                     DistributedType.MULTI_MUSA,
                     DistributedType.MULTI_XPU,
+                    DistributedType.MULTI_HPU,
+                    DistributedType.MULTI_NEURON,
                 )
                 else False
             )
@@ -1003,6 +1240,7 @@ def _validate_launch_command(args):
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
+            args.use_parallelism_config = defaults.parallelism_config != {}
         if args.gpu_ids is None:
             if defaults.gpu_ids is not None:
                 args.gpu_ids = defaults.gpu_ids
@@ -1021,28 +1259,20 @@ def _validate_launch_command(args):
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
                 if isinstance(attr, dict):
-                    for k in defaults.deepspeed_config:
-                        setattr(args, k, defaults.deepspeed_config[k])
-                    for k in defaults.fsdp_config:
-                        arg_to_set = k
-                        if "fsdp" not in arg_to_set:
-                            arg_to_set = "fsdp_" + arg_to_set
-                        setattr(args, arg_to_set, defaults.fsdp_config[k])
-                    for k in defaults.megatron_lm_config:
-                        setattr(args, k, defaults.megatron_lm_config[k])
-                    for k in defaults.dynamo_config:
-                        setattr(args, k, defaults.dynamo_config[k])
-                    for k in defaults.ipex_config:
-                        setattr(args, k, defaults.ipex_config[k])
-                    for k in defaults.mpirun_config:
-                        setattr(args, k, defaults.mpirun_config[k])
-                    continue
-
-                # Those args are handled separately
-                if (
+                    # Copy defaults.somedict.somearg to args.somearg and
+                    # defaults.fsdp_config.x to args.fsdp_x
+                    for key, value in attr.items():
+                        if name == "fsdp_config" and not key.startswith("fsdp"):
+                            key = "fsdp_" + key
+                        elif name == "fp8_config" and not key.startswith("fp8"):
+                            key = "fp8_" + key
+                        if hasattr(args, "nondefault") and key not in args.nondefault:
+                            setattr(args, key, value)
+                elif (
                     name not in ["compute_environment", "mixed_precision", "distributed_type"]
                     and getattr(args, name, None) is None
                 ):
+                    # Those args are handled separately
                     setattr(args, name, attr)
         if not args.debug:
             args.debug = defaults.debug
@@ -1054,10 +1284,7 @@ def _validate_launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
                 mp_from_config_flag = True
         else:
-            if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
-                native_amp = is_torch_version(">=", "1.10")
-            else:
-                native_amp = is_bf16_available(True)
+            native_amp = is_bf16_available(True)
             if (
                 args.mixed_precision == "bf16"
                 and not native_amp
@@ -1072,14 +1299,20 @@ def _validate_launch_command(args):
             raise ValueError("You need to manually pass in `--num_processes` using this config yaml.")
     else:
         if args.num_processes is None:
-            if args.use_xpu and is_xpu_available():
+            if is_xpu_available():
                 args.num_processes = torch.xpu.device_count()
             elif is_mlu_available():
                 args.num_processes = torch.mlu.device_count()
+            elif is_sdaa_available():
+                args.num_processes = torch.sdaa.device_count()
             elif is_musa_available():
                 args.num_processes = torch.musa.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
+            elif is_hpu_available():
+                args.num_processes = torch.hpu.device_count()
+            elif is_neuron_available():
+                args.num_processes = torch.neuron.device_count()
             else:
                 args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
@@ -1089,11 +1322,14 @@ def _validate_launch_command(args):
             not args.multi_gpu
             and args.num_processes > 1
             and (
-                (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
-                or (is_mlu_available() and torch.mlu.device_count() > 1)
-                or (is_musa_available() and torch.musa.device_count() > 1)
+                (is_xpu_available() and torch.xpu.device_count() > 1)
                 or (is_npu_available() and torch.npu.device_count() > 1)
-                or (torch.cuda.device_count() > 1)
+                or (is_hpu_available() and torch.hpu.device_count() > 1)
+                or (is_mlu_available() and torch.mlu.device_count() > 1)
+                or (is_sdaa_available() and torch.sdaa.device_count() > 1)
+                or (is_musa_available() and torch.musa.device_count() > 1)
+                or (is_neuron_available() and torch.neuron.device_count() > 1)
+                or (torch.cuda.is_available() and torch.cuda.device_count() > 1)
             )
         ):
             warned.append(

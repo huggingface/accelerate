@@ -18,9 +18,10 @@ import logging
 import os
 import threading
 import warnings
+import weakref
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import torch
 
@@ -28,22 +29,24 @@ from .utils import (
     DistributedType,
     DynamoBackend,
     GradientAccumulationPlugin,
+    check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
-    check_fp8_capability,
     deepspeed_required,
-    get_ccl_version,
     get_cpu_distributed_information,
     get_int_from_env,
-    is_ccl_available,
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
-    is_ipex_available,
+    is_habana_gaudi1,
+    is_hpu_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
+    is_sdaa_available,
     is_torch_xla_available,
+    is_xccl_available,
     is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
@@ -54,15 +57,20 @@ from .utils.dataclasses import SageMakerDistributedType
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
 
 if is_mlu_available(check_device=False):
     import torch_mlu  # noqa: F401
+
+if is_sdaa_available(check_device=False):
+    import torch_sdaa  # noqa: F401
 
 if is_musa_available(check_device=False):
     import torch_musa  # noqa: F401
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
+
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +131,7 @@ class PartialState:
             Whether or not to force the script to execute on CPU. Will ignore any accelerators available if set to
             `True` and force the execution on the CPU.
         kwargs (additional keyword arguments, *optional*):
-            Additional keyword arguments to pass to the relevent `init_process_group` function. Valid `kwargs` can be
+            Additional keyword arguments to pass to the relevant `init_process_group` function. Valid `kwargs` can be
             found in [`utils.InitProcessGroupKwargs`]. See the example section for detailed usage.
 
     **Available attributes:**
@@ -178,7 +186,7 @@ class PartialState:
             dist_information = None
             if use_sagemaker_dp is None:
                 use_sagemaker_dp = (
-                    os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
+                    os.environ.get("ACCELERATE_USE_SAGEMAKER", "false").lower() == "true"
                     and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
                 )
 
@@ -186,14 +194,14 @@ class PartialState:
             original_backend = kwargs.pop("backend", None)
             backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, original_backend)
             if original_backend is not None and backend != original_backend:
-                raise ValueError(f"Your assigned backend {original_backend} is not avaliable, please use {backend}")
+                raise ValueError(f"Your assigned backend {original_backend} is not available, please use {backend}")
             self.backend = backend
             self.distributed_type = distributed_type
             use_deepspeed = False
             if not cpu and self.backend != "xla":
                 if int(os.environ.get("LOCAL_RANK", -1)) != -1:
                     # Deal with spawning deepspeed
-                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true":
                         if not is_deepspeed_available():
                             raise ImportError(
                                 "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
@@ -201,17 +209,42 @@ class PartialState:
                         from deepspeed import comm as dist
 
                         if not dist.is_initialized():
+                            if self.backend == "tccl":
+                                local_rank = os.environ.get("LOCAL_RANK", -1)
+                                torch.sdaa.set_device(f"sdaa:{local_rank}")
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
                         use_deepspeed = True
-                    # Deal with all other backends but XPU and CPU, that gets handled special later
+                    # Deal with all other backends but CPU, that gets handled special later
                     elif (
-                        self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU)
+                        self.distributed_type is not DistributedType.MULTI_CPU
                         and not torch.distributed.is_initialized()
                     ):
+                        if self.backend == "tccl":
+                            local_rank = os.environ.get("LOCAL_RANK", -1)
+                            torch.sdaa.set_device(f"sdaa:{local_rank}")
+                        if (
+                            self.backend == "nccl"
+                            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+                            and (
+                                os.environ.get("FSDP_OFFLOAD_PARAMS", "false").lower() == "true"
+                                or os.environ.get("FSDP_STATE_DICT_TYPE", "SHARDED_STATE_DICT") == "FULL_STATE_DICT"
+                            )
+                        ):
+                            self.backend = "cuda:nccl,cpu:gloo"
+                        if (
+                            self.backend == "xccl"
+                            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+                            and (
+                                os.environ.get("FSDP_OFFLOAD_PARAMS", "false").lower() == "true"
+                                or os.environ.get("FSDP_STATE_DICT_TYPE", "SHARDED_STATE_DICT") == "FULL_STATE_DICT"
+                            )
+                        ):
+                            self.backend = "xpu:xccl,cpu:gloo"
                         torch.distributed.init_process_group(backend=self.backend, **kwargs)
-            # XPU and CPU require special env configs to be set
-            if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
+
+            # CPU require special env configs to be set
+            if self.distributed_type == DistributedType.MULTI_CPU:
                 dist_information = get_cpu_distributed_information()
                 os.environ["RANK"] = str(dist_information.rank)
                 os.environ["WORLD_SIZE"] = str(dist_information.world_size)
@@ -261,8 +294,8 @@ class PartialState:
                 # XLA needs device setting first for `set_replication`
                 self.set_device()
                 xm.set_replication(self.device, xm.get_xla_supported_devices())
-                self.num_processes = xm.xrt_world_size()
-                self.process_index = xm.get_ordinal()
+                self.num_processes = xr.world_size()
+                self.process_index = xr.global_ordinal()
                 if is_torch_xla_available(check_is_tpu=True):
                     self.local_process_index = xm.get_local_ordinal()
                 else:
@@ -290,6 +323,7 @@ class PartialState:
                         'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                         "will do this automatically."
                     )
+
         # Important: This should be the *only* code outside of `self.initialized!`
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
@@ -365,14 +399,17 @@ class PartialState:
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
+            DistributedType.MULTI_HPU,
+            DistributedType.MULTI_NEURON,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
-            torch.distributed.barrier()
+            torch.distributed.barrier(device_ids=[self.local_process_index])
         elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
@@ -451,7 +488,7 @@ class PartialState:
                         tensorized_result = send_to_device(result, self.device)
                         result = pad_across_processes(tensorized_result, pad_index=inputs[-1])
                     else:
-                        result += [result[-1]] * (num_samples_per_process + 1 - len(result))
+                        result += [result[-1]] * (num_samples_per_process + (1 if num_extras > 0 else 0) - len(result))
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
@@ -468,7 +505,9 @@ class PartialState:
                             end_index = len(inputs)
                         result_idcs = list(range(start_index, end_index))
                         if apply_padding:
-                            result_idcs += [end_index - 1] * (num_samples_per_process + 1 - len(result_idcs))
+                            result_idcs += [end_index - 1] * (
+                                num_samples_per_process + (1 if num_extras > 0 else 0) - len(result_idcs)
+                            )
                         return inputs.select(result_idcs)
                 return inputs
 
@@ -516,7 +555,7 @@ class PartialState:
         """
         yield from self._goes_first(self.is_local_main_process)
 
-    def on_main_process(self, function: Callable[..., Any] = None):
+    def on_main_process(self, function: Callable[..., Any] | None = None):
         """
         Decorator that only runs the decorated function on the main process.
 
@@ -546,7 +585,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_local_main_process(self, function: Callable[..., Any] = None):
+    def on_local_main_process(self, function: Callable[..., Any] | None = None):
         """
         Decorator that only runs the decorated function on the local main process.
 
@@ -605,7 +644,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
+    def on_process(self, function: Callable[..., Any] | None = None, process_index: int | None = None):
         """
         Decorator that only runs the decorated function on the process with the given index.
 
@@ -638,7 +677,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
+    def on_local_process(self, function: Callable[..., Any] | None = None, local_process_index: int | None = None):
         """
         Decorator that only runs the decorated function on the process with the given index on the current node.
 
@@ -685,8 +724,11 @@ class PartialState:
         - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
         - CUDA if `torch.cuda.is_available()`
         - MLU if `is_mlu_available()`
+        - SDAA if `is_sdaa_available()`
         - MUSA if `is_musa_available()`
         - NPU if `is_npu_available()`
+        - HPU if `is_hpu_available()`
+        - NEURON if `is_neuron_available()`
         - CPU otherwise
         """
         if is_mps_available():
@@ -694,21 +736,27 @@ class PartialState:
             return torch.device("mps")
         elif is_mlu_available():
             return torch.device("mlu")
+        elif is_sdaa_available():
+            return torch.device("sdaa")
         elif is_musa_available():
             return torch.device("musa")
         # NPU should be checked before CUDA when using `transfer_to_npu`
         # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
         elif is_npu_available():
             return torch.device("npu")
+        elif is_hpu_available():
+            return torch.device("hpu")
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
             return torch.device("xpu")
+        elif is_neuron_available():
+            return torch.device("neuron")
         else:
             return torch.device("cpu")
 
     def _prepare_backend(
-        self, cpu: bool = False, sagemaker_dp=False, backend: str = None
+        self, cpu: bool = False, sagemaker_dp=False, backend: str | None = None
     ) -> tuple[str, DistributedType]:
         "Prepares any imports needed before initializing the distributed backend and sets `self.backend` properly"
         distributed_type = None
@@ -720,10 +768,14 @@ class PartialState:
         elif is_torch_xla_available():
             backend = "xla"
             distributed_type = DistributedType.XLA
+
         elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
             if is_mlu_available():
                 backend = "cncl"
                 distributed_type = DistributedType.MULTI_MLU
+            if is_sdaa_available():
+                backend = "tccl"
+                distributed_type = DistributedType.MULTI_SDAA
             elif is_musa_available():
                 backend = "mccl"
                 distributed_type = DistributedType.MULTI_MUSA
@@ -732,32 +784,33 @@ class PartialState:
             elif is_npu_available():
                 backend = "hccl"
                 distributed_type = DistributedType.MULTI_NPU
+            elif is_hpu_available(init_hccl=True):
+                if backend is None:
+                    backend = "hccl"
+                distributed_type = DistributedType.MULTI_HPU
             elif torch.cuda.is_available():
                 if backend is None:
                     backend = "nccl"
                 distributed_type = DistributedType.MULTI_GPU
-
-        if distributed_type is None and (
-            int(os.environ.get("LOCAL_RANK", -1)) != -1
-            or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
-        ):
-            if not cpu and is_xpu_available():
+            elif is_xpu_available() and is_xccl_available():
+                if backend is None:
+                    backend = "xccl"
                 distributed_type = DistributedType.MULTI_XPU
-            else:
-                distributed_type = DistributedType.MULTI_CPU
+            elif is_neuron_available():
+                backend = "neuron"
+                distributed_type = DistributedType.MULTI_NEURON
 
-            if (
-                backend in (None, "ccl")
-                and is_ccl_available()
-                and (get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU)
-            ):
-                if get_ccl_version() >= "1.12":
-                    import oneccl_bindings_for_pytorch  # noqa: F401
-                else:
-                    import torch_ccl  # noqa: F401
+        if (
+            distributed_type is None
+            and cpu
+            and (
+                int(os.environ.get("LOCAL_RANK", -1)) != -1
+                or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
+            )
+        ):
+            distributed_type = DistributedType.MULTI_CPU
 
-                backend = "ccl"
-            elif backend in (None, "mpi") and torch.distributed.is_mpi_available():
+            if backend in (None, "mpi") and torch.distributed.is_mpi_available():
                 backend = "mpi"
             else:
                 backend = "gloo"
@@ -776,12 +829,14 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa", "neuron"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
         if device == "xla":
             self.device = xm.xla_device()
+        elif device == "hpu":
+            self.device = torch.device("hpu", torch.hpu.current_device())
         else:
             if device == "gpu":
                 device = "cuda"
@@ -822,6 +877,8 @@ class AcceleratorState:
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
           in use.
+        - **parallelism_config** ([`~accelerate.utils.ParallelismConfig`]) -- The parallelism configuration for the
+          current training environment. This is used to configure the distributed training environment.
         - **initialized** (`bool`) -- Whether or not the `AcceleratorState` has been initialized from `Accelerator`.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type
@@ -837,7 +894,6 @@ class AcceleratorState:
     _shared_state = SharedDict()
     _known_attrs = PartialState._known_attrs + [
         "deepspeed_plugin",
-        "use_ipex",
         "fsdp_plugin",
         "megatron_lm_plugin",
         "dynamo_plugin",
@@ -845,12 +901,14 @@ class AcceleratorState:
 
     def __init__(
         self,
-        mixed_precision: str = None,
+        mixed_precision: str | None = None,
         cpu: bool = False,
         dynamo_plugin=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
+        torch_tp_plugin=None,
         megatron_lm_plugin=None,
+        parallelism_config=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -863,24 +921,33 @@ class AcceleratorState:
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
             self.deepspeed_plugins = None
-            self.use_ipex = None
+            self.torch_tp_plugin = torch_tp_plugin
+            self.parallelism_config = parallelism_config
+            self.device_mesh = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
                 else mixed_precision.lower()
             )
             if mixed_precision == "fp8":
+                # this is confusing, why is is_fp8_available only checks for library availability ?
                 if not is_fp8_available():
                     raise ValueError(
                         "Using `fp8` precision requires `transformer_engine` or `MS-AMP` to be installed."
                     )
-                elif not check_fp8_capability():
+                elif torch.cuda.is_available() and not check_cuda_fp8_capability():
                     logger.warning(
                         f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
                         "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
                         "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                     )
                     mixed_precision = "fp16"
+                elif is_habana_gaudi1():
+                    logger.warning(
+                        "The current HPU device is Gaudi1 which does not support FP8 mixed precision training (requires "
+                        "Gaudi2 or higher). Will use BF16 instead."
+                    )
+                    mixed_precision = "bf16"
 
             self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:
@@ -888,8 +955,13 @@ class AcceleratorState:
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
                     "before using any functionality from the `accelerate` library."
                 )
-            # deepspeed handles mixed_precision using deepspeed_config
-            self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
+            # deepspeed handles mixed_precision using deepspeed_config. But we need to set it to fp8
+            # if we're using fp8.
+            if self.distributed_type == DistributedType.DEEPSPEED and mixed_precision != "fp8":
+                self._mixed_precision = "no"
+            else:
+                self._mixed_precision = mixed_precision
+
             if self.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_tpu=True):
                 if mixed_precision == "bf16":
                     if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
@@ -900,33 +972,57 @@ class AcceleratorState:
                         os.environ["XLA_USE_BF16"] = str(1)
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
-            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
-                self.deepspeed_plugins = deepspeed_plugin
+            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true" and not cpu:
                 self.distributed_type = DistributedType.DEEPSPEED
+                if not isinstance(deepspeed_plugin, dict):
+                    deepspeed_plugin.set_mixed_precision(mixed_precision)
+                    deepspeed_plugin.select(_from_accelerator_state=True)
+                else:
+                    for plugin in deepspeed_plugin.values():
+                        plugin.set_mixed_precision(mixed_precision)
+                    # The first plugin passed in is always the active one
+                    first_plugin = next(iter(deepspeed_plugin.values()))
+                    first_plugin.select(_from_accelerator_state=True)
+                self.deepspeed_plugins = deepspeed_plugin
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
                 DistributedType.MULTI_MLU,
+                DistributedType.MULTI_SDAA,
                 DistributedType.MULTI_MUSA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
+                DistributedType.MULTI_HPU,
+                DistributedType.MULTI_NEURON,
             ]:
-                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or fsdp_plugin is not None:
+                # TODO: Siro - remove when axolotl fixes their side
+                if not os.environ.get("ACCELERATE_ALLOW_CP_STANDALONE", "false").lower() == "true":
+                    if self.parallelism_config and self.parallelism_config.cp_enabled and fsdp_plugin is None:
+                        raise ValueError(
+                            "`cp_size > 1` specified in the `parallelism_config`, but no `fsdp_plugin` was provided. We need a `fsdp_plugin` to use context parallelism with `cp_backend=torch`, as we also shard the model across the device mesh to save more memory"
+                        )
+                    if (
+                        self.parallelism_config is not None
+                        and self.parallelism_config.cp_enabled
+                        and fsdp_plugin.fsdp_version == 1
+                    ):
+                        raise ValueError(
+                            "Using `cp_size>1` requires FSDP2, but the provided `fsdp_plugin` is using FSDP1. "
+                        )
+                if (os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None) or (
+                    self.parallelism_config is not None and self.parallelism_config.cp_enabled
+                ):
                     self.distributed_type = DistributedType.FSDP
-                    if self._mixed_precision != "no":
+                    if self._mixed_precision != "no" and fsdp_plugin is not None:
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
-                if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" and self.distributed_type not in [
+                if os.environ.get(
+                    "ACCELERATE_USE_MEGATRON_LM", "false"
+                ).lower() == "true" and self.distributed_type not in [
                     DistributedType.MULTI_XPU,
                 ]:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
-            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-                if is_ipex_available():
-                    # check if user disables it explicitly
-                    self.use_ipex = parse_flag_from_env("ACCELERATE_USE_IPEX", default=True)
-                else:
-                    self.use_ipex = False
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"
@@ -966,7 +1062,7 @@ class AcceleratorState:
 
     @property
     def mixed_precision(self):
-        if self.distributed_type == DistributedType.DEEPSPEED:
+        if self.distributed_type == DistributedType.DEEPSPEED and self._mixed_precision != "fp8":
             config = self.deepspeed_plugin.deepspeed_config
             if config.get("fp16", {}).get("enabled", False):
                 mixed_precision = "fp16"
@@ -989,7 +1085,7 @@ class AcceleratorState:
         """
         Destroys the process group. If one is not specified, the default process group is destroyed.
 
-        If `self.fork_lauched` is `True` and `group` is `None`, nothing happens.
+        If `self.fork_launched` is `True` and `group` is `None`, nothing happens.
         """
         PartialState().destroy_process_group(group)
 
@@ -1003,6 +1099,10 @@ class AcceleratorState:
         Whether the Accelerator is configured for distributed training
         """
         return PartialState().use_distributed
+
+    @property
+    def is_fsdp2(self) -> bool:
+        return self.distributed_type == DistributedType.FSDP and self.fsdp_plugin.fsdp_version == 2
 
     @property
     def is_last_process(self) -> bool:
@@ -1106,7 +1206,7 @@ class AcceleratorState:
         return self.deepspeed_plugins[name]
 
     @deepspeed_required
-    def select_deepspeed_plugin(self, name: str = None):
+    def select_deepspeed_plugin(self, name: str | None = None):
         """
         Activates the DeepSpeedPlugin with the given `name`, and will disable all other plugins.
         """
@@ -1156,12 +1256,11 @@ class GradientState:
 
     _shared_state = SharedDict()
 
-    def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
+    def __init__(self, gradient_accumulation_plugin: GradientAccumulationPlugin | None = None):
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True
-            self.active_dataloader = None
-            self.dataloader_references = [None]
+            self._dataloader_references_ref = [None]
             self.plugin_kwargs = (
                 gradient_accumulation_plugin.to_kwargs() if gradient_accumulation_plugin is not None else {}
             )
@@ -1238,13 +1337,31 @@ class GradientState:
 
     def _add_dataloader(self, dataloader):
         "Private function that adds a dataloader to `self.dataloader_references` and sets `in_dataloader` to `True`. Users should not have to call this."
-        self.active_dataloader = dataloader
-        self.dataloader_references.append(self.active_dataloader)
+        # We explicitly use assignment to ensure that the property setter is triggered, which is required for garbage collection.
+        # Avoid using self.dataloader_references.append as it will not trigger the setter.
+        self.dataloader_references += [dataloader]
 
     def _remove_dataloader(self, dataloader):
         "Private function that removes a dataloader from `self.dataloader_references` and sets `in_dataloader` to `False` if there are no more dataloaders. Users should not have to call this."
-        self.dataloader_references.remove(dataloader)
-        self.active_dataloader = self.dataloader_references[-1]
+        # We explicitly use assignment to ensure that the property setter is triggered.
+        self.dataloader_references = [
+            dataloader_ref for dataloader_ref in self.dataloader_references if dataloader_ref != dataloader
+        ]
+
+    @property
+    def active_dataloader(self):
+        return self.dataloader_references[-1]
+
+    @property
+    def dataloader_references(self):
+        # We use a property getter and setter with weakrefs to avoid circular references that prevent garbage collection
+        return [reference() if reference is not None else reference for reference in self._dataloader_references_ref]
+
+    @dataloader_references.setter
+    def dataloader_references(self, references):
+        self._dataloader_references_ref = [
+            weakref.ref(dataloader) if dataloader is not None else dataloader for dataloader in references
+        ]
 
     @property
     def in_dataloader(self) -> bool:

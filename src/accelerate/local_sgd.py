@@ -29,12 +29,12 @@ class LocalSGD:
     back to at least:
 
     Zhang, J., De Sa, C., Mitliagkas, I., & Ré, C. (2016). [Parallel SGD: When does averaging help?. arXiv preprint
-    arXiv:1606.07365.](https://arxiv.org/abs/1606.07365)
+    arXiv:1606.07365.](https://huggingface.co/papers/1606.07365)
 
     We credit the term Local SGD to the following paper (but there might be earlier references we are not aware of).
 
     Stich, Sebastian Urban. ["Local SGD Converges Fast and Communicates Little." ICLR 2019-International Conference on
-    Learning Representations. No. CONF. 2019.](https://arxiv.org/abs/1805.09767)
+    Learning Representations. No. CONF. 2019.](https://huggingface.co/papers/1805.09767)
 
     """
 
@@ -71,8 +71,11 @@ class LocalSGD:
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_HPU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
+            DistributedType.MULTI_NEURON,
         ]:
             raise NotImplementedError("LocalSGD is supported only for CPUs and GPUs (no DeepSpeed or MegatronLM)")
         self.enabled = enabled and accelerator.distributed_type != DistributedType.NO

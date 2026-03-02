@@ -19,23 +19,22 @@ A collection of utilities for ensuring that training can always occur. Heavily i
 
 import functools
 import gc
-import importlib
 import inspect
-import warnings
+from typing import Optional
 
 import torch
-from packaging import version
 
 from .imports import (
     is_cuda_available,
-    is_ipex_available,
+    is_hpu_available,
     is_mlu_available,
     is_mps_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
+    is_sdaa_available,
     is_xpu_available,
 )
-from .versions import compare_versions
 
 
 def clear_device_cache(garbage_collection=False):
@@ -50,6 +49,8 @@ def clear_device_cache(garbage_collection=False):
         torch.xpu.empty_cache()
     elif is_mlu_available():
         torch.mlu.empty_cache()
+    elif is_sdaa_available():
+        torch.sdaa.empty_cache()
     elif is_musa_available():
         torch.musa.empty_cache()
     elif is_npu_available():
@@ -58,6 +59,12 @@ def clear_device_cache(garbage_collection=False):
         torch.mps.empty_cache()
     elif is_cuda_available():
         torch.cuda.empty_cache()
+    elif is_hpu_available():
+        # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
+        pass
+    elif is_neuron_available():
+        # Not sure it actually does something, but adding for consistency with other backends
+        torch.neuron.empty_cache()
 
 
 def release_memory(*objects):
@@ -99,20 +106,24 @@ def should_reduce_batch_size(exception: Exception) -> bool:
             An exception
     """
     _statements = [
-        "CUDA out of memory.",  # CUDA OOM
-        "XPU out of memory.",  # XPU OOM
+        " out of memory.",  # OOM for CUDA, HIP, XPU
         "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",  # CUDNN SNAFU
         "DefaultCPUAllocator: can't allocate memory",  # CPU OOM
+        "FATAL ERROR :: MODULE:PT_DEVMEM Allocation failed",  # HPU OOM
     ]
     if isinstance(exception, RuntimeError) and len(exception.args) == 1:
         return any(err in exception.args[0] for err in _statements)
     return False
 
 
-def find_executable_batch_size(function: callable = None, starting_batch_size: int = 128):
+def find_executable_batch_size(
+    function: Optional[callable] = None,
+    starting_batch_size: int = 128,
+    reduce_batch_size_fn: Optional[callable] = None,
+):
     """
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function`
+    CUDNN, the batch size is multiplied by 0.9 and passed to `function`
 
     `function` must take in a `batch_size` parameter as its first argument.
 
@@ -140,6 +151,12 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
         return functools.partial(find_executable_batch_size, starting_batch_size=starting_batch_size)
 
     batch_size = starting_batch_size
+    if reduce_batch_size_fn is None:
+
+        def reduce_batch_size_fn():
+            nonlocal batch_size
+            batch_size = int(batch_size * 0.9)
+            return batch_size
 
     def decorator(*args, **kwargs):
         nonlocal batch_size
@@ -160,21 +177,8 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
             except Exception as e:
                 if should_reduce_batch_size(e):
                     clear_device_cache(garbage_collection=True)
-                    batch_size //= 2
+                    batch_size = reduce_batch_size_fn()
                 else:
                     raise
 
     return decorator
-
-
-def get_xpu_available_memory(device_index: int):
-    if is_ipex_available():
-        ipex_version = version.parse(importlib.metadata.version("intel_extension_for_pytorch"))
-        if compare_versions(ipex_version, ">=", "2.5"):
-            from intel_extension_for_pytorch.xpu import mem_get_info
-
-            return mem_get_info(device_index)[0]
-    warnings.warn(
-        "The XPU `mem_get_info` API is available in IPEX version >=2.5. The current returned available memory is incorrect. Please consider upgrading your IPEX version."
-    )
-    return torch.xpu.max_memory_allocated(device_index)

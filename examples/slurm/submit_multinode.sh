@@ -11,7 +11,7 @@
 #SBATCH --time=01:59:00             # maximum execution time (HH:MM:SS)
 
 ######################
-### Set enviroment ###
+### Set environment ###
 ######################
 source activateEnvironment.sh
 export GPUS_PER_NODE=4
@@ -38,5 +38,5 @@ export SCRIPT_ARGS=" \
     "
     
 # This step is necessary because accelerate launch does not handle multiline arguments properly
-export CMD="$LAUNCHER $PYTHON_FILE $ARGS" 
+export CMD="$LAUNCHER $SCRIPT $SCRIPT_ARGS" 
 srun $CMD

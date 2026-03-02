@@ -145,8 +145,8 @@ image_uri: null
 mixed_precision: fp16
 num_machines: 1
 profile: xxxxx
-py_version: py38
-pytorch_version: 1.10.2
+py_version: py10
+pytorch_version: 2.5.0
 region: us-east-1
 transformers_version: 4.17.0
 use_cpu: false

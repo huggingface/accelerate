@@ -14,7 +14,6 @@
 
 import inspect
 import os
-import unittest
 from dataclasses import dataclass
 
 import torch
@@ -25,12 +24,19 @@ from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
     path_in_accelerate_package,
+    require_fp16,
     require_multi_device,
     require_non_cpu,
-    require_non_xpu,
+    run_first,
 )
-from accelerate.test_utils.testing import slow
-from accelerate.utils import AutocastKwargs, KwargsHandler, ProfileKwargs, TorchDynamoPlugin, clear_environment
+from accelerate.test_utils.testing import AccelerateTestCase, slow
+from accelerate.utils import (
+    AutocastKwargs,
+    KwargsHandler,
+    ProfileKwargs,
+    TorchDynamoPlugin,
+    clear_environment,
+)
 from accelerate.utils.dataclasses import DistributedType
 
 
@@ -41,7 +47,7 @@ class MockClass(KwargsHandler):
     c: float = 3.0
 
 
-class KwargsHandlerTester(unittest.TestCase):
+class KwargsHandlerTester(AccelerateTestCase):
     def test_kwargs_handler(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         assert MockClass().to_kwargs() == {}
@@ -49,8 +55,8 @@ class KwargsHandlerTester(unittest.TestCase):
         assert MockClass(a=2, b=True).to_kwargs() == {"a": 2, "b": True}
         assert MockClass(a=2, c=2.25).to_kwargs() == {"a": 2, "c": 2.25}
 
+    @require_fp16
     @require_non_cpu
-    @require_non_xpu
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         scaler_handler = GradScalerKwargs(init_scale=1024, growth_factor=2)
@@ -68,11 +74,13 @@ class KwargsHandlerTester(unittest.TestCase):
         assert scaler._growth_interval == 2000
         assert scaler._enabled is True
 
+    @run_first
     @require_multi_device
     def test_ddp_kwargs(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd)
 
+    @require_fp16
     @require_non_cpu
     def test_autocast_kwargs(self):
         kwargs = AutocastKwargs(enabled=False)
@@ -155,6 +163,7 @@ class KwargsHandlerTester(unittest.TestCase):
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
         assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
+    @run_first
     @require_multi_device
     def test_ddp_comm_hook(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]

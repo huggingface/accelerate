@@ -20,16 +20,22 @@ import argparse
 import copy
 import enum
 import functools
+import logging
 import os
 import warnings
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union, get_args
 
 import torch
 
 from .constants import (
+    BETA_CP_AVAILABLE_PYTORCH_VERSION,
+    BETA_TP_AVAILABLE_PYTORCH_VERSION,
+    BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
+    FSDP2_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
@@ -39,13 +45,24 @@ from .constants import (
 from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
     is_cuda_available,
+    is_hpu_available,
     is_mlu_available,
     is_msamp_available,
+    is_musa_available,
     is_npu_available,
+    is_torchao_available,
     is_transformer_engine_available,
     is_xpu_available,
 )
 from .versions import compare_versions, is_torch_version
+
+
+if TYPE_CHECKING:
+    # Mock imports for type checking
+    from torchao.float8 import Float8LinearConfig
+
+
+logger = logging.getLogger(__name__)
 
 
 class KwargsHandler:
@@ -111,7 +128,7 @@ class AutocastKwargs(KwargsHandler):
     """
 
     enabled: bool = True
-    cache_enabled: bool = None
+    cache_enabled: Optional[bool] = None
 
 
 class DDPCommunicationHookType(BaseEnum):
@@ -171,7 +188,9 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
     comm_hook: DDPCommunicationHookType = DDPCommunicationHookType.NO
     comm_wrapper: Literal[
-        DDPCommunicationHookType.NO, DDPCommunicationHookType.FP16, DDPCommunicationHookType.BF16
+        DDPCommunicationHookType.NO,
+        DDPCommunicationHookType.FP16,
+        DDPCommunicationHookType.BF16,
     ] = DDPCommunicationHookType.NO
     comm_state_option: dict = field(default_factory=dict)
 
@@ -179,16 +198,19 @@ class DistributedDataParallelKwargs(KwargsHandler):
         return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
 
     def register_comm_hook(self, model):
-        from torch.distributed.algorithms.ddp_comm_hooks import default_hooks, powerSGD_hook
+        from torch.distributed.algorithms.ddp_comm_hooks import (
+            default_hooks,
+            powerSGD_hook,
+        )
 
-        hook_map: Dict[DDPCommunicationHookType, Callable] = {
+        hook_map: dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_hook,
             DDPCommunicationHookType.BF16: default_hooks.bf16_compress_hook,
             DDPCommunicationHookType.POWER_SGD: powerSGD_hook.powerSGD_hook,
             DDPCommunicationHookType.BATCHED_POWER_SGD: powerSGD_hook.batched_powerSGD_hook,
         }
 
-        wrapper_map: Dict[DDPCommunicationHookType, Callable] = {
+        wrapper_map: dict[DDPCommunicationHookType, Callable] = {
             DDPCommunicationHookType.FP16: default_hooks.fp16_compress_wrapper,
             DDPCommunicationHookType.BF16: default_hooks.bf16_compress_wrapper,
         }
@@ -202,7 +224,11 @@ class DistributedDataParallelKwargs(KwargsHandler):
         if hook:
             state = (
                 powerSGD_hook.PowerSGDState(None, **self.comm_state_option)
-                if self.comm_hook in (DDPCommunicationHookType.POWER_SGD, DDPCommunicationHookType.BATCHED_POWER_SGD)
+                if self.comm_hook
+                in (
+                    DDPCommunicationHookType.POWER_SGD,
+                    DDPCommunicationHookType.BATCHED_POWER_SGD,
+                )
                 else None
             )
             model.register_comm_hook(
@@ -215,12 +241,13 @@ class DistributedDataParallelKwargs(KwargsHandler):
 class GradScalerKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the behavior of mixed precision, specifically how the
-    `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this
+    `torch.amp.GradScaler` or `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this
     [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument.
 
     <Tip warning={true}>
 
-    `GradScaler` is only available in PyTorch 1.5.0 and later versions.
+    `torch.cuda.amp.GradScaler` is only available in PyTorch 1.5.0 and later versions, and `torch.amp.GradScaler` is
+    only available in PyTorch 2.4.0 and later versions.
 
     </Tip>
 
@@ -230,7 +257,7 @@ class GradScalerKwargs(KwargsHandler):
     from accelerate import Accelerator
     from accelerate.utils import GradScalerKwargs
 
-    kwargs = GradScalerKwargs(backoff_filter=0.25)
+    kwargs = GradScalerKwargs(backoff_factor=0.25)
     accelerator = Accelerator(kwargs_handlers=[kwargs])
     ```
     """
@@ -275,44 +302,81 @@ class InitProcessGroupKwargs(KwargsHandler):
 # Literals
 Backend = Literal["MSAMP", "TE"]
 OptLevel = Literal["O1", "O2"]
-FP8Format = Literal["E4M3", "HYBRID"]
+FP8Format = Literal["HYBRID", "E4M3", "E5M2"]
 AmaxComputeAlgorithm = Literal["max", "most_recent"]
 
 
+# FP8 training recipe kwargs
 @dataclass
-class FP8RecipeKwargs(KwargsHandler):
+class AORecipeKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
-    training with `transformer-engine` or `ms-amp`.
+    training with `torchao` FP8.
+
+    Args:
+        config (`torchao.float8.Float8LinearConfig`, *optional*, default to `None`):
+            The configuration for the FP8 training. If `None`, a default config will be created with sensible
+            defaults for most use cases:
+            - `pad_inner_dim=True`: Pads matrix dimensions to be divisible by 16, required for `torch._scaled_mm`
+              operations to prevent runtime errors.
+            - `enable_fsdp_float8_all_gather=True`: Enables FP8 all-gather for FSDP2. This provides memory bandwidth
+              savings by casting parameters before the all-gather operation, saving 50% bandwidth compared to BF16.
+
+            You can override these defaults by providing your own `Float8LinearConfig` instance.
+        module_filter_func (`Callable`, *optional*, default to `None`):
+            Optional function that must take in a module and layer name, and returns a boolean indicating whether the
+            module should be converted to FP8. Defaults to `accelerate.utils.ao.filter_linear_layers`. See it for an
+            example.
+    """
+
+    config: Optional["Float8LinearConfig"] = None
+    module_filter_func: Optional[Callable] = None
+    pad_inner_dim: Optional[bool] = None
+    enable_fsdp_float8_all_gather: Optional[bool] = None
+
+    def __post_init__(self):
+        env_prefix = "ACCELERATE_FP8_"
+        if not is_torchao_available():
+            raise ImportError("TorchAO is not available. Please install it or use a different backend.")
+
+        if self.config is None:
+            from torchao.float8 import Float8LinearConfig
+
+            # Check environment variables for overrides
+            if self.pad_inner_dim is None:
+                self.pad_inner_dim = parse_flag_from_env(env_prefix + "PAD_INNER_DIM", default=True)
+            if self.enable_fsdp_float8_all_gather is None:
+                self.enable_fsdp_float8_all_gather = parse_flag_from_env(
+                    env_prefix + "ENABLE_FSDP_FLOAT8_ALL_GATHER", default=True
+                )
+            self.config = Float8LinearConfig(
+                pad_inner_dim=self.pad_inner_dim,
+                enable_fsdp_float8_all_gather=self.enable_fsdp_float8_all_gather,
+            )
+
+
+@dataclass
+class TERecipeKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
+    training with `transformer-engine`.
 
     <Tip>
 
-        For more information on `transformer-engine` args, please refer to the API
+        For more information on the args, please refer to the API
         [documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html).
-
-        For more information on the `ms-amp` args, please refer to the Optimization Level
-        [documentation](https://azure.github.io/MS-AMP/docs/user-tutorial/optimization-level).
 
     </Tip>
 
     ```python
     from accelerate import Accelerator
-    from accelerate.utils import FP8RecipeKwargs
+    from accelerate.utils import TERecipeKwargs
 
-    kwargs = FP8RecipeKwargs(backend="te", fp8_format="HYBRID")
+    kwargs = TERecipeKwargs(fp8_format="HYBRID")
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
     ```
 
-    To use MS-AMP as an engine, pass `backend="msamp"` and the `optimization_level`:
-
-    ```python
-    kwargs = FP8RecipeKwargs(backend="msamp", optimization_level="02")
-    ```
-
     Args:
-        backend (`str`, *optional*):
-            Which FP8 engine to use. Must be one of `"msamp"` (MS-AMP) or `"te"` (TransformerEngine). If not passed,
-            will use whichever is available in the environment, prioritizing MS-AMP.
         use_autocast_during_eval (`bool`, *optional*, default to `False`):
             Whether to use FP8 autocast during eval mode. Generally better metrics are found when this is `False`.
         margin (`int`, *optional*, default to 0):
@@ -320,86 +384,100 @@ class FP8RecipeKwargs(KwargsHandler):
         interval (`int`, *optional*, default to 1):
             The interval to use for how often the scaling factor is recomputed.
         fp8_format (`str`, *optional*, default to "HYBRID"):
-            The format to use for the FP8 recipe. Must be one of `HYBRID` or `E4M3`. (Generally `HYBRID` for training,
-            `E4M3` for evaluation)
+            The format to use for the FP8 recipe. Must be one of `HYBRID`, `E4M3` or `E5M2`. (Generally `HYBRID` for
+            training, `E4M3` or `E5M2` for evaluation)
         amax_history_len (`int`, *optional*, default to 1024):
             The length of the history to use for the scaling factor computation
         amax_compute_algo (`str`, *optional*, default to "most_recent"):
             The algorithm to use for the scaling factor computation. Must be one of `max` or `most_recent`.
         override_linear_precision (`tuple` of three `bool`, *optional*, default to `(False, False, False)`):
             Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
-        optimization_level (`str`), one of `O1`, `O2`. (default is `O2`):
-            What level of 8-bit collective communication should be used with MS-AMP. In general:
-                * O1: Weight gradients and `all_reduce` communications are done in fp8, reducing GPU
-                    memory usage and communication bandwidth
-                * O2: First-order optimizer states are in 8-bit, and second order states are in FP16.
-                    Only available when using Adam or AdamW. This maintains accuracy and can potentially save the
-                    highest memory.
-                * 03: Specifically for DeepSpeed, implements capabilities so weights and master weights of models
-                    are stored in FP8. If `fp8` is selected and deepspeed is enabled, will be used by default. (Not
-                    available currently).
     """
 
-    backend: Backend = None
-    use_autocast_during_eval: bool = None
-    opt_level: OptLevel = None
-    margin: int = None
-    interval: int = None
+    use_autocast_during_eval: Optional[bool] = None
+    margin: Optional[int] = None
+    interval: Optional[int] = None
     fp8_format: FP8Format = None
-    amax_history_len: int = None
+    amax_history_len: Optional[int] = None
     amax_compute_algo: AmaxComputeAlgorithm = None
-    override_linear_precision: Tuple[bool, bool, bool] = None
+    override_linear_precision: tuple[bool, bool, bool] = None
+    use_mxfp8_block_scaling: Optional[bool] = None
 
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
+        if not is_transformer_engine_available():
+            raise ImportError("TransformerEngine is not available. Please install it or use a different backend.")
+        if self.use_autocast_during_eval is None:
+            self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
+        if self.margin is None:
+            self.margin = int(os.environ.get(env_prefix + "MARGIN", 0))
+        if self.interval is None:
+            self.interval = int(os.environ.get(env_prefix + "INTERVAL", 1))
+        if self.fp8_format is None:
+            self.fp8_format = os.environ.get(env_prefix + "FORMAT", "HYBRID")
+        self.fp8_format = self.fp8_format.upper()
+        if self.fp8_format not in get_args(FP8Format):
+            raise ValueError(f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}.")
+        if self.amax_compute_algo is None:
+            self.amax_compute_algo = os.environ.get(env_prefix + "AMAX_COMPUTE_ALGO", "most_recent")
+        self.amax_compute_algo = self.amax_compute_algo.lower()
+        if self.amax_compute_algo not in get_args(AmaxComputeAlgorithm):
+            raise ValueError(f"`amax_compute_algo` must be one of {' or '.join(get_args(AmaxComputeAlgorithm))}")
+        if self.amax_history_len is None:
+            self.amax_history_len = int(os.environ.get(env_prefix + "AMAX_HISTORY_LEN", 1024))
+        if self.override_linear_precision is None:
+            fprop = parse_flag_from_env(env_prefix + "OVERRIDE_FPROP")
+            dgrad = parse_flag_from_env(env_prefix + "OVERRIDE_DGRAD")
+            wgrad = parse_flag_from_env(env_prefix + "OVERRIDE_WGRAD")
+            self.override_linear_precision = (fprop, dgrad, wgrad)
+        if self.use_mxfp8_block_scaling is None:
+            self.use_mxfp8_block_scaling = parse_flag_from_env(env_prefix + "USE_MXFP8_BLOCK_SCALING")
+
+
+@dataclass
+class MSAMPRecipeKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
+    training with `ms-amp`.
+    """
+
+    opt_level: OptLevel = None
+
+    def __post_init__(self):
+        env_prefix = "ACCELERATE_FP8_"
+        if self.opt_level is None:
+            self.opt_level = os.environ.get(env_prefix + "OPT_LEVEL", "O2")
+        if self.opt_level not in get_args(OptLevel):
+            raise ValueError(f"`opt_level` must be one of {' or '.join(get_args(OptLevel))}")
+
+
+@dataclass
+class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
+    """
+    Deprecated. Please use one of the proper FP8 recipe kwargs classes such as `TERecipeKwargs` or `MSAMPRecipeKwargs`
+    instead.
+    """
+
+    backend: Backend = None
+
+    def __post_init__(self):
+        env_prefix = "ACCELERATE_FP8_"
+        warnings.warn(
+            "FP8RecipeKwargs is deprecated and will be removed in Accelerate v2.0.0. "
+            "Please use one of the proper FP8 recipe kwargs classes such as TERecipeKwargs or MSAMPRecipeKwargs instead.",
+            FutureWarning,
+        )
         default_backend = "msamp" if is_msamp_available() else "te"
         if self.backend is None:
             self.backend = os.environ.get(env_prefix + "BACKEND", default_backend)
         self.backend = self.backend.upper()
         if self.backend not in get_args(Backend):
-            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
-        # Check TE args
-        if self.backend == "TE":
-            if not is_transformer_engine_available():
-                raise ValueError(
-                    "TransformerEngine is not available. Please either install it, or use the 'MSAMP' backend (if installed)."
-                )
-            if self.use_autocast_during_eval is None:
-                self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
-            if self.margin is None:
-                self.margin = int(os.environ.get(env_prefix + "MARGIN", 0))
-            if self.interval is None:
-                self.interval = int(os.environ.get(env_prefix + "INTERVAL", 1))
-            if self.fp8_format is None:
-                self.fp8_format = os.environ.get(env_prefix + "FORMAT", "HYBRID")
-            self.fp8_format = self.fp8_format.upper()
-            if self.fp8_format not in get_args(FP8Format):
-                raise ValueError(f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}.")
-            if self.amax_compute_algo is None:
-                self.amax_compute_algo = os.environ.get(env_prefix + "AMAX_COMPUTE_ALGO", "most_recent")
-            self.amax_compute_algo = self.amax_compute_algo.lower()
-            if self.amax_compute_algo not in get_args(AmaxComputeAlgorithm):
-                raise ValueError(f"`amax_compute_algo` must be one of {' or '.join(get_args(AmaxComputeAlgorithm))}")
-            if self.amax_history_len is None:
-                self.amax_history_len = int(os.environ.get(env_prefix + "AMAX_HISTORY_LEN", 1024))
-            if self.override_linear_precision is None:
-                fprop = parse_flag_from_env(env_prefix + "OVERRIDE_FPROP")
-                dgrad = parse_flag_from_env(env_prefix + "OVERRIDE_DGRAD")
-                wgrad = parse_flag_from_env(env_prefix + "OVERRIDE_WGRAD")
-                self.override_linear_precision = (fprop, dgrad, wgrad)
-        elif self.backend == "MSAMP":
-            if not is_msamp_available():
-                raise ValueError(
-                    "MS-AMP is not available. Please either install it, or use the 'TE' backend (if installed)."
-                )
-            if self.opt_level is None:
-                self.opt_level = os.environ.get(env_prefix + "OPT_LEVEL", "O2")
-            if self.opt_level not in get_args(OptLevel):
-                raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
+            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine) to use `FP8RecipeKwargs`.")
+        super().__post_init__()
 
 
 # Literal
-ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda"]
+ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda", "hpu"]
 
 
 @dataclass
@@ -427,7 +505,8 @@ class ProfileKwargs(KwargsHandler):
 
     Args:
         activities (`List[str]`, *optional*, default to `None`):
-            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, or `"cuda"`.
+            The list of activity groups to use in profiling. Must be one of `"cpu"`, `"xpu"`, `"mtia"`, "hpu" or
+            `"cuda"`.
         schedule_option (`Dict[str, int]`, *optional*, default to `None`):
             The schedule option to use for the profiler. Available keys are `wait`, `warmup`, `active`, `repeat` and
             `skip_first`. The profiler will skip the first `skip_first` steps, then wait for `wait` steps, then do the
@@ -452,8 +531,8 @@ class ProfileKwargs(KwargsHandler):
             to None, which means profiling does not store json files.
     """
 
-    activities: Optional[List[ProfilerActivity]] = None
-    schedule_option: Optional[Dict[str, int]] = None
+    activities: Optional[list[ProfilerActivity]] = None
+    schedule_option: Optional[dict[str, int]] = None
     on_trace_ready: Optional[Callable] = None
     record_shapes: bool = False
     profile_memory: bool = False
@@ -477,11 +556,16 @@ class ProfileKwargs(KwargsHandler):
             "cuda": torch.profiler.ProfilerActivity.CUDA,
         }
 
+        if is_hpu_available():
+            profiler_activity_map["hpu"] = torch.profiler.ProfilerActivity.HPU
+
         if is_torch_version(">=", XPU_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
+            if torch.xpu.is_available():
+                profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
 
         if is_torch_version(">=", MITA_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
+            if torch.mtia.is_available():
+                profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
 
         if activity not in profiler_activity_map:
             raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
@@ -494,7 +578,7 @@ class ProfileKwargs(KwargsHandler):
         Returns:
             torch.profiler.profile: The profiler object.
         """
-        activities: Optional[List[ProfilerActivity]] = None
+        activities: Optional[list[ProfilerActivity]] = None
         if self.activities is not None:
             activities = [self._get_profiler_activity(activity) for activity in self.activities]
         schedule: Optional[torch.profiler.schedule] = None
@@ -523,9 +607,12 @@ class DistributedType(str, enum.Enum):
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
         - **MULTI_MLU** -- Distributed on multiple MLUs.
+        - **MULTI_SDAA** -- Distributed on multiple SDAAs.
         - **MULTI_MUSA** -- Distributed on multiple MUSAs.
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
+        - **MULTI_HPU** -- Distributed on multiple HPUs.
+        - **MULTI_NEURON** -- Distributed on multiple Neuron cores.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **XLA** -- Using TorchXLA.
     """
@@ -536,12 +623,15 @@ class DistributedType(str, enum.Enum):
     MULTI_GPU = "MULTI_GPU"
     MULTI_NPU = "MULTI_NPU"
     MULTI_MLU = "MULTI_MLU"
+    MULTI_SDAA = "MULTI_SDAA"
     MULTI_MUSA = "MULTI_MUSA"
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
     XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
+    MULTI_HPU = "MULTI_HPU"
+    MULTI_NEURON = "MULTI_NEURON"
 
 
 class SageMakerDistributedType(str, enum.Enum):
@@ -572,8 +662,10 @@ class FP8BackendType(str, enum.Enum):
     """
 
     # Subclassing str as well as Enum allows the `FP8BackendType` to be JSON-serializable out of the box.
+    NO = "NO"
     TE = "TE"
     MSAMP = "MSAMP"
+    AO = "AO"
 
 
 class ComputeEnvironment(str, enum.Enum):
@@ -621,9 +713,8 @@ class DynamoBackend(str, BaseEnum):
           more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
         - **TORCHXLA_TRACE_ONCE** -- Uses Pytorch/XLA with TorchDynamo optimization, for inference. [Read
           more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
-        - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
-          more](https://github.com/intel/intel-extension-for-pytorch).
-        - **TVM** -- Uses Apach TVM for inference optimizations. [Read more](https://tvm.apache.org/)
+        - **TVM** -- Uses Apache TVM for inference optimizations. [Read more](https://tvm.apache.org/)
+        - **HPU_BACKEND** -- Uses HPU backend for inference optimizations.
 
     """
 
@@ -641,8 +732,8 @@ class DynamoBackend(str, BaseEnum):
     TENSORRT = "TENSORRT"
     AOT_TORCHXLA_TRACE_ONCE = "AOT_TORCHXLA_TRACE_ONCE"
     TORCHXLA_TRACE_ONCE = "TORCHXLA_TRACE_ONCE"
-    IPEX = "IPEX"
     TVM = "TVM"
+    HPU_BACKEND = "HPU_BACKEND"
 
 
 class LoggerType(BaseEnum):
@@ -653,18 +744,24 @@ class LoggerType(BaseEnum):
         - **ALL** -- all available trackers in the environment that are supported
         - **TENSORBOARD** -- TensorBoard as an experiment tracker
         - **WANDB** -- wandb as an experiment tracker
+        - **TRACKIO** -- trackio as an experiment tracker
         - **COMETML** -- comet_ml as an experiment tracker
+        - **MLFLOW** -- mlflow as an experiment tracker
+        - **CLEARML** -- clearml as an experiment tracker
         - **DVCLIVE** -- dvclive as an experiment tracker
+        - **SWANLAB** -- swanlab as an experiment tracker
     """
 
     ALL = "all"
     AIM = "aim"
     TENSORBOARD = "tensorboard"
     WANDB = "wandb"
+    TRACKIO = "trackio"
     COMETML = "comet_ml"
     MLFLOW = "mlflow"
     CLEARML = "clearml"
     DVCLIVE = "dvclive"
+    SWANLAB = "swanlab"
 
 
 class PrecisionType(str, BaseEnum):
@@ -687,10 +784,13 @@ class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
     MLU = "mlu"
+    SDAA = "sdaa"
     MUSA = "musa"
     NPU = "npu"
     XLA = "xla"
     XPU = "xpu"
+    HPU = "hpu"
+    NEURON = "neuron"
     GENERATOR = "generator"
 
 
@@ -734,9 +834,9 @@ class DataLoaderConfiguration:
             all workers.
         use_seedable_sampler (`bool`, defaults to `False`):
             Whether or not use a fully seedable random sampler ([`data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
-            also be ran with [`~utils.set_seed`] for the best results.
+            training results are fully reproducible using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are negligible when using multiple different seeds to compare.
+            Should also be ran with [`~utils.set_seed`] for the best results.
         data_seed (`int`, defaults to `None`):
             The seed to use for the underlying generator when using `use_seedable_sampler`. If `None`, the generator
             will use the current default seed from torch.
@@ -779,8 +879,8 @@ class DataLoaderConfiguration:
         default=False,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`data_loader.SeedableRandomSampler`])."
-            "Ensures training results are fully reproducable using a different sampling technique. "
-            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "Ensures training results are fully reproducible using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are negligible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
@@ -861,7 +961,7 @@ class ProjectConfiguration:
         },
     )
 
-    def set_directories(self, project_dir: str = None):
+    def set_directories(self, project_dir: Optional[str] = None):
         "Sets `self.project_dir` and `self.logging_dir` to the appropriate values."
         self.project_dir = project_dir
         if self.logging_dir is None:
@@ -886,7 +986,7 @@ class GradientAccumulationPlugin(KwargsHandler):
         sync_with_dataloader (`bool`, *optional*, defaults to `True`):
             Whether to synchronize setting the gradients when at the end of the dataloader.
         sync_each_batch (`bool`, *optional*):
-                Whether to synchronize setting the gradients at each data batch. Seting to `True` may reduce memory
+                Whether to synchronize setting the gradients at each data batch. Setting to `True` may reduce memory
                 requirements when using gradient accumulation with distributed training, at expense of speed.
 
     Example:
@@ -899,7 +999,10 @@ class GradientAccumulationPlugin(KwargsHandler):
     ```
     """
 
-    num_steps: int = field(default=None, metadata={"help": "The number of steps to accumulate gradients for."})
+    num_steps: int = field(
+        default=None,
+        metadata={"help": "The number of steps to accumulate gradients for."},
+    )
     adjust_scheduler: bool = field(
         default=True,
         metadata={
@@ -938,6 +1041,11 @@ class TorchDynamoPlugin(KwargsHandler):
             A dictionary of options to pass to the backend.
         disable (`bool`, defaults to `False`):
             Turn torch.compile() into a no-op for testing
+        use_regional_compilation (`bool`, defaults to `None`):
+            Use it to reduce the cold start compilation time of torch.compile() by targeting repeated blocks of the
+            same class and compiling them sequentially to hit the compiler's cache. For example, in `GPT2LMHeadModel`,
+            the repeated block/class is `GPT2Block`, and can be accessed as `model.transformer.h[0]`. The rest of the
+            model (e.g model.lm_head) is compiled separately.
     """
 
     backend: DynamoBackend = field(
@@ -945,29 +1053,63 @@ class TorchDynamoPlugin(KwargsHandler):
         metadata={"help": f"Possible options are {[b.value.lower() for b in DynamoBackend]}"},
     )
     mode: str = field(
-        default=None, metadata={"help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"}
+        default=None,
+        metadata={"help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"},
     )
-    fullgraph: bool = field(default=None, metadata={"help": "Whether it is ok to break model into several subgraphs"})
+    fullgraph: bool = field(
+        default=None,
+        metadata={"help": "Whether it is ok to break model into several subgraphs"},
+    )
     dynamic: bool = field(default=None, metadata={"help": "Whether to use dynamic shape for tracing"})
-    options: Any = field(default=None, metadata={"help": "A dictionary of options to pass to the backend."})
-    disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
+    options: Any = field(
+        default=None,
+        metadata={"help": "A dictionary of options to pass to the backend."},
+    )
+    disable: bool = field(
+        default=False,
+        metadata={"help": "Turn torch.compile() into a no-op for testing"},
+    )
+
+    use_regional_compilation: bool = field(
+        default=None,
+        metadata={
+            "help": (
+                # https://pytorch.org/tutorials/recipes/regional_compilation.html
+                "Use it to reduce the cold start compilation time of torch.compile() by targeting repeated "
+                "blocks of the same class and compiling them sequentially to hit the compiler's cache. For "
+                "example, in `GPT2LMHeadModel`, the repeated block/class is `GPT2Block`, and can be accessed "
+                "as `model.transformer.h[0]`. The rest of the model (e.g model.lm_head) is compiled separately."
+            )
+        },
+    )
 
     def __post_init__(self):
         prefix = "ACCELERATE_DYNAMO_"
         if self.backend is None:
             self.backend = os.environ.get(prefix + "BACKEND", "no")
         self.backend = DynamoBackend(self.backend.upper())
+
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")
         if self.fullgraph is None:
             self.fullgraph = str_to_bool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
-        if self.dynamic is None:
+        if self.use_regional_compilation is None:
+            self.use_regional_compilation = (
+                str_to_bool(os.environ.get(prefix + "USE_REGIONAL_COMPILATION", "False")) == 1
+            )
+
+        if self.dynamic is None and os.environ.get(prefix + "USE_DYNAMIC", None) is not None:
             self.dynamic = str_to_bool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
 
     def to_dict(self):
         dynamo_config = copy.deepcopy(self.__dict__)
         dynamo_config["backend"] = dynamo_config["backend"].value.lower()
         return dynamo_config
+
+    def to_kwargs(self):
+        kwargs = super().to_kwargs()
+        kwargs.pop("use_regional_compilation", None)
+        return kwargs
 
 
 @dataclass
@@ -1105,7 +1247,7 @@ class DeepSpeedPlugin:
 
         if self.zero3_save_16bit_model is None:
             self.zero3_save_16bit_model = (
-                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false").lower() == "true"
             )
         if self.enable_msamp is None:
             self.enable_msamp = os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"
@@ -1115,6 +1257,7 @@ class DeepSpeedPlugin:
 
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
+
         if (
             isinstance(self.hf_ds_config, dict)
             or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
@@ -1158,13 +1301,13 @@ class DeepSpeedPlugin:
                     "stage": self.zero_stage,
                     "offload_optimizer": {
                         "device": self.offload_optimizer_device,
-                        "nvme_path": self.offload_optimizer_nvme_path
-                        if self.offload_optimizer_device == "nvme"
-                        else None,
+                        "nvme_path": (
+                            self.offload_optimizer_nvme_path if self.offload_optimizer_device == "nvme" else None
+                        ),
                     },
                     "offload_param": {
                         "device": self.offload_param_device,
-                        "nvme_path": self.offload_param_nvme_path if self.offload_param_device == "nvme" else None,
+                        "nvme_path": (self.offload_param_nvme_path if self.offload_param_device == "nvme" else None),
                     },
                     "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
@@ -1177,7 +1320,13 @@ class DeepSpeedPlugin:
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
             self.zero3_init_flag = (
-                str_to_bool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
+                str_to_bool(
+                    os.environ.get(
+                        "ACCELERATE_DEEPSPEED_ZERO3_INIT",
+                        str(self.hf_ds_config.is_zero3()),
+                    )
+                )
+                == 1
             )
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
@@ -1194,7 +1343,10 @@ class DeepSpeedPlugin:
                 )
             if self.msamp_opt_level not in ["O1", "O2"]:
                 raise ValueError("Invalid optimization level for MS-AMP. Please use one of ['O1' or'O2'].")
-            self.deepspeed_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
+            self.deepspeed_config["msamp"] = {
+                "enabled": True,
+                "opt_level": self.msamp_opt_level,
+            }
 
     def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
         mismatches = [] if mismatches is None else mismatches
@@ -1239,7 +1391,11 @@ class DeepSpeedPlugin:
         for key, value in config.items():
             if isinstance(value, dict):
                 self.deepspeed_config_process(
-                    prefix=prefix + key + ".", mismatches=mismatches, config=value, must_match=must_match, **kwargs
+                    prefix=prefix + key + ".",
+                    mismatches=mismatches,
+                    config=value,
+                    must_match=must_match,
+                    **kwargs,
                 )
             else:
                 self.fill_match(prefix + key, mismatches, must_match=must_match, **kwargs)
@@ -1266,7 +1422,10 @@ class DeepSpeedPlugin:
 
         if mixed_precision == "fp8" and self.enable_msamp:
             if "msamp" not in ds_config:
-                ds_config["msamp"] = {"enabled": True, "opt_level": self.msamp_opt_level}
+                ds_config["msamp"] = {
+                    "enabled": True,
+                    "opt_level": self.msamp_opt_level,
+                }
 
         if mixed_precision != "no":
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
@@ -1298,9 +1457,15 @@ class DeepSpeedPlugin:
             del ds_config["train_batch_size"]
 
         if compare_versions("transformers", "<", "4.46"):
-            from transformers.deepspeed import HfDeepSpeedConfig, unset_hf_deepspeed_config
+            from transformers.deepspeed import (
+                HfDeepSpeedConfig,
+                unset_hf_deepspeed_config,
+            )
         else:
-            from transformers.integrations import HfDeepSpeedConfig, unset_hf_deepspeed_config
+            from transformers.integrations import (
+                HfDeepSpeedConfig,
+                unset_hf_deepspeed_config,
+            )
 
         unset_hf_deepspeed_config()
         self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
@@ -1406,24 +1571,36 @@ class FullyShardedDataParallelPlugin:
     This plugin is used to enable fully sharded data parallelism.
 
     Args:
+        fsdp_version (`int`, defaults to `1`):
+            The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to
+            FSDP2 format.
         sharding_strategy (`Union[str, torch.distributed.fsdp.ShardingStrategy]`, defaults to `'FULL_SHARD'`):
             Sharding strategy to use. Should be either a `str` or an instance of
+            `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Is deprecated in favor of
+            `reshard_after_forward`.
+        reshard_after_forward (`Union[str, torch.distributed.fsdp.ShardingStrategy, bool]`, defaults to `'FULL_SHARD'` for `fsdp_version=1` and `True` for `fsdp_version=2`):
+            Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`.
         backward_prefetch (`Union[str, torch.distributed.fsdp.BackwardPrefetch]`, defaults to `'NO_PREFETCH'`):
             Backward prefetch strategy to use. Should be either a `str` or an instance of
             `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`.
-        mixed_precision_policy (`Optional[Union[dict, torch.distributed.fsdp.MixedPrecision]]`, defaults to `None`):
+        mixed_precision_policy (`Optional[Union[dict, str, torch.distributed.fsdp.MixedPrecision, torch.distributed.fsdp.MixedPrecisionPolicy]]`, defaults to `None`):
             A config to enable mixed precision training with FullyShardedDataParallel. If passing in a `dict`, it
-            should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`.
+            should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`, can be an instance of
+            `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2. If passing in a `str`, it
+            should be one of the following values: fp8, fp16, bf16, fp32, and used to set `param_dtype`,
+            `reduce_dtype`, and `buffer_dtype`.
         auto_wrap_policy (`Optional(Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]), defaults to `NO_WRAP`):
             A callable or string specifying a policy to recursively wrap layers with FSDP. If a string, it must be one
             of `transformer_based_wrap`, `size_based_wrap`, or `no_wrap`. See
             `torch.distributed.fsdp.wrap.size_based_wrap_policy` for a direction on what it should look like.
-        cpu_offload (`Union[bool, torch.distributed.fsdp.CPUOffload]`, defaults to `False`):
+        cpu_offload (`Union[bool, torch.distributed.fsdp.CPUOffload, torch.distributed.fsdp.CPUOffloadPolicy]`, defaults to `False`):
             Whether to offload parameters to CPU. Should be either a `bool` or an instance of
-            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`.
-        ignored_modules (`Optional[Iterable[torch.nn.Module]]`, defaults to `None`):
-            A list of modules to ignore when wrapping with FSDP.
+            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or
+            `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2.
+        ignored_modules (`Optional[Union[Iterable[torch.nn.Module], str]]`, defaults to `None`):
+            A list of modules to ignore when wrapping with FSDP. When passing a string, will match the modules by name
+            using regex fullmatch. If `fsdp_version` is set to 2, the modules are converted to parameters and used.
         state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
             State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or
             `sharded_state_dict`.
@@ -1462,23 +1639,45 @@ class FullyShardedDataParallelPlugin:
             is `size_based_wrap`.
     """
 
+    fsdp_version: int = field(
+        default=None,
+        metadata={
+            "help": "The version of FSDP to use. Defaults to 1. If set to 2, launcher expects the config to be converted to FSDP2 format."
+        },
+    )
+
     sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
         default=None,
         metadata={
-            "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'"
+            "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'. Is deprecated in favor of `reshard_after_forward` "
         },
     )
-    backward_prefetch: Union[str, "torch.distributed.fsdp.BackwardPrefetch"] = field(
+
+    reshard_after_forward: Union[str, "torch.distributed.fsdp.ShardingStrategy", bool] = field(
         default=None,
         metadata={
-            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'"
+            "help": "Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'"
         },
     )
-    mixed_precision_policy: Optional[Union[dict, "torch.distributed.fsdp.MixedPrecision"]] = field(
+    backward_prefetch: Optional[Union[str, "torch.distributed.fsdp.BackwardPrefetch"]] = field(
+        default=None,
+        metadata={
+            "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'. This becomes obsolete in FSDP2."
+        },
+    )
+    mixed_precision_policy: Optional[
+        Union[
+            dict,
+            str,
+            "torch.distributed.fsdp.MixedPrecision",
+            "torch.distributed.fsdp.MixedPrecisionPolicy",
+        ]
+    ] = field(
         default=None,
         metadata={
             "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
             "If passing in a `dict`, it should have the following keys: `param_dtype`, `reduce_dtype`, and `buffer_dtype`."
+            "Can also be an instance of `torch.distributed.fsdp.MixedPrecisionPolicy` if `fsdp_version` is set to 2."
         },
     )
     auto_wrap_policy: Optional[Union[Callable, Literal["transformer_based_wrap", "size_based_wrap", "no_wrap"]]] = (
@@ -1490,13 +1689,17 @@ class FullyShardedDataParallelPlugin:
             },
         )
     )
-    cpu_offload: Union[bool, "torch.distributed.fsdp.CPUOffload"] = field(
+    cpu_offload: Union[
+        bool,
+        "torch.distributed.fsdp.CPUOffload",
+        "torch.distributed.fsdp.CPUOffloadPolicy",
+    ] = field(
         default=None,
         metadata={
-            "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`. Defaults to `False`"
+            "help": "Whether to offload parameters to CPU. Should be either a `bool` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload` or `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffloadPolicy` if `fsdp_version` is set to 2. Defaults to `False`"
         },
     )
-    ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
+    ignored_modules: Optional[Union[Iterable[torch.nn.Module], str]] = field(
         default=None,
         metadata={"help": "A list of modules to ignore when wrapping with FSDP."},
     )
@@ -1517,7 +1720,10 @@ class FullyShardedDataParallelPlugin:
         metadata={"help": "State dict config to use. Is determined based on the `state_dict_type` if not passed in."},
     )
     optim_state_dict_config: Optional[
-        Union["torch.distributed.fsdp.FullOptimStateDictConfig", "torch.distributed.fsdp.ShardedOptimStateDictConfig"]
+        Union[
+            "torch.distributed.fsdp.FullOptimStateDictConfig",
+            "torch.distributed.fsdp.ShardedOptimStateDictConfig",
+        ]
     ] = field(
         default=None,
         metadata={
@@ -1532,9 +1738,11 @@ class FullyShardedDataParallelPlugin:
             "Enabling this can help lower the number of CUDA malloc retries."
         },
     )
-    use_orig_params: bool = field(
+    use_orig_params: Optional[bool] = field(
         default=None,
-        metadata={"help": "Whether to use the original parameters for the optimizer. Defaults to `False`"},
+        metadata={
+            "help": "Whether to use the original parameters for the optimizer. Defaults to `False`. This becomes obsolete in FSDP2."
+        },
     )
     param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
         default=None,
@@ -1544,12 +1752,12 @@ class FullyShardedDataParallelPlugin:
             "Only applicable when `sync_module_states` is `True`. By default is a `lambda` which calls `to_empty` on the module."
         },
     )
-    sync_module_states: bool = field(
+    sync_module_states: Optional[bool] = field(
         default=None,
         metadata={
             "help": "Whether each individually wrapped FSDP unit should broadcast module parameters from rank 0 "
             "to ensure they are the same across all ranks after initialization. Defaults to `False` unless "
-            "`cpu_ram_efficient_loading` is `True`, then will be forcibly enabled."
+            "`cpu_ram_efficient_loading` is `True`, then will be forcibly enabled. This becomes obsolete in FSDP2."
         },
     )
     forward_prefetch: bool = field(
@@ -1574,7 +1782,7 @@ class FullyShardedDataParallelPlugin:
             "Only applicable for 🤗 Transformers. When using this, `sync_module_states` needs to be `True`. Defaults to `False`."
         },
     )
-    transformer_cls_names_to_wrap: Optional[List[str]] = field(
+    transformer_cls_names_to_wrap: Optional[list[str]] = field(
         default=None,
         metadata={
             "help": "A list of transformer layer class names to wrap. Only applicable when `auto_wrap_policy` is `transformer_based_wrap`."
@@ -1588,29 +1796,73 @@ class FullyShardedDataParallelPlugin:
     )
 
     def __post_init__(self):
-        from torch.distributed.fsdp import (
-            BackwardPrefetch,
-            CPUOffload,
-            ShardingStrategy,
-        )
+        from torch.distributed.fsdp import BackwardPrefetch, ShardingStrategy
+
+        _fsdp2_warnings = set()
 
         env_prefix = "FSDP_"
         # Strategy: By default we should always assume that values are passed in, else we check the environment variables
-        if self.sharding_strategy is None:
-            self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
-        if isinstance(self.sharding_strategy, str):
-            # We need to remap based on custom enum values for user readability
-            if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
-                self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
-            if isinstance(self.sharding_strategy, int) or self.sharding_strategy.isdigit():
-                self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
+        if self.fsdp_version is None:
+            self.fsdp_version = int(os.environ.get(env_prefix + "VERSION", "1"))
+
+        if self.fsdp_version == 2:
+            if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
+                raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
+
+        if self.sharding_strategy is not None:
+            # We cannot properly detect all of the cases, as by default `args.fsdp_sharding_strategy` is set to `fully_shard`
+            # Therefore we issue a warning only if the user has explicitly set it inside their plugin
+            _fsdp2_warnings.add(
+                "sharding_strategy is deprecated in favor of reshard_after_forward. "
+                "This will be removed in a future version of Accelerate."
+            )
+        if self.fsdp_version == 1:
+            if self.sharding_strategy is None:
+                self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
+            if isinstance(self.sharding_strategy, str):
+                if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
+                    self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1
+                if isinstance(self.sharding_strategy, int) or self.sharding_strategy.isdigit():
+                    self.sharding_strategy = ShardingStrategy(int(self.sharding_strategy))
+                else:
+                    self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
+
+        # Fallback to `reshard_after_forward` in FSDP1 if `sharding_strategy` is not set
+        if self.reshard_after_forward is None and self.sharding_strategy is None:
+            reshard_after_forward = os.environ.get(
+                env_prefix + "RESHARD_AFTER_FORWARD",
+                "true" if self.fsdp_version == 2 else "FULL_SHARD",
+            )
+            if self.fsdp_version == 2:
+                self.reshard_after_forward = str_to_bool(reshard_after_forward.lower(), to_bool=True)
             else:
-                self.sharding_strategy = ShardingStrategy[self.sharding_strategy.upper()]
+                self.reshard_after_forward = reshard_after_forward
+        if isinstance(self.reshard_after_forward, str):
+            if self.fsdp_version == 2:
+                self.reshard_after_forward = str_to_bool(self.reshard_after_forward.lower(), to_bool=True)
+            else:
+                # We need to remap based on custom enum values for user readability
+                if self.reshard_after_forward.upper() in FSDP_SHARDING_STRATEGY:
+                    self.reshard_after_forward = FSDP_SHARDING_STRATEGY.index(self.reshard_after_forward.upper()) + 1
+                if isinstance(self.reshard_after_forward, int) or self.reshard_after_forward.isdigit():
+                    self.reshard_after_forward = ShardingStrategy(int(self.reshard_after_forward))
+                else:
+                    self.reshard_after_forward = ShardingStrategy[self.reshard_after_forward.upper()]
+
+        if self.fsdp_version == 2 and not isinstance(self.reshard_after_forward, bool):
+            raise ValueError(
+                f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP2, please set to a `bool`"
+            )
+        if self.fsdp_version == 1 and isinstance(self.reshard_after_forward, bool):
+            raise ValueError(
+                f"reshard_after_forward set to {self.reshard_after_forward}. This is not supported with FSDP1, please set to a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
+            )
 
         if self.cpu_offload is None:
             self.cpu_offload = str_to_bool(os.environ.get(env_prefix + "OFFLOAD_PARAMS", "False")) == 1
-        if isinstance(self.cpu_offload, bool):
-            self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
+
+        self.set_cpu_offload()  # abstracted away to hide imports due to version checks
+        self.validate_cpu_offload()
 
         if self.backward_prefetch is None:
             self.backward_prefetch = os.environ.get(env_prefix + "BACKWARD_PREFETCH", None)
@@ -1623,6 +1875,9 @@ class FullyShardedDataParallelPlugin:
                 self.backward_prefetch = BackwardPrefetch(int(self.backward_prefetch))
             else:
                 self.backward_prefetch = BackwardPrefetch[self.backward_prefetch.upper()]
+        if self.fsdp_version == 2 and self.backward_prefetch is not None:
+            _fsdp2_warnings.add("backward_prefetch is not supported in FSDP2. Setting backward prefetch to None.")
+            self.backward_prefetch = None
 
         self.set_state_dict_type()
 
@@ -1631,9 +1886,12 @@ class FullyShardedDataParallelPlugin:
         if isinstance(self.auto_wrap_policy, str):
             if self.auto_wrap_policy.upper() not in FSDP_AUTO_WRAP_POLICY:
                 raise ValueError(
-                    f"Invalid auto wrap policy: {self.auto_wrap_policy}. Must be one of {list(FSDP_AUTO_WRAP_POLICY.keys())}"
+                    f"Invalid auto wrap policy: {self.auto_wrap_policy}. Must be one of {FSDP_AUTO_WRAP_POLICY}"
                 )
-            from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+            from torch.distributed.fsdp.wrap import (
+                size_based_auto_wrap_policy,
+                transformer_auto_wrap_policy,
+            )
 
             if self.auto_wrap_policy.upper() == "TRANSFORMER_BASED_WRAP":
                 self.auto_wrap_policy = transformer_auto_wrap_policy
@@ -1652,51 +1910,86 @@ class FullyShardedDataParallelPlugin:
             elif self.auto_wrap_policy.upper() == "NO_WRAP":
                 self.auto_wrap_policy = None
 
-        if self.use_orig_params is None:
+        if self.use_orig_params is None and self.fsdp_version == 1:
             self.use_orig_params = str_to_bool(os.environ.get(env_prefix + "USE_ORIG_PARAMS", "False")) == 1
+        if self.fsdp_version == 2 and self.use_orig_params is not None:
+            _fsdp2_warnings.add("use_orig_params is obsolete in FSDP2, as FSDP2 always uses the original parameters.")
+            self.use_orig_params = None
 
-        if self.sync_module_states is None:
+        if self.sync_module_states is None and self.fsdp_version == 1:
             self.sync_module_states = str_to_bool(os.environ.get(env_prefix + "SYNC_MODULE_STATES", "False")) == 1
+        if self.fsdp_version == 2 and self.sync_module_states is not None:
+            _fsdp2_warnings.add(
+                "sync_module_states is obsolete in FSDP2, as it is not needed anymore."
+                "Setting sync_module_states to None."
+            )
+            self.sync_module_states = None
 
-        if self.forward_prefetch is None:
+        if self.forward_prefetch is None and self.fsdp_version == 1:
             self.forward_prefetch = str_to_bool(os.environ.get(env_prefix + "FORWARD_PREFETCH", "False")) == 1
+        if self.fsdp_version == 2 and self.forward_prefetch is not None:
+            raise ValueError("forward_prefetch is not yet implemented in FSDP2, set to None or use `fsdp_version=1`")
 
         if self.activation_checkpointing is None:
             self.activation_checkpointing = (
                 str_to_bool(os.environ.get(env_prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
             )
 
+        if self.ignored_modules is None:
+            self.ignored_modules = os.environ.get(env_prefix + "IGNORED_MODULES", None)
+
         if self.cpu_ram_efficient_loading is None:
             self.cpu_ram_efficient_loading = (
                 str_to_bool(os.environ.get(env_prefix + "CPU_RAM_EFFICIENT_LOADING", "False")) == 1
             )
-
-        if self.cpu_ram_efficient_loading and not self.sync_module_states:
+        else:
+            # We still need to set it for transformers
+            os.environ[env_prefix + "CPU_RAM_EFFICIENT_LOADING"] = str(self.cpu_ram_efficient_loading)
+        # There's no need to specify sync_module_states in FSDP2
+        if self.fsdp_version == 1 and self.cpu_ram_efficient_loading and not self.sync_module_states:
             warnings.warn(
                 "sync_module_states cannot be False since efficient cpu ram loading enabled. "
                 "Setting sync_module_states to True."
             )
             self.sync_module_states = True
-
-        if isinstance(self.mixed_precision_policy, dict):
+        if isinstance(self.mixed_precision_policy, str):
+            # override is True since self.mixed_precision_policy is not None
+            # has to be overwritten with the correct mixed precision object
+            self.set_mixed_precision(self.mixed_precision_policy, override=True)
+        elif isinstance(self.mixed_precision_policy, dict):
             self.set_mixed_precision(self.mixed_precision_policy)
+        if self.mixed_precision_policy is not None:
+            self.validate_mixed_precision_policy()
 
         if self.sync_module_states:
             if is_npu_available():
                 device = torch.npu.current_device()
             elif is_mlu_available():
                 device = torch.mlu.current_device()
+            elif is_musa_available():
+                device = torch.musa.current_device()
             elif is_cuda_available():
                 device = torch.cuda.current_device()
             elif is_xpu_available():
                 device = torch.xpu.current_device()
+            elif is_hpu_available():
+                device = torch.hpu.current_device()
             else:
                 raise RuntimeError(
-                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', or 'NPU'."
+                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', 'MLU', 'NPU', 'MUSA', or 'HPU'."
                 )
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
+        if is_torch_version("<", "2.7.0") and self.fsdp_version == 2 and self.ignored_modules is not None:
+            _fsdp2_warnings.add(
+                "FSDP2 ignored_params/ignored_modules is not available for torch version < 2.7.0"
+                "Setting ignored_modules to None."
+            )
+            self.ignored_modules = None
+        #  Single warning for all deprecation warnings due to FSDP2 conversion
+        if _fsdp2_warnings:
+            logger.warning("Multiple deprecation warnings due to FSDP2 conversion:\n".join(_fsdp2_warnings))
 
     def set_state_dict_type(self, state_dict_type=None):
         """
@@ -1716,7 +2009,10 @@ class FullyShardedDataParallelPlugin:
             self.state_dict_type = state_dict_type
 
         if self.state_dict_type is None:
-            self.state_dict_type = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
+            self.state_dict_type = os.environ.get(
+                "FSDP_STATE_DICT_TYPE",
+                "FULL_STATE_DICT" if self.fsdp_version == 1 else "SHARDED_STATE_DICT",
+            )
         if isinstance(self.state_dict_type, str):
             if self.state_dict_type.isdigit():
                 self.state_dict_type = StateDictType(int(self.state_dict_type))
@@ -1734,12 +2030,21 @@ class FullyShardedDataParallelPlugin:
             if self.optim_state_dict_config is None:
                 self.optim_state_dict_config = ShardedOptimStateDictConfig(offload_to_cpu=True)
 
+        if self.fsdp_version == 2 and self.state_dict_type == StateDictType.LOCAL_STATE_DICT:
+            raise ValueError(
+                "FSDP2 does not support LOCAL_STATE_DICT. "
+                "Please set `fsdp_state_dict_type` to `SHARDED_STATE_DICT` or `FULL_STATE_DICT`."
+            )
+
     def set_auto_wrap_policy(self, model):
         """
-        Given `model`, creates an `auto_wrap_policy` baesd on the passed in policy and if we can use the
+        Given `model`, creates an `auto_wrap_policy` based on the passed in policy and if we can use the
         `transformer_cls_to_wrap`
         """
-        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+        from torch.distributed.fsdp.wrap import (
+            size_based_auto_wrap_policy,
+            transformer_auto_wrap_policy,
+        )
 
         # First base off of `_no_split_modules`
         no_split_modules = getattr(model, "_no_split_modules", None)
@@ -1787,27 +2092,197 @@ class FullyShardedDataParallelPlugin:
 
         buffer_type = torch.float32 if buffer_autocast else dtype
 
-        from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
+        if self.fsdp_version == 1:
+            from torch.distributed.fsdp import MixedPrecision
+        elif self.fsdp_version == 2:
+            from torch.distributed.fsdp import MixedPrecisionPolicy as MixedPrecision
 
         if override or self.mixed_precision_policy is None:
-            self.mixed_precision_policy = MixedPrecision(
-                param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_type
-            )
+            dtype_args = {"param_dtype": dtype, "reduce_dtype": dtype}
+            if self.fsdp_version == 1:
+                dtype_args["buffer_dtype"] = buffer_type
+            else:
+                dtype_args["output_dtype"] = dtype
+            # TODO(s1ro1): `cast_forward_inputs` for FSDP2?
+            self.mixed_precision_policy = MixedPrecision(**dtype_args)
         elif isinstance(self.mixed_precision_policy, dict):
             # Check for incompatible types
-            missing_keys = [
-                k for k in ["param_dtype", "reduce_dtype", "buffer_dtype"] if k not in self.mixed_precision_policy
-            ]
+            valid_keys = ["param_dtype", "reduce_dtype"] + (
+                ["buffer_dtype"] if self.fsdp_version == 1 else ["output_dtype"]
+            )
+            missing_keys = [k for k in valid_keys if k not in self.mixed_precision_policy]
             invalid_values = [
                 k for k, v in self.mixed_precision_policy.items() if v not in mixed_precision_mapping.values()
             ]
             if missing_keys or invalid_values:
                 raise ValueError(
                     f"Invalid mixed precision policy: {self.mixed_precision_policy}. "
-                    f"Must be a `dict` with keys `param_dtype`, `reduce_dtype`, and `buffer_dtype`. "
+                    f"Must be a `dict` with keys {valid_keys}."
                     f"Values must be one of {list(mixed_precision_mapping.values())}"
                 )
             self.mixed_precision_policy = MixedPrecision(**self.mixed_precision_policy)
+
+    def validate_mixed_precision_policy(self):
+        """
+        Validates the mixed precision policy, abstracted away to not bring in the imports if not needed.
+        """
+        if self.fsdp_version == 2:
+            from torch.distributed.fsdp import MixedPrecisionPolicy as MixedPrecision
+        else:
+            from torch.distributed.fsdp import MixedPrecision
+
+        if not isinstance(self.mixed_precision_policy, MixedPrecision):
+            required_type = (
+                "`torch.distributed.fsdp.MixedPrecisionPolicy`"
+                if self.fsdp_version == 2
+                else "`torch.distributed.fsdp.MixedPrecision`"
+            )
+            raise ValueError(f"mixed_precision_policy must be an instance of {required_type}.")
+
+    def set_cpu_offload(self):
+        if self.fsdp_version == 2:
+            from torch.distributed.fsdp import CPUOffloadPolicy, OffloadPolicy
+        else:
+            from torch.distributed.fsdp import CPUOffload
+
+        if isinstance(self.cpu_offload, bool):
+            if self.fsdp_version == 2:
+                if not self.cpu_offload:
+                    self.cpu_offload = OffloadPolicy()
+                else:
+                    self.cpu_offload = CPUOffloadPolicy()
+            else:
+                self.cpu_offload = CPUOffload(offload_params=self.cpu_offload)
+
+    def validate_cpu_offload(self):
+        if self.fsdp_version == 2:
+            from torch.distributed.fsdp import OffloadPolicy
+        else:
+            from torch.distributed.fsdp import CPUOffload
+
+        if self.fsdp_version == 2 and not isinstance(self.cpu_offload, OffloadPolicy):
+            raise ValueError(
+                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.OffloadPolicy` in FSDP2, got {self.cpu_offload}"
+            )
+        if self.fsdp_version == 1 and not isinstance(self.cpu_offload, CPUOffload):
+            raise ValueError(
+                f"`cpu_offload` must be an instance of `torch.distributed.fsdp.CPUOffload` in FSDP1, got {self.cpu_offload}"
+            )
+
+
+@dataclass
+class TorchTensorParallelPlugin:
+    """
+    This plugin is used to enable tensor parallelism using PyTorch >= 2.0.
+    """
+
+    tp_size: int = field(
+        default=1,
+        metadata={"help": "tensor parallel size will be used in the device mesh preparation"},
+    )
+
+    # torch_device_mesh is of type "torch.distributed.DeviceMesh"
+    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
+
+
+@dataclass
+class TorchContextParallelConfig:
+    """
+    This class holds the configuration for context parallelism in PyTorch.
+    """
+
+    cp_comm_strategy: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Communication strategy for context parallelism. Can be one of 'allgather' or 'alltoall'. Defaults to 'allgather'."
+        },
+    )
+
+    def __post_init__(self):
+        if not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION):
+            raise ValueError(
+                f"FSDP2-based Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                "Please upgrade your PyTorch version."
+            )
+
+        if self.cp_comm_strategy is None:
+            self.cp_comm_strategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
+        if self.cp_comm_strategy not in ["allgather", "alltoall"]:
+            raise ValueError(
+                f"Invalid cp_comm_strategy: {self.cp_comm_strategy}. Must be one of 'allgather' or 'alltoall'."
+            )
+
+
+@dataclass
+class DeepSpeedSequenceParallelConfig:
+    sp_seq_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Sequence length for when batches are all of the same length. For variable sequence lengths across batches set `sp_seq_length_is_variable=True` and leave this field unset"
+        },
+    )
+    sp_seq_length_is_variable: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "If `True` will work with a sequence length that may change between batches, in which case `sp_seq_length` value can be set to anything divisible by cp size or remain unset. If `False` then `sp_seq_length` needs to match the batch's sequence length dimension. The default is `True`."
+        },
+    )
+    sp_attn_implementation: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`."
+        },
+    )
+
+    def __post_init__(self):
+        # sp_seq_length_is_variable and sp_seq_length are interconnected
+        if self.sp_seq_length_is_variable is None:
+            self.sp_seq_length_is_variable = (
+                os.environ.get("PARALLELISM_CONFIG_SP_SEQ_LENGTH_IS_VARIABLE", "true").lower() == "true"
+            )
+
+        if not self.sp_seq_length_is_variable and self.sp_seq_length is None:
+            if "PARALLELISM_CONFIG_SP_SEQ_LENGTH" not in os.environ:
+                raise ValueError(
+                    "when `sp_seq_length_is_variable` is `False` `sp_seq_length` must be provided either through the constructor or the environment variable PARALLELISM_CONFIG_SP_SEQ_LENGTH"
+                )
+            else:
+                self.sp_seq_length = os.environ.get("PARALLELISM_CONFIG_SP_SEQ_LENGTH")
+                self.sp_seq_length = None if self.sp_seq_length == "None" else int(self.sp_seq_length)
+
+        if self.sp_attn_implementation is None:
+            self.sp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_SP_ATTN_IMPLEMENTATION", None)
+
+        if self.sp_attn_implementation is not None and self.sp_attn_implementation not in [
+            "flash_attention_2",
+            "flash_attention_3",
+            "sdpa",
+        ]:
+            raise ValueError(
+                f"Invalid sp_attn_implementation: {self.sp_attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
+            )
+
+
+@dataclass
+class TorchTensorParallelConfig:
+    """
+    Use this object in your [`Accelerator`] to customize your torch tensor parallelism.
+    """
+
+    enable_async_tp: bool = False
+
+    def __post_init__(self):
+        if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
+            raise ValueError(
+                f"Torch tensor parallelism is only available in PyTorch {BETA_TP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                "Please upgrade your PyTorch version."
+            )
+
+        if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
+            raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
+
+        if self.enable_async_tp:
+            warnings.warn("Async tensor parallelism is currently not supported, ignoring this option.")
 
 
 @dataclass
@@ -1862,7 +2337,7 @@ class MegatronLMPlugin:
         lr_warmup_fraction (`float`, defaults to `None`):
             Fraction of lr-warmup-(iters/samples) to linearly warmup learning rate over.
         min_lr (`float`, defaults to `0`):
-            Minumum value for learning rate. The scheduler clip values below this threshold.
+            Minimum value for learning rate. The scheduler clip values below this threshold.
         consumed_samples (`List`, defaults to `None`):
             Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call.
         no_wd_decay_cond (`Optional`, defaults to `None`):
@@ -1909,9 +2384,37 @@ class MegatronLMPlugin:
 
     tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
     pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
+    use_custom_fsdp: bool = field(default=None, metadata={"help": "use custom fsdp."})
+    overlap_cpu_optimizer_d2h_h2d: bool = field(
+        default=None, metadata={"help": "overlap CPU optimizer step, gradients D2H and updated parameters H2D."}
+    )
+    no_load_optim: bool = field(default=None, metadata={"help": "do not load optimizer."})
+    eod_mask_loss: bool = field(default=None, metadata={"help": "use eod mask loss."})
+    no_save_optim: bool = field(default=None, metadata={"help": "do not save optimizer."})
+    optimizer_cpu_offload: bool = field(default=None, metadata={"help": "use CPU offload for optimizer."})
+    use_precision_aware_optimizer: bool = field(default=None, metadata={"help": "use precision aware optimizer."})
+    decoder_last_pipeline_num_layers: int = field(
+        default=None,
+        metadata={
+            "help": "decoder last pipeline number of layers, default None is even split of transformer layers across all pipeline stages."
+        },
+    )
+    recompute_granularity: str = field(default=None, metadata={"help": "recompute granularity (full, selective)."})
+    recompute_method: str = field(default=None, metadata={"help": "recompute method (uniform, block)."})
+    recompute_num_layers: int = field(default=None, metadata={"help": "number of layers to recompute."})
+    attention_backend: bool = field(default=None, metadata={"help": "enable attention backend."})
+    expert_model_parallel_size: int = field(default=None, metadata={"help": "expert model parallel size."})
+    context_parallel_size: int = field(default=None, metadata={"help": "context parallel size."})
+    attention_dropout: float = field(default=None, metadata={"help": "attention dropout rate."})
+    hidden_dropout: float = field(default=None, metadata={"help": "hidden dropout rate."})
+    attention_softmax_in_fp32: bool = field(default=None, metadata={"help": "use fp32 for attention softmax."})
+    expert_tensor_parallel_size: int = field(default=None, metadata={"help": "expert tensor parallel size."})
+    calculate_per_token_loss: bool = field(default=None, metadata={"help": "calculate per token loss."})
+    use_rotary_position_embeddings: bool = field(default=None, metadata={"help": "use rotary position embeddings."})
     num_micro_batches: int = field(default=None, metadata={"help": "number of micro-batches."})
     gradient_clipping: float = field(
-        default=None, metadata={"help": "gradient clipping value based on global L2 Norm (0 to disable)"}
+        default=None,
+        metadata={"help": "gradient clipping value based on global L2 Norm (0 to disable)"},
     )
     sequence_parallelism: bool = field(
         default=None,
@@ -1926,7 +2429,8 @@ class MegatronLMPlugin:
         metadata={"help": "enable distributed optimizer"},
     )
     pipeline_model_parallel_split_rank: int = field(
-        default=None, metadata={"help": "Rank where encoder and decoder should be split."}
+        default=None,
+        metadata={"help": "Rank where encoder and decoder should be split."},
     )
     num_layers_per_virtual_pipeline_stage: int = field(
         default=None, metadata={"help": "Number of layers per virtual pipeline stage."}
@@ -1987,9 +2491,9 @@ class MegatronLMPlugin:
     )
     min_lr: float = field(
         default=0,
-        metadata={"help": "Minumum value for learning rate. The scheduler clip values below this threshold."},
+        metadata={"help": "Minimum value for learning rate. The scheduler clip values below this threshold."},
     )
-    consumed_samples: List[int] = field(
+    consumed_samples: list[int] = field(
         default=None,
         metadata={
             "help": "Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call."
@@ -2023,10 +2527,12 @@ class MegatronLMPlugin:
         metadata={"help": "Whether to set all logging options."},
     )
     eval_iters: int = field(
-        default=100, metadata={"help": "Number of iterations to run for evaluation validation/test for."}
+        default=100,
+        metadata={"help": "Number of iterations to run for evaluation validation/test for."},
     )
     eval_interval: int = field(
-        default=1000, metadata={"help": "Interval between running evaluation on validation set."}
+        default=1000,
+        metadata={"help": "Interval between running evaluation on validation set."},
     )
     return_logits: bool = field(
         default=False,
@@ -2038,7 +2544,7 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom train step class."},
     )
-    custom_train_step_kwargs: Optional[Dict[str, Any]] = field(
+    custom_train_step_kwargs: Optional[dict[str, Any]] = field(
         default=None,
         metadata={"help": "Custom train step kwargs."},
     )
@@ -2067,7 +2573,7 @@ class MegatronLMPlugin:
 
     # remaining args such as enabling Alibi/ROPE positional embeddings,
     # wandb logging, Multi-Query Attention, etc.
-    other_megatron_args: Optional[Dict[str, Any]] = field(
+    other_megatron_args: Optional[dict[str, Any]] = field(
         default=None,
         metadata={"help": "Other Megatron-LM arguments. Please refer Megatron-LM"},
     )
@@ -2078,6 +2584,31 @@ class MegatronLMPlugin:
             self.tp_degree = int(os.environ.get(prefix + "TP_DEGREE", 1))
         if self.pp_degree is None:
             self.pp_degree = int(os.environ.get(prefix + "PP_DEGREE", 1))
+        if self.use_custom_fsdp is None:
+            self.use_custom_fsdp = str_to_bool(os.environ.get(prefix + "USE_CUSTOM_FSDP", "False")) == 1
+        if self.no_load_optim is None:
+            self.no_load_optim = str_to_bool(os.environ.get(prefix + "NO_LOAD_OPTIM", "False")) == 1
+        if self.eod_mask_loss is None:
+            self.eod_mask_loss = str_to_bool(os.environ.get(prefix + "EOD_MASK_LOSS", "False")) == 1
+        if self.no_save_optim is None:
+            self.no_save_optim = str_to_bool(os.environ.get(prefix + "NO_SAVE_OPTIM", "False")) == 1
+        if self.optimizer_cpu_offload is None:
+            self.optimizer_cpu_offload = str_to_bool(os.environ.get(prefix + "OPTIMIZER_CPU_OFFLOAD", "False")) == 1
+        if self.overlap_cpu_optimizer_d2h_h2d is None:
+            self.overlap_cpu_optimizer_d2h_h2d = (
+                str_to_bool(os.environ.get(prefix + "OVERLAP_CPU_OPTIMIZER_D2H_H2D", "False")) == 1
+            )
+        if self.use_precision_aware_optimizer is None:
+            self.use_precision_aware_optimizer = (
+                str_to_bool(os.environ.get(prefix + "USE_PRECISION_AWARE_OPTIMIZER", "False")) == 1
+            )
+        if self.decoder_last_pipeline_num_layers is None:
+            if os.environ.get(prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS") is not None:
+                self.decoder_last_pipeline_num_layers = int(
+                    os.environ.get(prefix + "DECODER_LAST_PIPELINE_NUM_LAYERS", 0)
+                )
+            else:
+                self.decoder_last_pipeline_num_layers = None
         if self.num_micro_batches is None:
             self.num_micro_batches = int(os.environ.get(prefix + "NUM_MICRO_BATCHES", 1))
         if self.gradient_clipping is None:
@@ -2090,6 +2621,36 @@ class MegatronLMPlugin:
             )
         if self.sequence_parallelism is None:
             self.sequence_parallelism = str_to_bool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
+        if self.recompute_granularity is None:
+            self.recompute_granularity = os.environ.get(prefix + "RECOMPUTE_GRANULARITY", "full")
+        if self.recompute_method is None:
+            self.recompute_method = os.environ.get(prefix + "RECOMPUTE_METHOD", "uniform")
+        if self.recompute_num_layers is None:
+            self.recompute_num_layers = int(os.environ.get(prefix + "RECOMPUTE_NUM_LAYERS", 1))
+        if self.attention_backend is None:
+            self.attention_backend = str_to_bool(os.environ.get(prefix + "ATTENTION_BACKEND", "True")) == 1
+        if self.expert_model_parallel_size is None:
+            self.expert_model_parallel_size = int(os.environ.get(prefix + "EXPERT_MODEL_PARALLEL_SIZE", 1))
+        if self.context_parallel_size is None:
+            self.context_parallel_size = int(os.environ.get(prefix + "CONTEXT_PARALLEL_SIZE", 2))
+        if self.attention_dropout is None:
+            self.attention_dropout = float(os.environ.get(prefix + "ATTENTION_DROPOUT", "0.0"))
+        if self.hidden_dropout is None:
+            self.hidden_dropout = float(os.environ.get(prefix + "HIDDEN_DROPOUT", "0.0"))
+        if self.attention_softmax_in_fp32 is None:
+            self.attention_softmax_in_fp32 = (
+                str_to_bool(os.environ.get(prefix + "ATTENTION_SOFTMAX_IN_FP32", "True")) == 1
+            )
+        if self.expert_tensor_parallel_size is None:
+            self.expert_tensor_parallel_size = int(os.environ.get(prefix + "EXPERT_TENSOR_PARALLEL_SIZE", 1))
+        if self.calculate_per_token_loss is None:
+            self.calculate_per_token_loss = (
+                str_to_bool(os.environ.get(prefix + "CALCULATE_PER_TOKEN_LOSS", "True")) == 1
+            )
+        if self.use_rotary_position_embeddings is None:
+            self.use_rotary_position_embeddings = (
+                str_to_bool(os.environ.get(prefix + "USE_ROTARY_POSITION_EMBEDDINGS", "True")) == 1
+            )
 
         if self.pp_degree > 1 or self.use_distributed_optimizer:
             self.DDP_impl = "local"
@@ -2119,9 +2680,27 @@ class MegatronLMPlugin:
             "megatron_dataset_flag": self.megatron_dataset_flag,
             "eval_iters": self.eval_iters,
             "eval_interval": self.eval_interval,
+            "use_custom_fsdp": self.use_custom_fsdp,
+            "no_load_optim": self.no_load_optim,
+            "eod_mask_loss": self.eod_mask_loss,
+            "no_save_optim": self.no_save_optim,
+            "optimizer_cpu_offload": self.optimizer_cpu_offload,
+            "overlap_cpu_optimizer_d2h_h2d": self.overlap_cpu_optimizer_d2h_h2d,
+            "use_precision_aware_optimizer": self.use_precision_aware_optimizer,
+            "decoder_last_pipeline_num_layers": self.decoder_last_pipeline_num_layers,
+            "recompute_granularity": self.recompute_granularity,
+            "recompute_method": self.recompute_method,
+            "recompute_num_layers": self.recompute_num_layers,
+            "attention_backend": self.attention_backend,
+            "expert_model_parallel_size": self.expert_model_parallel_size,
+            "context_parallel_size": self.context_parallel_size,
+            "attention_dropout": self.attention_dropout,
+            "hidden_dropout": self.hidden_dropout,
+            "attention_softmax_in_fp32": self.attention_softmax_in_fp32,
+            "expert_tensor_parallel_size": self.expert_tensor_parallel_size,
+            "calculate_per_token_loss": self.calculate_per_token_loss,
+            "use_rotary_position_embeddings": self.use_rotary_position_embeddings,
         }
-        if self.recompute_activations:
-            self.megatron_lm_default_args["recompute_granularity"] = "selective"
         if self.tensorboard_dir is not None:
             self.megatron_lm_default_args["tensorboard_dir"] = self.tensorboard_dir
             if self.set_all_logging_options:
@@ -2361,6 +2940,90 @@ def parse_llama_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
 
 
+@add_model_config_to_megatron_parser("glm4_moe")
+def parse_glm4_moe_config(megatron_lm_plugin, model, batch_data):
+    model_type_name = "gpt"
+    num_layers = model.config.num_hidden_layers
+    pretraining_flag = False
+    hidden_size = model.config.hidden_size
+    num_attention_heads = model.config.num_attention_heads
+    orig_vocab_size = model.config.vocab_size
+
+    max_position_embeddings = model.config.max_position_embeddings
+    seq_length = getattr(model.config, "max_sequence_length", None)
+    if megatron_lm_plugin.seq_length is None:
+        if seq_length is not None:
+            megatron_lm_plugin.seq_length = seq_length
+        elif megatron_lm_plugin.decoder_seq_length is not None:
+            megatron_lm_plugin.seq_length = megatron_lm_plugin.decoder_seq_length
+        elif batch_data is not None:
+            megatron_lm_plugin.seq_length = batch_data["input_ids"].shape[1]
+        else:
+            megatron_lm_plugin.seq_length = max_position_embeddings
+
+    megatron_lm_plugin.megatron_lm_default_args["return_logits"] = megatron_lm_plugin.return_logits
+    megatron_lm_plugin.megatron_lm_default_args["tokenizer_type"] = "HuggingFaceTokenizer"
+    megatron_lm_plugin.megatron_lm_default_args["model_type_name"] = model_type_name
+    megatron_lm_plugin.megatron_lm_default_args["num_layers"] = num_layers
+    megatron_lm_plugin.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+    megatron_lm_plugin.megatron_lm_default_args["hidden_size"] = hidden_size
+    megatron_lm_plugin.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+    megatron_lm_plugin.megatron_lm_default_args["kv_channels"] = model.config.head_dim
+    megatron_lm_plugin.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+    megatron_lm_plugin.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+    megatron_lm_plugin.megatron_lm_default_args["seq_length"] = megatron_lm_plugin.seq_length
+    megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
+    megatron_lm_plugin.megatron_lm_default_args["position_embedding_type"] = "rope"
+    megatron_lm_plugin.megatron_lm_default_args["original_model_type"] = model.config.model_type
+    megatron_lm_plugin.megatron_lm_default_args["qk_layernorm"] = (
+        model.config.use_qk_norm
+    )  # this is true for glm4.5 but False for glm4.5-air.
+    megatron_lm_plugin.megatron_lm_default_args["add_bias_linear"] = False
+    megatron_lm_plugin.megatron_lm_default_args["group_query_attention"] = True
+    megatron_lm_plugin.megatron_lm_default_args["num_query_groups"] = model.config.num_key_value_heads
+    megatron_lm_plugin.megatron_lm_default_args["ffn_hidden_size"] = model.config.intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["add_qkv_bias"] = True
+    megatron_lm_plugin.megatron_lm_default_args["normalization"] = "RMSNorm"
+    megatron_lm_plugin.megatron_lm_default_args["rotary-percent"] = 0.5
+    megatron_lm_plugin.megatron_lm_default_args["swiglu"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_ffn_hidden_size"] = model.config.moe_intermediate_size
+    megatron_lm_plugin.megatron_lm_default_args["moe_shared_expert_intermediate_size"] = (
+        model.config.moe_intermediate_size
+    )
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_pre_softmax"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_score_function"] = "sigmoid"
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_enable_expert_bias"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_bias_update_rate"] = 0
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_load_balancing_type"] = "seq_aux_loss"
+    megatron_lm_plugin.megatron_lm_default_args["moe_token_dispatcher_type"] = "alltoall"
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_topk"] = model.config.num_experts_per_tok
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_topk_scaling_factor"] = model.config.routed_scaling_factor
+    megatron_lm_plugin.megatron_lm_default_args["moe_layer_freq"] = [0] * model.config.first_k_dense_replace + [1] * (
+        model.config.num_hidden_layers - model.config.first_k_dense_replace
+    )
+    megatron_lm_plugin.megatron_lm_default_args["num_experts"] = model.config.n_routed_experts
+    megatron_lm_plugin.megatron_lm_default_args["moe_grouped_gemm"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_router_dtype"] = "fp32"
+    megatron_lm_plugin.megatron_lm_default_args["moe_permute_fusion"] = True
+    megatron_lm_plugin.megatron_lm_default_args["moe_aux_loss_coeff"] = 0
+    megatron_lm_plugin.megatron_lm_default_args["rotary_base"] = model.config.rope_theta
+    megatron_lm_plugin.megatron_lm_default_args["rope_type"] = "rope"
+    megatron_lm_plugin.megatron_lm_default_args["rotary_percent"] = model.config.partial_rotary_factor
+    megatron_lm_plugin.megatron_lm_default_args["norm_epsilon"] = 1e-3
+    megatron_lm_plugin.megatron_lm_default_args["use_flash_attn"] = True
+    megatron_lm_plugin.megatron_lm_default_args["eos_token_id"] = model.config.eos_token_id
+    if getattr(model.config, "fp8_param", False):
+        megatron_lm_plugin.megatron_lm_default_args["fp8"] = model.config.fp8
+        megatron_lm_plugin.megatron_lm_default_args["fp8_param"] = model.config.fp8_param
+        megatron_lm_plugin.megatron_lm_default_args["fp8_param_gather"] = model.config.fp8_param_gather
+        megatron_lm_plugin.megatron_lm_default_args["fp8_recipe"] = model.config.fp8_recipe
+    megatron_lm_plugin.megatron_lm_default_args["bf16"] = model.config.bf16
+    megatron_lm_plugin.megatron_lm_default_args[
+        "untie_embeddings_and_output_weights"
+    ] = not model.config.tie_word_embeddings
+    logger.info(f"Parsed GLM4 MoE config: {megatron_lm_plugin.megatron_lm_default_args}")
+
+
 @dataclass
 class BnbQuantizationConfig:
     """
@@ -2371,7 +3034,7 @@ class BnbQuantizationConfig:
             Enable 8bit quantization.
         llm_int8_threshold (`float`, defaults to `6.0`):
             Value of the outliner threshold. Only relevant when `load_in_8bit=True`.
-        load_in_4_bit (`bool`, defaults to `False`):
+        load_in_4bit (`bool`, defaults to `False`):
             Enable 4bit quantization.
         bnb_4bit_quant_type (`str`, defaults to `fp4`):
             Set the quantization data type in the `bnb.nn.Linear4Bit` layers. Options are {'fp4','np4'}.
@@ -2393,7 +3056,8 @@ class BnbQuantizationConfig:
     load_in_8bit: bool = field(default=False, metadata={"help": "enable 8bit quantization."})
 
     llm_int8_threshold: float = field(
-        default=6.0, metadata={"help": "value of the outliner threshold. only relevant when load_in_8bit=True"}
+        default=6.0,
+        metadata={"help": "value of the outliner threshold. only relevant when load_in_8bit=True"},
     )
 
     load_in_4bit: bool = field(default=False, metadata={"help": "enable 4bit quantization."})
@@ -2428,14 +3092,14 @@ class BnbQuantizationConfig:
         },
     )
 
-    skip_modules: List[str] = field(
+    skip_modules: list[str] = field(
         default=None,
         metadata={
             "help": "an explicit list of the modules that we don't quantize. The dtype of these modules will be `torch_dtype`."
         },
     )
 
-    keep_in_fp32_modules: List[str] = field(
+    keep_in_fp32_modules: list[str] = field(
         default=None,
         metadata={"help": "an explicit list of the modules that we don't quantize. We keep them in `torch.float32`."},
     )

@@ -17,9 +17,10 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 
 import pickle
 import warnings
+from collections.abc import Mapping
 from contextlib import contextmanager, nullcontext
 from functools import update_wrapper, wraps
-from typing import Any, Mapping
+from typing import Any
 
 import torch
 
@@ -30,7 +31,6 @@ from .imports import (
     is_npu_available,
     is_torch_distributed_available,
     is_torch_xla_available,
-    is_xpu_available,
 )
 from .versions import is_torch_version
 
@@ -150,8 +150,6 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
         if device == "npu":
             device = "npu:0"
-        if device == "xpu":
-            device = "xpu:0"
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
@@ -162,9 +160,6 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             if is_npu_available():
                 if isinstance(device, int):
                     device = f"npu:{device}"
-            elif is_xpu_available():
-                if isinstance(device, int):
-                    device = f"xpu:{device}"
             else:
                 raise error
         try:
@@ -320,10 +315,11 @@ def _tpu_gather(tensor):
 
 def _gpu_gather(tensor):
     state = PartialState()
-    if is_torch_version(">=", "1.13"):
-        gather_op = torch.distributed.all_gather_into_tensor
-    else:
-        gather_op = torch.distributed._all_gather_base
+    gather_op = torch.distributed.all_gather_into_tensor
+
+    # NOTE: need manually synchronize to workaourd a INT64 collectives bug in oneCCL before torch 2.9.0
+    if state.device.type == "xpu" and is_torch_version("<=", "2.8"):
+        torch.xpu.synchronize()
 
     def _gpu_gather_one(tensor):
         if tensor.ndim == 0:
@@ -524,7 +520,7 @@ def gather_tensor_shape(tensor):
 
 def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
     """
-    Copys a tensor that only exists on a single device and broadcasts it to other devices. Differs from `broadcast` as
+    Copies a tensor that only exists on a single device and broadcasts it to other devices. Differs from `broadcast` as
     each worker doesn't need to know its shape when used (and tensor can be `None`)
 
     Args:
@@ -563,7 +559,7 @@ def broadcast(tensor, from_process: int = 0):
 
 def broadcast_object_list(object_list, from_process: int = 0):
     """
-    Broadcast a list of picklable objects form one process to the others.
+    Broadcast a list of picklable objects from one process to the others.
 
     Args:
         object_list (list of picklable objects):
@@ -605,6 +601,7 @@ def slice_tensors(data, tensor_slice, process_index=None, num_processes=None):
 def concatenate(data, dim=0):
     """
     Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors with the same shape.
+    If there is only a single batch of data, it is returned as-is.
 
     Args:
         data (nested list/tuple/dictionary of lists of tensors `torch.Tensor`):
@@ -619,9 +616,12 @@ def concatenate(data, dim=0):
         return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
     elif isinstance(data[0], Mapping):
         return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
-    elif not isinstance(data[0], torch.Tensor):
+    elif isinstance(data[0], torch.Tensor):
+        return torch.cat(data, dim=dim)
+    elif isinstance(data, (tuple, list)) and len(data) == 1:
+        return data[0]
+    else:
         raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
-    return torch.cat(data, dim=dim)
 
 
 class CannotPadNestedTensorWarning(UserWarning):
@@ -736,7 +736,7 @@ def reduce(tensor, reduction="mean", scale=1.0):
         reduction (`str`, *optional*, defaults to `"mean"`):
             A reduction method. Can be of "mean", "sum", or "none"
         scale (`float`, *optional*):
-            A default scaling value to be applied after the reduce, only valied on XLA.
+            A default scaling value to be applied after the reduce, only valid on XLA.
 
     Returns:
         The same data structure as `data` with all the tensors reduced.
@@ -792,7 +792,7 @@ def convert_to_fp32(tensor):
 
 class ConvertOutputsToFp32:
     """
-    Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
+    Decorator to apply to a function outputting tensors (like a model forward pass) that ensures the outputs in FP16
     precision will be convert back to FP32.
 
     Args:

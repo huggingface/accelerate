@@ -168,7 +168,7 @@ with init_empty_weights():
 
 The [`~accelerate.load_checkpoint_and_dispatch`] function loads full or sharded checkpoints into the empty model, and automatically distribute weights across all available devices.
 
-The `device_map` parameter determines where to place each model layer, and specifiying `"auto"` places them on the GPU first, then the CPU, and finally the hard drive as memory-mapped tensors if there's still not enough memory. Use the `no_split_module_classes` parameter to indicate which modules shouldn't be split across devices (typically those with a residual connection).
+The `device_map` parameter determines where to place each model layer, and specifying `"auto"` places them on the GPU first, then the CPU, and finally the hard drive as memory-mapped tensors if there's still not enough memory. Use the `no_split_module_classes` parameter to indicate which modules shouldn't be split across devices (typically those with a residual connection).
 
 ```py
 from accelerate import load_checkpoint_and_dispatch

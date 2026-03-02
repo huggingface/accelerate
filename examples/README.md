@@ -225,7 +225,7 @@ In [/slurm/submit_multinode.sh](./slurm/submit_multinode.sh) we must specify the
 
 In [/slurm/submit_multicpu.sh](./slurm/submit_multicpu.sh) we must specify the number of nodes that will be part of the training (`--num_machines`), how many CPU processes we will use in total (`--num_processes`), the [`backend`](https://pytorch.org/docs/stable/elastic/run.html#note-on-rendezvous-backend), `--main_process_ip` which will be the address the master node and the `--main_process_port`. `mpirun_hostfile` specifies to run the job using MPIRun.
 
-In both scripts, we run `activateEnviroment.sh` at the beginning. This script should contain the necessary instructions to initialize the environment for execution. Below, we show an example that loads the necessary libraries ([Environment modules](https://github.com/cea-hpc/modules)), activates the Python environment, and sets up various environment variables, most of them to run the scripts in offline mode in case we don't have internet connection from the cluster.
+In both scripts, we run `activateEnvironment.sh` at the beginning. This script should contain the necessary instructions to initialize the environment for execution. Below, we show an example that loads the necessary libraries ([Environment modules](https://github.com/cea-hpc/modules)), activates the Python environment, and sets up various environment variables, most of them to run the scripts in offline mode in case we don't have internet connection from the cluster.
 
 ```bash
 # activateEnvironment.sh 
@@ -254,6 +254,12 @@ with `pip install runhouse`, and you can refer to
 [hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/latest/api/python/cluster.html#hardware-setup)
 for hardware setup instructions, or this
 [Colab tutorial](https://colab.research.google.com/drive/1qVwYyLTCPYPSdz9ZX7BZl9Qm0A3j7RJe) for a more in-depth walkthrough.
+
+## Simple fine-tuning script that works on TPU
+
+[finetune_lm_tpu.py](./finetune_lm_tpu.py) is a classical language modeling generation fine tuning script that has been
+adapted to run best on TPUs. It has been successfully run and tested on a TPU v5 litepod-8, and it shows how it is
+possible to perform a fine-tuning task on such hardware thanks to accelerate and FSDPv2, using transformers and Torch XLA.
 
 ## Finer Examples
 

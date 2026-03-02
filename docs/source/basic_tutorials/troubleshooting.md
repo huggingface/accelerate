@@ -153,7 +153,7 @@ To use [`find_executable_batch_size`], restructure your training function to inc
 
 <Tip warning={true}> 
 
-The inner function **must** take batch size as the first parameter, but we do not pass one to it when called. The wrapper will handles this for you. Any object (models, optimizers) that consumes device memory and is passed to the [`Accelerator`] also **must** be declared inside the inner function.
+The inner function **must** take batch size as the first parameter, but we do not pass one to it when called. The wrapper will handle this for you. Any object (models, optimizers) that consumes device memory and is passed to the [`Accelerator`] also **must** be declared inside the inner function.
 
 </Tip>
 

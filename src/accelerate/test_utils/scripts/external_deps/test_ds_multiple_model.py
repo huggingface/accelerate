@@ -34,8 +34,7 @@ from accelerate.state import AcceleratorState
 from accelerate.utils.deepspeed import get_active_deepspeed_plugin
 
 
-MAX_GPU_BATCH_SIZE = 16
-EVAL_BATCH_SIZE = 32
+EVAL_BATCH_SIZE = 16
 
 
 class NoiseModel(torch.nn.Module):
@@ -318,11 +317,11 @@ def main():
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=2,
+        default=3,
         help="Number of train epochs.",
     )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 8}
     single_model_training(config, args)
     AcceleratorState._reset_state(True)
     multiple_model_training(config, args)

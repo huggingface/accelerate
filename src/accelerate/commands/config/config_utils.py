@@ -40,7 +40,6 @@ DYNAMO_BACKENDS = [
     "TENSORRT",
     "AOT_TORCHXLA_TRACE_ONCE",
     "TORHCHXLA_TRACE_ONCE",
-    "IPEX",
     "TVM",
 ]
 
@@ -72,7 +71,19 @@ def _convert_compute_environment(value):
 def _convert_distributed_mode(value):
     value = int(value)
     return DistributedType(
-        ["NO", "MULTI_CPU", "MULTI_XPU", "MULTI_GPU", "MULTI_NPU", "MULTI_MLU", "MULTI_MUSA", "XLA"][value]
+        [
+            "NO",
+            "MULTI_CPU",
+            "MULTI_XPU",
+            "MULTI_HPU",
+            "MULTI_GPU",
+            "MULTI_NPU",
+            "MULTI_MLU",
+            "MULTI_SDAA",
+            "MULTI_MUSA",
+            "MULTI_NEURON",
+            "XLA",
+        ][value]
     )
 
 
@@ -93,7 +104,7 @@ def _convert_sagemaker_distributed_mode(value):
 
 def _convert_fp8_backend(value):
     value = int(value)
-    return FP8BackendType(["TE", "MSAMP"][value])
+    return FP8BackendType(["AO", "TE", "MSAMP"][value])
 
 
 def _convert_yes_no_to_bool(value):

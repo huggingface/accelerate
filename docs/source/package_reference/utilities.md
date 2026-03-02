@@ -148,8 +148,6 @@ These functionalities check the state of the current working environment includi
 
 [[autodoc]] utils.is_bf16_available
 
-[[autodoc]] utils.is_ipex_available
-
 [[autodoc]] utils.is_mps_available
 
 [[autodoc]] utils.is_npu_available
@@ -208,6 +206,7 @@ These utilities relate to interacting with PyTorch models
 
 [[autodoc]] utils.set_module_tensor_to_device
 
+[[autodoc]] utils.get_module_children_bottom_up
 
 ## Parallel
 
