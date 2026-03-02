@@ -471,17 +471,18 @@ class DataLoaderAdapter:
         # The state dict will be off by a factor of `n-1` batch too many during DDP,
         # so we need to adjust it here
         if PartialState().distributed_type != DistributedType.NO:
+            dl_state_dict = self.dl_state_dict["_snapshot"]["_main_snapshot"] if "_snapshot" in self.dl_state_dict else self.dl_state_dict
             factor = PartialState().num_processes - 1
-            if self.dl_state_dict["_sampler_iter_yielded"] > 0:
-                self.dl_state_dict["_sampler_iter_yielded"] -= factor
-            if self.dl_state_dict["_num_yielded"] > 0:
-                self.dl_state_dict["_num_yielded"] -= factor
-            if self.dl_state_dict["_index_sampler_state"] is not None:
+            if dl_state_dict["_sampler_iter_yielded"] > 0:
+                dl_state_dict["_sampler_iter_yielded"] -= factor
+            if "_num_yielded" in dl_state_dict and dl_state_dict["_num_yielded"] > 0:
+                dl_state_dict["_num_yielded"] -= factor
+            if dl_state_dict["_index_sampler_state"] is not None:
                 if (
-                    "samples_yielded" in self.dl_state_dict["_index_sampler_state"]
-                    and self.dl_state_dict["_index_sampler_state"]["samples_yielded"] > 0
+                    "samples_yielded" in dl_state_dict["_index_sampler_state"]
+                    and dl_state_dict["_index_sampler_state"]["samples_yielded"] > 0
                 ):
-                    self.dl_state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
+                    dl_state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
 
     def _update_state_dict(self):
         # The state_dict of the underlying base_dataloader may be ahead of what is currently being yielded.
