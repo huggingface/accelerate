@@ -16,7 +16,6 @@ from __future__ import annotations
 import functools
 import logging
 import os
-from typing import Optional
 
 from .state import PartialState
 
