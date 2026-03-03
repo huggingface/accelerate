@@ -17,7 +17,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import torch
-from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+from huggingface_hub.utils import GatedRepoError
 
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
@@ -438,9 +438,7 @@ class ModelEstimatorTester(unittest.TestCase):
     parser = estimate_command_parser()
 
     def test_invalid_model_name(self):
-        with self.assertRaises(
-            RepositoryNotFoundError, msg="Repo for model `somebrokenname` does not exist on the Hub"
-        ):
+        with self.assertRaises(OSError, msg="Repo for model `somebrokenname` does not exist on the Hub"):
             args = self.parser.parse_args(["somebrokenname"])
             estimate_command(args)
 

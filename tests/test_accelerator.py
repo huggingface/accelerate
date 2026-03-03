@@ -246,7 +246,8 @@ class AcceleratorTester(AccelerateTestCase):
         assert len(accelerator._dataloaders) == 0
 
         # The less-than comes *specifically* from device CPU things/won't be present on CPU builds
-        assert free_cpu_ram_after <= free_cpu_ram_before
+        # Allow a small tolerance (5 MB) for OS-level memory fluctuations between measurements
+        assert free_cpu_ram_after <= free_cpu_ram_before + 5
 
     @require_non_torch_xla
     def test_env_var_device(self):

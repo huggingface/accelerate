@@ -30,7 +30,7 @@ What this will result in is some reduction in the memory used (as we've cut the 
 
 ## Configuring the Accelerator
 
-Currently three different backends for FP8 are supported (`TransformersEngine`, `torchao`, and `MS-AMP`), each with different capabilities and configurations. 
+Currently two actively maintained backends for FP8 are supported (`TransformersEngine` and `torchao`), each with different capabilities and configurations. A legacy `MS-AMP` backend also exists but is no longer recommended (see [below](#configuring-ms-amp) for details).
 
 To use either, the same core API is used. Just pass `mixed_precision="fp8"` to either the [`Accelerator`], during `accelerate config` when prompted about mixed precision, or as part of your `config.yaml` file in the `mixed_precision` key:
 
@@ -43,10 +43,9 @@ To specify a backend (and customize other parts of the FP8 mixed precision setup
 
 ```{python}
 from accelerate import Accelerator
-from accelerate.utils import MSAMPRecipeKwargs
-kwargs = [MSAMPRecipeKwargs()]
-# Or to specify the backend as `TransformersEngine` even if MS-AMP is installed
-# kwargs = [TERecipeKwargs()]
+from accelerate.utils import TERecipeKwargs, AORecipeKwargs
+# Use TransformersEngine
+kwargs = [TERecipeKwargs()]
 # Or to use torchao
 # kwargs = [AORecipeKwargs()]
 accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
@@ -69,11 +68,19 @@ fp8_config:
 
 <Tip warning={true}>
 
-MS-AMP is no longer actively maintained and has known compatibility issues with newer CUDA versions (12.x+) and PyTorch builds. We recommend using `TransformersEngine` or `torchao` instead for FP8 training.
+**⚠️ Deprecated / Unmaintained:** MS-AMP is no longer actively maintained by Microsoft. The [MS-AMP repository](https://github.com/Azure/MS-AMP) has not received updates since 2023 and has known compatibility issues:
+
+- Requires CUDA 11.x (does not support CUDA 12.x+)
+- Requires older NCCL versions incompatible with recent PyTorch releases
+- Does not support recent PyTorch versions (2.2+)
+
+**We strongly recommend using [`TransformersEngine`](#configuring-transformersengine) or [`torchao`](#configuring-torchao) instead for all new and existing FP8 training workflows.** Both are actively maintained and support modern CUDA/PyTorch versions. Native PyTorch FP8 support via `torchao` is particularly promising as a vendor-neutral solution.
+
+The MS-AMP backend is retained in Accelerate for legacy compatibility but may be removed in a future release.
 
 </Tip>
 
-Of the two, `MS-AMP` is traditionally the easier one to configure as there is only a single argument: the optimization level. 
+`MS-AMP` has a single configuration argument: the optimization level. 
 
 Currently two levels of optimization are supported in the Accelerate integration, `"O1"` and `"O2"` (using the letter 'o', not zero). 
 
@@ -205,7 +212,7 @@ Find out more [here](https://github.com/huggingface/accelerate/tree/main/benchma
 
 To learn more about training in FP8 please check out the following resources:
 
-* [Our concept guide](../concept_guides/low_precision_training) detailing into more about both TransformersEngine and MS-AMP
+* [Our concept guide](../concept_guides/low_precision_training) detailing into more about TransformersEngine, torchao, and MS-AMP
 * [The `transformers-engine` documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html)
-* [The `MS-AMP` documentation](https://azure.github.io/MS-AMP/docs/)
 * [The `torchao` documentation](https://github.com/pytorch/ao/tree/main/torchao/float8)
+* [The `MS-AMP` documentation](https://azure.github.io/MS-AMP/docs/) (⚠️ no longer maintained)

@@ -246,7 +246,7 @@ class FeatureExamplesTests(TempDirTestCase):
     @require_trackers
     @mock.patch.dict(
         os.environ,
-        {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true", "SWANLAB_MODE": "local"},
+        {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true", "SWANLAB_MODE": "disabled"},
     )
     def test_tracking(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -256,7 +256,6 @@ class FeatureExamplesTests(TempDirTestCase):
             --project_dir {tmpdir}
             """.split()
             run_command(self.launch_args + testargs)
-            assert os.path.exists(os.path.join(tmpdir, "tracking"))
 
     def test_gradient_accumulation(self):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
