@@ -1578,7 +1578,8 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def _prepare_tp(self, *args):
-        # First pass: prepare everything except schedulers (and model, which is prepared separately below)
+        # First pass: prepare everything except schedulers (first_pass=True) and the model, which is prepared separately
+        # below
         result = [
             self._prepare_one(obj, first_pass=True) if not isinstance(obj, torch.nn.Module) else obj for obj in args
         ]
@@ -1586,6 +1587,21 @@ class Accelerator:
         # Second pass: prepare schedulers
         result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
 
+        for arg in args:
+            if not isinstance(arg, torch.nn.Module):
+                continue
+            model = arg
+
+            from torch.distributed.tensor import DTensor
+
+            if not any(isinstance(p, DTensor) for p in model.parameters()):
+                logger.warning(
+                    "The model parameters are not sharded by DTensor, we skip the TP preparation. If you are using "
+                    "a PreTrained model it is exepected and this warning can be ignored."
+                )
+                return result
+
+        # Now we prepare the model
         device_mesh = self.torch_device_mesh
 
         old_named_params = self._get_named_parameters(*tuple(result), drop_refs=True)
