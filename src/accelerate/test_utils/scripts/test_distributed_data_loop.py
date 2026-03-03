@@ -275,29 +275,26 @@ def test_data_loader(data_loader, accelerator):
     )
 
 
-def test_stateful_dataloader(accelerator):
+def _test_stateful_dataloader_resume(accelerator, iterable):
     """
-    Tests that a stateful dataloader can be iterated over, saved after a few batches using `load_state_dict`, and then
-    resumed from the saved state.
+    Helper: iterate a stateful dataloader, save state after a few batches using `load_state_dict`,
+    resume from the saved state, and verify the resumed batches match what was originally unseen.
 
-    The result should be the same as the rest of the data that iterated over after saving.
+    Saves early (after 3 batches) so many batches remain, exposing any off-by-one in state restoration.
+    Tested with both iterable and map-style datasets to cover different state_dict code paths.
     """
     old_dataloader_config = accelerator.dataloader_config
     try:
         accelerator.dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
         prepared_dl = create_dataloader(
-            accelerator, dataset_size=32 * accelerator.num_processes, batch_size=4, iterable=True, shuffle=True
+            accelerator, dataset_size=32 * accelerator.num_processes, batch_size=4, iterable=iterable, shuffle=True
         )
         untrained_batches = []
-        # Calculate what step that will be
-        total_batches = 32 * accelerator.num_processes // (4 * accelerator.num_processes)
-        last_batch_num = total_batches - 1
+        save_step = 2
         for step, batch in enumerate(prepared_dl):
-            # Step just before
-            if step == last_batch_num - 1:
+            if step == save_step:
                 state_dict = prepared_dl.state_dict()
-            if step >= last_batch_num:
-                # Otherwise grab the "unseen" batches
+            if step > save_step:
                 untrained_batches.append(batch)
         not_skipped_batches = accelerator.gather(untrained_batches)
         prepared_dl.load_state_dict(state_dict)
@@ -305,9 +302,58 @@ def test_stateful_dataloader(accelerator):
         for batch in prepared_dl:
             resumed_batches.append(batch)
         resumed_batches = accelerator.gather(resumed_batches)
+        assert len(not_skipped_batches) == len(resumed_batches), (
+            f"Expected {len(not_skipped_batches)} batches after resume, got {len(resumed_batches)}"
+        )
         for b1, b2 in zip(not_skipped_batches, resumed_batches):
             for v1, v2 in zip(b1, b2):
                 assert torch.equal(v1, v2), f"Batch {b1} and {b2} are not equal"
+    finally:
+        accelerator.dataloader_config = old_dataloader_config
+
+
+def test_stateful_dataloader(accelerator):
+    """
+    Tests that a stateful dataloader can be iterated over, saved after a few batches using `load_state_dict`, and then
+    resumed from the saved state.
+
+    The result should be the same as the rest of the data that iterated over after saving.
+    """
+    _test_stateful_dataloader_resume(accelerator, iterable=True)
+    _test_stateful_dataloader_resume(accelerator, iterable=False)
+
+
+def _test_stateful_dataloader_save_state_resume(accelerator, iterable):
+    """
+    Helper: iterate a stateful dataloader, save state after a few batches using `Accelerator.save_state`,
+    resume, and verify the resumed batches match what was originally unseen.
+    """
+    old_dataloader_config = accelerator.dataloader_config
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            accelerator.dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
+            prepared_dl = create_dataloader(
+                accelerator, dataset_size=32 * accelerator.num_processes, batch_size=4, iterable=iterable, shuffle=True
+            )
+            untrained_batches = []
+            save_step = 2
+            for step, batch in enumerate(prepared_dl):
+                if step == save_step:
+                    accelerator.save_state(tmpdir)
+                if step > save_step:
+                    untrained_batches.append(batch)
+            not_skipped_batches = accelerator.gather(untrained_batches)
+            accelerator.load_state(tmpdir)
+            resumed_batches = []
+            for batch in prepared_dl:
+                resumed_batches.append(batch)
+            resumed_batches = accelerator.gather(resumed_batches)
+            assert len(not_skipped_batches) == len(resumed_batches), (
+                f"Expected {len(not_skipped_batches)} batches after resume, got {len(resumed_batches)}"
+            )
+            for b1, b2 in zip(not_skipped_batches, resumed_batches):
+                for v1, v2 in zip(b1, b2):
+                    assert torch.equal(v1, v2), f"Batch {b1} and {b2} are not equal"
     finally:
         accelerator.dataloader_config = old_dataloader_config
 
@@ -319,35 +365,8 @@ def test_stateful_dataloader_save_state(accelerator):
 
     The result should be the same as the rest of the data that iterated over after saving.
     """
-    old_dataloader_config = accelerator.dataloader_config
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            accelerator.dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
-            prepared_dl = create_dataloader(
-                accelerator, dataset_size=32 * accelerator.num_processes, batch_size=4, iterable=True, shuffle=True
-            )
-            untrained_batches = []
-            # Calculate what step that will be
-            total_batches = 32 * accelerator.num_processes // (4 * accelerator.num_processes)
-            last_batch_num = total_batches - 1
-            for step, batch in enumerate(prepared_dl):
-                # Step just before
-                if step == last_batch_num - 1:
-                    accelerator.save_state(tmpdir)
-                if step >= last_batch_num:
-                    # Otherwise grab the "unseen" batches
-                    untrained_batches.append(batch)
-            not_skipped_batches = accelerator.gather(untrained_batches)
-            accelerator.load_state(tmpdir)
-            resumed_batches = []
-            for batch in prepared_dl:
-                resumed_batches.append(batch)
-            resumed_batches = accelerator.gather(resumed_batches)
-            for b1, b2 in zip(not_skipped_batches, resumed_batches):
-                for v1, v2 in zip(b1, b2):
-                    assert torch.equal(v1, v2), f"Batch {b1} and {b2} are not equal"
-    finally:
-        accelerator.dataloader_config = old_dataloader_config
+    _test_stateful_dataloader_save_state_resume(accelerator, iterable=True)
+    _test_stateful_dataloader_save_state_resume(accelerator, iterable=False)
 
 
 def main():

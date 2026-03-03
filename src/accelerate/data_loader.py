@@ -557,6 +557,14 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self._non_blocking = _non_blocking
         self.iteration = 0
 
+    def adjust_state_dict_for_prefetch(self):
+        # DataLoaderShard does not need the DDP prefetch adjustment that DataLoaderDispatcher needs.
+        # In DataLoaderShard, each process has its own sharded base dataloader and the 1-batch
+        # look-ahead is already accounted for by the timing of _update_state_dict() calls
+        # (called before the inner next(), so the captured state already equals the number of
+        # batches yielded to the user).
+        pass
+
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
