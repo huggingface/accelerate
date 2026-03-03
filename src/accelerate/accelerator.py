@@ -1587,6 +1587,20 @@ class Accelerator:
         # Second pass: prepare schedulers
         result = [self._prepare_one(obj) if not isinstance(obj, torch.nn.Module) else obj for obj in result]
 
+        for arg in args:
+            if not isinstance(arg, torch.nn.Module):
+                continue
+            model = arg
+
+            from torch.distributed.tensor import DTensor
+
+            if not any(isinstance(p, DTensor) for p in model.parameters()):
+                logger.warning(
+                    "The model parameters are not sharded by DTensor, we skip the TP preparation. If you are using "
+                    "a PreTrained model it is exepected and this warning can be ignored."
+                )
+                return result
+
         # Now we prepare the model
         device_mesh = self.torch_device_mesh
 
@@ -1603,14 +1617,6 @@ class Accelerator:
                 from transformers.integrations.tensor_parallel import ReplicateParallel
 
                 model: torch.nn.Module = arg
-
-                if not any(isinstance(p, DTensor) for p in model.parameters()):
-                    logger.warning(
-                        "The model parameters are not sharded by DTensor, we skip the TP preparation. If you are using "
-                        "a PreTrained model it is exepected and this warning can be ignored."
-                    )
-                    return result
-
                 tp_plan = ReplicateParallel
 
                 for name, param in model.named_parameters():
