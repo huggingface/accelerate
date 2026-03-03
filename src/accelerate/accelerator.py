@@ -31,7 +31,6 @@ from typing import Any, Callable, Union
 
 import torch
 import torch.utils.hooks as hooks
-from huggingface_hub import split_torch_state_dict_into_shards
 
 from accelerate.utils.dataclasses import FP8BackendType
 
@@ -3481,6 +3480,8 @@ class Accelerator:
             state_dict = clean_state_dict_for_safetensors(state_dict)
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
         filename_pattern = SAFE_WEIGHTS_PATTERN_NAME if safe_serialization else WEIGHTS_PATTERN_NAME
+
+        from huggingface_hub import split_torch_state_dict_into_shards
 
         state_dict_split = split_torch_state_dict_into_shards(
             state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
