@@ -22,7 +22,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import psutil
 import torch
 
 from accelerate.commands.config import default_config_file, load_config_from_file
@@ -1361,6 +1360,8 @@ def _validate_launch_command(args):
                 ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"],
                 max(int(args.num_processes / args.num_machines), 1),
             )
+            import psutil
+
             threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
             if threads_per_process > 1:
                 args.num_cpu_threads_per_process = threads_per_process
