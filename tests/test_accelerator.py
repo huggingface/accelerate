@@ -469,11 +469,11 @@ class AcceleratorTester(AccelerateTestCase):
     @require_bnb
     def test_accelerator_bnb(self):
         """Tests that the accelerator can be used with the BNB library."""
-        from transformers import AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
         model = AutoModelForCausalLM.from_pretrained(
             "EleutherAI/gpt-neo-125m",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map={"": 0},
         )
         accelerator = Accelerator()
@@ -500,8 +500,12 @@ class AcceleratorTester(AccelerateTestCase):
             device_map = infer_auto_device_map(model)
             device_map["lm_head"] = "cpu"
 
+        from transformers import BitsAndBytesConfig
+
         model = AutoModelForCausalLM.from_pretrained(
-            "EleutherAI/gpt-neo-125m", device_map=device_map, load_in_8bit=True, llm_int8_enable_fp32_cpu_offload=True
+            "EleutherAI/gpt-neo-125m",
+            device_map=device_map,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True, llm_int8_enable_fp32_cpu_offload=True),
         )
 
         # This should not work and get value error
@@ -515,7 +519,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_multi_device
     def test_accelerator_bnb_multi_device(self):
         """Tests that the accelerator can be used with the BNB library."""
-        from transformers import AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
         if torch_device == "cuda":
             PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
@@ -536,7 +540,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             "EleutherAI/gpt-neo-125m",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map=device_map,
         )
         accelerator = Accelerator()
@@ -552,7 +556,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_multi_device
     def test_accelerator_bnb_multi_device_no_distributed(self):
         """Tests that the accelerator can be used with the BNB library."""
-        from transformers import AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
         with init_empty_weights():
             model = AutoModelForCausalLM.from_pretrained(
@@ -563,7 +567,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             "EleutherAI/gpt-neo-125m",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map=device_map,
         )
         accelerator = Accelerator()
