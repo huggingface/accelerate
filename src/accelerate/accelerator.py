@@ -1596,7 +1596,7 @@ class Accelerator:
             if not any(isinstance(p, DTensor) for p in model.parameters()):
                 logger.warning(
                     "The model parameters are not sharded by DTensor, we skip the TP preparation. If you are using "
-                    "a PreTrained model it is exepected and this warning can be ignored."
+                    "a PreTrained model it is expected and this warning can be ignored."
                 )
                 return result
 
