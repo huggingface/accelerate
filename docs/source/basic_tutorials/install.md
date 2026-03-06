@@ -56,7 +56,7 @@ pip install -e .
 
 ## Configuration
 
-After installing, you need to configure Accelerate for how the current system is setup for training. 
+After installing, you need to configure Accelerate for how the current system is set up for training. 
 To do so run the following and answer the questions prompted to you:
 
 ```bash
