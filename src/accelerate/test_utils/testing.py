@@ -312,6 +312,13 @@ def require_huggingface_suite(test_case):
     )(test_case)
 
 
+def require_datasets(test_case):
+    """
+    Decorator marking a test that requires datasets. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_datasets_available(), "test requires the datasets library")(test_case)
+
+
 def require_transformers(test_case):
     """
     Decorator marking a test that requires transformers. These tests are skipped when they are not.

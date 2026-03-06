@@ -33,7 +33,7 @@ from accelerate.data_loader import (
     skip_first_batches,
 )
 from accelerate.state import GradientState
-from accelerate.test_utils.testing import AccelerateTestCase, require_torchdata_stateful_dataloader
+from accelerate.test_utils.testing import AccelerateTestCase, require_datasets, require_torchdata_stateful_dataloader
 from accelerate.utils import is_torchdata_stateful_dataloader_available, set_seed
 
 
@@ -543,6 +543,20 @@ class DataLoaderTester(AccelerateTestCase):
         assert batch_sampler.epoch == 0
         dataloader.set_epoch(1)
         assert batch_sampler.epoch == 1
+
+    @require_datasets
+    def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
+        """When n_shards == num_processes, native HF dataset sharding should be used."""
+        from datasets import Dataset
+
+        ds = Dataset.from_dict({"x": list(range(10))}).to_iterable_dataset(num_shards=2)
+        assert ds.n_shards == 2
+
+        dataloader = DataLoader(ds, batch_size=4)
+        result = prepare_data_loader(dataloader, num_processes=2, process_index=0, dispatch_batches=False)
+
+        # n_shards (2) == num_processes (2): should use native sharding, not IterableDatasetShard
+        assert not isinstance(result.dataset, IterableDatasetShard)
 
     def test_ensure_dataloader_gets_cleaned_up(self):
         # Ensure that the dataloader gets cleaned up properly
