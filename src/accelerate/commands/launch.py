@@ -972,7 +972,7 @@ def launch_command_parser(subparsers=None):
         "--parallelism_config_sp_attn_implementation",
         type=str,
         default="sdpa",
-        help="Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`.",
+        help="Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3', 'sdpa', or a hub-hosted kernel (e.g. 'kernels-community/flash-attn2'). Defaults to `sdpa`.",
     )
 
     # Other arguments of the training scripts
