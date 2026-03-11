@@ -3809,7 +3809,7 @@ class Accelerator:
         scaler = None
         if self.scaler is not None and self.is_fsdp2:
             input_scaler_file = os.path.join(input_dir, SCALER_NAME)
-            scaler_state = torch.load(input_scaler_file)
+            scaler_state = torch.load(input_scaler_file, weights_only=True)
             self.scaler.load_state_dict(scaler_state)
             # We also need to call the `_lazy_init_scale_growth_tracker` to initialize the scaler, as it would else be called
             # on the first call to scale
