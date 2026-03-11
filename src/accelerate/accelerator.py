@@ -154,7 +154,8 @@ if is_megatron_lm_available():
         megatron_lm_prepare_model_optimizer_scheduler,
     )
 
-from torch.distributed.algorithms.join import Join
+if torch.distributed.is_available():
+    from torch.distributed.algorithms.join import Join
 
 
 if is_torch_xla_available():
