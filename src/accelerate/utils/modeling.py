@@ -367,7 +367,9 @@ def set_module_tensor_to_device(
                 new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(
                     device, non_blocking=non_blocking
                 )
-            elif param_cls.__name__ in ["AffineQuantizedTensor"]:
+            elif param_cls.__name__ in ["AffineQuantizedTensor"] or "torchao" in getattr(
+                param_cls, "__module__", ""
+            ):
                 new_value = new_value.to(device, non_blocking=non_blocking)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(
