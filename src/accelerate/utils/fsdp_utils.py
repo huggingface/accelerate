@@ -281,6 +281,7 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
 def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     import torch.distributed.checkpoint as dist_cp
+    from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -322,6 +323,7 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
                 optim_state,
                 checkpoint_id=ckpt_dir,
                 storage_reader=dist_cp.FileSystemReader(ckpt_dir),
+                planner=DefaultLoadPlanner(),
             )
             optim_state = optim_state["optimizer"]
             logger.info(f"Optimizer loaded from {ckpt_dir}")
