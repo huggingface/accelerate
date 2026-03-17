@@ -1028,6 +1028,10 @@ def multi_gpu_launcher(args):
                 console.print_exception(suppress=[__file__], show_locals=False)
             else:
                 raise
+        else:
+            if is_xpu_available():
+                import os as _os
+                _os._exit(0)
 
 
 def deepspeed_launcher(args):
