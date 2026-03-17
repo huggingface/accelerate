@@ -350,6 +350,7 @@ def set_module_tensor_to_device(
         elif value is not None or not check_device_same(torch.device(device), module._parameters[tensor_name].device):
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
+            is_hf_initialized = kwargs.pop("_is_hf_initialized", None)
             if param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]:
                 if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
                     # downcast to fp16 if any - needed for 8bit serialization
@@ -374,6 +375,8 @@ def set_module_tensor_to_device(
                     device, non_blocking=non_blocking
                 )
 
+            if is_hf_initialized is not None:
+                new_value._is_hf_initialized = is_hf_initialized
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
                 module._parameters[tensor_name].SCB = fp16_statistics.to(device, non_blocking=non_blocking)
