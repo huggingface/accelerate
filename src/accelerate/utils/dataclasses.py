@@ -614,7 +614,9 @@ class DistributedType(str, enum.Enum):
         - **MULTI_HPU** -- Distributed on multiple HPUs.
         - **MULTI_NEURON** -- Distributed on multiple Neuron cores.
         - **DEEPSPEED** -- Using DeepSpeed.
+        - **FSDP** -- Using Fully Sharded Data Parallelism (FSDP).
         - **XLA** -- Using TorchXLA.
+        - **MEGATRON_LM** -- Using Megatron-LM.
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
