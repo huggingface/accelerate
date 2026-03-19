@@ -15,7 +15,7 @@
 import importlib
 import math
 from contextlib import suppress
-from typing import Callable, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 from packaging import version
@@ -658,6 +658,68 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                 self.batch_sampler.batch_sampler.sampler = sampler
 
 
+class CustomIterableDataLoader(DataLoaderStateMixin):
+    """
+    Lightweight wrapper around custom iterable dataloader-like objects.
+
+    This wrapper only handles optional device placement and keeps dataloader state tracking
+    for gradient synchronization.
+    """
+
+    def __init__(self, dataloader, device=None, _non_blocking: bool = False):
+        self.base_dataloader = dataloader
+        self.device = device
+        self._non_blocking = _non_blocking
+        self.gradient_state = GradientState()
+        self._drop_last = False
+
+    def __getattr__(self, name):
+        if name == "base_dataloader":
+            raise AttributeError()
+        return getattr(self.base_dataloader, name)
+
+    def __iter__(self):
+        self.begin()
+        dataloader_iter = iter(self.base_dataloader)
+        # We iterate one batch ahead to identify the last yielded batch.
+        try:
+            current_batch = next(dataloader_iter)
+        except StopIteration:
+            self.end()
+            return
+
+        while True:
+            try:
+                if self.device is not None:
+                    current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
+                next_batch = next(dataloader_iter)
+                yield current_batch
+                current_batch = next_batch
+            except StopIteration:
+                self.end_of_dataloader = True
+                if self.device is not None:
+                    current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
+                yield current_batch
+                break
+
+        self.end()
+
+    def __len__(self):
+        return len(self.base_dataloader)
+
+    def set_epoch(self, epoch: int):
+        if hasattr(self.base_dataloader, "set_epoch"):
+            self.base_dataloader.set_epoch(epoch)
+
+    @property
+    def dataset(self):
+        return getattr(self.base_dataloader, "dataset", self.base_dataloader)
+
+    @property
+    def total_batch_size(self):
+        return getattr(self.base_dataloader, "batch_size", None) or 1
+
+
 if is_torch_xla_available():
     import torch_xla.distributed.parallel_loader as xpl
 
@@ -1004,7 +1066,7 @@ def get_sampler(dataloader):
 
 
 def prepare_data_loader(
-    dataloader: DataLoader,
+    dataloader: Any,
     device: Optional[torch.device] = None,
     num_processes: Optional[int] = None,
     process_index: Optional[int] = None,
@@ -1019,7 +1081,8 @@ def prepare_data_loader(
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
     torch_device_mesh=None,
-) -> DataLoader:
+    custom_classes: Optional[tuple[type[Any], ...]] = None,
+) -> Any:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
 
@@ -1088,6 +1151,9 @@ def prepare_data_loader(
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
         torch_device_mesh (`torch.distributed.DeviceMesh`, *optional*, defaults to `None`):
             PyTorch device mesh.
+        custom_classes (`tuple[type, ...]`, *optional*, defaults to `None`):
+            A tuple of custom iterable dataloader-like classes to match with `isinstance`. Matching objects are
+            wrapped in a lightweight accelerator wrapper that only handles optional device placement.
 
 
     Returns:
@@ -1100,6 +1166,13 @@ def prepare_data_loader(
 
     </Tip>
     """
+    if custom_classes and isinstance(dataloader, custom_classes):
+        return CustomIterableDataLoader(
+            dataloader,
+            device=device if put_on_device else None,
+            _non_blocking=non_blocking,
+        )
+
     if dispatch_batches is None:
         if not put_on_device:
             dispatch_batches = False

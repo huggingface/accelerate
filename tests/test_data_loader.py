@@ -23,6 +23,7 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
     BatchSamplerShard,
+    CustomIterableDataLoader,
     DataLoaderDispatcher,
     DataLoaderShard,
     DataLoaderStateMixin,
@@ -93,6 +94,19 @@ class SimpleBatchSampler(BatchSampler):
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+
+
+class CustomIterableLoader:
+    def __init__(self, values):
+        self.values = values
+        self.batch_size = 1
+
+    def __iter__(self):
+        for value in self.values:
+            yield torch.tensor([value])
+
+    def __len__(self):
+        return len(self.values)
 
 
 class DataLoaderTester(AccelerateTestCase):
@@ -437,6 +451,13 @@ class DataLoaderTester(AccelerateTestCase):
         for d in dataloader:
             assert isinstance(d["tensor"], torch.Tensor)
             assert d["non_tensor"] == "non_tensor_value"
+
+    def test_prepare_data_loader_with_custom_iterable_loader(self):
+        dataloader = CustomIterableLoader([1, 2, 3])
+        prepared = prepare_data_loader(dataloader, custom_classes=(CustomIterableLoader,))
+
+        assert isinstance(prepared, CustomIterableDataLoader)
+        assert [batch.tolist() for batch in prepared] == [[1], [2], [3]]
 
     @parameterized.expand([1, 2], name_func=parameterized_custom_name_func)
     def test_reproducibility(self, num_processes):

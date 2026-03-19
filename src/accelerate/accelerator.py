@@ -718,6 +718,10 @@ class Accelerator:
         return False
 
     @property
+    def custom_dataloader_classes(self):
+        return tuple(getattr(self.dataloader_config, "custom_classes", ()))
+
+    @property
     def project_dir(self):
         return self.project_configuration.project_dir
 
@@ -1397,7 +1401,7 @@ class Accelerator:
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer
         if first_pass:
-            if isinstance(obj, torch.utils.data.DataLoader):
+            if isinstance(obj, torch.utils.data.DataLoader) or isinstance(obj, self.custom_dataloader_classes):
                 return self.prepare_data_loader(obj, device_placement=device_placement)
             elif isinstance(obj, torch.nn.Module):
                 return self.prepare_model(obj, device_placement=device_placement)
@@ -2660,9 +2664,7 @@ class Accelerator:
             device_placement[optimizer_index] = False
         return tuple(result), device_placement
 
-    def prepare_data_loader(
-        self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
-    ):
+    def prepare_data_loader(self, data_loader, device_placement=None, slice_fn_for_dispatch=None):
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -2715,6 +2717,7 @@ class Accelerator:
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
             torch_device_mesh=device_mesh,
+            custom_classes=self.custom_dataloader_classes,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader

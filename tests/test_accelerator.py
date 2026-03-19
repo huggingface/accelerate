@@ -106,6 +106,19 @@ def create_dataloaders_for_test(batch_size=3, n_train_batches: int = 12, n_valid
     return (train_dataloader, valid_dataloader)
 
 
+class CustomIterableDataLoader:
+    def __init__(self, values):
+        self.values = values
+        self.batch_size = 1
+
+    def __iter__(self):
+        for value in self.values:
+            yield torch.tensor([value])
+
+    def __len__(self):
+        return len(self.values)
+
+
 def get_signature(model):
     return sum(param.abs().sum().item() for param in model.parameters())
 
@@ -701,6 +714,17 @@ class AcceleratorTester(AccelerateTestCase):
             assert isinstance(loaded_dl, DataLoaderShard)
         assert len(loaded_skip_dl) == len(original_dl) - 2
         assert [i for i in loaded_skip_dl] == [i for i in original_dl][2:]
+
+    def test_prepare_with_custom_iterable_dataloader(self):
+        dataloader_config = DataLoaderConfiguration(custom_classes=(CustomIterableDataLoader,))
+        accelerator = Accelerator(cpu=True, dataloader_config=dataloader_config)
+
+        dataloader = CustomIterableDataLoader([1, 2, 3])
+        prepared_dataloader = accelerator.prepare(dataloader)
+
+        assert prepared_dataloader in accelerator._dataloaders
+        assert prepared_dataloader._is_accelerate_prepared
+        assert [batch.tolist() for batch in prepared_dataloader] == [[1], [2], [3]]
 
     # Ideally would be a parameterized test which works with either stateful or non-stateful dataloaders, but dependencies are a bit awkward.
     @require_torchdata_stateful_dataloader
