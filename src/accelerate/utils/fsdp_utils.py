@@ -696,7 +696,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     if not isinstance(model, FSDPModule):
         fully_shard(model, **fsdp2_kwargs)
 
-    if fsdp2_plugin.cpu_ram_efficient_loading:
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
         # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
         # When CPU offloading is enabled, parameters need to stay on CPU after distribution
