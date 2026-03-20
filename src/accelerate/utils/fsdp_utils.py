@@ -666,6 +666,21 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             model_has_params4bit = True
             break
 
+    # FSDP2 requires uniform original parameter dtype within each param group.
+    # Norm/embedding weights stored in fp32 while the rest is bf16/fp16, causing _init_mp_dtypes() AssertionError.
+    if accelerator.mixed_precision != "no" and not model_has_params4bit:
+        mp_policy = fsdp2_plugin.mixed_precision_policy
+        if mp_policy is not None and getattr(mp_policy, "param_dtype", None) is not None:
+            target_dtype = mp_policy.param_dtype
+        elif accelerator.mixed_precision == "bf16":
+            target_dtype = torch.bfloat16
+        elif accelerator.mixed_precision == "fp16":
+            target_dtype = torch.float16
+        else:
+            target_dtype = None
+        if target_dtype is not None:
+            model.to(target_dtype)
+
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
         # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
