@@ -471,6 +471,94 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
 
         AcceleratorState._reset_state(True)
 
+    def test_fsdp2_ignored_params_non_floating_params4bit(self):
+        """Test that non-floating frozen Params4bit are auto-excluded from FSDP sharding via ignored_params."""
+        from unittest.mock import Mock, patch
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.Linear(4, 4),
+        )
+        # Simulate Params4bit: frozen + uint8 (non-floating)
+        fake_param = torch.nn.Parameter(torch.randint(0, 255, (4, 4), dtype=torch.uint8), requires_grad=False)
+        fake_param.__class__ = type("Params4bit", (torch.nn.Parameter,), {})
+        model[0].weight = fake_param
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "no"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = None
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        captured_kwargs = {}
+        def mock_fully_shard(module, **kwargs):
+            captured_kwargs.update(kwargs)
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard", side_effect=mock_fully_shard),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            patch("accelerate.utils.fsdp_utils.is_torch_version", return_value=True),
+            patch("accelerate.utils.fsdp_utils.logger"),
+        ):
+            fsdp2_prepare_model(mock_accelerator, model)
+
+        # Verify the fake Params4bit was added to ignored_params
+        ignored = captured_kwargs.get("ignored_params", set())
+        assert fake_param in ignored, f"Expected Params4bit in ignored_params, got {ignored}"
+
+    def test_fsdp2_floating_params4bit_not_ignored(self):
+        """Test that floating Params4bit are not excluded from sharding."""
+        from unittest.mock import Mock, patch
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.Linear(4, 4),
+        )
+        # Simulate floating Params4bit: frozen + bf16
+        fake_param = torch.nn.Parameter(torch.randn(4, 4, dtype=torch.bfloat16), requires_grad=False)
+        fake_param.__class__ = type("Params4bit", (torch.nn.Parameter,), {})
+        model[0].weight = fake_param
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "no"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = None
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        captured_kwargs = {}
+        def mock_fully_shard(module, **kwargs):
+            captured_kwargs.update(kwargs)
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard", side_effect=mock_fully_shard),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            patch("accelerate.utils.fsdp_utils.is_torch_version", return_value=True),
+        ):
+            fsdp2_prepare_model(mock_accelerator, model)
+
+        # Floating Params4bit should not be in ignored_params
+        ignored = captured_kwargs.get("ignored_params", set())
+        assert fake_param not in ignored, f"Floating Params4bit should not be ignored, got {ignored}"
 
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
