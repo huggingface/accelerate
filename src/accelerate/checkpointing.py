@@ -71,6 +71,7 @@ def save_accelerator_state(
     scaler: Optional[GradScaler] = None,
     save_on_each_node: bool = False,
     safe_serialization: bool = True,
+    save_model_only: bool = False,
 ):
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
@@ -113,6 +114,10 @@ def save_accelerator_state(
         output_model_file = output_dir.joinpath(weights_name)
         save(state, output_model_file, save_on_each_node=save_on_each_node, safe_serialization=safe_serialization)
         logger.info(f"Model weights saved in {output_model_file}")
+
+    if save_model_only:
+        return output_dir
+
     # Optimizer states
     for i, opt in enumerate(optimizers):
         state = opt.state_dict()

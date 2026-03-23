@@ -297,6 +297,21 @@ class AcceleratorTester(AccelerateTestCase):
             assert abs(model_signature - get_signature(model)) < 1e-3
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_state_model_only(self, use_safetensors):
+        accelerator = Accelerator()
+        model = torch.nn.Linear(10, 10)
+        model = accelerator.prepare(model)
+
+        model_signature = get_signature(model)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            accelerator.save_state(tmpdirname, safe_serialization=use_safetensors, save_model_only=True)
+            # make sure only the model was saved
+            assert os.listdir(tmpdirname) == ['model.safetensors' if use_safetensors else 'pytorch_model.bin']
+            # make sure loaded weights match
+            load_checkpoint_in_model(model, tmpdirname)
+            assert abs(model_signature - get_signature(model)) < 1e-3
+
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_sharded_model(self, use_safetensors):
         accelerator = Accelerator()
         inputs = torch.randn(3, 3)

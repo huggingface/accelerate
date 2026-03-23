@@ -3639,6 +3639,8 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
 
+        save_model_only = save_model_func_kwargs.pop("save_model_only", False)
+
         if self.distributed_type == DistributedType.XLA:
             # Finish running the previous step before checkpointing
             xm.mark_step()
@@ -3664,23 +3666,25 @@ class Accelerator:
 
         # Save the optimizers taking care of FSDP and DeepSpeed nuances
         optimizers = []
-        if self.distributed_type == DistributedType.FSDP:
-            for i, opt in enumerate(self._optimizers):
-                logger.info("Saving FSDP Optimizer")
-                save_fsdp_optimizer(self.state.fsdp_plugin, self, opt, self._models[i], output_dir, i)
-                logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
-        elif self.distributed_type not in [DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
-            optimizers = self._optimizers
+        if not save_model_only:
+            if self.distributed_type == DistributedType.FSDP:
+                for i, opt in enumerate(self._optimizers):
+                    logger.info("Saving FSDP Optimizer")
+                    save_fsdp_optimizer(self.state.fsdp_plugin, self, opt, self._models[i], output_dir, i)
+                    logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
+            elif self.distributed_type not in [DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
+                optimizers = self._optimizers
 
         # Save the lr schedulers taking care of DeepSpeed nuances
         schedulers = []
-        if self.distributed_type == DistributedType.DEEPSPEED:
-            for i, scheduler in enumerate(self._schedulers):
-                if isinstance(scheduler, DeepSpeedSchedulerWrapper):
-                    continue
-                schedulers.append(scheduler)
-        elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
-            schedulers = self._schedulers
+        if not save_model_only:
+            if self.distributed_type == DistributedType.DEEPSPEED:
+                for i, scheduler in enumerate(self._schedulers):
+                    if isinstance(scheduler, DeepSpeedSchedulerWrapper):
+                        continue
+                    schedulers.append(scheduler)
+            elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
+                schedulers = self._schedulers
 
         # Save the samplers of the dataloaders
         dataloaders = self._dataloaders
@@ -3701,6 +3705,7 @@ class Accelerator:
             self.scaler,
             save_on_each_node=self.project_configuration.save_on_each_node,
             safe_serialization=safe_serialization,
+            save_model_only=save_model_only
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
