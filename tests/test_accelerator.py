@@ -473,9 +473,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert len(accelerator._models) == num_models_before, (
             "prepare_model should not add duplicate entries to _models"
         )
-        assert reprepared_model is prepared_model, (
-            "prepare_model should return the same object when called twice"
-        )
+        assert reprepared_model is prepared_model, "prepare_model should return the same object when called twice"
 
     @require_cuda_or_xpu
     @slow

@@ -2060,6 +2060,7 @@ class Accelerator:
                 model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
             else:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+        model._is_accelerate_prepared = True
         return model
 
     def _prepare_ao(self, *args):
