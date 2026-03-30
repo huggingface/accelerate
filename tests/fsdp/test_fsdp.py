@@ -508,7 +508,6 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
             patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
             patch("accelerate.utils.fsdp_utils.is_torch_version", return_value=True),
-            patch("accelerate.utils.fsdp_utils.logger"),
         ):
             fsdp2_prepare_model(mock_accelerator, model)
 

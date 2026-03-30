@@ -678,9 +678,11 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             ignored = set(fsdp2_kwargs.get("ignored_params", set()))
             fsdp2_kwargs["ignored_params"] = ignored | incompatible_params4bit
             if accelerator.is_main_process:
-                logger.info(
+                warnings.warn(
                     f"Found {len(incompatible_params4bit)} non-floating frozen Params4bit. "
                     "Excluding from FSDP2 sharding to prevent quant_state corruption."
+                    "To enable memory-efficient sharding of 4-bit weights, set"
+                    "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
                 )
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
