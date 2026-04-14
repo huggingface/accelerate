@@ -15,6 +15,8 @@ rendered properly in your Markdown viewer.
 
 # Accelerate
 
+<!-- test: bucket doc build -->
+
 Accelerate is a library that enables the same PyTorch code to be run across any distributed configuration by adding just four lines of code! In short, training and inference at scale made simple, efficient and adaptable.
 
 ```diff
@@ -38,11 +40,11 @@ Accelerate is a library that enables the same PyTorch code to be run across any 
 ```
 
 Built on `torch_xla` and `torch.distributed`, Accelerate takes care of the heavy lifting, so you don't have to write any custom code to adapt to these platforms.
-Convert existing codebases to utilize [DeepSpeed](usage_guides/deepspeed), perform [fully sharded data parallelism](usage_guides/fsdp), and have automatic support for mixed-precision training! 
+Convert existing codebases to utilize [DeepSpeed](usage_guides/deepspeed), perform [fully sharded data parallelism](usage_guides/fsdp), and have automatic support for mixed-precision training!
 
-<Tip> 
+<Tip>
 
-  To get a better idea of this process, make sure to check out the [Tutorials](basic_tutorials/overview)! 
+  To get a better idea of this process, make sure to check out the [Tutorials](basic_tutorials/overview)!
 
 </Tip>
 
