@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Accelerate
 
-<!-- test: bucket doc build -->
+<!-- test: bucket doc build (main) -->
 
 Accelerate is a library that enables the same PyTorch code to be run across any distributed configuration by adding just four lines of code! In short, training and inference at scale made simple, efficient and adaptable.
 
