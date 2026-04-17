@@ -386,6 +386,76 @@ class CheckpointTest(AccelerateTestCase):
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
 
+    def test_dataloader_iteration_counter_is_persisted(self):
+        # Regression test for https://github.com/huggingface/accelerate/issues/3996
+        # The per-epoch `iteration` counter on DataLoaderShard / DataLoaderDispatcher is
+        # what seeds SeedableRandomSampler for the next epoch. If the counter is not
+        # round-tripped through save_state/load_state the resumed run replays the
+        # epoch-0 shuffle order, which breaks deterministic resumption.
+        from accelerate.checkpointing import load_accelerator_state, save_accelerator_state
+
+        class _FakeDataLoader:
+            def __init__(self, iteration):
+                self.iteration = iteration
+                self.dataset = object()  # not an IterableDatasetShard
+
+            def set_epoch(self, epoch):
+                self.iteration = epoch
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            saved = _FakeDataLoader(iteration=7)
+            save_accelerator_state(
+                output_dir=tmpdir,
+                model_states=[],
+                optimizers=[],
+                schedulers=[],
+                dataloaders=[saved],
+                process_index=0,
+                step=0,
+                safe_serialization=self.use_safetensors,
+            )
+            assert os.path.exists(os.path.join(tmpdir, "dl_iteration.bin"))
+
+            restored = _FakeDataLoader(iteration=0)
+            load_accelerator_state(
+                input_dir=tmpdir,
+                models=[],
+                optimizers=[],
+                schedulers=[],
+                dataloaders=[restored],
+                process_index=0,
+            )
+            assert restored.iteration == 7
+
+    def test_load_state_tolerates_missing_iteration_file(self):
+        # Backward compatibility: checkpoints written by older accelerate versions
+        # do not contain dl_iteration.bin. Loading must not raise and the
+        # dataloader iteration should be left at its initial value.
+        from accelerate.checkpointing import load_accelerator_state
+
+        class _FakeDataLoader:
+            def __init__(self):
+                self.iteration = 0
+                self.dataset = object()
+
+            def set_epoch(self, epoch):
+                self.iteration = epoch
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write the RNG state file so load_accelerator_state's try/except
+            # for random states does not mask other errors.
+            torch.save({"step": 0}, os.path.join(tmpdir, "random_states_0.pkl"))
+            dl = _FakeDataLoader()
+            load_accelerator_state(
+                input_dir=tmpdir,
+                models=[],
+                optimizers=[],
+                schedulers=[],
+                dataloaders=[dl],
+                process_index=0,
+            )
+            assert dl.iteration == 0
+
 
 if __name__ == "__main__":
     use_safetensors = os.environ.get("USE_SAFETENSORS", "False") == "True"
