@@ -166,6 +166,33 @@ class MemoryTest(unittest.TestCase):
             mock_training_loop_function()
             assert "Oops, we had an error!" in cm.exception.args[0]
 
+    def test_minimum_batch_size(self):
+        @find_executable_batch_size(starting_batch_size=128, minimum_batch_size=32)
+        def mock_training_loop_function(batch_size):
+            if batch_size > 8:
+                raise_fake_out_of_memory()
+
+        with self.assertRaises(RuntimeError) as cm:
+            mock_training_loop_function()
+        assert "minimum batch size (32) reached" in cm.exception.args[0]
+
+    def test_minimum_batch_size_logging(self):
+        import logging
+
+        with self.assertLogs("accelerate.utils.memory", level=logging.WARNING) as log_cm:
+
+            @find_executable_batch_size(starting_batch_size=64, minimum_batch_size=32)
+            def mock_training_loop_function(batch_size):
+                if batch_size > 8:
+                    raise_fake_out_of_memory()
+
+            try:
+                mock_training_loop_function()
+            except RuntimeError:
+                pass
+
+        assert any("Retrying with batch size" in msg for msg in log_cm.output)
+
     @require_non_cpu
     @require_non_torch_xla
     def test_release_memory(self):
