@@ -20,6 +20,7 @@ A collection of utilities for ensuring that training can always occur. Heavily i
 import functools
 import gc
 import inspect
+import logging
 from typing import Optional
 
 import torch
@@ -116,9 +117,13 @@ def should_reduce_batch_size(exception: Exception) -> bool:
     return False
 
 
+logger = logging.getLogger(__name__)
+
+
 def find_executable_batch_size(
     function: Optional[callable] = None,
     starting_batch_size: int = 128,
+    minimum_batch_size: int = 1,
     reduce_batch_size_fn: Optional[callable] = None,
 ):
     """
@@ -132,23 +137,30 @@ def find_executable_batch_size(
             A function to wrap
         starting_batch_size (`int`, *optional*):
             The batch size to try and fit into memory
+        minimum_batch_size (`int`, *optional*, defaults to 1):
+            The minimum batch size to try. If the batch size is reduced below this value, a `RuntimeError` is raised
+            immediately rather than continuing to reduce toward zero.
 
     Example:
 
-    ```python
+```python
     >>> from accelerate.utils import find_executable_batch_size
 
 
-    >>> @find_executable_batch_size(starting_batch_size=128)
+    >>> @find_executable_batch_size(starting_batch_size=128, minimum_batch_size=8)
     ... def train(batch_size, model, optimizer):
     ...     ...
 
 
     >>> train(model, optimizer)
-    ```
+```
     """
     if function is None:
-        return functools.partial(find_executable_batch_size, starting_batch_size=starting_batch_size)
+        return functools.partial(
+            find_executable_batch_size,
+            starting_batch_size=starting_batch_size,
+            minimum_batch_size=minimum_batch_size,
+        )
 
     batch_size = starting_batch_size
     if reduce_batch_size_fn is None:
@@ -172,12 +184,20 @@ def find_executable_batch_size(
         while True:
             if batch_size == 0:
                 raise RuntimeError("No executable batch size found, reached zero.")
+            if batch_size < minimum_batch_size:
+                raise RuntimeError(
+                    f"No executable batch size found, minimum batch size ({minimum_batch_size}) reached."
+                )
             try:
                 return function(batch_size, *args, **kwargs)
             except Exception as e:
                 if should_reduce_batch_size(e):
                     clear_device_cache(garbage_collection=True)
                     batch_size = reduce_batch_size_fn()
+                    logger.warning(
+                        f"Batch size {batch_size * (10 // 9 + 1)} failed with OOM. "  # approximate previous
+                        f"Retrying with batch size {batch_size}."
+                    )
                 else:
                     raise
 
