@@ -471,9 +471,10 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
 
         AcceleratorState._reset_state(True)
 
-    def test_fsdp2_uniform_dtype_cast_bf16(self):
-        """Test that fsdp2_prepare_model casts mixed-dtype model to uniform bf16 before fully_shard
-        when mixed_precision='bf16'. Many HF models (Llama, Mistral) store norm weights in fp32."""
+    def test_fsdp2_uniform_dtype_upcast_bf16(self):
+        """Test that fsdp2_prepare_model upcasts mixed-dtype trainable params to fp32 master weights
+        when mixed_precision='bf16'. Many HF models (Llama, Mistral) store norm weights in fp32,
+        and FSDP2 requires uniform orig_dtype among trainable params within each FSDP group."""
         from unittest.mock import Mock, patch
         from accelerate.utils.fsdp_utils import fsdp2_prepare_model
 
@@ -510,10 +511,11 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             result = fsdp2_prepare_model(mock_accelerator, model)
 
         dtypes_after = {p.dtype for p in result.parameters()}
-        assert dtypes_after == {torch.bfloat16}, f"Expected all bf16, got {dtypes_after}"
+        assert dtypes_after == {torch.float32}, f"Expected all fp32 master weights, got {dtypes_after}"
 
-    def test_fsdp2_uniform_dtype_cast_fp16(self):
-        """Test that fsdp2_prepare_model casts mixed-dtype model to uniform fp16 when mixed_precision='fp16'."""
+    def test_fsdp2_uniform_dtype_upcast_fp16(self):
+        """Test that fsdp2_prepare_model upcasts mixed-dtype trainable params to fp32 master weights
+        when mixed_precision='fp16'."""
         from unittest.mock import Mock, patch
         from accelerate.utils.fsdp_utils import fsdp2_prepare_model
 
@@ -549,7 +551,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             result = fsdp2_prepare_model(mock_accelerator, model)
 
         dtypes_after = {p.dtype for p in result.parameters()}
-        assert dtypes_after == {torch.float16}, f"Expected all fp16, got {dtypes_after}"
+        assert dtypes_after == {torch.float32}, f"Expected all fp32 master weights, got {dtypes_after}"
 
     def test_fsdp2_no_dtype_cast_when_no_mixed_precision(self):
         """Test that no dtype cast happens when mixed_precision='no', preserving original model dtypes."""
