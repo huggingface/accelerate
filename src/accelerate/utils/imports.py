@@ -248,7 +248,7 @@ def is_timm_available():
 
 def is_triton_available():
     if is_xpu_available():
-        return _is_package_available("triton", "pytorch-triton-xpu")
+        return _is_package_available("triton", "triton-xpu")
     return _is_package_available("triton")
 
 

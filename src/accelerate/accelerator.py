@@ -1792,6 +1792,12 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
 
+        # Ensure we can't double wrap a model
+        if getattr(model, "_is_accelerate_prepared", False):
+            if model not in self._models:
+                self._models.append(model)
+            return model
+
         self._models.append(model)
 
         # TODO: Look at enabling native TP training directly with a proper config
@@ -2054,6 +2060,7 @@ class Accelerator:
                 model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
             else:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+        model._is_accelerate_prepared = True
         return model
 
     def _prepare_ao(self, *args):

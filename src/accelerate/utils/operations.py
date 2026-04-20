@@ -435,6 +435,60 @@ def gather(tensor):
         return tensor
 
 
+def _neuron_gather_object(object: Any):
+    """Gather picklable objects from all ranks with padded allgather sizes.
+
+    On Neuron devices every unique tensor shape triggers a new NEFF compilation. The standard
+    ``all_gather_object`` sizes its byte tensor to the exact max pickle size, which varies per call
+    and causes unbounded compilation cache growth.  This variant rounds the allgather size up to
+    the next power of 2 so the number of distinct compiled shapes stays bounded to O(log(max_size)).
+    """
+    import io
+
+    state = PartialState()
+    device = state.device
+    group_size = state.num_processes
+
+    # Serialize
+    buf = io.BytesIO()
+    pickle.dump(object, buf)
+    raw_bytes = buf.getvalue()
+    local_size = len(raw_bytes)
+
+    # Exchange sizes – each rank sends a single int64
+    local_size_tensor = torch.tensor([local_size], dtype=torch.long, device=device)
+    size_list = [torch.zeros(1, dtype=torch.long, device=device) for _ in range(group_size)]
+    torch.distributed.all_gather(size_list, local_size_tensor)
+    max_size = int(max(s.item() for s in size_list))
+
+    # Round up to next power of 2 (starting at 1MB) so the allgather shape stays stable — O(log(max_size)) distinct shapes
+    padded_size = 1024 * 1024
+    while padded_size < max_size:
+        padded_size <<= 1
+
+    # Pack local bytes into a uint8 tensor of the padded size (zero-pads beyond local_size)
+    byte_storage = torch.ByteStorage._from_buffer(raw_bytes)
+    input_tensor = torch.ByteTensor(byte_storage).to(device)
+    input_tensor.resize_(padded_size)
+
+    # Allgather – shape is (padded_size,) on every rank, stable across steps
+    coalesced = torch.empty(padded_size * group_size, dtype=torch.uint8, device=device)
+    output_tensors = [coalesced[padded_size * i : padded_size * (i + 1)] for i in range(group_size)]
+    torch.distributed.all_gather(output_tensors, input_tensor)
+
+    # Deserialize and flatten (each rank's object is a list, flatten like _gpu_gather_object)
+    result = []
+    for i, tensor in enumerate(output_tensors):
+        obj_size = int(size_list[i].item())
+        obj_bytes = tensor[:obj_size].cpu().numpy().tobytes()
+        obj = pickle.loads(obj_bytes)
+        if isinstance(obj, list):
+            result.extend(obj)
+        else:
+            result.append(obj)
+    return result
+
+
 def _gpu_gather_object(object: Any):
     output_objects = [None for _ in range(PartialState().num_processes)]
     torch.distributed.all_gather_object(output_objects, object)
@@ -456,6 +510,8 @@ def gather_object(object: Any):
     if PartialState().distributed_type == DistributedType.XLA:
         raise NotImplementedError("gather objects in TPU is not supported")
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
+        if PartialState().device.type == "neuron":
+            return _neuron_gather_object(object)
         return _gpu_gather_object(object)
     else:
         return object
@@ -557,6 +613,59 @@ def broadcast(tensor, from_process: int = 0):
         return tensor
 
 
+def _neuron_broadcast_object_list(object_list, from_process: int = 0):
+    """Broadcast a list of picklable objects with padded tensor sizes.
+
+    On Neuron devices ``ProcessGroupNeuron.broadcast()`` is implemented as an allreduce,
+    so every unique tensor shape triggers a new NEFF compilation.  The standard
+    ``broadcast_object_list`` sizes its byte tensor to the exact serialized length, which
+    varies per call and causes unbounded compilation cache growth.  This variant rounds the
+    broadcast tensor size up to the next power of 2, bounding the number of distinct
+    compiled shapes to ~O(log(max_size)).
+    """
+    import io
+
+    state = PartialState()
+    device = state.device
+
+    # --- 1. Serialize on the source rank, get sizes ---------------------------
+    if state.process_index == from_process:
+        buf = io.BytesIO()
+        pickle.dump(object_list, buf)
+        raw_bytes = buf.getvalue()
+        local_size = len(raw_bytes)
+    else:
+        raw_bytes = b""
+        local_size = 0
+
+    # Broadcast the serialized size from root so every rank knows the padded length.
+    # Use allreduce(SUM) directly: root has the real size, others have 0.
+    size_tensor = torch.tensor([local_size], dtype=torch.long, device=device)
+    torch.distributed.all_reduce(size_tensor)
+    real_size = int(size_tensor.item())
+
+    # Round up to next power of 2 (starting at 1MB) to keep the number of distinct shapes O(log(max_size))
+    padded_size = 1024 * 1024
+    while padded_size < real_size:
+        padded_size <<= 1
+
+    # --- 2. Build the byte tensor and broadcast --------------------------------
+    if state.process_index == from_process:
+        byte_storage = torch.ByteStorage._from_buffer(raw_bytes)
+        data_tensor = torch.ByteTensor(byte_storage).to(device)
+        data_tensor.resize_(padded_size)
+    else:
+        data_tensor = torch.zeros(padded_size, dtype=torch.uint8, device=device)
+
+    torch.distributed.broadcast(data_tensor, src=from_process)
+
+    # --- 3. Deserialize on all ranks ------------------------------------------
+    result = pickle.loads(data_tensor[:real_size].cpu().numpy().tobytes())
+    for i in range(len(object_list)):
+        object_list[i] = result[i]
+    return object_list
+
+
 def broadcast_object_list(object_list, from_process: int = 0):
     """
     Broadcast a list of picklable objects from one process to the others.
@@ -574,7 +683,10 @@ def broadcast_object_list(object_list, from_process: int = 0):
         for i, obj in enumerate(object_list):
             object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
-        torch.distributed.broadcast_object_list(object_list, src=from_process)
+        if PartialState().device.type == "neuron":
+            _neuron_broadcast_object_list(object_list, from_process=from_process)
+        else:
+            torch.distributed.broadcast_object_list(object_list, src=from_process)
     return object_list
 
 

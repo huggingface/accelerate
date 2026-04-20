@@ -223,7 +223,7 @@ Multi-node training with Accelerate is similar to [multi-node training with torc
 Once you have done this, you can start your multi-node training run by running `accelerate launch` (or `torchrun`) on all nodes.
 
 <Tip>
-    It is required that the command be ran on all nodes for everything to start, not just running it from the main node. You can use something like SLURM or a different process executor to wrap around this requirement and call everything from a single command.
+    It is required that the command be run on all nodes for everything to start, not just running it from the main node. You can use something like SLURM or a different process executor to wrap around this requirement and call everything from a single command.
 </Tip>
 
 <Tip>
