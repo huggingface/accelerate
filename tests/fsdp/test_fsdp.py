@@ -321,7 +321,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
                 plugin = FullyShardedDataParallelPlugin(
-                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, **{extra_arg: dtype}}
+                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, extra_arg: dtype}
                 )
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
@@ -476,6 +476,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         when mixed_precision='bf16'. Many HF models (Llama, Mistral) store norm weights in fp32,
         and FSDP2 requires uniform orig_dtype among trainable params within each FSDP group."""
         from unittest.mock import Mock, patch
+
         from accelerate.utils.fsdp_utils import fsdp2_prepare_model
 
         # Create model with mixed dtypes: linear=bf16, norm=fp32 (simulates HF Llama)
@@ -517,6 +518,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         """Test that fsdp2_prepare_model upcasts mixed-dtype trainable params to fp32 master weights
         when mixed_precision='fp16'."""
         from unittest.mock import Mock, patch
+
         from accelerate.utils.fsdp_utils import fsdp2_prepare_model
 
         model = torch.nn.Sequential(
@@ -556,6 +558,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
     def test_fsdp2_no_dtype_cast_when_no_mixed_precision(self):
         """Test that no dtype cast happens when mixed_precision='no', preserving original model dtypes."""
         from unittest.mock import Mock, patch
+
         from accelerate.utils.fsdp_utils import fsdp2_prepare_model
 
         model = torch.nn.Sequential(
@@ -594,6 +597,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         """Test that dtype cast is skipped when model has Params4bit (QLoRA),
         to avoid destroying quantized weights."""
         from unittest.mock import Mock, patch
+
         from accelerate.utils.fsdp_utils import fsdp2_prepare_model
 
         model = torch.nn.Sequential(
