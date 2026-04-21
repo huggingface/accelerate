@@ -34,7 +34,7 @@ But in most cases, you should always run [`accelerate config`](package_reference
 accelerate config
 ```
 
-The [`accelerate config`](package_reference/cli#accelerate-config) command creates and saves a default_config.yaml file in Accelerates cache folder. This file stores the configuration for your training environment, which helps Accelerate correctly launch your training script based on your machine.
+The [`accelerate config`](package_reference/cli#accelerate-config) command creates and saves a default_config.yaml file in Accelerate's cache folder. This file stores the configuration for your training environment, which helps Accelerate correctly launch your training script based on your machine.
 
 After you've configured your environment, you can test your setup with [`accelerate test`](package_reference/cli#accelerate-test), which launches a short script to test the distributed environment.
 
@@ -45,7 +45,7 @@ accelerate test
 > [!TIP]
 > Add `--config_file` to the `accelerate test` or `accelerate launch` command to specify the location of the configuration file if it is saved in a non-default location like the cache.
 
-Once your environment is setup, launch your training script with [`accelerate launch`](package_reference/cli#accelerate-launch)!
+Once your environment is set up, launch your training script with [`accelerate launch`](package_reference/cli#accelerate-launch)!
 
 ```bash
 accelerate launch path_to_script.py --args_for_the_script

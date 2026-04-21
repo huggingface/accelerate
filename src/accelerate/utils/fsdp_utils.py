@@ -511,7 +511,13 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         return tensor
 
     if accelerator.is_main_process:
-        for (param_name, full_param), sharded_param in zip(full_sd.items(), meta_sharded_sd.values()):
+        for param_name, sharded_param in meta_sharded_sd.items():
+            if param_name not in full_sd:
+                raise KeyError(
+                    f"Parameter '{param_name}' found in sharded model state dict but missing from full state dict. "
+                    f"Full state dict has {len(full_sd)} keys, sharded has {len(meta_sharded_sd)} keys."
+                )
+            full_param = full_sd[param_name]
             device_mesh = sharded_param.device_mesh
             full_param = full_param.detach().to(device_mesh.device_type)
             if isinstance(full_param, DTensor):
@@ -658,13 +664,28 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         )
 
     model_has_params4bit = False
+    incompatible_params4bit = set()
     for name, param in model.named_parameters():
         # this is a temporary fix whereby loading models with bnb params cannot be moved from
         # GPU to a meta device due with FSDP2 because torch operations don't return the original class type
         # bypassing the move to meta will still cause the VRAM spike, but at least it still will load
         if param.__class__.__name__ == "Params4bit":
             model_has_params4bit = True
-            break
+            # Exclude non-floating frozen Params4bit from FSDP sharding.
+            # Default uint8 quant_storage cannot survive fully_shard's DTensor conversion.
+            if (not param.requires_grad) and (not param.is_floating_point()) and (not param.is_complex()):
+                incompatible_params4bit.add(param)
+
+    if incompatible_params4bit and is_torch_version(">=", "2.7.0"):
+        ignored = set(fsdp2_kwargs.get("ignored_params", set()))
+        fsdp2_kwargs["ignored_params"] = ignored | incompatible_params4bit
+        if accelerator.is_main_process:
+            warnings.warn(
+                f"Found {len(incompatible_params4bit)} non-floating frozen Params4bit. "
+                "Excluding from FSDP2 sharding to prevent quant_state corruption."
+                "To enable memory-efficient sharding of 4-bit weights, set"
+                "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
+            )
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
@@ -696,7 +717,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     if not isinstance(model, FSDPModule):
         fully_shard(model, **fsdp2_kwargs)
 
-    if fsdp2_plugin.cpu_ram_efficient_loading:
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
         # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
         # When CPU offloading is enabled, parameters need to stay on CPU after distribution
@@ -784,7 +805,7 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
             transformer_cls_to_wrap.add(transformer_cls)
 
         def policy(module: torch.nn.Module) -> bool:
-            if fsdp2_plugin.transformer_cls_names_to_wrap is None:
+            if not transformer_cls_to_wrap:
                 return False
             return isinstance(module, tuple(transformer_cls_to_wrap))
 

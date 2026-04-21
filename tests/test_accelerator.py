@@ -464,6 +464,17 @@ class AcceleratorTester(AccelerateTestCase):
             "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
         )
 
+    def test_prepare_model_twice_does_not_double_wrap(self):
+        accelerator = Accelerator()
+        model = torch.nn.Linear(10, 2)
+        prepared_model = accelerator.prepare_model(model)
+        num_models_before = len(accelerator._models)
+        reprepared_model = accelerator.prepare_model(prepared_model)
+        assert len(accelerator._models) == num_models_before, (
+            "prepare_model should not add duplicate entries to _models"
+        )
+        assert reprepared_model is prepared_model, "prepare_model should return the same object when called twice"
+
     @require_cuda_or_xpu
     @slow
     @require_bnb

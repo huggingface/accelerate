@@ -614,7 +614,9 @@ class DistributedType(str, enum.Enum):
         - **MULTI_HPU** -- Distributed on multiple HPUs.
         - **MULTI_NEURON** -- Distributed on multiple Neuron cores.
         - **DEEPSPEED** -- Using DeepSpeed.
+        - **FSDP** -- Using Fully Sharded Data Parallelism (FSDP).
         - **XLA** -- Using TorchXLA.
+        - **MEGATRON_LM** -- Using Megatron-LM.
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
@@ -2230,7 +2232,7 @@ class DeepSpeedSequenceParallelConfig:
     sp_attn_implementation: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'. Defaults to `sdpa`."
+            "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3', 'sdpa', or a hub-hosted kernel (e.g. 'kernels-community/flash-attn2'). Defaults to `sdpa`."
         },
     )
 
@@ -2253,14 +2255,24 @@ class DeepSpeedSequenceParallelConfig:
         if self.sp_attn_implementation is None:
             self.sp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_SP_ATTN_IMPLEMENTATION", None)
 
-        if self.sp_attn_implementation is not None and self.sp_attn_implementation not in [
-            "flash_attention_2",
-            "flash_attention_3",
-            "sdpa",
-        ]:
-            raise ValueError(
-                f"Invalid sp_attn_implementation: {self.sp_attn_implementation}. Must be one of 'flash_attention_2', 'flash_attention_3' or 'sdpa'."
-            )
+        _builtin_sp_attn = ["flash_attention_2", "flash_attention_3", "sdpa"]
+        # Also allow hub-hosted flash attention kernels (e.g. "kernels-community/flash-attn2").
+        # These register into transformers' ALL_ATTENTION_FUNCTIONS at model load time and
+        # DeepSpeed validates against that registry directly.
+        _unsupported_sp_attn = ["eager", "flex_attention"]
+        if self.sp_attn_implementation is not None:
+            if self.sp_attn_implementation in _unsupported_sp_attn:
+                raise ValueError(
+                    f"Invalid sp_attn_implementation: {self.sp_attn_implementation}. "
+                    f"'eager' and 'flex_attention' are not supported with sequence parallelism."
+                )
+            if self.sp_attn_implementation not in _builtin_sp_attn:
+                if "/" not in self.sp_attn_implementation or "flash-attn" not in self.sp_attn_implementation:
+                    raise ValueError(
+                        f"Invalid sp_attn_implementation: {self.sp_attn_implementation}. "
+                        f"Must be one of {_builtin_sp_attn} or a hub-hosted flash attention kernel "
+                        f"(e.g. 'kernels-community/flash-attn2')."
+                    )
 
 
 @dataclass

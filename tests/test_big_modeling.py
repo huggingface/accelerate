@@ -45,7 +45,7 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
-from accelerate.utils import is_hpu_available, offload_state_dict
+from accelerate.utils import is_hpu_available, is_xpu_available, offload_state_dict
 from accelerate.utils.memory import clear_device_cache
 from accelerate.utils.versions import is_torch_version
 
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 torch_device_type = torch_device
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 
-if is_hpu_available():
+if is_hpu_available() or is_xpu_available():
     ATOL = 1e-4
     RTOL = 1e-4
 else:
