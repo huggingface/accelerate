@@ -715,7 +715,13 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 fully_shard(module, **fsdp2_kwargs)
 
     if not isinstance(model, FSDPModule):
-        fully_shard(model, **fsdp2_kwargs)
+        # For the root unit, defer to PyTorch's `reshard_after_forward=None` heuristic, which
+        # resolves to `False` for the root. The root's params (embeddings, final norm, lm_head)
+        # are used at the very start of forward and the very end of backward; resharding in between
+        # forces an unhideable all-gather right before backward starts for no memory benefit
+        # (peak memory is dominated by the backward, where the root is gathered in either case).
+        root_kwargs = {k: v for k, v in fsdp2_kwargs.items() if k != "reshard_after_forward"}
+        fully_shard(model, **root_kwargs)
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
