@@ -27,6 +27,7 @@ from .utils import (
     get_current_device_type,
     get_gpu_info,
     is_mps_available,
+    is_rocm_available,
     is_torch_version,
     patch_environment,
 )
@@ -206,8 +207,9 @@ def notebook_launcher(
                 # First dummy launch
                 # Determine device type without initializing any device (which would break fork)
                 device_type, distributed_type = get_current_device_type()
-                # XPU requires spawn instead of fork
-                start_method = "spawn" if device_type == "xpu" else "fork"
+                # XPU and ROCm require spawn instead of fork (HIP/XPU runtime is initialized in the parent,
+                # which breaks fork-based subprocesses).
+                start_method = "spawn" if device_type == "xpu" or is_rocm_available() else "fork"
                 if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
                     launcher = PrepareForLaunch(test_launch, distributed_type=distributed_type)
                     try:

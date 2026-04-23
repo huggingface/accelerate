@@ -197,7 +197,7 @@ class UtilsTester(unittest.TestCase):
     @require_triton
     @require_non_cpu
     def test_dynamo(self):
-        model = RegressionModel()
+        model = RegressionModel().to(torch_device)
         model._original_forward = model.forward
         model.forward = torch.autocast(device_type=torch_device, dtype=torch.float16)(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
