@@ -624,6 +624,24 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     return model
 
 
+def _find_final_norm(model: torch.nn.Module) -> torch.nn.Module | None:
+    """Find the final normalization layer before the output head.
+
+    The final norm is conventionally a direct child of the base model (e.g. `model.norm`
+    for Llama, `transformer.ln_f` for GPT-2), so we only scan the base model's direct
+    children. Returns the last norm found there, or None.
+    """
+    base_prefix = getattr(model, "base_model_prefix", "")
+    base_model = getattr(model, base_prefix, None) if base_prefix else model
+    if not isinstance(base_model, torch.nn.Module):
+        return None
+    final_norm = None
+    for _, module in base_model.named_children():
+        if "Norm" in type(module).__name__:
+            final_norm = module
+    return final_norm
+
+
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
 
@@ -728,8 +746,30 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
                 fully_shard(module, **fsdp2_kwargs)
 
+    # Carve embed + tail=[final_norm, lm_head] into their own units. Tail gets `False`
+    # (forward-end / backward-start uses cluster, re-gather would be unhideable).
+    input_embed = getattr(model, "get_input_embeddings", lambda: None)()
+    output_embed = getattr(model, "get_output_embeddings", lambda: None)()
+    input_weight = getattr(input_embed, "weight", None)
+    output_weight = getattr(output_embed, "weight", None)
+    is_weights_tied = input_weight is not None and input_weight is output_weight
+
+    if not is_weights_tied and input_embed is not None and not isinstance(input_embed, FSDPModule):
+        fully_shard(input_embed, **fsdp2_kwargs)
+
+    final_norm = _find_final_norm(model)
+    # Tied case uses `input_embed` so the pre-forward hook fires at forward-start
+    # (embed's use of the shared tensor), not at forward-end with `output_embed`.
+    tail_embed = input_embed if is_weights_tied else output_embed
+    tail = [m for m in (final_norm, tail_embed) if m is not None and not isinstance(m, FSDPModule)]
+    if tail:
+        fully_shard(tail, **{**fsdp2_kwargs, "reshard_after_forward": False})
+
     if not isinstance(model, FSDPModule):
-        fully_shard(model, **fsdp2_kwargs)
+        # Defer to PyTorch's `reshard_after_forward=None` heuristic, which resolves to `False`
+        # for the root. Avoids an unhideable pre-backward all-gather of the root's leftovers.
+        root_kwargs = {k: v for k, v in fsdp2_kwargs.items() if k != "reshard_after_forward"}
+        fully_shard(model, **root_kwargs)
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
