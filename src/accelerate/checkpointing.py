@@ -131,13 +131,12 @@ def save_accelerator_state(
     for i, dataloader in enumerate(dataloaders):
         sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
         output_sampler_file = output_dir.joinpath(sampler_name)
-        # Only save if we have our custom sampler
-        from .data_loader import IterableDatasetShard, SeedableRandomSampler
+        # Save SeedableRandomSampler state for both IterableDataset and map-style datasets
+        from .data_loader import SeedableRandomSampler
 
-        if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = dataloader.get_sampler()
-            if isinstance(sampler, SeedableRandomSampler):
-                save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
+        sampler = dataloader.get_sampler()
+        if isinstance(sampler, SeedableRandomSampler):
+            save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
         if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
@@ -265,13 +264,12 @@ def load_accelerator_state(
     for i, dataloader in enumerate(dataloaders):
         sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
         input_sampler_file = input_dir.joinpath(sampler_name)
-        # Only load if we have our custom sampler
-        from .data_loader import IterableDatasetShard, SeedableRandomSampler
+        # Load SeedableRandomSampler state for both IterableDataset and map-style datasets
+        from .data_loader import SeedableRandomSampler
 
-        if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = dataloader.get_sampler()
-            if isinstance(sampler, SeedableRandomSampler):
-                sampler = dataloader.set_sampler(load(input_sampler_file))
+        sampler = dataloader.get_sampler()
+        if isinstance(sampler, SeedableRandomSampler) and input_sampler_file.exists():
+            sampler = dataloader.set_sampler(load(input_sampler_file))
         if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
