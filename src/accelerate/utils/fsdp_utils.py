@@ -664,7 +664,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     fsdp2_plugin.set_auto_wrap_policy(model)
 
-    original_sd = model.state_dict()
     mesh = getattr(accelerator, "torch_device_mesh", None)
 
     fsdp2_kwargs = {
@@ -714,10 +713,13 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 upcasted_params.append(name)
                 param.data = param.data.to(torch.float32)
         if accelerator.is_main_process and upcasted_params:
-            warnings.warn(
+            logger.info(
                 "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints. "
                 f"This effects {len(upcasted_params)} parameters: {upcasted_params}..."
             )
+
+    # Capture after upcast so dtypes match what `fully_shard` will produce.
+    original_sd = model.state_dict()
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`

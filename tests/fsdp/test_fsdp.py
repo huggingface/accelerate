@@ -687,6 +687,32 @@ class FSDPIntegrationTest(TempDirTestCase):
 
         self.current_fsdp_version = 1
 
+    @require_fsdp2
+    def test_fsdp2_mixed_precision_bf16_with_bf16_model_loaded(self):
+        """FSDP2 + `mixed_precision=bf16` with the model loaded in bf16."""
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+            mixed_precision="bf16",
+        )
+        cmd.extend(
+            [
+                "--fsdp_reshard_after_forward=true",
+                "--fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP",
+                "--fsdp_transformer_layer_cls_to_wrap=BertLayer",
+                "--fsdp_cpu_ram_efficient_loading=true",
+                str(self.test_scripts_folder / "test_performance.py"),
+                f"--output_dir={self.tmpdir}",
+                "--num_epochs=1",
+                "--model_dtype=bfloat16",
+            ]
+        )
+        # If the regression returns, this hangs forever — keep the test bounded.
+        execute_subprocess_async(cmd, timeout=180)
+
     @require_fp16
     def test_performance(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
