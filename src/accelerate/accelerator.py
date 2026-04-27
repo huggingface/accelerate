@@ -129,7 +129,7 @@ from .utils.constants import (
     SCALER_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
-from .utils.other import compile_regions, compile_regions_deepspeed, is_compiled_module
+from .utils.other import compile_regions, compile_regions_deepspeed, compile_regions_fsdp2, is_compiled_module
 
 
 if is_deepspeed_available():
@@ -1697,10 +1697,9 @@ class Accelerator:
             model = fsdp2_apply_ac(self, model)
 
         # Apply compile if needed, has to be *after* applying AC
-        # Copied from: `accelerator.prepare_model` ~ L1804
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if self.state.dynamo_plugin.use_regional_compilation:
-                model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
+                model = compile_regions_fsdp2(model, **self.state.dynamo_plugin.to_kwargs())
             else:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
 
