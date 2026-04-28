@@ -1265,6 +1265,8 @@ def _validate_launch_command(args):
                             key = "fsdp_" + key
                         elif name == "fp8_config" and not key.startswith("fp8"):
                             key = "fp8_" + key
+                        elif name == "dynamo_config" and not key.startswith("dynamo_"):
+                            key = "dynamo_" + key
                         if hasattr(args, "nondefault") and key not in args.nondefault:
                             setattr(args, key, value)
                 elif (
