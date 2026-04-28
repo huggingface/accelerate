@@ -643,6 +643,49 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         finally:
             model[0].weight.__class__ = original_class
 
+    def test_compile_regions_fsdp2_preserves_block_class(self):
+        """`compile_regions_fsdp2` must use in-place `module.compile()` so module classes are preserved.
+
+        `fsdp2_prepare_model`'s auto_wrap_policy uses `isinstance(module, transformer_cls_to_wrap)`. If
+        `OptimizedModule`-wrapped blocks were used (as `compile_regions` does), the isinstance check would
+        miss them and only the root model would get FSDP-sharded — losing per-layer all-gather/compute overlap.
+        """
+        from accelerate.utils import compile_regions_fsdp2
+
+        class Block(torch.nn.Module):
+            def __init__(self, dim):
+                super().__init__()
+                self.linear = torch.nn.Linear(dim, dim)
+
+            def forward(self, x):
+                return self.linear(x)
+
+        class Model(torch.nn.Module):
+            def __init__(self, dim, n_blocks):
+                super().__init__()
+                self.layers = torch.nn.ModuleList([Block(dim) for _ in range(n_blocks)])
+                self.head = torch.nn.Linear(dim, dim)
+
+            def forward(self, x):
+                for layer in self.layers:
+                    x = layer(x)
+                return self.head(x)
+
+        model = Model(dim=8, n_blocks=4)
+        block_cls_before = type(model.layers[0])
+
+        result = compile_regions_fsdp2(model, backend="inductor")
+
+        # In-place: same Python object returned, no wrapper
+        assert result is model
+        # Class identity preserved on each repeated block (the FSDP2 auto_wrap invariant)
+        assert all(type(b) is block_cls_before for b in model.layers)
+        assert all(isinstance(b, Block) for b in model.layers)
+        assert not any(isinstance(b, torch._dynamo.eval_frame.OptimizedModule) for b in model.layers)
+        # And each block + non-repeated leaf is compiled in-place
+        assert all(getattr(b, "_compiled_call_impl", None) is not None for b in model.layers)
+        assert getattr(model.head, "_compiled_call_impl", None) is not None
+
 
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
