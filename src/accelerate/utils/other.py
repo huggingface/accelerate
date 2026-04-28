@@ -214,12 +214,6 @@ def compile_regions_fsdp2(module: torch.nn.Module, **compile_kwargs) -> torch.nn
         **compile_kwargs:
             Additional keyword arguments to pass to `module.compile()`.
     """
-    # Match torchtitan's per-block compile recipe: needed for MoE token-choice dispatch
-    # (data-dependent dynamic shapes) and to keep the AC + compile boundary consistent
-    # by skipping replay of forward python side effects in backward.
-    torch._dynamo.config.capture_scalar_outputs = True
-    torch._dynamo.config.skip_fwd_side_effects_in_bwd_under_checkpoint = True
-
     if is_repeated_blocks(module):
         for submodule in module:
             submodule.compile(**compile_kwargs)
