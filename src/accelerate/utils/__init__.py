@@ -278,6 +278,7 @@ from .other import (
     clean_state_dict_for_safetensors,
     compile_regions,
     compile_regions_deepspeed,
+    compile_regions_fsdp2,
     convert_bytes,
     extract_model_from_parallel,
     get_module_children_bottom_up,

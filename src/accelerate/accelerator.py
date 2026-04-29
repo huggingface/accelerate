@@ -129,7 +129,7 @@ from .utils.constants import (
     SCALER_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
-from .utils.other import compile_regions, compile_regions_deepspeed, is_compiled_module
+from .utils.other import compile_regions, compile_regions_deepspeed, compile_regions_fsdp2, is_compiled_module
 
 
 if is_deepspeed_available():
@@ -1697,10 +1697,14 @@ class Accelerator:
             model = fsdp2_apply_ac(self, model)
 
         # Apply compile if needed, has to be *after* applying AC
-        # Copied from: `accelerator.prepare_model` ~ L1804
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if self.state.dynamo_plugin.use_regional_compilation:
-                model = compile_regions(model, **self.state.dynamo_plugin.to_kwargs())
+                # Match torchtitan's per-block compile recipe: needed for MoE token-choice dispatch
+                # (data-dependent dynamic shapes) and to keep the AC + compile boundary consistent
+                # by skipping replay of forward python side effects in backward.
+                torch._dynamo.config.capture_scalar_outputs = True
+                torch._dynamo.config.skip_fwd_side_effects_in_bwd_under_checkpoint = True
+                model = compile_regions_fsdp2(model, **self.state.dynamo_plugin.to_kwargs())
             else:
                 model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
 
