@@ -262,7 +262,7 @@ def get_quantized_model_device_map(
                     )
                 else:
                     logger.info(
-                        "Some modules are are offloaded to the CPU or the disk. Note that these modules will be converted to 8-bit"
+                        "Some modules are offloaded to the CPU or the disk. Note that these modules will be converted to 8-bit"
                     )
         del device_map_without_some_modules
     return device_map
