@@ -484,6 +484,12 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
 
+    # `fully_shard` wraps each parameter in its own DTensor, breaking the `id`-equality
+    # that PyTorch's `state_dict()` uses to dedupe tied weights. So the meta-side dict
+    # may contain keys (e.g. `lm_head.weight`) whose source `full_sd` deduped away.
+    # These keys will be re-tied by the caller after loading, so we can skip them.
+    tied_keys = set(getattr(model, "_tied_weights_keys", None) or [])
+
     # Rank 0 distributes the full state dict to other ranks
     def _infer_parameter_dtype(model, param_name, empty_param):
         try:
@@ -513,6 +519,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     if accelerator.is_main_process:
         for param_name, sharded_param in meta_sharded_sd.items():
             if param_name not in full_sd:
+                if param_name in tied_keys:
+                    continue  # will be re-tied to its source key after loading
                 raise KeyError(
                     f"Parameter '{param_name}' found in sharded model state dict but missing from full state dict. "
                     f"Full state dict has {len(full_sd)} keys, sharded has {len(meta_sharded_sd)} keys."
@@ -540,6 +548,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
     else:
         for param_name, sharded_param in meta_sharded_sd.items():
+            if param_name in tied_keys and param_name not in full_sd:
+                continue  # mirror the rank-0 skip so broadcast counts stay aligned
             device_mesh = sharded_param.device_mesh
             full_tensor = torch.empty(sharded_param.size(), device=device_mesh.device_type, dtype=sharded_param.dtype)
             dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
@@ -555,8 +565,17 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                 sharded_tensor = sharded_tensor.to("cpu")
             sharded_sd[param_name] = sharded_tensor
 
-    # we set `assign=True` because our params are on meta device
-    model.load_state_dict(sharded_sd, assign=True)
+    # We set `assign=True` because our params are on meta device. We use `strict=False`
+    # only when the missing keys are tied-weight keys (skipped above): the caller will
+    # call `tie_weights()` right after, repointing them at their already-loaded source.
+    skipped_tied = [k for k in meta_sharded_sd if k in tied_keys and k not in full_sd]
+    incompatible = model.load_state_dict(sharded_sd, assign=True, strict=not skipped_tied)
+    if skipped_tied:
+        unexpected_missing = set(incompatible.missing_keys) - set(skipped_tied)
+        if unexpected_missing:
+            raise RuntimeError(
+                f"Unexpected missing keys when loading sharded state dict: {sorted(unexpected_missing)}"
+            )
     return model
 
 
