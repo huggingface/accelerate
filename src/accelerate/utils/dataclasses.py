@@ -50,6 +50,7 @@ from .imports import (
     is_msamp_available,
     is_musa_available,
     is_npu_available,
+    is_rocm_available,
     is_torchao_available,
     is_transformer_engine_available,
     is_xpu_available,
@@ -1440,6 +1441,21 @@ class DeepSpeedPlugin:
                 ds_config[dtype] = {"enabled": False}
         self.fill_match("fp16.enabled", must_match=False, **kwargs)
         self.fill_match("bf16.enabled", must_match=False, **kwargs)
+
+        # On ROCm, bf16 DeepSpeed training can silently produce NaN weights because
+        # bf16 has no NaN/Inf safety net (unlike fp16 loss scaling). Accumulating
+        # gradients in fp32 for the collective avoids the overflow path.
+        if (
+            mixed_precision in ("bf16", "fp8")
+            and is_rocm_available()
+            and "communication_data_type" not in ds_config
+        ):
+            ds_config["communication_data_type"] = "fp32"
+            logger.info(
+                "ROCm + DeepSpeed + bf16 detected: setting "
+                "`communication_data_type='fp32'` to avoid bf16 overflow corrupting "
+                "weights. Set it explicitly in your DeepSpeed config to override."
+            )
 
     def set_deepspeed_weakref(self):
         from .imports import is_transformers_available
