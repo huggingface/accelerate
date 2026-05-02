@@ -730,6 +730,24 @@ class CustomTrackerTestCase(unittest.TestCase):
                 }
                 assert data == truth
 
+    def test_init_trackers_none_kwargs(self):
+        with tempfile.TemporaryDirectory() as d:
+            tracker = MyCustomTracker(d)
+            accelerator = Accelerator(log_with=tracker)
+            # Passing init_kwargs=None must not raise AttributeError
+            accelerator.init_trackers("Some name", init_kwargs=None)
+            accelerator.end_training()
+
+    def test_log_none_kwargs(self):
+        with tempfile.TemporaryDirectory() as d:
+            tracker = MyCustomTracker(d)
+            accelerator = Accelerator(log_with=tracker)
+            accelerator.init_trackers("Some name")
+            values = {"total_loss": 0.1}
+            # Passing log_kwargs=None must not raise AttributeError
+            accelerator.log(values, step=0, log_kwargs=None)
+            accelerator.end_training()
+
 
 @require_dvclive
 @mock.patch("dvclive.live.get_dvc_repo", return_value=None)
