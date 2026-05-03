@@ -846,7 +846,7 @@ def reduce(tensor, reduction="mean", scale=1.0):
         tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to reduce.
         reduction (`str`, *optional*, defaults to `"mean"`):
-            A reduction method. Can be of "mean", "sum", or "none"
+            A reduction method. Can be of "mean", "sum", "max", or "none"
         scale (`float`, *optional*):
             A default scaling value to be applied after the reduce, only valid on XLA.
 
@@ -865,10 +865,12 @@ def reduce(tensor, reduction="mean", scale=1.0):
             # accelerator.set_trigger(). Use mark_step to make HLOs
             # the same on all processes.
             xm.mark_step()
-            xm.all_reduce(xm.REDUCE_SUM, [cloned_tensor], scale)
+            xla_op = xm.REDUCE_MAX if reduction == "max" else xm.REDUCE_SUM
+            xm.all_reduce(xla_op, [cloned_tensor], scale)
             xm.mark_step()
         elif state.distributed_type.value in TORCH_DISTRIBUTED_OPERATION_TYPES:
-            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
+            torch_op = ReduceOp.MAX if reduction == "max" else ReduceOp.SUM
+            torch.distributed.all_reduce(cloned_tensor, torch_op)
         if reduction == "mean":
             cloned_tensor /= state.num_processes
         return cloned_tensor
