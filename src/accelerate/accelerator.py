@@ -3149,7 +3149,8 @@ class Accelerator:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors to reduce across all processes.
             reduction (`str`, *optional*, defaults to "sum"):
-                A reduction type, can be one of 'sum', 'mean', or 'none'. If 'none', will not perform any operation.
+                A reduction type, can be one of 'sum', 'mean', 'max', or 'none'. If 'none', will not perform any
+                operation.
             scale (`float`, *optional*, defaults to 1.0):
                 A default scaling value to be applied after the reduce, only valid on XLA.
 
