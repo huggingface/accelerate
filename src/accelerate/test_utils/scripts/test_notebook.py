@@ -23,7 +23,7 @@ from torch.distributed.elastic.multiprocessing.errors import ChildFailedError
 
 from accelerate import PartialState, notebook_launcher
 from accelerate.test_utils import require_bnb
-from accelerate.utils import is_bnb_available, is_xpu_available
+from accelerate.utils import is_bnb_available, is_rocm_available, is_xpu_available
 
 
 def basic_function():
@@ -72,8 +72,9 @@ def test_fault_tolerant(max_restarts: int = 3):
     # Use torch.multiprocessing to get the right context for the current device
     import torch.multiprocessing as mp
 
-    # Get appropriate context - 'spawn' for XPU, 'fork' for others
-    if is_xpu_available():
+    # Get appropriate context - 'spawn' for XPU/ROCm (matches notebook_launcher's start_method),
+    # 'fork' for others
+    if is_xpu_available() or is_rocm_available():
         ctx = mp.get_context("spawn")
     else:
         ctx = mp.get_context("fork")
