@@ -95,6 +95,18 @@ class SimpleBatchSampler(BatchSampler):
         self.epoch = epoch
 
 
+class VariableBatchSampler:
+    def __init__(self, batches, drop_last=False):
+        self.batches = batches
+        self.drop_last = drop_last
+
+    def __iter__(self):
+        return iter(self.batches)
+
+    def __len__(self):
+        return len(self.batches)
+
+
 class DataLoaderTester(AccelerateTestCase):
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False, even_batches=True):
         batch_sampler_shards = [
@@ -357,6 +369,25 @@ class DataLoaderTester(AccelerateTestCase):
 
         assert list(batch_sampler_shards[0]) == [[0, 1, 2], [5, 6, 7, 8], [12, 13]]
         assert list(batch_sampler_shards[1]) == [[3, 4], [9, 10, 11]]
+
+    def test_batch_sampler_with_varying_batch_size_and_drop_last(self):
+        batch_sampler = VariableBatchSampler(
+            [[0, 1, 2], [3, 4], [5, 6, 7, 8], [9, 10, 11], [12, 13]],
+            drop_last=True,
+        )
+        batch_sampler_shards = [BatchSamplerShard(batch_sampler, 2, i) for i in range(2)]
+
+        assert len(batch_sampler_shards[0]) == 2
+        assert len(batch_sampler_shards[1]) == 2
+
+        assert list(batch_sampler_shards[0]) == [[0, 1, 2], [5, 6, 7, 8]]
+        assert list(batch_sampler_shards[1]) == [[3, 4], [9, 10, 11]]
+
+    def test_batch_sampler_with_varying_batch_size_without_drop_last_requires_no_even_batches(self):
+        batch_sampler = VariableBatchSampler([[0, 1, 2], [3, 4]])
+
+        with pytest.raises(ValueError, match="even_batches=False"):
+            BatchSamplerShard(batch_sampler, 2, 0)
 
     def check_iterable_dataset_shards(
         self, dataset, seed, batch_size, drop_last=False, num_processes=2, split_batches=False

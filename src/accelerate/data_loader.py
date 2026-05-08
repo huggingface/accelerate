@@ -137,8 +137,8 @@ class BatchSamplerShard(BatchSampler):
 
     <Tip warning={true}>
 
-    `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
-    equal to `False`
+    `BatchSampler`s with varying batch sizes are not enabled by default unless they set `drop_last=True`. To enable this
+    behaviour while keeping incomplete batches, set `even_batches` equal to `False`.
 
     </Tip>"""
 
@@ -162,10 +162,11 @@ class BatchSamplerShard(BatchSampler):
         self.even_batches = even_batches
         self.batch_size = getattr(batch_sampler, "batch_size", None)
         self.drop_last = getattr(batch_sampler, "drop_last", False)
-        if self.batch_size is None and self.even_batches:
+        if self.batch_size is None and self.even_batches and not self.drop_last:
             raise ValueError(
                 "You need to use `even_batches=False` when the batch sampler has no batch size. If you "
-                "are not calling this method directly, set `accelerator.even_batches=False` instead."
+                "are not calling this method directly, set `accelerator.even_batches=False` instead. "
+                "Alternatively, set the batch sampler's `drop_last` attribute to `True`."
             )
 
     @property
@@ -1095,8 +1096,8 @@ def prepare_data_loader(
 
     <Tip warning={true}>
 
-    `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
-    equal to `False`
+    `BatchSampler`s with varying batch sizes are not enabled by default unless they set `drop_last=True`. To enable this
+    behaviour while keeping incomplete batches, set `even_batches` equal to `False`.
 
     </Tip>
     """
