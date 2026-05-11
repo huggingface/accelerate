@@ -807,7 +807,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     return model
 
 
-def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool]:
+def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool] | None:
     """Prepares the auto wrap policy based on its type, done to mimic the behaviour of FSDP1 auto wrap policy.
 
     Args:
@@ -817,8 +817,8 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
             The model to wrap
 
     Returns:
-        `Callable[[torch.nn.Module], bool]`:
-            The auto wrap policy function to be applied to the model
+        `Callable[[torch.nn.Module], bool] | None`:
+            The auto wrap policy function to be applied to the model or `None`
     """
     from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
