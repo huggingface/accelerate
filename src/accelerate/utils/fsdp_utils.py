@@ -813,8 +813,6 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
     Args:
         fsdp2_plugin (`FullyShardedDataParallelPlugin`):
             Instance of `FullyShardedDataParallelPlugin` containing the configuration options
-        auto_wrap_policy_type (`str`):
-            Either `transformer` or `size`
         model (`torch.nn.Module`):
             The model to wrap
 
