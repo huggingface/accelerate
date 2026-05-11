@@ -231,11 +231,18 @@ def main():
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
         "and an Nvidia Ampere GPU.",
     )
+    parser.add_argument(
+        "--observed_batch_size",
+        type=int,
+        default=256,
+        help="The target effective batch size to maintain while `find_executable_batch_size` adjusts per-step batch size.",
+    )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
     # New Code #
-    # We modify the starting batch size to be an observed batch size of 256, to guarantee an initial device OOM
-    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 256}
+    # Start from the user-provided observed batch size, then let `find_executable_batch_size` reduce it
+    # if needed and compensate with gradient accumulation.
+    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": args.observed_batch_size}
     training_function(config, args)
 
 

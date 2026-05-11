@@ -261,6 +261,10 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
         run_command(self.launch_args + testargs)
 
+    def test_automatic_gradient_accumulation(self):
+        testargs = ["examples/by_feature/automatic_gradient_accumulation.py", "--observed_batch_size", "32"]
+        run_command(self.launch_args + testargs)
+
     def test_gradient_accumulation_for_autoregressive_models(self):
         testargs = [
             "examples/by_feature/gradient_accumulation_for_autoregressive_models.py",

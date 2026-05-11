@@ -79,6 +79,18 @@ These arguments should be added at the end of any method for starting the python
 accelerate launch ./gradient_accumulation.py --gradient_accumulation_steps 5
 ```
 
+### Automatic Gradient Accumulation (`automatic_gradient_accumulation.py`)
+
+- Shows how to combine `find_executable_batch_size` with `Accelerator.accumulate` to keep a target effective batch size when memory is limited.
+- Arguments available:
+  - `observed_batch_size`, target effective batch size before automatic per-step batch-size retries.
+
+These arguments should be added at the end of any method for starting the python script (such as `python`, `accelerate launch`, `python -m torchrun`), such as:
+
+```bash
+accelerate launch ./automatic_gradient_accumulation.py --observed_batch_size 256
+```
+
 ### LocalSGD (`local_sgd.py`)
 - Shows how to use `Accelerator.no_sync` to prevent gradient averaging in a distributed setup. However, unlike gradient accumulation, this method does not change the effective batch size. Local SGD can be combined with gradient accumulation.
 
