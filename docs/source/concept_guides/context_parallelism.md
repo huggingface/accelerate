@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 This guide will cover basics of using context parallelism in 🤗`accelerate`, for the more curious readers, we will also cover some technicalities in the later sections.
 
-See also the very related [Guide to Sequence Parallellism](./sequence_parallelism.md).
+See also the very related [Guide to Sequence Parallelism](./sequence_parallelism.md).
 
 ## Why context parallelism?
 

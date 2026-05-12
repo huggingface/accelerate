@@ -1309,7 +1309,7 @@ class Accelerator:
                 PyTorch Module that was prepared with `Accelerator.prepare` for DistributedDataParallel training.
             even_batches (`bool`, *optional*)
                 If set, this will override the value of `even_batches` set in the `Accelerator`. If it is not provided,
-                the default `Accelerator` value wil be used.
+                the default `Accelerator` value will be used.
 
         <Tip warning={true}>
 
@@ -2346,7 +2346,7 @@ class Accelerator:
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
 
-            # note: batch_size derivation is all over the map, especiall in HF Trainer, so try to fix it at the last moment if needed
+            # note: batch_size derivation is all over the map, especially in HF Trainer, so try to fix it at the last moment if needed
             pc = self.parallelism_config
             if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_size > 1:
                 self.deepspeed_config["train_batch_size"] = (
@@ -3382,7 +3382,7 @@ class Accelerator:
 
     def end_training(self):
         """
-        Runs any special end training behaviors, such as stopping trackers on the main process only or destoying
+        Runs any special end training behaviors, such as stopping trackers on the main process only or destroying
         process group. Should always be called at the end of your script if using experiment tracking.
 
         Example:

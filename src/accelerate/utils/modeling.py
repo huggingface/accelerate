@@ -1917,7 +1917,7 @@ def load_checkpoint_in_model(
         checkpoint_files = sorted(list(set(index.values())))
         checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
 
-    # Logic for missing/unexepected keys goes here.
+    # Logic for missing/unexpected keys goes here.
 
     offload_index = {}
     if offload_state_dict:
