@@ -335,14 +335,24 @@ class MLflowTrackingTest(unittest.TestCase):
         """`MLflowTracker.log` should accept extra kwargs forwarded by `Accelerator.log(log_kwargs=...)`.
 
         Previously the signature omitted `**kwargs`, so any per-tracker kwarg (e.g. `synchronous`)
-        passed via `log_kwargs={"mlflow": {...}}` raised TypeError.
+        passed via `log_kwargs={"mlflow": {...}}` raised TypeError. Beyond not raising, the kwarg
+        must reach `mlflow.log_metrics` so it actually changes mlflow's behavior.
         """
         tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
         accelerator = Accelerator(log_with=tracker)
         accelerator.init_trackers(project_name="test_exp")
         # `synchronous` is a real mlflow.log_metrics kwarg; the tracker must forward it.
-        accelerator.log({"loss": 0.1}, step=1, log_kwargs={"mlflow": {"synchronous": True}})
+        with mock.patch("mlflow.log_metrics") as mock_log_metrics:
+            accelerator.log({"loss": 0.1}, step=1, log_kwargs={"mlflow": {"synchronous": True}})
         accelerator.end_training()
+        mock_log_metrics.assert_called_once()
+        call_kwargs = mock_log_metrics.call_args.kwargs
+        assert call_kwargs.get("synchronous") is True, (
+            f"expected synchronous=True forwarded to mlflow.log_metrics, got kwargs={call_kwargs}"
+        )
+        assert call_kwargs.get("step") == 1, (
+            f"expected step=1 forwarded to mlflow.log_metrics, got kwargs={call_kwargs}"
+        )
 
 
 @require_comet_ml
