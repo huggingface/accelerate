@@ -49,6 +49,7 @@ from .imports import (
     is_mlu_available,
     is_msamp_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_torchao_available,
     is_transformer_engine_available,
@@ -1976,6 +1977,8 @@ class FullyShardedDataParallelPlugin:
                 device = torch.xpu.current_device()
             elif is_hpu_available():
                 device = torch.hpu.current_device()
+            elif is_neuron_available():
+                device = torch.neuron.current_device()
             else:
                 raise RuntimeError(
                     "There are currently no available devices found, must be one of 'XPU', 'CUDA', 'MLU', 'NPU', 'MUSA', or 'HPU'."
