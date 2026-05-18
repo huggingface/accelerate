@@ -143,6 +143,18 @@ def save_accelerator_state(
             output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
             state_dict = dataloader.state_dict()
             torch.save(state_dict, output_dataloader_state_dict_file)
+        # Persist the epoch counter so that deterministic per-epoch shuffles
+        # (e.g. SeedableRandomSampler) resume with the correct seed rather
+        # than replaying the shuffle order from epoch 0.
+        if hasattr(dataloader, "iteration"):
+            iteration_name = "dl_iteration.bin" if i == 0 else f"dl_iteration_{i}.bin"
+            output_iteration_file = output_dir.joinpath(iteration_name)
+            save(
+                dataloader.iteration,
+                output_iteration_file,
+                save_on_each_node=save_on_each_node,
+                safe_serialization=False,
+            )
         logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
 
     # GradScaler state
@@ -278,6 +290,18 @@ def load_accelerator_state(
             if input_dataloader_state_dict_file.exists():
                 state_dict = load(input_dataloader_state_dict_file, **load_kwargs)
                 dataloader.load_state_dict(state_dict)
+        # Restore the epoch counter so that deterministic per-epoch shuffles
+        # (e.g. SeedableRandomSampler) resume with the correct seed rather
+        # than replaying the shuffle order from epoch 0.
+        if hasattr(dataloader, "iteration"):
+            iteration_name = "dl_iteration.bin" if i == 0 else f"dl_iteration_{i}.bin"
+            input_iteration_file = input_dir.joinpath(iteration_name)
+            if input_iteration_file.exists():
+                iteration = load(input_iteration_file, **load_kwargs)
+                if hasattr(dataloader, "set_epoch"):
+                    dataloader.set_epoch(iteration)
+                else:
+                    dataloader.iteration = iteration
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
