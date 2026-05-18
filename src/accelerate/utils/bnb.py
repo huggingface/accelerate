@@ -138,6 +138,12 @@ def load_and_quantize_model(
                 param.data = param.data.to(torch.float32)
             elif torch.is_floating_point(param):
                 param.data = param.data.to(dtype)
+        # Second pass: ensure keep_in_fp32 modules are in fp32 even when their weights are tied
+        # to other modules (named_parameters() deduplicates tied params, so the first pass may miss them)
+        for name, module in model.named_modules():
+            if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                for param in module.parameters(recurse=False):
+                    param.data = param.data.to(torch.float32)
         if model_device.type == "cuda":
             model.cuda(torch.cuda.current_device())
             torch.cuda.empty_cache()
