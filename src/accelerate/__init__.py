@@ -23,7 +23,7 @@ from .big_modeling import (
     init_on_device,
     load_checkpoint_and_dispatch,
 )
-from .data_loader import skip_first_batches
+from .data_loader import DispatchDataLoader, skip_first_batches
 from .inference import prepare_pippy
 from .launchers import debug_launcher, notebook_launcher
 from .parallelism_config import ParallelismConfig

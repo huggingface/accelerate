@@ -36,7 +36,7 @@ from accelerate.utils.dataclasses import FP8BackendType
 
 from .big_modeling import _attach_context_parallel_hooks
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
+from .data_loader import DataLoaderDispatcher, DispatchDataLoader, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .parallelism_config import ParallelismConfig
@@ -1399,6 +1399,18 @@ class Accelerator:
         if first_pass:
             if isinstance(obj, torch.utils.data.DataLoader):
                 return self.prepare_data_loader(obj, device_placement=device_placement)
+            elif isinstance(obj, DispatchDataLoader):
+                if device_placement:
+                    obj._device = self.device
+                return obj
+            elif (
+                self.dataloader_config.custom_classes is not None
+                and isinstance(obj, self.dataloader_config.custom_classes)
+            ):
+                wrapped = DispatchDataLoader(obj)
+                if device_placement:
+                    wrapped._device = self.device
+                return wrapped
             elif isinstance(obj, torch.nn.Module):
                 return self.prepare_model(obj, device_placement=device_placement)
             elif isinstance(obj, torch.optim.Optimizer):

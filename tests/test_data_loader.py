@@ -26,6 +26,7 @@ from accelerate.data_loader import (
     DataLoaderDispatcher,
     DataLoaderShard,
     DataLoaderStateMixin,
+    DispatchDataLoader,
     IterableDatasetShard,
     SkipBatchSampler,
     SkipDataLoader,
@@ -925,3 +926,119 @@ class StatefulDataLoaderTester(AccelerateTestCase):
 
         gradient_state = GradientState()
         assert gradient_state.active_dataloader is None
+
+
+class DispatchDataLoaderTester(AccelerateTestCase):
+    """Tests for DispatchDataLoader and DataLoaderConfiguration.custom_classes."""
+
+    def test_dispatch_dataloader_iterates(self):
+        """DispatchDataLoader yields every item from the wrapped iterable."""
+
+        class SimpleSource:
+            def __iter__(self):
+                yield from [{"x": torch.tensor(i)} for i in range(5)]
+
+            def __len__(self):
+                return 5
+
+        loader = DispatchDataLoader(SimpleSource())
+        batches = list(loader)
+        assert len(batches) == 5
+        for i, batch in enumerate(DispatchDataLoader(SimpleSource())):
+            assert batch["x"].item() == i
+
+    def test_dispatch_dataloader_len(self):
+        """DispatchDataLoader forwards __len__ to the wrapped object."""
+
+        class SizedSource:
+            def __iter__(self):
+                return iter([])
+
+            def __len__(self):
+                return 42
+
+        assert len(DispatchDataLoader(SizedSource())) == 42
+
+    def test_dispatch_dataloader_device_placement(self):
+        """Setting _device moves tensors onto the target device on each iteration."""
+        device = torch.device("cpu")
+
+        class TensorSource:
+            def __iter__(self):
+                yield {"val": torch.tensor(1)}
+
+        loader = DispatchDataLoader(TensorSource())
+        loader._device = device
+        batch = next(iter(loader))
+        assert batch["val"].device == device
+
+    def test_custom_classes_wraps_iterable(self):
+        """Accelerator.prepare() wraps a custom-class instance in DispatchDataLoader."""
+        from accelerate.utils import DataLoaderConfiguration
+
+        class MySource:
+            def __iter__(self):
+                yield from [{"x": torch.tensor(i)} for i in range(3)]
+
+        config = DataLoaderConfiguration(custom_classes=(MySource,))
+        accelerator = Accelerator(dataloader_config=config)
+        prepared = accelerator._prepare_one(MySource(), first_pass=True, device_placement=False)
+        assert isinstance(prepared, DispatchDataLoader)
+        batches = list(prepared)
+        assert len(batches) == 3
+
+    def test_custom_classes_none_does_not_wrap(self):
+        """Without custom_classes, non-DataLoader iterables pass through unprepared."""
+        from accelerate.utils import DataLoaderConfiguration
+
+        class MySource:
+            def __iter__(self):
+                yield from []
+
+        config = DataLoaderConfiguration(custom_classes=None)
+        accelerator = Accelerator(dataloader_config=config)
+        source = MySource()
+        result = accelerator._prepare_one(source, first_pass=True, device_placement=False)
+        assert result is source
+
+    def test_dispatch_dataloader_prepare_directly(self):
+        """A DispatchDataLoader passed directly to _prepare_one is returned as-is."""
+        from accelerate.utils import DataLoaderConfiguration
+
+        loader = DispatchDataLoader(iter([]))
+        accelerator = Accelerator(dataloader_config=DataLoaderConfiguration())
+        result = accelerator._prepare_one(loader, first_pass=True, device_placement=False)
+        assert result is loader
+
+    def test_custom_classes_full_prepare_flow(self):
+        """accelerator.prepare() end-to-end with custom_classes yields correct batches."""
+        from accelerate.utils import DataLoaderConfiguration
+
+        class BatchSource:
+            def __iter__(self):
+                yield from [{"val": torch.tensor(i)} for i in range(4)]
+
+        config = DataLoaderConfiguration(custom_classes=(BatchSource,))
+        accelerator = Accelerator(dataloader_config=config)
+        prepared = accelerator.prepare(BatchSource())
+        assert isinstance(prepared, DispatchDataLoader)
+        values = [batch["val"].item() for batch in prepared]
+        assert values == [0, 1, 2, 3]
+
+    def test_custom_classes_multiple_types(self):
+        """custom_classes tuple with multiple types wraps instances of any listed class."""
+        from accelerate.utils import DataLoaderConfiguration
+
+        class SourceA:
+            def __iter__(self):
+                yield {"tag": torch.tensor(0)}
+
+        class SourceB:
+            def __iter__(self):
+                yield {"tag": torch.tensor(1)}
+
+        config = DataLoaderConfiguration(custom_classes=(SourceA, SourceB))
+        accelerator = Accelerator(dataloader_config=config)
+        for source in [SourceA(), SourceB()]:
+            result = accelerator._prepare_one(source, first_pass=True, device_placement=False)
+            assert isinstance(result, DispatchDataLoader)

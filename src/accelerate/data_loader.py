@@ -1459,3 +1459,53 @@ def skip_first_batches(dataloader, num_batches=0):
         dataloader = MpDeviceLoaderWrapper(dataloader, device)
 
     return dataloader
+
+
+class DispatchDataLoader:
+    """
+    A lightweight wrapper that makes any Python iterable compatible with `Accelerator.prepare()`.
+
+    Useful when you have a custom iterable object that yields batches and you want to use it with
+    the Accelerator without converting it to a `torch.utils.data.DataLoader`. Register the custom
+    class via `DataLoaderConfiguration(custom_classes=(MyClass,))` so that `Accelerator.prepare()`
+    recognises it and wraps it automatically.
+
+    The wrapped iterable is responsible for any distributed sharding — `DispatchDataLoader` only
+    handles device placement of the yielded batches.
+
+    Args:
+        dataloader (`Iterable`):
+            Any iterable that yields batches (dicts, tensors, or nested structures thereof).
+
+    Example:
+
+    ```python
+    import torch
+    from accelerate import Accelerator
+    from accelerate.utils import DataLoaderConfiguration
+
+    class MyDataSource:
+        def __iter__(self):
+            for i in range(10):
+                yield {"input_ids": torch.tensor([i])}
+
+    dataloader_config = DataLoaderConfiguration(custom_classes=(MyDataSource,))
+    accelerator = Accelerator(dataloader_config=dataloader_config)
+    loader = accelerator.prepare(MyDataSource())
+    for batch in loader:
+        ...  # batch tensors are on accelerator.device
+    ```
+    """
+
+    def __init__(self, dataloader):
+        self.dataloader = dataloader
+        self._device = None
+
+    def __iter__(self):
+        for batch in self.dataloader:
+            if self._device is not None:
+                batch = send_to_device(batch, self._device)
+            yield batch
+
+    def __len__(self):
+        return len(self.dataloader)

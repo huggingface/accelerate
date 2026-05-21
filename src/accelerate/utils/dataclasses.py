@@ -851,6 +851,11 @@ class DataLoaderConfiguration:
             If set to `True`, the dataloader prepared by the Accelerator will be backed by
             [torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed.
+        custom_classes (`tuple` of types, defaults to `None`):
+            A tuple of custom class types that should be treated as iterable dataloaders when passed to
+            `Accelerator.prepare()`. Instances of these classes are wrapped in a `DispatchDataLoader` which
+            calls `__iter__` on the underlying object and handles automatic device placement. The classes must
+            be iterable (i.e. implement `__iter__`).
     """
 
     split_batches: bool = field(
@@ -907,6 +912,14 @@ class DataLoaderConfiguration:
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
+        },
+    )
+    custom_classes: Optional[tuple] = field(
+        default=None,
+        metadata={
+            "help": "A tuple of custom class types to treat as iterable dataloaders in `Accelerator.prepare()`. "
+            "Instances are wrapped in a `DispatchDataLoader` that calls `__iter__` on the object and handles "
+            "device placement. Each class must implement `__iter__`."
         },
     )
 
