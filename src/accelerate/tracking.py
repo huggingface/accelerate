@@ -795,16 +795,16 @@ class MLflowTracker(GeneralTracker):
         """
         import mlflow
 
-        for name, value in list(values.items()):
+        values_list = []
+        for name, value in values.items():
             # internally, all values are converted to str in MLflow
             if len(str(value)) > mlflow.utils.validation.MAX_PARAM_VAL_LENGTH:
                 logger.warning_once(
                     f'Accelerate is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
                     f" log_param() only accepts values no longer than {mlflow.utils.validation.MAX_PARAM_VAL_LENGTH} characters so we dropped this attribute."
                 )
-                del values[name]
-
-        values_list = list(values.items())
+            else:
+                values_list.append((name, value))
 
         # MLflow cannot log more than 100 values in one go, so we have to split it
         for i in range(0, len(values_list), mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH):
