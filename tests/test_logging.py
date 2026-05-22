@@ -71,6 +71,23 @@ def test_log_stack(caplog):
 
 
 @pytest.mark.usefixtures("accelerator")
+def test_warning_once_handles_unhashable_kwargs(caplog):
+    # The previous lru_cache-based implementation raised
+    # `TypeError: unhashable type: 'dict'` whenever the caller passed a
+    # standard logging kwarg like `extra={...}`, because lru_cache hashes
+    # every keyword argument.
+    logger = get_logger(__name__)
+    with caplog.at_level(logging.WARNING):
+        logger.warning_once("only once", extra={"id": 1})
+        logger.warning_once("only once", extra={"id": 2})
+        logger.warning_once("a different message", extra={"id": 3})
+
+    messages = [r.message for r in caplog.records]
+    assert sum(m.endswith("only once") for m in messages) == 1
+    assert sum(m.endswith("a different message") for m in messages) == 1
+
+
+@pytest.mark.usefixtures("accelerator")
 def test_custom_stacklevel(caplog):
     wrapped_logger = get_logger(__name__)
     logging.basicConfig(
