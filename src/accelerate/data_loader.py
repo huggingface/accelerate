@@ -1507,5 +1507,11 @@ class DispatchDataLoader:
                 batch = send_to_device(batch, self._device)
             yield batch
 
+    def __getattr__(self, name):
+        try:
+            return getattr(object.__getattribute__(self, "dataloader"), name)
+        except AttributeError:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
     def __len__(self):
         return len(self.dataloader)

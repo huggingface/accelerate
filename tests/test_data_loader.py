@@ -1042,3 +1042,28 @@ class DispatchDataLoaderTester(AccelerateTestCase):
         for source in [SourceA(), SourceB()]:
             result = accelerator._prepare_one(source, first_pass=True, device_placement=False)
             assert isinstance(result, DispatchDataLoader)
+
+    def test_dispatch_dataloader_getattr_delegates(self):
+        """__getattr__ forwards attribute access to the wrapped object."""
+
+        class SourceWithMeta:
+            batch_size = 16
+            dataset_name = "my_dataset"
+
+            def __iter__(self):
+                return iter([])
+
+        loader = DispatchDataLoader(SourceWithMeta())
+        assert loader.batch_size == 16
+        assert loader.dataset_name == "my_dataset"
+
+    def test_dispatch_dataloader_getattr_missing_raises(self):
+        """__getattr__ raises AttributeError for attributes that don't exist."""
+
+        class SimpleSource:
+            def __iter__(self):
+                return iter([])
+
+        loader = DispatchDataLoader(SimpleSource())
+        with pytest.raises(AttributeError):
+            _ = loader.nonexistent_attr
