@@ -476,10 +476,7 @@ class PartialState:
 
         def _split_values(inputs, start_index, end_index):
             if isinstance(inputs, (list, tuple, torch.Tensor)):
-                if start_index >= len(inputs):
-                    result = inputs[-1:]
-                else:
-                    result = inputs[start_index:end_index]
+                result = inputs[start_index:end_index]
                 if apply_padding:
                     if isinstance(result, torch.Tensor):
                         from accelerate.utils import pad_across_processes, send_to_device
@@ -488,7 +485,7 @@ class PartialState:
                         tensorized_result = send_to_device(result, self.device)
                         result = pad_across_processes(tensorized_result, pad_index=inputs[-1])
                     else:
-                        result += [result[-1]] * (num_samples_per_process + (1 if num_extras > 0 else 0) - len(result))
+                        result += [inputs[-1]] * (num_samples_per_process + (1 if num_extras > 0 else 0) - len(result))
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
@@ -499,13 +496,11 @@ class PartialState:
                     from datasets import Dataset
 
                     if isinstance(inputs, Dataset):
-                        if start_index >= len(inputs):
-                            start_index = len(inputs) - 1
-                        if end_index > len(inputs):
-                            end_index = len(inputs)
-                        result_idcs = list(range(start_index, end_index))
+                        clamped_start = min(start_index, len(inputs))
+                        clamped_end   = min(end_index,   len(inputs))
+                        result_idcs = list(range(clamped_start, clamped_end))
                         if apply_padding:
-                            result_idcs += [end_index - 1] * (
+                            result_idcs += [len(inputs) - 1] * (
                                 num_samples_per_process + (1 if num_extras > 0 else 0) - len(result_idcs)
                             )
                         return inputs.select(result_idcs)
