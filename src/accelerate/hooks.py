@@ -436,9 +436,7 @@ class AlignDevicesHook(ModelHook):
                 if device != torch.device("meta"):
                     value = self.weights_map.get(name, None)
                     fp16_statistics = self._maybe_get_fp16_statistics(name, value)
-                    set_module_tensor_to_device(
-                        module, name, device, value=value, fp16_statistics=fp16_statistics
-                    )
+                    set_module_tensor_to_device(module, name, device, value=value, fp16_statistics=fp16_statistics)
         return module
 
 
