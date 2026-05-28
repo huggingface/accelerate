@@ -342,7 +342,7 @@ class AlignDevicesHook(ModelHook):
 
         return module
 
-    def _get_fp16_statistics(self, name, value):
+    def _maybe_get_fp16_statistics(self, name, value):
         # Some quantized weights keep scale statistics as separate state-dict entries rather than
         # parameters or buffers. When materializing an int8 weight from `weights_map`, pass those
         # statistics along so the restored parameter does not keep stale meta-device attributes.
@@ -369,7 +369,7 @@ class AlignDevicesHook(ModelHook):
                 remove_non_persistent=True,
             ):
                 value = self.weights_map[name]
-                fp16_statistics = self._get_fp16_statistics(name, value)
+                fp16_statistics = self._maybe_get_fp16_statistics(name, value)
 
                 # In case we are using offloading with tied weights, we need to keep track of the offloaded weights
                 # that are loaded on device at this point, as we will need to remove them as well from the dictionary
@@ -435,7 +435,7 @@ class AlignDevicesHook(ModelHook):
             for name, device in self.original_devices.items():
                 if device != torch.device("meta"):
                     value = self.weights_map.get(name, None)
-                    fp16_statistics = self._get_fp16_statistics(name, value)
+                    fp16_statistics = self._maybe_get_fp16_statistics(name, value)
                     set_module_tensor_to_device(
                         module, name, device, value=value, fp16_statistics=fp16_statistics
                     )
