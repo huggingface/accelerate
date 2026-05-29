@@ -140,14 +140,11 @@ def get_current_device_type() -> tuple[str, str]:
         return "npu", "MULTI_NPU"
     elif is_hpu_available():
         return "hpu", "MULTI_HPU"
-    elif torch.cuda.is_available():
-        return "cuda", "MULTI_GPU"
     elif is_xpu_available():
         return "xpu", "MULTI_XPU"
     elif is_neuron_available():
         return "neuron", "MULTI_NEURON"
     else:
-        # Default to CUDA even if not available (for CPU-only scenarios where CUDA code paths are still used)
         return "cuda", "MULTI_GPU"
 
 
