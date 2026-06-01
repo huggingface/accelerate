@@ -42,7 +42,7 @@ from .optimizer import AcceleratedOptimizer
 from .parallelism_config import ParallelismConfig
 from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, GradientState, PartialState
-from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
+from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers, register_tracker_class
 from .utils import (
     MODEL_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -3318,6 +3318,37 @@ class Accelerator:
         if config is not None:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
+
+    @staticmethod
+    def register_tracker_class(tracker_cls):
+        """
+        Register a custom tracker class so it can be used by name in `log_with` and `init_trackers`, just like
+        built-in trackers.
+
+        The class must be a subclass of [`~tracking.GeneralTracker`] and define a `name` class attribute.
+
+        Args:
+            tracker_cls (`type`):
+                A subclass of `GeneralTracker` with a `name` attribute.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+        >>> from accelerate.tracking import GeneralTracker
+
+        >>> class MyTracker(GeneralTracker):
+        ...     name = "my_tracker"
+        ...     requires_logging_directory = False
+        ...     @property
+        ...     def tracker(self):
+        ...         return None
+
+        >>> Accelerator.register_tracker_class(MyTracker)
+        >>> accelerator = Accelerator(log_with="my_tracker")
+        ```
+        """
+        register_tracker_class(tracker_cls)
 
     def get_tracker(self, name: str, unwrap: bool = False):
         """

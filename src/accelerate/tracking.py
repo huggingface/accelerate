@@ -1259,6 +1259,48 @@ LOGGER_TYPE_TO_CLASS = {
 }
 
 
+def register_tracker_class(tracker_cls):
+    """
+    Register a custom tracker class so it can be used by name in `Accelerator(log_with=...)` and
+    `Accelerator.init_trackers(...)`, just like built-in trackers.
+
+    The class must be a subclass of [`~tracking.GeneralTracker`] and define a `name` class attribute. Its `__init__`
+    must accept `run_name` as the first positional argument (the project name passed to `init_trackers`), plus any
+    additional keyword arguments supplied via `init_kwargs`.
+
+    Registration is global: once registered, the tracker is available to all `Accelerator` instances.
+
+    Args:
+        tracker_cls (`type`):
+            A subclass of `GeneralTracker` with a `name` attribute.
+
+    Example:
+
+    ```python
+    >>> from accelerate.tracking import GeneralTracker, register_tracker_class
+
+    >>> class MyTracker(GeneralTracker):
+    ...     name = "my_tracker"
+    ...     requires_logging_directory = False
+    ...     @property
+    ...     def tracker(self):
+    ...         return None
+
+    >>> register_tracker_class(MyTracker)
+    ```
+    """
+    if not (isinstance(tracker_cls, type) and issubclass(tracker_cls, GeneralTracker)):
+        raise TypeError(f"`tracker_cls` must be a subclass of `GeneralTracker`, got {tracker_cls}.")
+    name = getattr(tracker_cls, "name", None)
+    if not name or not isinstance(name, str):
+        raise ValueError(
+            f"The tracker class must define a `name` class attribute as a non-empty string, got {name!r}."
+        )
+    if name in LOGGER_TYPE_TO_CLASS:
+        logger.warning(f"Overwriting existing tracker class for '{name}'.")
+    LOGGER_TYPE_TO_CLASS[name] = tracker_cls
+
+
 def filter_trackers(
     log_with: list[Union[str, LoggerType, GeneralTracker]],
     logging_dir: Optional[Union[str, os.PathLike]] = None,
@@ -1285,6 +1327,7 @@ def filter_trackers(
             - `"swanlab"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
+            Custom tracker classes registered via `register_tracker_class` can also be referenced by their string name.
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
     """
@@ -1294,13 +1337,16 @@ def filter_trackers(
             log_with = [log_with]
         if "all" in log_with or LoggerType.ALL in log_with:
             loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
+            # Include custom-registered trackers not in the built-in LoggerType enum
+            existing = {str(t) for t in loggers}
+            for name in LOGGER_TYPE_TO_CLASS:
+                if name not in existing and name not in LoggerType:
+                    loggers.append(name)
         else:
             for log_type in log_with:
-                if log_type not in LoggerType and not issubclass(type(log_type), GeneralTracker):
-                    raise ValueError(f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}")
                 if issubclass(type(log_type), GeneralTracker):
                     loggers.append(log_type)
-                else:
+                elif log_type in LoggerType:
                     log_type = LoggerType(log_type)
                     if log_type not in loggers:
                         if log_type in get_available_trackers():
@@ -1313,5 +1359,16 @@ def filter_trackers(
                             loggers.append(log_type)
                         else:
                             logger.debug(f"Tried adding logger {log_type}, but package is unavailable in the system.")
+                elif isinstance(log_type, str) and log_type in LOGGER_TYPE_TO_CLASS:
+                    if log_type not in loggers:
+                        tracker_init = LOGGER_TYPE_TO_CLASS[log_type]
+                        if getattr(tracker_init, "requires_logging_directory", False) and logging_dir is None:
+                            raise ValueError(f"Logging with `{log_type}` requires a `logging_dir` to be passed in.")
+                        loggers.append(log_type)
+                else:
+                    raise ValueError(
+                        f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}"
+                        " or register a custom tracker with `register_tracker_class()`."
+                    )
 
     return loggers

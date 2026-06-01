@@ -28,6 +28,7 @@ from .inference import prepare_pippy
 from .launchers import debug_launcher, notebook_launcher
 from .parallelism_config import ParallelismConfig
 from .state import PartialState
+from .tracking import register_tracker_class
 from .utils import (
     AutocastKwargs,
     DataLoaderConfiguration,

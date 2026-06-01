@@ -60,6 +60,7 @@ from accelerate.tracking import (
     TensorBoardTracker,
     TrackioTracker,
     WandBTracker,
+    register_tracker_class,
 )
 from accelerate.utils import (
     ProjectConfiguration,
@@ -729,6 +730,144 @@ class CustomTrackerTestCase(unittest.TestCase):
                     "some_string": "",
                 }
                 assert data == truth
+
+
+class RegisterTrackerClassTestCase(unittest.TestCase):
+    def setUp(self):
+        from accelerate.tracking import LOGGER_TYPE_TO_CLASS
+
+        self._original_registry = dict(LOGGER_TYPE_TO_CLASS)
+
+    def tearDown(self):
+        from accelerate.tracking import LOGGER_TYPE_TO_CLASS
+
+        LOGGER_TYPE_TO_CLASS.clear()
+        LOGGER_TYPE_TO_CLASS.update(self._original_registry)
+
+    def _make_simple_tracker(self, name):
+        """Helper to create a minimal tracker class with the given name."""
+
+        class _Tracker(GeneralTracker):
+            requires_logging_directory = False
+
+            def __init__(self, run_name=None, **kwargs):
+                super().__init__()
+                self.run_name = run_name
+                self._config = {}
+                self._logs = []
+
+            @property
+            def tracker(self):
+                return self
+
+            def store_init_configuration(self, values: dict):
+                self._config = values
+
+            def log(self, values: dict, step=None, **kwargs):
+                self._logs.append(values)
+
+        _Tracker.name = name
+        return _Tracker
+
+    def test_register_and_use_by_name(self):
+        """Test that a registered custom tracker can be referenced by its string name."""
+        tracker_cls = self._make_simple_tracker("name_registered_tracker")
+        register_tracker_class(tracker_cls)
+        accelerator = Accelerator(log_with="name_registered_tracker")
+        config = {"learning_rate": 1e-2, "num_iterations": 12}
+        accelerator.init_trackers("test_project", config)
+        accelerator.log({"loss": 0.5}, step=0)
+        accelerator.end_training()
+        tracker = accelerator.get_tracker("name_registered_tracker")
+        assert tracker._config == config
+        assert tracker._logs == [{"loss": 0.5}]
+
+    def test_register_rejects_non_subclass(self):
+        """Test that register_tracker_class rejects objects that aren't GeneralTracker subclasses."""
+        with self.assertRaises(TypeError):
+            register_tracker_class("not a class")
+
+    def test_register_rejects_missing_name(self):
+        """Test that register_tracker_class rejects tracker classes without a name attribute."""
+
+        class NoNameTracker(GeneralTracker):
+            requires_logging_directory = False
+
+            @property
+            def tracker(self):
+                return None
+
+        with self.assertRaises(ValueError):
+            register_tracker_class(NoNameTracker)
+
+    def test_register_via_accelerator_static_method(self):
+        """Test that Accelerator.register_tracker_class works as a static method."""
+        tracker_cls = self._make_simple_tracker("static_method_tracker")
+        Accelerator.register_tracker_class(tracker_cls)
+        from accelerate.tracking import LOGGER_TYPE_TO_CLASS
+
+        assert "static_method_tracker" in LOGGER_TYPE_TO_CLASS
+
+    def test_register_overwrites_existing(self):
+        """Test that re-registering a tracker with the same name overwrites the previous one."""
+        first_cls = self._make_simple_tracker("overwrite_tracker")
+        second_cls = self._make_simple_tracker("overwrite_tracker")
+        register_tracker_class(first_cls)
+        register_tracker_class(second_cls)
+        from accelerate.tracking import LOGGER_TYPE_TO_CLASS
+
+        assert LOGGER_TYPE_TO_CLASS["overwrite_tracker"] is second_cls
+
+    def test_requires_logging_directory(self):
+        """Test that a custom tracker with requires_logging_directory=True raises without logging_dir."""
+
+        class DirRequiredTracker(GeneralTracker):
+            name = "dir_required_tracker"
+            requires_logging_directory = True
+
+            def __init__(self, run_name=None, logging_dir=None, **kwargs):
+                super().__init__()
+
+            @property
+            def tracker(self):
+                return None
+
+        register_tracker_class(DirRequiredTracker)
+        with self.assertRaises(ValueError, msg="should require logging_dir"):
+            Accelerator(log_with="dir_required_tracker")
+
+    def test_init_kwargs_passed_to_custom_tracker(self):
+        """Test that init_kwargs are forwarded to the custom tracker constructor."""
+
+        class KwargsTracker(GeneralTracker):
+            name = "kwargs_tracker"
+            requires_logging_directory = False
+
+            def __init__(self, run_name=None, **kwargs):
+                super().__init__()
+                self.run_name = run_name
+                self.extra = kwargs
+
+            @property
+            def tracker(self):
+                return self
+
+        register_tracker_class(KwargsTracker)
+        accelerator = Accelerator(log_with="kwargs_tracker")
+        accelerator.init_trackers("test_project", init_kwargs={"kwargs_tracker": {"custom_key": 42}})
+        tracker = accelerator.get_tracker("kwargs_tracker")
+        assert tracker.extra == {"custom_key": 42}
+        accelerator.end_training()
+
+    def test_filter_trackers_all_includes_custom(self):
+        """Test that log_with='all' includes custom-registered trackers."""
+        from accelerate.tracking import filter_trackers
+
+        tracker_cls = self._make_simple_tracker("all_test_tracker")
+        register_tracker_class(tracker_cls)
+        result = filter_trackers(["all"])
+        result_names = [str(t) for t in result]
+        assert "all_test_tracker" in result_names
 
 
 @require_dvclive
