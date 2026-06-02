@@ -247,11 +247,11 @@ def notebook_launcher(
                     )
                     if is_torch_version(">=", ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION):
                         launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template
-                    # torch >=2.10 LaunchConfig.__post_init__ calls torch.cuda.is_available()
-                    # / device_count() for NUMA auto-detect, tainting forked children with
-                    # _is_in_bad_fork. Short-circuit by passing non-None numa_options, then
-                    # reset to None to skip actual binding.
-                    has_numa_options = is_torch_version(">=", "2.10")
+                    # On torch versions that ship torch.numa, LaunchConfig.__post_init__
+                    # calls torch.cuda.is_available() / device_count() for NUMA auto-detect,
+                    # tainting forked children with _is_in_bad_fork. Short-circuit by passing
+                    # non-None numa_options, then reset to None to skip actual binding.
+                    has_numa_options = hasattr(torch, "numa")
                     if has_numa_options:
                         from torch.numa.binding import AffinityMode, NumaOptions
 
