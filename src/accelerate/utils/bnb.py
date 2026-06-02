@@ -132,8 +132,11 @@ def load_and_quantize_model(
         )
         model = replace_with_bnb_layers(model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert)
         # convert param to the right dtype
+        # remove_duplicate=False so tied params (e.g. BLOOM's lm_head.weight tied to
+        # word_embeddings.weight) are visited under every alias — the keep_in_fp32 cast
+        # would otherwise be skipped if the tied alias came first under a different name.
         dtype = bnb_quantization_config.torch_dtype
-        for name, param in model.named_parameters():
+        for name, param in model.named_parameters(remove_duplicate=False):
             if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
                 param.data = param.data.to(torch.float32)
             elif torch.is_floating_point(param):

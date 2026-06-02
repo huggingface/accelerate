@@ -283,6 +283,21 @@ def get_cpu_distributed_information() -> CPUInformation:
     return CPUInformation(**information)
 
 
+def _parse_cpu_list(cpu_list_str: str) -> list[int]:
+    """Parse a Linux sysfs-style CPU list (e.g. "0-7,16-23") into a list of ints."""
+    cpus = []
+    for part in cpu_list_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start, end = part.split("-")
+            cpus.extend(range(int(start), int(end) + 1))
+        else:
+            cpus.append(int(part))
+    return cpus
+
+
 def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = None) -> None:
     """
     Overrides whatever NUMA affinity is set for the current process. This is very taxing and requires recalculating the
@@ -297,25 +312,51 @@ def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = N
     if verbose is None:
         verbose = parse_flag_from_env("ACCELERATE_DEBUG_MODE", False)
     if torch.cuda.is_available():
-        from accelerate.utils import is_pynvml_available
+        from accelerate.utils import is_amdsmi_available, is_pynvml_available, is_rocm_available
 
-        if not is_pynvml_available():
-            raise ImportError(
-                "To set CPU affinity on CUDA GPUs the `nvidia-ml-py` package must be available. (`pip install nvidia-ml-py`)"
-            )
-        import pynvml as nvml
+        affinity_to_set = None
 
-        # The below code is based on https://github.com/NVIDIA/DeepLearningExamples/blob/master/TensorFlow2/LanguageModeling/BERT/gpu_affinity.py
-        nvml.nvmlInit()
-        num_elements = math.ceil(os.cpu_count() / 64)
-        handle = nvml.nvmlDeviceGetHandleByIndex(local_process_index)
-        affinity_string = ""
-        for j in nvml.nvmlDeviceGetCpuAffinity(handle, num_elements):
-            # assume nvml returns list of 64 bit ints
-            affinity_string = f"{j:064b}{affinity_string}"
-        affinity_list = [int(x) for x in affinity_string]
-        affinity_list.reverse()  # so core 0 is the 0th element
-        affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
+        if is_rocm_available():
+            if not is_amdsmi_available():
+                raise ImportError(
+                    "To set CPU affinity on ROCm GPUs the `amdsmi` package must be available. "
+                    "It ships with ROCm; ensure the ROCm Python bindings are on PYTHONPATH."
+                )
+            import amdsmi
+
+            amdsmi.amdsmi_init()
+            try:
+                handles = amdsmi.amdsmi_get_processor_handles()
+                handle = handles[local_process_index]
+                numa_node = amdsmi.amdsmi_topo_get_numa_node_number(handle)
+                if numa_node is None or numa_node < 0:
+                    # GPU is not bound to a NUMA node; fall back to all online CPUs
+                    affinity_to_set = list(os.sched_getaffinity(0))
+                else:
+                    with open(f"/sys/devices/system/node/node{numa_node}/cpulist") as f:
+                        cpu_list_str = f.read().strip()
+                    affinity_to_set = _parse_cpu_list(cpu_list_str)
+            finally:
+                amdsmi.amdsmi_shut_down()
+        else:
+            if not is_pynvml_available():
+                raise ImportError(
+                    "To set CPU affinity on CUDA GPUs the `nvidia-ml-py` package must be available. (`pip install nvidia-ml-py`)"
+                )
+            import pynvml as nvml
+
+            # The below code is based on https://github.com/NVIDIA/DeepLearningExamples/blob/master/TensorFlow2/LanguageModeling/BERT/gpu_affinity.py
+            nvml.nvmlInit()
+            num_elements = math.ceil(os.cpu_count() / 64)
+            handle = nvml.nvmlDeviceGetHandleByIndex(local_process_index)
+            affinity_string = ""
+            for j in nvml.nvmlDeviceGetCpuAffinity(handle, num_elements):
+                # assume nvml returns list of 64 bit ints
+                affinity_string = f"{j:064b}{affinity_string}"
+            affinity_list = [int(x) for x in affinity_string]
+            affinity_list.reverse()  # so core 0 is the 0th element
+            affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
+
         os.sched_setaffinity(0, affinity_to_set)
         if verbose:
             cpu_cores = os.sched_getaffinity(0)
