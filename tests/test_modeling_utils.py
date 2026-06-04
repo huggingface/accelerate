@@ -41,6 +41,7 @@ from accelerate.utils.modeling import (
     compute_module_sizes,
     compute_module_total_buffer_size,
     convert_file_size_to_int,
+    dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
     get_module_size_with_ties,
@@ -110,6 +111,25 @@ def sequential_model(num_layers):
 
 
 class ModelingUtilsTester(unittest.TestCase):
+    def test_dtype_byte_size(self):
+        self.assertEqual(dtype_byte_size(torch.bool), 1 / 8)
+        self.assertEqual(dtype_byte_size(torch.float16), 2)
+        self.assertEqual(dtype_byte_size(torch.bfloat16), 2)
+        self.assertEqual(dtype_byte_size(torch.float32), 4)
+        self.assertEqual(dtype_byte_size(torch.float64), 8)
+        # All 1-byte FP8 dtypes available in this torch should report 1 byte.
+        # Previously only e4m3fn/e5m2 were handled; the *fnuz and e8m0fnu
+        # variants fell through to a regex with no trailing digit and raised.
+        for name in (
+            "float8_e4m3fn",
+            "float8_e5m2",
+            "float8_e4m3fnuz",
+            "float8_e5m2fnuz",
+            "float8_e8m0fnu",
+        ):
+            if hasattr(torch, name):
+                self.assertEqual(dtype_byte_size(getattr(torch, name)), 1, msg=name)
+
     def check_set_module_tensor_for_device(self, model, device1, device2):
         assert model.linear1.weight.device == torch.device(device1)
 
