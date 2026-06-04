@@ -248,7 +248,7 @@ class ParallelismConfig:
             if device_type is not None:
                 self.device_mesh = self.build_device_mesh(device_type)
             else:
-                raise ("You need to pass a device_type e.g cuda to build the device mesh")
+                raise ValueError("You need to pass a device_type e.g cuda to build the device mesh")
         else:
             if device_type is not None:
                 if self.device_mesh.device_type != device_type:
