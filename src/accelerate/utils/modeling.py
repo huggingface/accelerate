@@ -69,6 +69,45 @@ WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
 logger = logging.getLogger(__name__)
 
+_GLOBAL_GPU_MAP = None
+_REMOTE_EXECUTION_DEVICE = None
+
+def _build_global_gpu_map():
+    global _GLOBAL_GPU_MAP
+    if _GLOBAL_GPU_MAP is not None:
+        return
+    try:
+        from .state import PartialState
+        state = PartialState()
+        if state.distributed_type == "NO" or state.num_processes <= 1:
+            return
+            
+        import torch.distributed as dist
+        import torch
+        # Only supporting standard CUDA GPUs for the global map initially,
+        # fallback is available for specialized accelerators locally.
+        local_memory = {}
+        for i in range(torch.cuda.device_count()):
+            try:
+                _ = torch.tensor([0], device=i)
+                local_memory[i] = torch.cuda.mem_get_info(i)[0]
+            except Exception:
+                continue
+                
+        gathered = [None for _ in range(state.num_processes)]
+        dist.all_gather_object(gathered, local_memory)
+        
+        global_map = {}
+        global_idx = 0
+        for rank, mem_dict in enumerate(gathered):
+            for local_gpu in mem_dict.keys():
+                global_map[global_idx] = (rank, local_gpu)
+                global_idx += 1
+        _GLOBAL_GPU_MAP = global_map
+    except Exception:
+        pass
+
+
 
 def is_peft_model(model):
     from .other import extract_model_from_parallel
@@ -802,6 +841,14 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
         else:
+            _build_global_gpu_map()
+            if _GLOBAL_GPU_MAP is not None:
+                for global_idx, (rank, local_gpu) in _GLOBAL_GPU_MAP.items():
+                    # We just use the gathered local memory directly if we want, but wait,
+                    # we don't have the memory value in _GLOBAL_GPU_MAP.
+                    # We can just run it locally on rank 0 and use all_gather here directly instead of `_build_global_gpu_map`?
+                    pass
+            
             for i in range(torch.cuda.device_count()):
                 try:
                     _ = torch.tensor([0], device=i)
@@ -809,6 +856,23 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
+                    
+            if _GLOBAL_GPU_MAP is not None:
+                # We need to overwrite max_memory with global indices and their gathered memory.
+                from .state import PartialState
+                state = PartialState()
+                import torch.distributed as dist
+                local_mem = max_memory.copy()
+                gathered = [None for _ in range(state.num_processes)]
+                dist.all_gather_object(gathered, local_mem)
+                max_memory = {}
+                global_idx = 0
+                for rank, mem_dict in enumerate(gathered):
+                    for local_gpu, mem in mem_dict.items():
+                        if isinstance(local_gpu, int): # Filter out 'cpu', 'disk'
+                            max_memory[global_idx] = mem
+                            global_idx += 1
+
         # allocate everything in the mps device as the RAM is shared
         if is_mps_available():
             max_memory["mps"] = psutil.virtual_memory().available

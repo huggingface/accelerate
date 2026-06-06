@@ -57,6 +57,19 @@ from .utils.other import recursive_getattr
 
 logger = logging.getLogger(__name__)
 
+_GLOBAL_MODEL = None
+
+def _remote_forward(module_name, args, kwargs):
+    global _GLOBAL_MODEL
+    if _GLOBAL_MODEL is None:
+        raise RuntimeError("Model not initialized on remote worker")
+    if module_name == "":
+        submodule = _GLOBAL_MODEL
+    else:
+        submodule = _GLOBAL_MODEL.get_submodule(module_name)
+    return submodule(*args, **kwargs)
+
+
 
 @contextmanager
 def init_empty_weights(include_buffers: Optional[bool] = None):
@@ -514,8 +527,50 @@ def dispatch_model(
             raise ValueError(
                 "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
             )
+            
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
+
+    # Multi-node RPCHook logic
+    import accelerate.utils.modeling as mod
+    remote_execution_device = getattr(mod, "_REMOTE_EXECUTION_DEVICE", {})
+    if len(remote_execution_device) > 0 or getattr(mod, "_GLOBAL_GPU_MAP", None) is not None:
+        import torch.distributed.rpc as rpc
+        from accelerate.state import PartialState
+        state = PartialState()
+        if not rpc._is_current_rpc_agent_set():
+            os.environ["MASTER_ADDR"] = os.environ.get("MASTER_ADDR", "localhost")
+            os.environ["MASTER_PORT"] = os.environ.get("MASTER_PORT", "29500")
+            rpc.init_rpc(f"worker{state.process_index}", rank=state.process_index, world_size=state.num_processes)
+            import atexit
+            atexit.register(lambda: rpc.shutdown() if rpc._is_current_rpc_agent_set() else None)
+        
+        global _GLOBAL_MODEL
+        _GLOBAL_MODEL = model
+        
+        from .hooks import remove_hook_from_module
+        for name, rank in remote_execution_device.items():
+            if name == "":
+                submodule = model
+            else:
+                submodule = model.get_submodule(name)
+            
+            def make_rpc_forward(target_rank, m_name):
+                def rpc_forward(*args, **kwargs):
+                    return rpc.rpc_sync(f"worker{target_rank}", _remote_forward, args=(m_name, args, kwargs))
+                return rpc_forward
+            
+            submodule.forward = make_rpc_forward(rank, name)
+            remove_hook_from_module(submodule)
+            
+        if state.process_index > 0:
+            import torch
+            def skip_forward(*args, **kwargs):
+                return torch.tensor([])
+            model.forward = skip_forward
+            if hasattr(model, "generate"):
+                model.generate = skip_forward
+
     return model
 
 
@@ -633,6 +688,29 @@ def load_checkpoint_and_dispatch(
             dtype=dtype,
             offload_buffers=offload_buffers,
         )
+        
+    # Rewrite device_map to handle Multi-Node RPCHook
+    import accelerate.utils.modeling as mod
+    if isinstance(device_map, dict):
+        mod._build_global_gpu_map()
+        if getattr(mod, "_GLOBAL_GPU_MAP", None) is not None:
+            from accelerate.state import PartialState
+            state = PartialState()
+            new_device_map = {}
+            remote_execution_device = {}
+            for name, device in device_map.items():
+                if isinstance(device, int) and device in mod._GLOBAL_GPU_MAP:
+                    rank, local_gpu = mod._GLOBAL_GPU_MAP[device]
+                    if rank == state.process_index:
+                        new_device_map[name] = local_gpu
+                    else:
+                        new_device_map[name] = "meta"
+                        remote_execution_device[name] = rank
+                else:
+                    new_device_map[name] = device
+            device_map = new_device_map
+            mod._REMOTE_EXECUTION_DEVICE = remote_execution_device
+
     if offload_state_dict is None and device_map is not None and "disk" in device_map.values():
         offload_state_dict = True
     load_checkpoint_in_model(
