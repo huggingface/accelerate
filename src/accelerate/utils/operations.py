@@ -142,6 +142,12 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             The data to send to a given device.
         device (`torch.device`):
             The device to send the data to.
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            If `True`, the transfer to the device is performed asynchronously, which can overlap
+            data movement with computation. Only effective when the device supports it (e.g. CUDA).
+        skip_keys (`str` or `List[str]`, *optional*):
+            A key or list of keys in a dictionary `tensor` whose values should not be sent to
+            the given `device`. Entries with these keys are left on their original device.
 
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.

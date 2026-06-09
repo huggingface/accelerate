@@ -204,6 +204,8 @@ def load_accelerator_state(
             A list of optimizer instances
         schedulers (`List[torch.optim.lr_scheduler._LRScheduler]`):
             A list of learning rate schedulers
+        dataloaders (`List[torch.utils.data.DataLoader]`):
+            A list of dataloader instances used in your program
         process_index (`int`):
             The current process index in the Accelerator state
         scaler (`torch.amp.GradScaler`, *optional*):
