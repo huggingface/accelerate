@@ -50,24 +50,46 @@ def bipolar_sleep_function(sleep_sec: int):
         time.sleep(sleep_sec)
 
 
+def assert_clean_cuda_fork_function():
+    # Regression guard: notebook_launcher must not load the CUDA driver in the
+    # parent before forking children. If it does, _is_in_bad_fork is set in each
+    # forked child and any later CUDA call (e.g. Accelerator() -> set_device)
+    # fails with "Cannot re-initialize CUDA in forked subprocess".
+    import torch
+
+    if torch.cuda.is_available():
+        assert not torch._C._cuda_isInBadFork(), (
+            "Child process started in bad-fork state — notebook_launcher tainted "
+            "the parent's CUDA driver before forking."
+        )
+
+
 NUM_PROCESSES = int(os.environ.get("ACCELERATE_NUM_PROCESSES", 1))
+require_multi_process = mark.skipif(NUM_PROCESSES < 2, reason="Need at least 2 processes")
 
 
 def test_can_initialize():
     notebook_launcher(basic_function, (), num_processes=NUM_PROCESSES)
 
 
-@mark.skipif(NUM_PROCESSES < 2, reason="Need at least 2 processes to test static rendezvous backends")
+@require_multi_process
+def test_clean_cuda_fork():
+    # Regression test for the CUDA-driver-loaded-in-parent bug that broke
+    # notebook_launcher on accelerate >=1.9 and torch >=2.10 (see issue #3925).
+    notebook_launcher(assert_clean_cuda_fork_function, (), num_processes=NUM_PROCESSES)
+
+
+@require_multi_process
 def test_static_rdzv_backend():
     notebook_launcher(basic_function, (), num_processes=NUM_PROCESSES, rdzv_backend="static")
 
 
-@mark.skipif(NUM_PROCESSES < 2, reason="Need at least 2 processes to test c10d rendezvous backends")
+@require_multi_process
 def test_c10d_rdzv_backend():
     notebook_launcher(basic_function, (), num_processes=NUM_PROCESSES, rdzv_backend="c10d")
 
 
-@mark.skipif(NUM_PROCESSES < 2, reason="Need at least 2 processes to test fault tolerance")
+@require_multi_process
 def test_fault_tolerant(max_restarts: int = 3):
     # Use torch.multiprocessing to get the right context for the current device
     import torch.multiprocessing as mp
@@ -83,7 +105,7 @@ def test_fault_tolerant(max_restarts: int = 3):
     notebook_launcher(tough_nut_function, (queue,), num_processes=NUM_PROCESSES, max_restarts=max_restarts)
 
 
-@mark.skipif(NUM_PROCESSES < 2, reason="Need at least 2 processes to test monitoring")
+@require_multi_process
 def test_monitoring(monitor_interval: float = 0.01, sleep_sec: int = 100):
     start_time = time.time()
     with raises(ChildFailedError, match="I'm an even process. I don't like to sleep."):
@@ -107,6 +129,8 @@ def test_problematic_imports():
 def main():
     print("Test basic notebook can be ran")
     test_can_initialize()
+    print("Test clean CUDA fork (regression test for #3925)")
+    test_clean_cuda_fork()
     print("Test static rendezvous backend")
     test_static_rdzv_backend()
     print("Test c10d rendezvous backend")
