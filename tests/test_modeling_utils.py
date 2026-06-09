@@ -926,6 +926,7 @@ class ModelingUtilsTester(unittest.TestCase):
 
         # Also verify infer_auto_device_map handles set input
         from accelerate import infer_auto_device_map
+
         device_map = infer_auto_device_map(
             model,
             max_memory={0: 300, 1: 300},
