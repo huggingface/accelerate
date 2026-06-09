@@ -19,6 +19,10 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] tracking.GeneralTracker
 
+## register_tracker_class
+
+[[autodoc]] tracking.register_tracker_class
+
 ## TensorBoardTracker
 
 [[autodoc]] tracking.TensorBoardTracker

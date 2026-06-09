@@ -50,6 +50,7 @@ from accelerate.test_utils.testing import (
     skip,
 )
 from accelerate.tracking import (
+    LOGGER_TYPE_TO_CLASS,
     AimTracker,
     ClearMLTracker,
     CometMLTracker,
@@ -60,6 +61,8 @@ from accelerate.tracking import (
     TensorBoardTracker,
     TrackioTracker,
     WandBTracker,
+    filter_trackers,
+    register_tracker_class,
 )
 from accelerate.utils import (
     ProjectConfiguration,
@@ -804,6 +807,124 @@ class CustomTrackerTestCase(unittest.TestCase):
             values = {"total_loss": 0.1}
             # Passing log_kwargs=None must not raise AttributeError
             accelerator.log(values, step=0, log_kwargs=None)
+            accelerator.end_training()
+
+
+class MyRegisteredTracker(GeneralTracker):
+    "Minimal tracker following the built-in `(run_name, **kwargs)` convention, used to test class registration."
+
+    name = "my_registered_tracker"
+    requires_logging_directory = False
+
+    def __init__(self, run_name: str, **kwargs):
+        super().__init__()
+        self.run_name = run_name
+        self.config = {}
+        self.values = {}
+
+    @property
+    def tracker(self):
+        return self
+
+    def store_init_configuration(self, values: dict):
+        self.config.update(values)
+
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
+        self.values.update(values)
+
+
+class MyDirRegisteredTracker(GeneralTracker):
+    "Registered tracker that requires a logging directory, used to test the logging-directory path."
+
+    name = "my_dir_registered_tracker"
+    requires_logging_directory = True
+
+    def __init__(self, run_name: str, logging_dir: str, **kwargs):
+        super().__init__()
+        self.run_name = run_name
+        self.logging_dir = logging_dir
+
+    @property
+    def tracker(self):
+        return self
+
+
+class RegisterTrackerClassTest(unittest.TestCase):
+    def setUp(self):
+        self._registry_snapshot = dict(LOGGER_TYPE_TO_CLASS)
+        super().setUp()
+
+    def tearDown(self):
+        LOGGER_TYPE_TO_CLASS.clear()
+        LOGGER_TYPE_TO_CLASS.update(self._registry_snapshot)
+        super().tearDown()
+
+    def test_register_and_use_by_name(self):
+        register_tracker_class(MyRegisteredTracker)
+        assert MyRegisteredTracker.name in LOGGER_TYPE_TO_CLASS
+
+        accelerator = Accelerator(log_with=MyRegisteredTracker.name)
+        config = {"num_iterations": 12, "learning_rate": 1e-2}
+        accelerator.init_trackers("some_project", config)
+        accelerator.log({"total_loss": 0.1}, step=0)
+        tracker = accelerator.get_tracker(MyRegisteredTracker.name)
+        accelerator.end_training()
+
+        assert isinstance(tracker, MyRegisteredTracker)
+        assert tracker.config == config
+        assert tracker.values == {"total_loss": 0.1}
+
+    def test_register_with_all(self):
+        register_tracker_class(MyRegisteredTracker)
+        loggers = filter_trackers([MyRegisteredTracker.name, "all"])
+        assert MyRegisteredTracker.name in loggers
+
+        # A registered tracker that requires a logging directory still enforces it alongside "all".
+        register_tracker_class(MyDirRegisteredTracker)
+        with self.assertRaises(ValueError):
+            filter_trackers([MyDirRegisteredTracker.name, "all"])
+
+    def test_register_invalid_class_raises(self):
+        with self.assertRaises(ValueError):
+            register_tracker_class(dict)
+
+        class NamelessTracker(GeneralTracker):
+            requires_logging_directory = False
+
+        with self.assertRaises(ValueError):
+            register_tracker_class(NamelessTracker)
+
+        class NoFlagTracker(GeneralTracker):
+            name = "no_flag_tracker"
+
+        with self.assertRaises(ValueError):
+            register_tracker_class(NoFlagTracker)
+
+    def test_register_overwrite_warns(self):
+        register_tracker_class(MyRegisteredTracker)
+
+        class ShadowTracker(GeneralTracker):
+            name = MyRegisteredTracker.name
+            requires_logging_directory = False
+
+        with mock.patch("accelerate.tracking.logger") as mock_logger:
+            register_tracker_class(ShadowTracker)
+            mock_logger.warning.assert_called_once()
+            assert MyRegisteredTracker.name in mock_logger.warning.call_args[0][0]
+
+    def test_register_requires_logging_directory(self):
+        register_tracker_class(MyDirRegisteredTracker)
+
+        with self.assertRaises(ValueError):
+            Accelerator(log_with=MyDirRegisteredTracker.name)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            accelerator = Accelerator(log_with=MyDirRegisteredTracker.name, project_dir=tmpdir)
+            accelerator.init_trackers("dir_project")
+            tracker = accelerator.get_tracker(MyDirRegisteredTracker.name)
+            assert isinstance(tracker, MyDirRegisteredTracker)
+            assert tracker.run_name == "dir_project"
+            assert tracker.logging_dir == tmpdir
             accelerator.end_training()
 
 
