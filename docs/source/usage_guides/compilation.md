@@ -14,7 +14,7 @@ The first execution of compiled code typically takes longer as it includes the c
 
 ## Using `torch.compile` with Accelerate
 
-Accelerate provides `TorchDynamoPlugin` for easy and seemless integration of `torch.compile` into your training scripts.
+Accelerate provides `TorchDynamoPlugin` for easy and seamless integration of `torch.compile` into your training scripts.
 
 ```python
 from accelerate import Accelerator

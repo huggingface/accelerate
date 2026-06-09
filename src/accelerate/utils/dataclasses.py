@@ -1644,7 +1644,7 @@ class FullyShardedDataParallelPlugin:
             A technique to reduce memory usage by clearing activations of certain layers and recomputing them during a
             backward pass. Effectively, this trades extra computation time for reduced memory usage.
         cpu_ram_efficient_loading (`bool`, defaults to `None`):
-            If True, only the first process loads the pretrained model checkoint while all other processes have empty
+            If True, only the first process loads the pretrained model checkpoint while all other processes have empty
             weights. Only applicable for Transformers. When using this, `sync_module_states` needs to be `True`.
         transformer_cls_names_to_wrap (`Optional[List[str]]`, defaults to `None`):
             A list of transformer layer class names to wrap. Only applicable when `auto_wrap_policy` is
@@ -1793,7 +1793,7 @@ class FullyShardedDataParallelPlugin:
     cpu_ram_efficient_loading: bool = field(
         default=None,
         metadata={
-            "help": "If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. "
+            "help": "If True, only the first process loads the pretrained model checkpoint while all other processes have empty weights. "
             "Only applicable for 🤗 Transformers. When using this, `sync_module_states` needs to be `True`. Defaults to `False`."
         },
     )
