@@ -1925,7 +1925,21 @@ def load_checkpoint_in_model(
         if "weight_map" in index:
             index = index["weight_map"]
         checkpoint_files = sorted(list(set(index.values())))
-        checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
+        # Guard against path traversal: a malicious or corrupted sharded-checkpoint index may
+        # map weights to filenames that escape `checkpoint_folder` (e.g. "../../etc/passwd" or
+        # an absolute path), which `os.path.join` would happily resolve outside the checkpoint
+        # folder and load as a shard. Reject any entry that does not stay inside the folder.
+        checkpoint_folder_abs = os.path.abspath(checkpoint_folder)
+        safe_checkpoint_files = []
+        for shard_file in checkpoint_files:
+            resolved = os.path.abspath(os.path.join(checkpoint_folder, shard_file))
+            if resolved != checkpoint_folder_abs and not resolved.startswith(checkpoint_folder_abs + os.sep):
+                raise ValueError(
+                    f"Invalid sharded checkpoint index: weight map entry {shard_file!r} resolves outside "
+                    f"the checkpoint folder. Refusing to load a potentially malicious checkpoint."
+                )
+            safe_checkpoint_files.append(resolved)
+        checkpoint_files = safe_checkpoint_files
 
     # Logic for missing/unexpected keys goes here.
 
