@@ -77,6 +77,14 @@ def is_pynvml_available():
     return _is_package_available("pynvml") or _is_package_available("pynvml", "nvidia-ml-py")
 
 
+def is_amdsmi_available():
+    return _is_package_available("amdsmi")
+
+
+def is_rocm_available():
+    return torch.cuda.is_available() and torch.version.hip is not None
+
+
 def is_pytest_available():
     return _is_package_available("pytest")
 

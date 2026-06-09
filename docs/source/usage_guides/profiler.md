@@ -161,6 +161,39 @@ The resulting table output (omitting some columns):
 Self CPU time total: 69.332ms
 ```
 
+If you need one or two aggregate numbers for experiment tracking instead of a full operator table, combine the profiler with the runtime memory stats exposed by PyTorch. This is often enough for logging peak memory usage per run:
+
+```python
+import torch
+from accelerate import Accelerator, ProfileKwargs
+
+
+def summarize_memory_stats():
+    return {
+        "peak_allocated_mb": torch.cuda.max_memory_allocated() / 1024**2,
+        "peak_reserved_mb": torch.cuda.max_memory_reserved() / 1024**2,
+    }
+
+
+profile_kwargs = ProfileKwargs(
+    activities=["cpu", "cuda"],
+    profile_memory=True,
+    record_shapes=True,
+)
+
+accelerator = Accelerator(kwargs_handlers=[profile_kwargs])
+
+torch.cuda.reset_peak_memory_stats()
+
+with accelerator.profile() as prof:
+    model(inputs)
+
+print(prof.key_averages().table(sort_by="self_cuda_memory_usage", row_limit=10))
+print(summarize_memory_stats())
+```
+
+This pattern keeps the profiler output available for debugging while also producing compact values that can be logged to an experiment tracker.
+
 
 ## Exporting chrome trace
 

@@ -53,6 +53,10 @@ def manage_process_group(func: Callable[..., Any]) -> Callable[..., Any]:
         if not dist.is_initialized():
             if torch_device == "hpu" and is_hpu_available(init_hccl=True):
                 dist.init_process_group(backend="hccl", world_size=torch_accelerator_module.device_count())
+            elif torch_device == "xpu":
+                dist.init_process_group(
+                    backend="cpu:gloo,xpu:xccl", world_size=torch_accelerator_module.device_count()
+                )
             else:
                 dist.init_process_group(world_size=torch_accelerator_module.device_count())
             initialized_here = True

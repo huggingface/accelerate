@@ -41,6 +41,7 @@ from accelerate.utils.modeling import (
     compute_module_sizes,
     compute_module_total_buffer_size,
     convert_file_size_to_int,
+    dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
     get_module_size_with_ties,
@@ -110,6 +111,25 @@ def sequential_model(num_layers):
 
 
 class ModelingUtilsTester(unittest.TestCase):
+    def test_dtype_byte_size(self):
+        self.assertEqual(dtype_byte_size(torch.bool), 1 / 8)
+        self.assertEqual(dtype_byte_size(torch.float16), 2)
+        self.assertEqual(dtype_byte_size(torch.bfloat16), 2)
+        self.assertEqual(dtype_byte_size(torch.float32), 4)
+        self.assertEqual(dtype_byte_size(torch.float64), 8)
+        # All 1-byte FP8 dtypes available in this torch should report 1 byte.
+        # Previously only e4m3fn/e5m2 were handled; the *fnuz and e8m0fnu
+        # variants fell through to a regex with no trailing digit and raised.
+        for name in (
+            "float8_e4m3fn",
+            "float8_e5m2",
+            "float8_e4m3fnuz",
+            "float8_e5m2fnuz",
+            "float8_e8m0fnu",
+        ):
+            if hasattr(torch, name):
+                self.assertEqual(dtype_byte_size(getattr(torch, name)), 1, msg=name)
+
     def check_set_module_tensor_for_device(self, model, device1, device2):
         assert model.linear1.weight.device == torch.device(device1)
 
@@ -905,6 +925,34 @@ class ModelingUtilsTester(unittest.TestCase):
         # If we set a device to 0, it's not counted.
         max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
         assert {0: 0, "cpu": 100} == max_memory
+
+    def test_get_balanced_memory_no_split_module_classes_set(self):
+        """Regression test: no_split_module_classes should accept a set without raising TypeError.
+
+        In accelerate<=1.5.0, passing a set caused:
+            TypeError: unhashable type: 'set'
+        because the code did `set(no_split_module_classes)` without first
+        normalizing set inputs to a list.  Fixed in #2345.
+        """
+        model = ModelForTest()
+        # Pass no_split_module_classes as a set (not list/tuple)
+        # This should not raise "TypeError: unhashable type: 'set'"
+        max_memory = get_balanced_memory(
+            model,
+            max_memory={0: 300, 1: 300},
+            no_split_module_classes={"Linear"},
+        )
+        assert isinstance(max_memory, dict)
+
+        # Also verify infer_auto_device_map handles set input
+        from accelerate import infer_auto_device_map
+
+        device_map = infer_auto_device_map(
+            model,
+            max_memory={0: 300, 1: 300},
+            no_split_module_classes={"Linear"},
+        )
+        assert isinstance(device_map, dict)
 
     # Tests that get_module_size_with_ties returns the correct tied modules in
     # models with tied parameters whose parent modules share the same name prefix

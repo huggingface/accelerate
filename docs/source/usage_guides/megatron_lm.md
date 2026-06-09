@@ -125,7 +125,7 @@ pip install --no-use-pep517 -e .
 ```
 
 ## Prepare Megaton-LM checkpoint
-If you want to fine-tune a model, make sure you have a torch dist format checkpoint ready. If you only have access to the huggingface model, please consider converting it to a torch dist format checkpoint acceptable to Megatron. One examle can be using slime's script, take GLM models as an example:
+If you want to fine-tune a model, make sure you have a torch dist format checkpoint ready. If you only have access to the huggingface model, please consider converting it to a torch dist format checkpoint acceptable to Megatron. One example can be using slime's script, take GLM models as an example:
 ```
 source /your/path/to/slime/scripts/models/glm4.5-355B-A32B.sh
 srun torchrun --nproc-per-node 8 \

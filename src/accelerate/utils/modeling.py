@@ -169,7 +169,17 @@ def dtype_byte_size(dtype: torch.dtype):
         return 1 / 2
     elif dtype == CustomDtype.FP8:
         return 1
-    elif is_torch_version(">=", "2.1.0") and dtype in [torch.float8_e4m3fn, torch.float8_e5m2]:
+    elif is_torch_version(">=", "2.1.0") and dtype in [
+        getattr(torch, name)
+        for name in (
+            "float8_e4m3fn",
+            "float8_e5m2",
+            "float8_e4m3fnuz",
+            "float8_e5m2fnuz",
+            "float8_e8m0fnu",
+        )
+        if hasattr(torch, name)
+    ]:
         return 1
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
@@ -1917,7 +1927,7 @@ def load_checkpoint_in_model(
         checkpoint_files = sorted(list(set(index.values())))
         checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
 
-    # Logic for missing/unexepected keys goes here.
+    # Logic for missing/unexpected keys goes here.
 
     offload_index = {}
     if offload_state_dict:

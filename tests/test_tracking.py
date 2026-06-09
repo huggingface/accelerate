@@ -75,7 +75,7 @@ if is_comet_ml_available():
 if is_tensorboard_available():
     import struct
 
-    import tensorboard.compat.proto.event_pb2 as event_pb2
+    from tensorboard.compat.proto import event_pb2
 
 if is_dvclive_available():
     from dvclive.plots.metric import Metric
@@ -320,6 +320,64 @@ class MLflowTrackingTest(unittest.TestCase):
                 artifact.path
                 for artifact in mlflow.artifacts.list_artifacts(run_id=run_id, artifact_path="artifact_dir")
             ],
+        )
+
+    def test_store_init_configuration_does_not_mutate_input(self):
+        import mlflow
+
+        """`store_init_configuration` must not mutate the caller's dict when dropping over-long values.
+
+        The same `config` object is shared across all trackers in `Accelerator.init_trackers`, so deleting
+        keys in place removed them from the user's dict and from every other tracker too.
+        """
+        too_long = "x" * (mlflow.utils.validation.MAX_PARAM_VAL_LENGTH + 1)
+        values = {"learning_rate": 0.001, "too_long": too_long}
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.store_init_configuration(values)
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        # The caller's dict must be left untouched (previously `too_long` was deleted in place).
+        self.assertEqual(values, {"learning_rate": 0.001, "too_long": too_long})
+
+        # The over-long value is still dropped from what is actually logged to MLflow.
+        params = mlflow.get_run(run_id).data.params
+        self.assertIn("learning_rate", params)
+        self.assertNotIn("too_long", params)
+
+    def test_log_without_step(self):
+        """`MLflowTracker.log` should treat `step` as optional, matching the docstring."""
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        # Should not raise; previously raised TypeError because `step` had no default.
+        tracker.log({"loss": 0.1})
+        accelerator.end_training()
+
+    def test_log_accepts_extra_kwargs(self):
+        """`MLflowTracker.log` should accept extra kwargs forwarded by `Accelerator.log(log_kwargs=...)`.
+
+        Previously the signature omitted `**kwargs`, so any per-tracker kwarg (e.g. `synchronous`)
+        passed via `log_kwargs={"mlflow": {...}}` raised TypeError. Beyond not raising, the kwarg
+        must reach `mlflow.log_metrics` so it actually changes mlflow's behavior.
+        """
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        # `synchronous` is a real mlflow.log_metrics kwarg; the tracker must forward it.
+        with mock.patch("mlflow.log_metrics") as mock_log_metrics:
+            accelerator.log({"loss": 0.1}, step=1, log_kwargs={"mlflow": {"synchronous": True}})
+        accelerator.end_training()
+        mock_log_metrics.assert_called_once()
+        call_kwargs = mock_log_metrics.call_args.kwargs
+        assert call_kwargs.get("synchronous") is True, (
+            f"expected synchronous=True forwarded to mlflow.log_metrics, got kwargs={call_kwargs}"
+        )
+        assert call_kwargs.get("step") == 1, (
+            f"expected step=1 forwarded to mlflow.log_metrics, got kwargs={call_kwargs}"
         )
 
 
@@ -678,7 +736,7 @@ class MyCustomTracker(GeneralTracker):
         logger.info("Call init")
         self.writer.writerow(values)
 
-    def log(self, values: dict, step: Optional[int]):
+    def log(self, values: dict, step: Optional[int] = None):
         logger.info("Call log")
         self.writer.writerow(values)
 
@@ -788,7 +846,7 @@ class DVCLiveTrackingTest(unittest.TestCase):
             assert latest.pop("step") == 3
             assert latest == values
             scalars = os.path.join(live.plots_dir, Metric.subfolder)
-            for val in values.keys():
+            for val in values:
                 val_path = os.path.join(scalars, f"{val}.tsv")
                 steps = [int(row["step"]) for row in logs[val_path]]
                 assert steps == [0, 1, 3]
