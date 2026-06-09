@@ -347,7 +347,7 @@ class MLflowTrackingTest(unittest.TestCase):
         params = mlflow.get_run(run_id).data.params
         self.assertIn("learning_rate", params)
         self.assertNotIn("too_long", params)
-        
+
     def test_log_without_step(self):
         """`MLflowTracker.log` should treat `step` as optional, matching the docstring."""
         tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
