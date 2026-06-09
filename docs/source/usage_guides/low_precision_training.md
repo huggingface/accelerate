@@ -122,7 +122,7 @@ kwargs = [FP8RecipeKwargs(backend="te", ...)]
 accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 ```
 
-Or during `accelerate launch` via `--fp8_backend=te ...`. Use `accelerate launch --fp8_backend=te -h` to see relevent arguments.
+Or during `accelerate launch` via `--fp8_backend=te ...`. Use `accelerate launch --fp8_backend=te -h` to see relevant arguments.
 
 Similarly this can be set in your `config.yaml`:
 
@@ -174,7 +174,7 @@ accelerator = Accelerator(
 )
 ```
 
-Or during `accelerate launch` via `--fp8_backend=ao ...`. Use `accelerate launch --fp8_backend=ao -h` to see relevent arguments.
+Or during `accelerate launch` via `--fp8_backend=ao ...`. Use `accelerate launch --fp8_backend=ao -h` to see relevant arguments.
 
 Similarly, this can be set in `config.yaml`:
 

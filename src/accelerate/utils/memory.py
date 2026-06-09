@@ -132,6 +132,10 @@ def find_executable_batch_size(
             A function to wrap
         starting_batch_size (`int`, *optional*):
             The batch size to try and fit into memory
+        reduce_batch_size_fn (`callable`, *optional*):
+            A function to determine the new batch size after an out-of-memory error. If not
+            provided, the batch size is multiplied by 0.9 on each failure. The function takes
+            no arguments and should return the new (reduced) batch size as an `int`.
 
     Example:
 

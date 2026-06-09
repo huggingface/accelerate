@@ -142,6 +142,12 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             The data to send to a given device.
         device (`torch.device`):
             The device to send the data to.
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            If `True`, the transfer to the device is performed asynchronously, which can overlap
+            data movement with computation. Only effective when the device supports it (e.g. CUDA).
+        skip_keys (`str` or `List[str]`, *optional*):
+            A key or list of keys in a dictionary `tensor` whose values should not be sent to
+            the given `device`. Entries with these keys are left on their original device.
 
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
@@ -846,7 +852,7 @@ def reduce(tensor, reduction="mean", scale=1.0):
         tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to reduce.
         reduction (`str`, *optional*, defaults to `"mean"`):
-            A reduction method. Can be of "mean", "sum", or "none"
+            A reduction method. Can be of "mean", "sum", "max", or "none"
         scale (`float`, *optional*):
             A default scaling value to be applied after the reduce, only valid on XLA.
 
@@ -865,10 +871,12 @@ def reduce(tensor, reduction="mean", scale=1.0):
             # accelerator.set_trigger(). Use mark_step to make HLOs
             # the same on all processes.
             xm.mark_step()
-            xm.all_reduce(xm.REDUCE_SUM, [cloned_tensor], scale)
+            xla_op = xm.REDUCE_MAX if reduction == "max" else xm.REDUCE_SUM
+            xm.all_reduce(xla_op, [cloned_tensor], scale)
             xm.mark_step()
         elif state.distributed_type.value in TORCH_DISTRIBUTED_OPERATION_TYPES:
-            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
+            torch_op = ReduceOp.MAX if reduction == "max" else ReduceOp.SUM
+            torch.distributed.all_reduce(cloned_tensor, torch_op)
         if reduction == "mean":
             cloned_tensor /= state.num_processes
         return cloned_tensor
