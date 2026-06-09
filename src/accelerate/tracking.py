@@ -144,7 +144,6 @@ class GeneralTracker:
         Lazy initialization of the tracker inside Accelerator to avoid initializing PartialState before
         InitProcessGroupKwargs.
         """
-        pass
 
     def store_init_configuration(self, values: dict):
         """
@@ -156,9 +155,8 @@ class GeneralTracker:
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
-        pass
 
-    def log(self, values: dict, step: Optional[int], **kwargs):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run. Base `log` implementations of a tracking API should go in here, along with
         special behavior for the `step parameter.
@@ -169,14 +167,12 @@ class GeneralTracker:
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
-        pass
 
     def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just don't
         overwrite that method.
         """
-        pass
 
 
 class TensorBoardTracker(GeneralTracker):
@@ -269,7 +265,7 @@ class TensorBoardTracker(GeneralTracker):
         logger.debug("Successfully logged to TensorBoard")
 
     @on_main_process
-    def log_images(self, values: dict, step: Optional[int], **kwargs):
+    def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `images` to the current run.
 
@@ -637,7 +633,7 @@ class AimTracker(GeneralTracker):
         self.writer["hparams"] = values
 
     @on_main_process
-    def log(self, values: dict, step: Optional[int], **kwargs):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
 
@@ -813,7 +809,7 @@ class MLflowTracker(GeneralTracker):
         logger.debug("Stored initial configuration hyperparameters to MLflow")
 
     @on_main_process
-    def log(self, values: dict, step: Optional[int]):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
 
@@ -822,6 +818,8 @@ class MLflowTracker(GeneralTracker):
                 Values to be logged as key-value pairs.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `mlflow.log_metrics` method.
         """
         metrics = {}
         for k, v in values.items():
@@ -834,7 +832,7 @@ class MLflowTracker(GeneralTracker):
                 )
         import mlflow
 
-        mlflow.log_metrics(metrics, step=step)
+        mlflow.log_metrics(metrics, step=step, **kwargs)
         logger.debug("Successfully logged to mlflow")
 
     @on_main_process

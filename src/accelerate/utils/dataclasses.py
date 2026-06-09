@@ -51,6 +51,7 @@ from .imports import (
     is_musa_available,
     is_neuron_available,
     is_npu_available,
+    is_rocm_available,
     is_torchao_available,
     is_transformer_engine_available,
     is_xpu_available,
@@ -1442,6 +1443,17 @@ class DeepSpeedPlugin:
         self.fill_match("fp16.enabled", must_match=False, **kwargs)
         self.fill_match("bf16.enabled", must_match=False, **kwargs)
 
+        # On ROCm, bf16 DeepSpeed training can silently produce NaN weights because
+        # bf16 has no NaN/Inf safety net (unlike fp16 loss scaling). Accumulating
+        # gradients in fp32 for the collective avoids the overflow path.
+        if mixed_precision in ("bf16", "fp8") and is_rocm_available() and "communication_data_type" not in ds_config:
+            ds_config["communication_data_type"] = "fp32"
+            logger.info(
+                "ROCm + DeepSpeed + bf16 detected: setting "
+                "`communication_data_type='fp32'` to avoid bf16 overflow corrupting "
+                "weights. Set it explicitly in your DeepSpeed config to override."
+            )
+
     def set_deepspeed_weakref(self):
         from .imports import is_transformers_available
 
@@ -1632,7 +1644,7 @@ class FullyShardedDataParallelPlugin:
             A technique to reduce memory usage by clearing activations of certain layers and recomputing them during a
             backward pass. Effectively, this trades extra computation time for reduced memory usage.
         cpu_ram_efficient_loading (`bool`, defaults to `None`):
-            If True, only the first process loads the pretrained model checkoint while all other processes have empty
+            If True, only the first process loads the pretrained model checkpoint while all other processes have empty
             weights. Only applicable for Transformers. When using this, `sync_module_states` needs to be `True`.
         transformer_cls_names_to_wrap (`Optional[List[str]]`, defaults to `None`):
             A list of transformer layer class names to wrap. Only applicable when `auto_wrap_policy` is
@@ -1781,7 +1793,7 @@ class FullyShardedDataParallelPlugin:
     cpu_ram_efficient_loading: bool = field(
         default=None,
         metadata={
-            "help": "If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. "
+            "help": "If True, only the first process loads the pretrained model checkpoint while all other processes have empty weights. "
             "Only applicable for 🤗 Transformers. When using this, `sync_module_states` needs to be `True`. Defaults to `False`."
         },
     )

@@ -585,7 +585,7 @@ def launch_command_parser(subparsers=None):
         "--fsdp_cpu_ram_efficient_loading",
         default="true",
         type=str,
-        help="If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. "
+        help="If True, only the first process loads the pretrained model checkpoint while all other processes have empty weights. "
         "Only applicable for 🤗 Transformers. When using this, `--fsdp_sync_module_states` needs to True. "
         "(useful only when `use_fsdp` flag is passed).",
     )

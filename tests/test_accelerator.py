@@ -823,7 +823,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_non_cpu
     @require_huggingface_suite
     def test_nested_hook(self):
-        from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
+        from transformers import PretrainedConfig, PreTrainedModel
 
         class MyLinear(torch.nn.Module):
             def __init__(self, device=None, dtype=None):

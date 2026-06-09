@@ -773,7 +773,7 @@ class PartialState:
             if is_mlu_available():
                 backend = "cncl"
                 distributed_type = DistributedType.MULTI_MLU
-            if is_sdaa_available():
+            elif is_sdaa_available():
                 backend = "tccl"
                 distributed_type = DistributedType.MULTI_SDAA
             elif is_musa_available():
