@@ -483,7 +483,9 @@ class PartialState:
 
                         # The tensor needs to be on the device before we can pad it
                         tensorized_result = send_to_device(result, self.device)
-                        result = pad_across_processes(tensorized_result, pad_index=send_to_device(inputs[-1], self.device))
+                        result = pad_across_processes(
+                            tensorized_result, pad_index=send_to_device(inputs[-1], self.device)
+                        )
                     else:
                         result += [inputs[-1]] * (num_samples_per_process + (1 if num_extras > 0 else 0) - len(result))
                 return result
@@ -497,7 +499,7 @@ class PartialState:
 
                     if isinstance(inputs, Dataset):
                         clamped_start = min(start_index, len(inputs))
-                        clamped_end   = min(end_index,   len(inputs))
+                        clamped_end = min(end_index, len(inputs))
                         result_idcs = list(range(clamped_start, clamped_end))
                         if apply_padding:
                             result_idcs += [len(inputs) - 1] * (
