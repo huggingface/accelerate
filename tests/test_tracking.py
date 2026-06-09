@@ -322,6 +322,32 @@ class MLflowTrackingTest(unittest.TestCase):
             ],
         )
 
+    def test_store_init_configuration_does_not_mutate_input(self):
+        import mlflow
+
+        """`store_init_configuration` must not mutate the caller's dict when dropping over-long values.
+
+        The same `config` object is shared across all trackers in `Accelerator.init_trackers`, so deleting
+        keys in place removed them from the user's dict and from every other tracker too.
+        """
+        too_long = "x" * (mlflow.utils.validation.MAX_PARAM_VAL_LENGTH + 1)
+        values = {"learning_rate": 0.001, "too_long": too_long}
+        tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+        accelerator = Accelerator(log_with=tracker)
+        accelerator.init_trackers(project_name="test_exp")
+        tracker.store_init_configuration(values)
+
+        run_id = tracker.active_run.info.run_id
+        accelerator.end_training()
+
+        # The caller's dict must be left untouched (previously `too_long` was deleted in place).
+        self.assertEqual(values, {"learning_rate": 0.001, "too_long": too_long})
+
+        # The over-long value is still dropped from what is actually logged to MLflow.
+        params = mlflow.get_run(run_id).data.params
+        self.assertIn("learning_rate", params)
+        self.assertNotIn("too_long", params)
+
     def test_log_without_step(self):
         """`MLflowTracker.log` should treat `step` as optional, matching the docstring."""
         tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
