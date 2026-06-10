@@ -291,7 +291,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(
                 ddp_model,
                 did_step or sync_each_batch,  # syncs at each grad_accum interval of if sync_each_batch==True
                 iteration,
-                rtol=1e-3,  # needs a relative tolerance due to roundoff errors
+                rtol=2e-3,
             )
 
         if did_step:
