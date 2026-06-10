@@ -14,9 +14,11 @@
 
 
 import os
+import unittest
 
 from accelerate.test_utils.testing import (
     TempDirTestCase,
+    device_count,
     execute_subprocess_async,
     get_launch_command,
     path_in_accelerate_package,
@@ -64,11 +66,15 @@ class TPIntegrationTest(TempDirTestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
+    @unittest.skipUnless(device_count >= 4, "TP (2) x FSDP dp_shard (2) requires at least 4 hardware accelerators")
     def test_working_of_tp_and_fsdp(self):
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.test_file_path = os.path.join(current_dir, "fsdp2_tp_preparation.py")
         self.test_config_path = os.path.join(current_dir, "fsdp2_tp_preparation_config.yaml")
-        cmd = get_launch_command()
+        # Launch one process per available accelerator instead of the fixed `num_processes` in the
+        # config file (the script derives DP from the world size), so the test uses the whole host
+        # instead of failing with "invalid device ordinal" when fewer than 4 GPUs are present.
+        cmd = get_launch_command(num_processes=device_count, num_machines=1, machine_rank=0)
         cmd.extend(
             [
                 f"--config_file={self.test_config_path}",
