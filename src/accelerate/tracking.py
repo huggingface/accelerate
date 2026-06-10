@@ -18,6 +18,7 @@
 import json
 import os
 import time
+import warnings
 from functools import wraps
 from typing import Any, Optional, Union
 
@@ -1300,7 +1301,7 @@ def register_tracker_class(tracker_class: type[GeneralTracker]):
             "Set it to `True` if the tracker needs a logging directory, or `False` otherwise."
         )
     if tracker_class.name in LOGGER_TYPE_TO_CLASS:
-        logger.warning(
+        warnings.warn(
             f"A tracker with the name '{tracker_class.name}' is already registered and will be overwritten by "
             f"{tracker_class}. This is especially significant when shadowing a built-in tracker."
         )

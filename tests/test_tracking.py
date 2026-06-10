@@ -896,10 +896,9 @@ class RegisterTrackerClassTest(unittest.TestCase):
             name = MyRegisteredTracker.name
             requires_logging_directory = False
 
-        with mock.patch("accelerate.tracking.logger") as mock_logger:
+        with self.assertWarns(UserWarning) as cm:
             register_tracker_class(ShadowTracker)
-            mock_logger.warning.assert_called_once()
-            assert MyRegisteredTracker.name in mock_logger.warning.call_args[0][0]
+        assert MyRegisteredTracker.name in str(cm.warning)
 
     def test_register_requires_logging_directory(self):
         register_tracker_class(MyDirRegisteredTracker)
