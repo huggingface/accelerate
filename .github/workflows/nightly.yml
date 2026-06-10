@@ -2,13 +2,8 @@ name: Self-hosted runner with slow tests (scheduled)
 
 on:
   workflow_dispatch:
-  workflow_call:
   schedule:
     - cron: "0 2 * * *"
-  # TEMPORARY: run directly on pushes to this branch while validating the CI rework
-  # (no docker rebuild involved). Remove before merge.
-  push:
-    branches: [fix-all-tests]
 
 env:
   RUN_SLOW: "yes"
