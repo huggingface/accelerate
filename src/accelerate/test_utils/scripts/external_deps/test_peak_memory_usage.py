@@ -145,7 +145,7 @@ def get_dataloaders(
     """
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     datasets = load_dataset(
-        "glue", "mrpc", split={"train": f"train[:{n_train}]", "validation": f"validation[:{n_val}]"}
+        "nyu-mll/glue", "mrpc", split={"train": f"train[:{n_train}]", "validation": f"validation[:{n_val}]"}
     )
 
     def tokenize_function(examples):
