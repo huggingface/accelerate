@@ -82,7 +82,7 @@ def is_amdsmi_available():
 
 
 def is_rocm_available():
-    return torch.cuda.is_available() and torch.version.hip is not None
+    return torch.version.hip is not None and torch.cuda.is_available()
 
 
 def is_pytest_available():

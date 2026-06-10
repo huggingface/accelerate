@@ -15,6 +15,7 @@
 import os
 import sys
 import tempfile
+from dataclasses import fields
 
 import torch
 
@@ -249,11 +250,7 @@ def notebook_launcher(
                     )
                     if is_torch_version(">=", ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION):
                         launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template
-                    # On torch versions that ship torch.numa, LaunchConfig.__post_init__
-                    # calls torch.cuda.is_available() / device_count() for NUMA auto-detect,
-                    # tainting forked children with _is_in_bad_fork. Short-circuit by passing
-                    # non-None numa_options, then reset to None to skip actual binding.
-                    has_numa_options = hasattr(torch, "numa")
+                    has_numa_options = any(field.name == "numa_options" for field in fields(LaunchConfig))
                     if has_numa_options:
                         from torch.numa.binding import AffinityMode, NumaOptions
 
@@ -311,6 +308,7 @@ def debug_launcher(function, args=(), num_processes=2):
     with tempfile.NamedTemporaryFile() as tmp_file:
         # torch.distributed will expect a few environment variable to be here. We set the ones common to each
         # process here (the other ones will be set be the launcher).
+        # gloo's default interface selection (hostname-based) is flaky on CI runners, pin it to loopback
         with patch_environment(
             world_size=num_processes,
             master_addr="127.0.0.1",
@@ -318,6 +316,7 @@ def debug_launcher(function, args=(), num_processes=2):
             accelerate_mixed_precision="no",
             accelerate_debug_rdv_file=tmp_file.name,
             accelerate_use_cpu="yes",
+            gloo_socket_ifname="lo",
         ):
             launcher = PrepareForLaunch(function, debug=True)
             start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")

@@ -4,11 +4,6 @@ check_dirs := .
 
 # Check that source code meets quality standards
 
-extra_quality_checks:
-	python utils/check_copies.py
-	python utils/check_dummies.py
-	python utils/check_repo.py
-
 # this target runs checks on all files
 quality:
 	ruff check $(check_dirs)
@@ -46,23 +41,19 @@ test_fsdp:
 test_tp:
 	python -m pytest -s -v ./tests/tp $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_tp.log",)
 
-# Since the new version of pytest will *change* how things are collected, we need `deepspeed` to 
+# Since the new version of pytest will *change* how things are collected, we need `deepspeed` to
 # run after test_core and test_cli
 test:
-	$(MAKE) test_core
-	$(MAKE) test_cli
-	$(MAKE) test_big_modeling
-	$(MAKE) test_deepspeed
-	$(MAKE) test_fsdp
-	$(MAKE) test_tp
+	@status=0; \
+	for target in test_core test_cli test_big_modeling test_deepspeed test_fsdp test_tp; do \
+		$(MAKE) $$target || status=1; \
+	done; \
+	exit $$status
 
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_examples.log",)
 
-# Broken down example tests for the CI runners
-test_integrations:
-	python -m pytest -s -v ./tests/fsdp ./tests/tp ./tests/deepspeed $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_integrations.log",)
-
+# Example-suite shards used by test.yml
 test_example_differences:
 	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_example_diff.log",)
 

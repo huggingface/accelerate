@@ -12,14 +12,39 @@ env:
 
 
 jobs:
-  run_core_tests_single_gpu:
+  run_tests:
+    name: run_tests_${{ matrix.test_type }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test_type: single_gpu
+            runner: aws-g6-4xlarge-plus
+            image: huggingface/accelerate:gpu-nightly
+            cuda_visible_devices: "0"
+            targets: test test_examples
+          - test_type: single_gpu_deepspeed
+            runner: aws-g6-4xlarge-plus
+            image: huggingface/accelerate:gpu-deepspeed-nightly
+            cuda_visible_devices: "0"
+            targets: test_deepspeed
+          - test_type: multi_gpu
+            runner: aws-g6-12xlarge-plus
+            image: huggingface/accelerate:gpu-nightly
+            cuda_visible_devices: "0,1"
+            targets: test test_examples
+          - test_type: multi_gpu_deepspeed
+            runner: aws-g6-12xlarge-plus
+            image: huggingface/accelerate:gpu-deepspeed-nightly
+            cuda_visible_devices: "0,1"
+            targets: test_deepspeed
     runs-on:
-      group: aws-g6-4xlarge-plus
+      group: ${{ matrix.runner }}
     env:
-      CUDA_VISIBLE_DEVICES: "0"
-      TEST_TYPE: "single_gpu"
+      CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+      TEST_TYPE: ${{ matrix.test_type }}
     container:
-      image: huggingface/accelerate:gpu-nightly
+      image: ${{ matrix.image }}
       options: --gpus all --shm-size "16gb"
     defaults:
       run:
@@ -39,19 +64,15 @@ jobs:
           source activate accelerate;
           pip freeze
 
-      - name: Run test on GPUs
+      - name: Run test suites
         working-directory: accelerate
         run: |
           source activate accelerate
-          make test
-
-      - name: Run examples on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
+          status=0
+          for target in ${{ matrix.targets }}; do
+            make $target || status=1
+          done
+          exit $status
 
       - name: Generate Report
         working-directory: accelerate
@@ -59,186 +80,6 @@ jobs:
         run: |
           pip install slack_sdk tabulate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
-
-  run_deepspeed_tests_single_gpu:
-    runs-on:
-      group: aws-g6-4xlarge-plus
-    env:
-      CUDA_VISIBLE_DEVICES: "0"
-      TEST_TYPE: "single_gpu_deepspeed"
-    container:
-      image: huggingface/accelerate:gpu-deepspeed-nightly
-      options: --gpus all --shm-size "16gb"
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Update clone & pip install
-        run: |
-          source activate accelerate
-          git clone https://github.com/huggingface/accelerate;
-          cd accelerate;
-          git checkout ${{ github.sha }};
-          pip install -e . --no-deps
-          pip install pytest-reportlog tabulate
-
-      - name: Show installed libraries
-        run: |
-          source activate accelerate;
-          pip freeze
-
-      - name: Run test on GPUs
-        working-directory: accelerate
-        run: |
-          source activate accelerate
-          make test_deepspeed
-
-      - name: Run Integration tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_integrations
-
-      - name: Run examples on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
-
-      - name: Generate Report
-        working-directory: accelerate
-        if: always()
-        run: |
-          pip install slack_sdk tabulate
-          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
-
-  run_core_tests_multi_gpu:
-    runs-on:
-      group: aws-g6-12xlarge-plus
-    env:
-      CUDA_VISIBLE_DEVICES: "0,1"
-      TEST_TYPE: "multi_gpu"
-    container:
-      image: huggingface/accelerate:gpu-nightly
-      options: --gpus all --shm-size "16gb"
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Update clone
-        run: |
-          source activate accelerate
-          git clone https://github.com/huggingface/accelerate;
-          cd accelerate;
-          git checkout ${{ github.sha }};
-          pip install -e . --no-deps
-          pip install pytest-reportlog tabulate
-
-      - name: Show installed libraries
-        run: |
-          source activate accelerate;
-          pip freeze
-
-      - name: Run core tests on GPUs
-        working-directory: accelerate
-        run: |
-          source activate accelerate
-          make test_core
-
-      - name: Run big modeling tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_big_modeling
-
-      - name: Run CLI tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_cli
-
-      - name: Run Integration tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_integrations
-
-      - name: Run examples on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
-
-      - name: Generate Report
-        working-directory: accelerate
-        if: always()
-        run: |
-          pip install slack_sdk tabulate
-          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
-
-  run_deepspeed_tests_multi_gpu:
-    runs-on:
-      group: aws-g6-12xlarge-plus
-    env:
-      CUDA_VISIBLE_DEVICES: "0,1"
-      TEST_TYPE: "multi_gpu_deepspeed"
-    container:
-      image: huggingface/accelerate:gpu-deepspeed-nightly
-      options: --gpus all --shm-size "16gb"
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Update clone
-        run: |
-          source activate accelerate
-          git clone https://github.com/huggingface/accelerate;
-          cd accelerate;
-          git checkout ${{ github.sha }};
-          pip install -e . --no-deps
-          pip install pytest-reportlog tabulate
-
-      - name: Show installed libraries
-        run: |
-          source activate accelerate;
-          pip freeze
-
-      - name: Run DeepSpeed tests
-        working-directory: accelerate
-        run: |
-          source activate accelerate
-          make test_deepspeed
-
-      - name: Run Integration tests on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          make test_integrations
-
-      - name: Run examples on GPUs
-        working-directory: accelerate
-        if: always()
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
-
-      - name: Generate Report
-        working-directory: accelerate
-        if: always()
-        run: |
-          pip install slack_sdk tabulate
-          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
-
 
   run-integration-tests:
     if: always()

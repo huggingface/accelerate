@@ -508,6 +508,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             patch("torch.distributed.fsdp.fully_shard"),
             patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
             patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            patch("accelerate.utils.fsdp_utils.logger"),
         ):
             result = fsdp2_prepare_model(mock_accelerator, model)
 
@@ -549,6 +550,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             patch("torch.distributed.fsdp.fully_shard"),
             patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
             patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            patch("accelerate.utils.fsdp_utils.logger"),
         ):
             result = fsdp2_prepare_model(mock_accelerator, model)
 
@@ -587,6 +589,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             patch("torch.distributed.fsdp.fully_shard"),
             patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
             patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            patch("accelerate.utils.fsdp_utils.logger"),
         ):
             result = fsdp2_prepare_model(mock_accelerator, model)
 
