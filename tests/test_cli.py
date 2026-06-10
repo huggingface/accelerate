@@ -23,7 +23,11 @@ import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
-from accelerate.commands.to_fsdp2 import to_fsdp2_command, to_fsdp2_command_parser
+from accelerate.commands.to_fsdp2 import (
+    convert_config_to_fsdp2,
+    to_fsdp2_command,
+    to_fsdp2_command_parser,
+)
 from accelerate.commands.tpu import tpu_command_launcher, tpu_command_parser
 from accelerate.test_utils.testing import (
     capture_call_output,
@@ -577,6 +581,36 @@ class ToFSDP2Tester(unittest.TestCase):
         with self.assertRaises(ValueError, msg="If --overwrite is not set, --output_file must be provided"):
             args = self.parser.parse_args(["--config_file", str(self.test_config_path / "latest_fsdp.yaml")])
             to_fsdp2_command(args)
+
+    def test_convert_config_drops_removed_and_unimplemented_keys(self):
+        config = {
+            "fsdp_config": {
+                "fsdp_backward_prefetch": "BACKWARD_PRE",  # REMOVED
+                "fsdp_use_orig_params": True,  # REMOVED
+                "fsdp_sync_module_states": True,  # REMOVED
+                "fsdp_forward_prefetch": True,  # NOT_YET_IMPLEMENTED
+                "fsdp_sharding_strategy": "FULL_SHARD",  # renamed + value-mapped
+                "fsdp_offload_params": True,  # carried over (maps to itself)
+                "some_unknown_key": 5,  # not in the mapping -> carried over
+            }
+        }
+        out = convert_config_to_fsdp2(config)["fsdp_config"]
+
+        # FSDP1-only keys must not leak into the FSDP2 config
+        for removed in (
+            "fsdp_backward_prefetch",
+            "fsdp_use_orig_params",
+            "fsdp_sync_module_states",
+            "fsdp_forward_prefetch",
+        ):
+            self.assertNotIn(removed, out)
+
+        # renamed key + value mapping, pass-through keys, and version bump
+        self.assertEqual(out["fsdp_reshard_after_forward"], True)
+        self.assertNotIn("fsdp_sharding_strategy", out)
+        self.assertEqual(out["fsdp_offload_params"], True)
+        self.assertEqual(out["some_unknown_key"], 5)
+        self.assertEqual(out["fsdp_version"], 2)
 
     @patch("pathlib.Path.exists")
     def test_overwrite_when_output_file_exists(self, mock_exists):

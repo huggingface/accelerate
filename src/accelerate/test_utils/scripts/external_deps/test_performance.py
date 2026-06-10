@@ -105,6 +105,8 @@ def training_function(config, args):
         model_kwargs["tp_plan"] = args.tp_plan
     if args.tp_size is not None:
         model_kwargs["tp_size"] = args.tp_size
+    if args.model_dtype is not None:
+        model_kwargs["torch_dtype"] = getattr(torch, args.model_dtype)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained(model_name, return_dict=True, **model_kwargs)
@@ -289,6 +291,13 @@ def main():
         type=int,
         default=None,
         help="TP size to be used to shard the model",
+    )
+    parser.add_argument(
+        "--model_dtype",
+        type=str,
+        default=None,
+        choices=["bfloat16", "float16", "float32"],
+        help="Optional dtype to load the model in (defaults to the checkpoint dtype).",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}

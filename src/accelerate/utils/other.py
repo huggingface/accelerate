@@ -199,6 +199,32 @@ def compile_regions_deepspeed(module: torch.nn.Module, **compile_kwargs):
         module.compile(**compile_kwargs)
 
 
+def compile_regions_fsdp2(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
+    """
+    Like `compile_regions`, but uses the in-place `module.compile()` instead of `torch.compile(module)`.
+
+    Needed for the FSDP2 prepare path: `torch.compile(module)` returns an `OptimizedModule` whose `__call__`
+    bypasses `nn.Module._call_impl`, so forward/pre hooks added later by `fully_shard` never fire and per-layer
+    all-gather/reshard is lost. The in-place `module.compile()` keeps `_call_impl` (and its runtime hook check)
+    on the call path, so FSDP hooks installed afterwards still run.
+
+    Args:
+        module (`torch.nn.Module`):
+            The model to compile.
+        **compile_kwargs:
+            Additional keyword arguments to pass to `module.compile()`.
+    """
+    if is_repeated_blocks(module):
+        for submodule in module:
+            submodule.compile(**compile_kwargs)
+    elif has_repeated_blocks(module):
+        for child in module.children():
+            compile_regions_fsdp2(child, **compile_kwargs)
+    else:  # leaf node
+        module.compile(**compile_kwargs)
+    return module
+
+
 def model_has_dtensor(model: torch.nn.Module) -> bool:
     """
     Check if the model has DTensor parameters.

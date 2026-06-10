@@ -259,7 +259,9 @@ class AcceleratorTester(AccelerateTestCase):
             pass
 
         with (
-            patch(f"torch.{torch_device}.set_device", noop),
+            # Some backends such as MPS do not expose a module-level `set_device`.
+            # This test only exercises env var parsing, so a synthetic attribute is enough.
+            patch(f"torch.{torch_device}.set_device", noop, create=True),
             patch_environment(ACCELERATE_TORCH_DEVICE=f"{torch_device}:64"),
         ):
             accelerator = Accelerator()
@@ -823,7 +825,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_non_cpu
     @require_huggingface_suite
     def test_nested_hook(self):
-        from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
+        from transformers import PretrainedConfig, PreTrainedModel
 
         class MyLinear(torch.nn.Module):
             def __init__(self, device=None, dtype=None):

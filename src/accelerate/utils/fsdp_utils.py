@@ -624,6 +624,24 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     return model
 
 
+def _find_final_norm(model: torch.nn.Module) -> torch.nn.Module | None:
+    """Find the final normalization layer before the output head.
+
+    The final norm is conventionally a direct child of the base model (e.g. `model.norm`
+    for Llama, `transformer.ln_f` for GPT-2), so we only scan the base model's direct
+    children. Returns the last norm found there, or None.
+    """
+    base_prefix = getattr(model, "base_model_prefix", "")
+    base_model = getattr(model, base_prefix, None) if base_prefix else model
+    if not isinstance(base_model, torch.nn.Module):
+        return None
+    final_norm = None
+    for _, module in base_model.named_children():
+        if "Norm" in type(module).__name__:
+            final_norm = module
+    return final_norm
+
+
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
 
@@ -646,7 +664,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     fsdp2_plugin.set_auto_wrap_policy(model)
 
-    original_sd = model.state_dict()
     mesh = getattr(accelerator, "torch_device_mesh", None)
 
     fsdp2_kwargs = {
@@ -687,6 +704,23 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
             )
 
+    # FSDP2 requires uniform orig_dtype among trainable params in each group.
+    # Upcast to fp32 master weights; MixedPrecisionPolicy.param_dtype handles compute cast.
+    if accelerator.mixed_precision != "no" and not model_has_params4bit:
+        upcasted_params = []
+        for name, param in model.named_parameters():
+            if param.requires_grad and param.dtype != torch.float32:
+                upcasted_params.append(name)
+                param.data = param.data.to(torch.float32)
+        if accelerator.is_main_process and upcasted_params:
+            logger.info(
+                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints. "
+                f"This effects {len(upcasted_params)} parameters: {upcasted_params}..."
+            )
+
+    # Capture after upcast so dtypes match what `fully_shard` will produce.
+    original_sd = model.state_dict()
+
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
         # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
@@ -714,8 +748,30 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
                 fully_shard(module, **fsdp2_kwargs)
 
+    # Carve embed + tail=[final_norm, lm_head] into their own units. Tail gets `False`
+    # (forward-end / backward-start uses cluster, re-gather would be unhideable).
+    input_embed = getattr(model, "get_input_embeddings", lambda: None)()
+    output_embed = getattr(model, "get_output_embeddings", lambda: None)()
+    input_weight = getattr(input_embed, "weight", None)
+    output_weight = getattr(output_embed, "weight", None)
+    is_weights_tied = input_weight is not None and input_weight is output_weight
+
+    if not is_weights_tied and input_embed is not None and not isinstance(input_embed, FSDPModule):
+        fully_shard(input_embed, **fsdp2_kwargs)
+
+    final_norm = _find_final_norm(model)
+    # Tied case uses `input_embed` so the pre-forward hook fires at forward-start
+    # (embed's use of the shared tensor), not at forward-end with `output_embed`.
+    tail_embed = input_embed if is_weights_tied else output_embed
+    tail = [m for m in (final_norm, tail_embed) if m is not None and not isinstance(m, FSDPModule)]
+    if tail:
+        fully_shard(tail, **{**fsdp2_kwargs, "reshard_after_forward": False})
+
     if not isinstance(model, FSDPModule):
-        fully_shard(model, **fsdp2_kwargs)
+        # Defer to PyTorch's `reshard_after_forward=None` heuristic, which resolves to `False`
+        # for the root. Avoids an unhideable pre-backward all-gather of the root's leftovers.
+        root_kwargs = {k: v for k, v in fsdp2_kwargs.items() if k != "reshard_after_forward"}
+        fully_shard(model, **root_kwargs)
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
@@ -748,39 +804,21 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    # There is no `dtype` attribution for nn.Module
-    # Set it to None if it doesn't exist and do the upcast always
-    model_dtype = getattr(model, "dtype", None)
-    if accelerator.mixed_precision != "no" and (model_dtype is None or model_dtype != torch.float32):
-        # We upcast the trainable parameters according to `deepspeed`'s implementation
-        # More info about this can be found in `accelerator.py:prepare_model`s FSDP1 section
-        upcasted_params = []
-        for name, param in model.named_parameters():
-            if param.requires_grad and param.dtype != torch.float32:
-                upcasted_params.append(name)
-                param = param.to(torch.float32)
-        if accelerator.is_main_process and upcasted_params:
-            warnings.warn(
-                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints. "
-                f"This effects {len(upcasted_params)} parameters: {upcasted_params}..."
-            )
     return model
 
 
-def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool]:
+def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool] | None:
     """Prepares the auto wrap policy based on its type, done to mimic the behaviour of FSDP1 auto wrap policy.
 
     Args:
         fsdp2_plugin (`FullyShardedDataParallelPlugin`):
             Instance of `FullyShardedDataParallelPlugin` containing the configuration options
-        auto_wrap_policy_type (`str`):
-            Either `transformer` or `size`
         model (`torch.nn.Module`):
             The model to wrap
 
     Returns:
-        `Callable[[torch.nn.Module], bool]`:
-            The auto wrap policy function to be applied to the model
+        `Callable[[torch.nn.Module], bool] | None`:
+            The auto wrap policy function to be applied to the model or `None`
     """
     from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 

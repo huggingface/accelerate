@@ -142,12 +142,24 @@ jobs:
           source activate accelerate;
           pip freeze
 
-      - name: Run core and big modeling tests on GPUs
+      - name: Run core tests on GPUs
         working-directory: accelerate
         run: |
           source activate accelerate
           make test_core
+
+      - name: Run big modeling tests on GPUs
+        working-directory: accelerate
+        if: always()
+        run: |
+          source activate accelerate
           make test_big_modeling
+
+      - name: Run CLI tests on GPUs
+        working-directory: accelerate
+        if: always()
+        run: |
+          source activate accelerate
           make test_cli
 
       - name: Run Integration tests on GPUs

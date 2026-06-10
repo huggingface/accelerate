@@ -321,7 +321,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
                 plugin = FullyShardedDataParallelPlugin(
-                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, **{extra_arg: dtype}}
+                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, extra_arg: dtype}
                 )
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
@@ -471,6 +471,221 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
 
         AcceleratorState._reset_state(True)
 
+    def test_fsdp2_uniform_dtype_upcast_bf16(self):
+        """Test that fsdp2_prepare_model upcasts mixed-dtype trainable params to fp32 master weights
+        when mixed_precision='bf16'. Many HF models (Llama, Mistral) store norm weights in fp32,
+        and FSDP2 requires uniform orig_dtype among trainable params within each FSDP group."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        # Create model with mixed dtypes: linear=bf16, norm=fp32 (simulates HF Llama)
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.LayerNorm(4),
+        )
+        model[0].to(torch.bfloat16)
+        dtypes_before = {p.dtype for p in model.parameters()}
+        assert dtypes_before == {torch.bfloat16, torch.float32}
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "bf16"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_mp_policy = Mock()
+        mock_mp_policy.param_dtype = torch.bfloat16
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = mock_mp_policy
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard"),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+        ):
+            result = fsdp2_prepare_model(mock_accelerator, model)
+
+        dtypes_after = {p.dtype for p in result.parameters()}
+        assert dtypes_after == {torch.float32}, f"Expected all fp32 master weights, got {dtypes_after}"
+
+    def test_fsdp2_uniform_dtype_upcast_fp16(self):
+        """Test that fsdp2_prepare_model upcasts mixed-dtype trainable params to fp32 master weights
+        when mixed_precision='fp16'."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.LayerNorm(4),
+        )
+        model[0].to(torch.float16)
+        dtypes_before = {p.dtype for p in model.parameters()}
+        assert dtypes_before == {torch.float16, torch.float32}
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "fp16"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_mp_policy = Mock()
+        mock_mp_policy.param_dtype = torch.float16
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = mock_mp_policy
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard"),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+        ):
+            result = fsdp2_prepare_model(mock_accelerator, model)
+
+        dtypes_after = {p.dtype for p in result.parameters()}
+        assert dtypes_after == {torch.float32}, f"Expected all fp32 master weights, got {dtypes_after}"
+
+    def test_fsdp2_no_dtype_cast_when_no_mixed_precision(self):
+        """Test that no dtype cast happens when mixed_precision='no', preserving original model dtypes."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.LayerNorm(4),
+        )
+        model[0].to(torch.bfloat16)
+        dtypes_before = {p.dtype for p in model.parameters()}
+        assert dtypes_before == {torch.bfloat16, torch.float32}
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "no"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = None
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard"),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+        ):
+            result = fsdp2_prepare_model(mock_accelerator, model)
+
+        dtypes_after = {p.dtype for p in result.parameters()}
+        assert dtypes_after == {torch.bfloat16, torch.float32}, f"Expected mixed dtypes preserved, got {dtypes_after}"
+
+    def test_fsdp2_no_dtype_cast_with_params4bit(self):
+        """Test that dtype cast is skipped when model has Params4bit (QLoRA),
+        to avoid destroying quantized weights."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.LayerNorm(4),
+        )
+        model[0].to(torch.bfloat16)
+        dtypes_before = {p.dtype for p in model.parameters()}
+        assert dtypes_before == {torch.bfloat16, torch.float32}
+
+        # Simulate Params4bit by renaming one parameter's class
+        original_class = model[0].weight.__class__
+        model[0].weight.__class__ = type("Params4bit", (torch.nn.Parameter,), {})
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "bf16"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_mp_policy = Mock()
+        mock_mp_policy.param_dtype = torch.bfloat16
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = mock_mp_policy
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        try:
+            with (
+                patch("torch.distributed.fsdp.fully_shard"),
+                patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+                patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            ):
+                result = fsdp2_prepare_model(mock_accelerator, model)
+
+            dtypes_after = {p.dtype for p in result.parameters()}
+            assert dtypes_after == {torch.bfloat16, torch.float32}, (
+                f"Expected mixed dtypes preserved (Params4bit skip), got {dtypes_after}"
+            )
+        finally:
+            model[0].weight.__class__ = original_class
+
+    def test_compile_regions_fsdp2_preserves_block_class(self):
+        """`compile_regions_fsdp2` must use in-place `module.compile()` so module classes are preserved.
+
+        `fsdp2_prepare_model`'s auto_wrap_policy uses `isinstance(module, transformer_cls_to_wrap)`. If
+        `OptimizedModule`-wrapped blocks were used (as `compile_regions` does), the isinstance check would
+        miss them and only the root model would get FSDP-sharded — losing per-layer all-gather/compute overlap.
+        """
+        from accelerate.utils import compile_regions_fsdp2
+
+        class Block(torch.nn.Module):
+            def __init__(self, dim):
+                super().__init__()
+                self.linear = torch.nn.Linear(dim, dim)
+
+            def forward(self, x):
+                return self.linear(x)
+
+        class Model(torch.nn.Module):
+            def __init__(self, dim, n_blocks):
+                super().__init__()
+                self.layers = torch.nn.ModuleList([Block(dim) for _ in range(n_blocks)])
+                self.head = torch.nn.Linear(dim, dim)
+
+            def forward(self, x):
+                for layer in self.layers:
+                    x = layer(x)
+                return self.head(x)
+
+        model = Model(dim=8, n_blocks=4)
+        block_cls_before = type(model.layers[0])
+
+        result = compile_regions_fsdp2(model, backend="inductor")
+
+        # In-place: same Python object returned, no wrapper
+        assert result is model
+        # Class identity preserved on each repeated block (the FSDP2 auto_wrap invariant)
+        assert all(type(b) is block_cls_before for b in model.layers)
+        assert all(isinstance(b, Block) for b in model.layers)
+        assert not any(isinstance(b, torch._dynamo.eval_frame.OptimizedModule) for b in model.layers)
+        # And each block + non-repeated leaf is compiled in-place
+        assert all(getattr(b, "_compiled_call_impl", None) is not None for b in model.layers)
+        assert getattr(model.head, "_compiled_call_impl", None) is not None
+
 
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
@@ -514,6 +729,32 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
         self.current_fsdp_version = 1
+
+    @require_fsdp2
+    def test_fsdp2_mixed_precision_bf16_with_bf16_model_loaded(self):
+        """FSDP2 + `mixed_precision=bf16` with the model loaded in bf16."""
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+            mixed_precision="bf16",
+        )
+        cmd.extend(
+            [
+                "--fsdp_reshard_after_forward=true",
+                "--fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP",
+                "--fsdp_transformer_layer_cls_to_wrap=BertLayer",
+                "--fsdp_cpu_ram_efficient_loading=true",
+                str(self.test_scripts_folder / "test_performance.py"),
+                f"--output_dir={self.tmpdir}",
+                "--num_epochs=1",
+                "--model_dtype=bfloat16",
+            ]
+        )
+        # If the regression returns, this hangs forever — keep the test bounded.
+        execute_subprocess_async(cmd, timeout=180)
 
     @require_fp16
     def test_performance(self):
