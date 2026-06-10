@@ -1341,17 +1341,7 @@ def filter_trackers(
         if not isinstance(log_with, (list, tuple)):
             log_with = [log_with]
         if "all" in log_with or LoggerType.ALL in log_with:
-            loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)]
-            # Also keep custom trackers registered via `register_tracker_class` that are named alongside "all".
-            # Apply the same logging-dir guard as the explicit-name branch for consistency.
-            for custom_name in log_with:
-                if custom_name not in LoggerType and custom_name in LOGGER_TYPE_TO_CLASS:
-                    tracker_init = LOGGER_TYPE_TO_CLASS[str(custom_name)]
-                    if tracker_init.requires_logging_directory and logging_dir is None:
-                        raise ValueError(f"Logging with `{custom_name}` requires a `logging_dir` to be passed in.")
-                    if custom_name not in loggers:
-                        loggers.append(custom_name)
-            loggers += get_available_trackers()
+            loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
         else:
             for log_type in log_with:
                 if (

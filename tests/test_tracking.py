@@ -61,7 +61,6 @@ from accelerate.tracking import (
     TensorBoardTracker,
     TrackioTracker,
     WandBTracker,
-    filter_trackers,
     register_tracker_class,
 )
 from accelerate.utils import (
@@ -873,16 +872,6 @@ class RegisterTrackerClassTest(unittest.TestCase):
         assert isinstance(tracker, MyRegisteredTracker)
         assert tracker.config == config
         assert tracker.values == {"total_loss": 0.1}
-
-    def test_register_with_all(self):
-        register_tracker_class(MyRegisteredTracker)
-        loggers = filter_trackers([MyRegisteredTracker.name, "all"])
-        assert MyRegisteredTracker.name in loggers
-
-        # A registered tracker that requires a logging directory still enforces it alongside "all".
-        register_tracker_class(MyDirRegisteredTracker)
-        with self.assertRaises(ValueError):
-            filter_trackers([MyDirRegisteredTracker.name, "all"])
 
     def test_register_invalid_class_raises(self):
         with self.assertRaises(ValueError):
