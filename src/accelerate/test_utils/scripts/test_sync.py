@@ -27,12 +27,16 @@ from accelerate.utils import DistributedType, set_seed
 
 
 def check_model_parameters(model_a, model_b, did_step, iteration, **kwargs):
+    # `kwargs` (e.g. a loosened `rtol`) only applies to the should-be-in-sync check: it is there to absorb
+    # reduction-order roundoff (observed up to ~5e-3 relative by iteration 4). The should-NOT-be-in-sync
+    # check must stay strict — the genuine cross-rank gradient difference can be as small as ~1e-2
+    # relative, so a loosened tolerance would mask it and flip this assertion.
     for param, grad_param in zip(model_a.parameters(), model_b.parameters()):
         if not param.requires_grad:
             continue
         if not did_step:
             # Grads should not be in sync
-            assert torch.allclose(param.grad, grad_param.grad, **kwargs) is False, (
+            assert torch.allclose(param.grad, grad_param.grad) is False, (
                 f"Gradients in sync when they should not be at iteration {iteration}:\nmodel_a grad ({param.grad}) == model_b grad ({grad_param.grad})"
             )
         else:
