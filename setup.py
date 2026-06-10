@@ -43,6 +43,7 @@ extras["test_trackers"] = [
     "tensorboard",
     "dvclive",
     # "mlflow", too many deps that lead to download a very old version of the lib
+    # "comet-ml" was removed: its import-time auto-patching breaks the example scripts
     "matplotlib",
     "swanlab[dashboard]",  # dashboard required for local use
     "trackio",
