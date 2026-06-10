@@ -150,11 +150,6 @@ class BatchSamplerShard(BatchSampler):
         split_batches: bool = False,
         even_batches: bool = True,
     ):
-        if split_batches and batch_sampler.batch_size % num_processes != 0:
-            raise ValueError(
-                f"To use `BatchSamplerShard` in `split_batches` mode, the batch size ({batch_sampler.batch_size}) "
-                f"needs to be a round multiple of the number of processes ({num_processes})."
-            )
         self.batch_sampler = batch_sampler
         self.num_processes = num_processes
         self.process_index = process_index
@@ -162,10 +157,10 @@ class BatchSamplerShard(BatchSampler):
         self.even_batches = even_batches
         self.batch_size = getattr(batch_sampler, "batch_size", None)
         self.drop_last = getattr(batch_sampler, "drop_last", False)
-        if self.batch_size is None and self.even_batches:
+        if split_batches and (self.batch_size is None or self.batch_size % num_processes != 0):
             raise ValueError(
-                "You need to use `even_batches=False` when the batch sampler has no batch size. If you "
-                "are not calling this method directly, set `accelerator.even_batches=False` instead."
+                f"To use `BatchSamplerShard` in `split_batches` mode, the batch size ({self.batch_size}) "
+                f"needs to be a round multiple of the number of processes ({num_processes})."
             )
 
     @property
@@ -217,11 +212,15 @@ class BatchSamplerShard(BatchSampler):
 
     def _iter_with_no_split(self):
         initial_data = []
-        batch_to_yield = []
+        batch_to_yield = None
         for idx, batch in enumerate(self.batch_sampler):
             # We gather the initial indices in case we need to circle back at the end.
             if not self.drop_last and idx < self.num_processes:
-                initial_data += batch
+                if self.batch_size is None:
+                    # If batch size is None, `batch` is considered to be a list of indices with dynamic length.
+                    initial_data.append(batch)
+                else:
+                    initial_data += batch
             # We identify the batch to yield but wait until we ar sure every process gets a full batch before actually
             # yielding it.
             if idx % self.num_processes == self.process_index:
@@ -230,35 +229,44 @@ class BatchSamplerShard(BatchSampler):
                 self.batch_size is None or len(batch) == self.batch_size
             ):
                 yield batch_to_yield
-                batch_to_yield = []
+                batch_to_yield = None
 
         # If drop_last is True, iteration is over, otherwise...
         if not self.drop_last and len(initial_data) > 0:
             if not self.even_batches:
-                if len(batch_to_yield) > 0:
+                if batch_to_yield:
                     yield batch_to_yield
             else:
                 # ... we yield the complete batch we had saved before if it has the proper length
-                if len(batch_to_yield) == self.batch_size:
+                if batch_to_yield and (self.batch_size is None or len(batch_to_yield) == self.batch_size):
                     yield batch_to_yield
 
                 # For degenerate cases where the dataset has less than num_process * batch_size samples
-                while len(initial_data) < self.num_processes * self.batch_size:
+                _min_length_needed = (
+                    self.num_processes * self.batch_size if self.batch_size is not None else self.num_processes
+                )
+                while len(initial_data) < _min_length_needed:
                     initial_data += initial_data
 
                 # If the last batch seen was of the proper size, it has been yielded by its process so we move to the next
-                if len(batch) == self.batch_size:
+                if self.batch_size is None or len(batch) == self.batch_size:
                     batch = []
                     idx += 1
 
                 # Make sure we yield a multiple of self.num_processes batches
                 cycle_index = 0
                 while idx % self.num_processes != 0 or len(batch) > 0:
-                    end_index = cycle_index + self.batch_size - len(batch)
-                    batch += initial_data[cycle_index:end_index]
-                    if idx % self.num_processes == self.process_index:
-                        yield batch
-                    cycle_index = end_index
+                    if self.batch_size is None:
+                        batch = initial_data[cycle_index]
+                        if idx % self.num_processes == self.process_index:
+                            yield batch
+                        cycle_index += 1
+                    else:
+                        end_index = cycle_index + self.batch_size - len(batch)
+                        batch += initial_data[cycle_index:end_index]
+                        if idx % self.num_processes == self.process_index:
+                            yield batch
+                        cycle_index = end_index
                     batch = []
                     idx += 1
 
