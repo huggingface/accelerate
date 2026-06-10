@@ -508,8 +508,6 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             patch("torch.distributed.fsdp.fully_shard"),
             patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
             patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
-            # This mock test resets the accelerate state in setUp; patch the logger so the upcast
-            # `logger.info(...)` does not trip the "must initialize PartialState()" guard.
             patch("accelerate.utils.fsdp_utils.logger"),
         ):
             result = fsdp2_prepare_model(mock_accelerator, model)
@@ -552,8 +550,6 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             patch("torch.distributed.fsdp.fully_shard"),
             patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
             patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
-            # This mock test resets the accelerate state in setUp; patch the logger so the upcast
-            # `logger.info(...)` does not trip the "must initialize PartialState()" guard.
             patch("accelerate.utils.fsdp_utils.logger"),
         ):
             result = fsdp2_prepare_model(mock_accelerator, model)
@@ -593,8 +589,6 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             patch("torch.distributed.fsdp.fully_shard"),
             patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
             patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
-            # This mock test resets the accelerate state in setUp; patch the logger so the upcast
-            # `logger.info(...)` does not trip the "must initialize PartialState()" guard.
             patch("accelerate.utils.fsdp_utils.logger"),
         ):
             result = fsdp2_prepare_model(mock_accelerator, model)

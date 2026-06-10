@@ -27,10 +27,7 @@ from accelerate.utils import DistributedType, set_seed
 
 
 def check_model_parameters(model_a, model_b, did_step, iteration, **kwargs):
-    # `kwargs` (e.g. a loosened `rtol`) only applies to the should-be-in-sync check: it is there to absorb
-    # reduction-order roundoff (observed up to ~5e-3 relative by iteration 4). The should-NOT-be-in-sync
-    # check must stay strict — the genuine cross-rank gradient difference can be as small as ~1e-2
-    # relative, so a loosened tolerance would mask it and flip this assertion.
+    # kwargs (e.g. a loosened rtol) only applies to the in-sync check; the not-in-sync check stays strict
     for param, grad_param in zip(model_a.parameters(), model_b.parameters()):
         if not param.requires_grad:
             continue
@@ -295,9 +292,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(
                 ddp_model,
                 did_step or sync_each_batch,  # syncs at each grad_accum interval of if sync_each_batch==True
                 iteration,
-                # fp32 reduction-order roundoff accumulates over iterations; observed relative
-                # deviations up to ~5e-3 by iteration 4 on 2-GPU runs.
-                rtol=1e-2,
+                rtol=1e-2,  # needs a relative tolerance due to roundoff errors
             )
 
         if did_step:

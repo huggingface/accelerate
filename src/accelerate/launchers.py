@@ -308,8 +308,7 @@ def debug_launcher(function, args=(), num_processes=2):
     with tempfile.NamedTemporaryFile() as tmp_file:
         # torch.distributed will expect a few environment variable to be here. We set the ones common to each
         # process here (the other ones will be set be the launcher).
-        # `gloo_socket_ifname` pins gloo's TCP mesh to loopback: all processes live on this machine, and
-        # resolving the hostname instead (gloo's default) flakes on CI runners with transient interfaces.
+        # gloo's default interface selection (hostname-based) is flaky on CI runners, pin it to loopback
         with patch_environment(
             world_size=num_processes,
             master_addr="127.0.0.1",

@@ -71,9 +71,6 @@ class TPIntegrationTest(TempDirTestCase):
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.test_file_path = os.path.join(current_dir, "fsdp2_tp_preparation.py")
         self.test_config_path = os.path.join(current_dir, "fsdp2_tp_preparation_config.yaml")
-        # Launch one process per available accelerator instead of the fixed `num_processes` in the
-        # config file (the script derives DP from the world size), so the test uses the whole host
-        # instead of failing with "invalid device ordinal" when fewer than 4 GPUs are present.
         cmd = get_launch_command(num_processes=device_count, num_machines=1, machine_rank=0)
         cmd.extend(
             [

@@ -42,8 +42,7 @@ test_tp:
 	python -m pytest -s -v ./tests/tp $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_tp.log",)
 
 # Since the new version of pytest will *change* how things are collected, we need `deepspeed` to
-# run after test_core and test_cli. Every suite runs even if an earlier one fails (the CI report
-# needs the full signal); the target fails at the end if any suite failed.
+# run after test_core and test_cli
 test:
 	@status=0; \
 	for target in test_core test_cli test_big_modeling test_deepspeed test_fsdp test_tp; do \
@@ -54,8 +53,7 @@ test:
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_examples.log",)
 
-# Shards of the examples suite, used by `test.yml` (via `make $(matrix.test-kind)`) to parallelize
-# the per-PR CI — see https://github.com/huggingface/accelerate/pull/419
+# Example-suite shards used by test.yml
 test_example_differences:
 	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_example_diff.log",)
 
