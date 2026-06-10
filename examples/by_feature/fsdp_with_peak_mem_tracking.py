@@ -185,7 +185,7 @@ def training_function(config, args):
         accelerator.init_trackers("fsdp_glue_no_trainer", experiment_config)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
-    datasets = load_dataset("glue", "mrpc")
+    datasets = load_dataset("nyu-mll/glue", "mrpc")
     metric = evaluate.load("glue", "mrpc")
 
     def tokenize_function(examples):
