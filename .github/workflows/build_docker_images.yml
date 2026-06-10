@@ -5,6 +5,14 @@ on:
   workflow_call:
   schedule:
     - cron: "0 1 * * *"
+  # TEMPORARY validation for the CI rework: rebuild when the image definitions or the deps baked
+  # into the images change, then run the nightly tests on the result (see run-nightly-tests below).
+  # Before merging: drop fix-all-tests from the branch list (keep main) or remove this trigger.
+  push:
+    branches: [main, fix-all-tests]
+    paths:
+      - "docker/**"
+      - "setup.py"
 
 concurrency:
   group: docker-image-builds
@@ -114,3 +122,10 @@ jobs:
           build-args: |
             BASE_YEAR=${{ env.base_year }}
             BASE_MONTH=${{ env.base_month }}
+
+  # Run the slow tests on the freshly built images so a broken image or dependency change
+  # surfaces immediately.
+  run-nightly-tests:
+    needs: [latest-cpu, latest-cuda, latest-cuda-deepspeed]
+    uses: ./.github/workflows/nightly.yml
+    secrets: inherit
