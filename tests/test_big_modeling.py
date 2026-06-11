@@ -32,6 +32,7 @@ from accelerate.big_modeling import (
     init_empty_weights,
     init_on_device,
     load_checkpoint_and_dispatch,
+    materialize_meta_tensors,
 )
 from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import (
@@ -701,6 +702,92 @@ class BigModelingTester(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 x = torch.randn(2, 3)
                 model(x)
+
+    def test_materialize_meta_tensors(self):
+        model = ModelForTest()
+        device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": "disk"}
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir)
+            assert model.linear2.weight.device == torch.device("meta")
+            # A dispatched model with offloaded modules cannot be moved.
+            with self.assertRaises(RuntimeError):
+                model.to("cpu")
+
+            materialize_meta_tensors(model, target_device="cpu")
+
+        assert all(t.device == torch.device("cpu") for t in itertools.chain(model.parameters(), model.buffers()))
+        assert all(not hasattr(module, "_hf_hook") for module in model.modules())
+        assert not hasattr(model, "hf_device_map")
+        # The model can now be moved freely, without any warning.
+        with self.assertLogs(level="WARNING") as cm:
+            # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
+            # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
+            model.to(torch_device)
+            logger.warning("Dummy warning")
+        assert len(cm.records) == 1
+        assert "Dummy warning" in cm.records[0].message
+        output = model(x.to(torch_device))
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
+    def test_materialize_meta_tensors_load_checkpoint_and_dispatch(self):
+        # Here the offloaded weights were never on a real device, so they can only be loaded from the offload folder.
+        model = ModelForTest()
+        device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": "disk"}
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            with init_empty_weights():
+                new_model = ModelForTest()
+            new_model = load_checkpoint_and_dispatch(
+                new_model, checkpoint, device_map=device_map, offload_folder=tmp_dir
+            )
+            assert new_model.linear2.weight.device == torch.device("meta")
+
+            materialize_meta_tensors(new_model, target_device="cpu")
+
+        assert all(
+            t.device == torch.device("cpu") for t in itertools.chain(new_model.parameters(), new_model.buffers())
+        )
+        output = new_model(x)
+        torch.testing.assert_close(expected, output, atol=ATOL, rtol=RTOL)
+
+    def test_materialize_meta_tensors_tied_weights(self):
+        model = ModelForTestTiedWeights()
+        model.linear1.weight = model.linear2.weight
+        device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": "disk"}
+        x = torch.randn(2, 4)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir)
+            materialize_meta_tensors(model, target_device="cpu")
+
+        assert model.linear1.weight is model.linear2.weight
+        assert all(t.device == torch.device("cpu") for t in itertools.chain(model.parameters(), model.buffers()))
+        output = model(x)
+        torch.testing.assert_close(expected, output, atol=ATOL, rtol=RTOL)
+
+    def test_materialize_meta_tensors_offload_buffers(self):
+        model = ModelForTestNonPersistentBuffers()
+        device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": "disk"}
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir, offload_buffers=True)
+            assert model.linear2.weight.device == torch.device("meta")
+            materialize_meta_tensors(model, target_device="cpu")
+
+        assert all(t.device == torch.device("cpu") for t in itertools.chain(model.parameters(), model.buffers()))
+        output = model(x)
+        torch.testing.assert_close(expected, output, atol=ATOL, rtol=RTOL)
 
     @slow
     @require_non_hpu  # hpu does not support device indexing "hpu:1"

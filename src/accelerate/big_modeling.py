@@ -26,10 +26,12 @@ from .hooks import (
     AlignDevicesHook,
     CpuOffload,
     LayerwiseCastingHook,
+    SequentialHook,
     UserCpuOffloadHook,
     add_hook_to_module,
     attach_align_device_hook,
     attach_align_device_hook_on_blocks,
+    remove_hook_from_module,
 )
 from .utils import (
     OffloadedWeightsLoader,
@@ -47,9 +49,11 @@ from .utils import (
     is_sdaa_available,
     is_xpu_available,
     load_checkpoint_in_model,
+    named_module_tensors,
     offload_state_dict,
     parse_flag_from_env,
     retie_parameters,
+    set_module_tensor_to_device,
 )
 from .utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 from .utils.other import recursive_getattr
@@ -517,6 +521,75 @@ def dispatch_model(
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
     return model
+
+
+def materialize_meta_tensors(model: nn.Module, target_device: Union[int, str, torch.device] = "cpu"):
+    """
+    Reverses [`dispatch_model`]: loads all the weights offloaded to the CPU or the disk back onto `target_device`,
+    removes all the hooks added by Accelerate and places the model on `target_device`. The model then no longer has
+    any parameter on the meta device and can be moved freely with `model.to()`, for instance to park it in CPU RAM
+    while another model uses the GPU, then move it back.
+
+    Note that this requires enough memory on `target_device` to fit the whole model.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model dispatched with [`dispatch_model`] or [`load_checkpoint_and_dispatch`].
+        target_device (`int`, `str` or `torch.device`, *optional*, defaults to `"cpu"`):
+            The device on which to load the offloaded weights and place the model.
+
+    Returns:
+        `torch.nn.Module`: The same model, with all its weights materialized on `target_device` (the model is
+        modified in place, so the result can be discarded).
+
+    Example:
+
+    ```python
+    >>> from accelerate import dispatch_model, materialize_meta_tensors
+
+    >>> model = dispatch_model(model, device_map=device_map, offload_dir=offload_dir)
+    >>> # ... run inference, then free the execution device for another model
+    >>> model = materialize_meta_tensors(model, target_device="cpu")
+    >>> # The model can now be moved freely
+    >>> model = model.to("cuda:0")
+    ```
+    """
+    # Materializing the offloaded weights breaks the ties between them, so we keep track of the tied parameters to
+    # retie them at the end.
+    tied_params = find_tied_parameters(model)
+
+    # Keep a handle on the offloading hooks before removing them, as we need their `weights_map` to load back the
+    # weights that `detach_hook` leaves on the meta device (those that were already on the meta device before the
+    # hooks were attached, for instance with `load_checkpoint_and_dispatch`).
+    offloaded_modules = []
+    for module in model.modules():
+        module_hook = getattr(module, "_hf_hook", None)
+        hooks = module_hook.hooks if isinstance(module_hook, SequentialHook) else [module_hook]
+        for hook in hooks:
+            if isinstance(hook, AlignDevicesHook) and hook.offload and hook.weights_map is not None:
+                offloaded_modules.append((module, hook))
+
+    # Detach all the hooks: this restores the weights that were offloaded from a real device and removes the wrappers
+    # `dispatch_model` added on `to`, `cuda`, etc.
+    remove_hook_from_module(model, recurse=True)
+
+    # Load the weights still on the meta device from the offloaded values, mirroring `AlignDevicesHook.pre_forward`.
+    for module, hook in offloaded_modules:
+        for name, tensor in named_module_tensors(
+            module, include_buffers=hook.offload_buffers, recurse=hook.place_submodules, remove_non_persistent=True
+        ):
+            if tensor.device != torch.device("meta"):
+                continue
+            value = hook.weights_map[name]
+            fp16_statistics = hook._maybe_get_fp16_statistics(name, value)
+            set_module_tensor_to_device(module, name, target_device, value=value, fp16_statistics=fp16_statistics)
+
+    retie_parameters(model, tied_params)
+    if hasattr(model, "hf_device_map"):
+        del model.hf_device_map
+
+    # Move the parts that were not offloaded (e.g. kept on the execution device) to `target_device` as well.
+    return model.to(target_device)
 
 
 def load_checkpoint_and_dispatch(

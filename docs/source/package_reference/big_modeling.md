@@ -37,6 +37,10 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] big_modeling.dispatch_model
 
+### materialize_meta_tensors
+
+[[autodoc]] big_modeling.materialize_meta_tensors
+
 ### load_checkpoint_and_dispatch
 
 [[autodoc]] big_modeling.load_checkpoint_and_dispatch
