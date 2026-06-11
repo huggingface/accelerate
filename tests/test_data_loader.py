@@ -544,6 +544,40 @@ class DataLoaderTester(AccelerateTestCase):
         dataloader.set_epoch(1)
         assert batch_sampler.epoch == 1
 
+    def test_skip_first_batches_preserves_iteration(self):
+        # Regression test: skip_first_batches must carry the DataLoaderShard's iteration
+        # forward so that __iter__ does not reset the sampler epoch to 0 on resume.
+        dataset = list(range(16))
+        generator = torch.Generator()
+        batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
+        dataloader = DataLoaderShard(dataset, batch_sampler=batch_sampler)
+
+        dataloader.set_epoch(1)
+        assert dataloader.iteration == 1
+
+        new_dataloader = skip_first_batches(dataloader, num_batches=2)
+        # The new DataLoaderShard must inherit iteration=1, not default to 0.
+        assert new_dataloader.iteration == 1
+
+    def test_skip_first_batches_does_not_reset_sampler_epoch(self):
+        # Regression test: iterating the dataloader returned by skip_first_batches must
+        # not call set_epoch(0) on the batch sampler when the original dataloader was
+        # already at epoch > 0.  Before the fix, DataLoaderShard.__iter__ always called
+        # self.set_epoch(0) because iteration was hard-coded to 0 in the constructor.
+        dataset = list(range(16))
+        generator = torch.Generator()
+        batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
+        dataloader = DataLoaderShard(dataset, batch_sampler=batch_sampler)
+
+        dataloader.set_epoch(1)
+        new_dataloader = skip_first_batches(dataloader, num_batches=2)
+
+        # Consume the iterator; __iter__ calls self.set_epoch(self.iteration) internally.
+        list(new_dataloader)
+
+        # The sampler epoch must remain 1 (propagated by set_epoch(1)), not be reset to 0.
+        assert batch_sampler.epoch == 1
+
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
         """When n_shards == num_processes, native HF dataset sharding should be used."""
