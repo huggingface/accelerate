@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from datetime import timedelta
 
 import torch
@@ -62,8 +63,9 @@ def main():
     MODEL_NAME = "Qwen/Qwen3-0.6B"
     BATCH_SIZE = 2
     SEQ_LEN = 64
-    TP = 2
-    DP = 4 // TP
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    TP = min(2, world_size)
+    DP = max(1, world_size // TP)
 
     # Setup Accelerator with FSDP2
     init_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=1800))

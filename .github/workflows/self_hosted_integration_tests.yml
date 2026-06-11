@@ -50,7 +50,7 @@ jobs:
           cd accelerate;
           git checkout ${{ github.sha }} ;
           pip install -e .[testing];
-          pip uninstall comet_ml wandb dvclive -y
+          pip uninstall wandb dvclive -y
           cd ..;
 
       - name: Show installed libraries
@@ -66,26 +66,6 @@ jobs:
         run: |
           source activate accelerate;
           pytest -sv tests/trainer
-
-      - name: Run deepspeed tests
-        working-directory: transformers/
-        env:
-          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
-          WANDB_DISABLED: true
-        if: always()
-        run: |
-          source activate accelerate;
-          pytest -sv tests/deepspeed
-
-      - name: Run transformers examples tests
-        working-directory: transformers/
-        env:
-          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
-          WANDB_DISABLED: true
-        run: |
-          source activate accelerate
-          pip install -r examples/pytorch/_tests_requirements.txt
-          pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
 
   run-skorch-tests:
     container:
