@@ -430,6 +430,21 @@ class ModelingUtilsTester(unittest.TestCase):
             self.shard_test_model(model, tmp_dir)
             load_checkpoint_in_model(model, tmp_dir)
 
+    def test_load_checkpoint_in_model_rejects_path_traversal(self):
+        # Regression test: a malicious or corrupted sharded-checkpoint index must not be able to
+        # load shards from outside the checkpoint folder (e.g. "../escaped_shard.bin" or an absolute
+        # path). Such an entry must be rejected before any file is opened.
+        model = ModelForTest()
+        for malicious_target in ("../escaped_shard.bin", os.path.join(os.sep, "tmp", "escaped_shard.bin")):
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                index = {name: malicious_target for name in model.state_dict()}
+                index_file = os.path.join(tmp_dir, "weight_map.index.json")
+                with open(index_file, "w") as f:
+                    json.dump(index, f)
+                with self.assertRaises(ValueError) as cm:
+                    load_checkpoint_in_model(model, index_file)
+                self.assertIn("outside", str(cm.exception))
+
     @require_non_cpu
     def test_load_checkpoint_in_model_one_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
