@@ -290,6 +290,17 @@ class UtilsTester(unittest.TestCase):
             assert "5.4.0" in ctx.records[0].msg
             assert "5.5.0" in ctx.records[0].msg
 
+    def test_check_os_kernel_no_crash_on_nonstandard_release(self):
+        # Some Linux kernels report a release string without a full X.Y.Z version (e.g. custom
+        # builds, certain containers/WSL). check_os_kernel() is called during Accelerator init and
+        # must never raise just because it cannot parse the version -- it should degrade gracefully.
+        for release in ("5.15", "6.1-arch1", "unknown"):
+            with (
+                patch("platform.uname", return_value=Mock(release=release, system="Linux")),
+                warnings.catch_warnings(record=True),
+            ):
+                check_os_kernel()
+
     @require_non_torch_xla
     def test_save_safetensor_shared_memory(self):
         class Model(nn.Module):
