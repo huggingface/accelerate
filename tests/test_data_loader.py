@@ -27,6 +27,7 @@ from accelerate.data_loader import (
     DataLoaderShard,
     DataLoaderStateMixin,
     IterableDatasetShard,
+    SeedableRandomSampler,
     SkipBatchSampler,
     SkipDataLoader,
     prepare_data_loader,
@@ -661,23 +662,18 @@ class DataLoaderTester(AccelerateTestCase):
         assert new_dataloader.iteration == 1
 
     def test_skip_first_batches_does_not_reset_sampler_epoch(self):
-        # Regression test: iterating the dataloader returned by skip_first_batches must
-        # not call set_epoch(0) on the batch sampler when the original dataloader was
-        # already at epoch > 0.  Before the fix, DataLoaderShard.__iter__ always called
-        # self.set_epoch(0) because iteration was hard-coded to 0 in the constructor.
+        # Regression test: skip_first_batches must preserve the original dataloader.batch_sampler.sampler's iteration.
         dataset = list(range(16))
         generator = torch.Generator()
-        batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
+        sampler = SeedableRandomSampler(dataset)
+        batch_sampler = SimpleBatchSampler(sampler, batch_size=4, drop_last=False, generator=generator, seed=42)
         dataloader = DataLoaderShard(dataset, batch_sampler=batch_sampler)
 
         dataloader.set_epoch(1)
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
+        next(iter(new_dataloader))
 
-        # Consume the iterator; __iter__ calls self.set_epoch(self.iteration) internally.
-        list(new_dataloader)
-
-        # The sampler epoch must remain 1 (propagated by set_epoch(1)), not be reset to 0.
-        assert batch_sampler.epoch == 1
+        assert sampler.epoch == 1
 
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
