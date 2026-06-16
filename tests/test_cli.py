@@ -472,7 +472,8 @@ class ModelEstimatorTester(unittest.TestCase):
         ):
             args = self.parser.parse_args(["meta-llama/Llama-2-7b-hf"])
             with patch_environment(hf_hub_disable_implicit_token="1"):
-                estimate_command(args)
+                with patch("accelerate.commands.estimate.verify_on_hub", return_value="gated"):
+                    estimate_command(args)
 
     @require_transformers
     def test_remote_code(self):
