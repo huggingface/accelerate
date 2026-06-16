@@ -757,6 +757,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         _non_blocking: bool = False,
         slice_fn=None,
         torch_device_mesh=None,
+        iteration=0,
         **kwargs,
     ):
         shuffle = False
@@ -778,7 +779,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         self.torch_device_mesh = torch_device_mesh
 
         self.slice_fn = slice_tensors if slice_fn is None else slice_fn
-        self.iteration = 0
+        self.iteration = iteration
 
         # if a device mesh is provided extract each dimension (dp, fsdp, tp)
         # device mesh may hold any number of dimensions, however,
@@ -1439,6 +1440,7 @@ def skip_first_batches(dataloader, num_batches=0):
             split_batches=dataloader.split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader._drop_last,
+            iteration=dataloader.iteration,
             **kwargs,
         )
     elif isinstance(dataloader, DataLoaderShard):
