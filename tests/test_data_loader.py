@@ -539,6 +539,23 @@ class DataLoaderTester(AccelerateTestCase):
             assert isinstance(d["tensor"], torch.Tensor)
             assert d["non_tensor"] == "non_tensor_value"
 
+    @require_datasets
+    def test_iterable_dataset_blocked_source_shuffling_multiple_epochs(self):
+        # Regression test for #4080: an HF `datasets` IterableDataset built via `.skip()`/`.take()`
+        # forbids reshuffling its data sources between epochs. Accelerate sets a nonzero epoch on the
+        # dataset before each pass, which previously raised `DataSourcesShufflingDisallowed` on the
+        # second epoch. The dataloader should reset the dataset epoch and keep iterating instead.
+        import datasets
+
+        expected = [[10, 11], [12, 13], [14, 15], [16, 17], [18, 19]]
+        for dispatch_batches in (True, False):
+            dataset = datasets.Dataset.from_dict({"a": list(range(20))}).to_iterable_dataset().skip(10)
+            dataloader = prepare_data_loader(
+                DataLoader(dataset, batch_size=2), dispatch_batches=dispatch_batches, put_on_device=True
+            )
+            for _ in range(2):  # second epoch must not raise DataSourcesShufflingDisallowed
+                assert [batch["a"].tolist() for batch in dataloader] == expected
+
     @parameterized.expand([1, 2], name_func=parameterized_custom_name_func)
     def test_reproducibility(self, num_processes):
         set_seed(21)
