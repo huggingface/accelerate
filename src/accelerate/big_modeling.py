@@ -495,7 +495,7 @@ def dispatch_model(
                 "Please make sure to update your driver to the latest version which resolves this."
             )
     else:
-        device = list(device_map.values())[0]
+        device = list(devices)[0]
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
         if is_npu_available() and isinstance(device, int):
             device = f"npu:{device}"
@@ -507,12 +507,9 @@ def dispatch_model(
             device = f"musa:{device}"
         elif is_neuron_available() and isinstance(device, int):
             device = f"neuron:{device}"
-        if device != "disk":
-            model.to(device)
         else:
-            raise ValueError(
-                "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
-            )
+            assert device != "disk"
+            model.to(device)
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
     return model
