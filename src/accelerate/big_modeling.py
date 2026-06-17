@@ -368,16 +368,15 @@ def dispatch_model(
         ):
             force_hooks = True
 
-    # We attach hooks if the device_map has at least 2 different devices or if
-    # force_hooks is set to `True`. Otherwise, the model in already loaded
+    # We attach hooks if there are least 2 different devices, one of the device is disk,
+    # or if force_hooks is set to `True`. Otherwise, the model in already loaded
     # in the unique device and the user can decide where to dispatch the model.
     # If the model is quantized, we always force-dispatch the model
-    if (len(set(device_map.values())) > 1) or force_hooks:
+    devices = set(device_map.values())
+    if (len(devices) > 1) or "disk" in devices or force_hooks:
         if main_device is None:
-            if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
-                main_device = "cpu"
-            else:
-                main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
+            non_offloaded_devices = devices - {"cpu", "disk"}
+            main_device = non_offloaded_devices[0] if non_offloaded_devices else "cpu"
 
         if main_device != "cpu":
             cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
