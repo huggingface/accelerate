@@ -780,6 +780,7 @@ class BigModelingTester(unittest.TestCase):
     def test_dispatch_model_disk_only(self):
         model = ModelForTest()
 
+        # note: non-expanded device maps for disk offloading is not supported
         device_map = {"linear1": "disk", "batchnorm": "disk", "linear2": "disk"}
 
         x = torch.randn(2, 3)
