@@ -373,10 +373,10 @@ def dispatch_model(
     # in the unique device and the user can decide where to dispatch the model.
     # If the model is quantized, we always force-dispatch the model
     devices = set(device_map.values())
-    if (len(devices) > 1) or "disk" in devices or force_hooks:
+    if len(devices) > 1 or "disk" in devices or force_hooks:
         if main_device is None:
             non_offloaded_devices = devices - {"cpu", "disk"}
-            main_device = non_offloaded_devices[0] if non_offloaded_devices else "cpu"
+            main_device = list(non_offloaded_devices)[0] if non_offloaded_devices else "cpu"
 
         if main_device != "cpu":
             cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
@@ -420,13 +420,16 @@ def dispatch_model(
         tied_params_map = {}
         for group in tied_params:
             for param_name in group:
-                # data_ptr() is enough here, as `find_tied_parameters` finds tied params simply by comparing `param1 is param2`, so we don't need
-                # to care about views of tensors through storage_offset.
-                data_ptr = recursive_getattr(model, param_name).data_ptr()
-                tied_params_map[data_ptr] = {}
+                offloaded_param = recursive_getattr(model, param_name)
 
                 # Note: To handle the disk offloading case, we can not simply use weights_map[param_name].data_ptr() as the reference pointer,
                 # as we have no guarantee that safetensors' `file.get_tensor()` will always give the same pointer.
+                # Therefore, we must skip and induce a runtime cost in the rare case that two tied disk-offloaded params are onloaded simultaneously
+                if offloaded_param.device.type != "meta":
+                    # data_ptr() is enough here, as `find_tied_parameters` finds tied params simply by comparing `param1 is param2`, so we don't need
+                    # to care about views of tensors through storage_offset.
+                    data_ptr = recursive_getattr(model, param_name).data_ptr()
+                    tied_params_map[data_ptr] = {}
 
         attach_align_device_hook_on_blocks(
             model,
