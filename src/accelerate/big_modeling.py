@@ -428,7 +428,7 @@ def dispatch_model(
                 if offloaded_param.device.type != "meta":
                     # data_ptr() is enough here, as `find_tied_parameters` finds tied params simply by comparing `param1 is param2`, so we don't need
                     # to care about views of tensors through storage_offset.
-                    data_ptr = recursive_getattr(model, param_name).data_ptr()
+                    data_ptr = offloaded_param.data_ptr()
                     tied_params_map[data_ptr] = {}
 
         attach_align_device_hook_on_blocks(
@@ -511,7 +511,6 @@ def dispatch_model(
         elif is_neuron_available() and isinstance(device, int):
             device = f"neuron:{device}"
         else:
-            assert device != "disk"
             model.to(device)
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
