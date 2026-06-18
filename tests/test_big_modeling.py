@@ -780,7 +780,7 @@ class BigModelingTester(unittest.TestCase):
     def test_dispatch_model_disk_only(self):
         model = ModelForTest()
 
-        device_map = {"": "disk"}
+        device_map = {"linear1": "disk", "batchnorm": "disk", "linear2": "disk"}
 
         x = torch.randn(2, 3)
         expected = model(x)
