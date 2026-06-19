@@ -21,6 +21,7 @@ from accelerate.utils.dataclasses import (
     DeepSpeedSequenceParallelConfig,
     DistributedType,
     TorchContextParallelConfig,
+    AccelerateSequenceParallelConfig,
     TorchTensorParallelConfig,
 )
 from accelerate.utils.versions import is_torch_version
@@ -53,10 +54,15 @@ class ParallelismConfig:
             for downstream libraries.
         cp_backend (`str`, defaults to `torch`):
             Which CP backend to use: `torch` (FSDP2)
+        cp_handler (`~utils.TorchContextParallelConfig`, *optional*,  defaults to `None`): The handler for the context parallel group.
         sp_size (`int`, defaults to `1`):
-            The size of the sequence parallel group.
-        sp_backend (`str`, defaults to `deepspeed`):
-            Which SP backend to use:`deepspeed` (ALST/Ulysses)
+            The size of the sequence parallel group. If `1`, SP is not used.
+        sp_backend (`str`, *optional*):
+            Which SP backend to use: `"accelerate"` (our native Ulysses) or `"deepspeed"`
+            (ALST/Ulysses, which needs the DeepSpeed engine). If left unset it auto-resolves: `"deepspeed"`
+            under the DeepSpeed engine, else `"accelerate"`.
+        sp_handler (`~utils.AccelerateSequenceParallelConfig` or `~utils.DeepSpeedSequenceParallelConfig`, *optional*, defaults to `None`):
+            Config for the sequence parallel group;
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
     together:
@@ -73,12 +79,12 @@ class ParallelismConfig:
     cp_size: Optional[int] = None
     cp_backend: Literal["torch"] = None
     sp_size: Optional[int] = None
-    sp_backend: Literal["deepspeed"] = None
+    sp_backend: Literal["deepspeed", "accelerate"] = None
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
     cp_handler: Union[None, TorchContextParallelConfig] = None
-    sp_handler: Union[None, DeepSpeedSequenceParallelConfig] = None
+    sp_handler: Union[None, DeepSpeedSequenceParallelConfig, AccelerateSequenceParallelConfig] = None
 
     device_mesh = None
 
@@ -94,7 +100,8 @@ class ParallelismConfig:
             f"\tsp_backend={self.sp_backend},\n"
             f"\ttotal_size={self.total_size}\n"
             f"\ttp_handler={self.tp_handler},\n"
-            f"\tcp_handler={self.cp_handler})\n"
+            f"\tcp_handler={self.cp_handler},\n"
+            f"\tsp_handler={self.sp_handler})\n"
         )
 
     def to_json(self):
@@ -102,7 +109,7 @@ class ParallelismConfig:
 
         _non_serializable_fields = ["device_mesh"]
 
-        copy.deepcopy(
+        return copy.deepcopy(
             {
                 k: copy.deepcopy(v.__dict__) if hasattr(v, "__dict__") else v
                 for k, v in self.__dict__.items()
@@ -133,18 +140,32 @@ class ParallelismConfig:
         return dims
 
     @property
+    def _sequence_sharding_enabled(self):
+        """Whether the native (accelerate) sequence-sharding path is active and `prepare` should wrap
+        dataloaders in a `SequenceShardingDataLoader`. Currently Ulysses SP on the accelerate backend;
+        ring CP will OR its clause in here once added."""
+        return self.sp_enabled and self.sp_backend == "accelerate"
+
+    @property
     def dp_shard_cp_dim_names(self):
-        """Names of enabled dimensions which will be flattened into a joint mesh across which is model sharded in FSDP."""
+        """The FSDP shard axis — flattened into one mesh dim (`dp_shard_cp`, accelerate's name) that
+        `fully_shard` shards params / reduce-scatters grads over. Despite the name it spans `dp_shard`
+        **plus the sequence-parallel dims `cp` and `sp`**: both shard the same sample's sequence, so
+        FSDP must shard over them for its reduce-scatter to average their grads."""
         dims = []
         if self.dp_shard_enabled:
             dims += ["dp_shard"]
         if self.cp_enabled:
             dims += ["cp"]
+        if self.sp_enabled:
+            dims += ["sp"]
         return dims
 
     @property
     def dp_cp_dim_names(self):
-        """Names of enabled dimensions across which loss should be averaged"""
+        """Dims over which loss/grads are averaged, flattened to the `dp_cp` mesh dim. Despite the
+        name it spans the data-parallel dims (`dp_replicate`, `dp_shard`) **plus the sequence-parallel
+        dims `cp` and `sp`**."""
         dims = []
         if self.dp_replicate_enabled:
             dims += ["dp_replicate"]
@@ -152,6 +173,8 @@ class ParallelismConfig:
             dims += ["dp_shard"]
         if self.cp_enabled:
             dims += ["cp"]
+        if self.sp_enabled:
+            dims += ["sp"]
         return dims
 
     @property
@@ -170,12 +193,12 @@ class ParallelismConfig:
 
     @property
     def non_data_parallel_size(self):
-        """The size of the non-data parallel dimensions, which is the product of tensor and context parallel sizes."""
+        """Product of the non-data-parallel sizes (tensor x context/ring x sequence/Ulysses)."""
         return self.tp_size * self.cp_size * self.sp_size
 
     @property
     def data_parallel_size(self):
-        """The size of the data parallel dimensions, which is the product of data parallel replication and"""
+        """Product of the data-parallel sizes (replication x shard)."""
         return self.dp_replicate_size * self.dp_shard_size
 
     @property
@@ -200,7 +223,7 @@ class ParallelismConfig:
 
     @property
     def sp_enabled(self):
-        """True if context parallelism is enabled, i.e. `sp_size > 1`."""
+        """True if sequence parallelism is enabled, i.e. `sp_size > 1`."""
         return self.sp_size > 1
 
     @property
@@ -272,6 +295,11 @@ class ParallelismConfig:
         return tuple(zip(*sorted_items))
 
     def __post_init__(self):
+        # Track whether the user explicitly chose a backend (vs. leaving it to auto-resolve from
+        # the training engine in `_resolve_backends`). Env-set counts as explicit. Must be read
+        # BEFORE the defaulting below overwrites None.
+        self._sp_backend_explicit = self.sp_backend is not None or "PARALLELISM_CONFIG_SP_BACKEND" in os.environ
+
         # Basic size validation
         if self.dp_replicate_size is None:
             self.dp_replicate_size = int(os.environ.get("PARALLELISM_CONFIG_DP_REPLICATE_SIZE", "1"))
@@ -281,10 +309,10 @@ class ParallelismConfig:
             self.tp_size = int(os.environ.get("PARALLELISM_CONFIG_TP_SIZE", "1"))
         if self.cp_size is None:
             self.cp_size = int(os.environ.get("PARALLELISM_CONFIG_CP_SIZE", "1"))
-        if self.cp_backend is None:
-            self.cp_backend = os.environ.get("PARALLELISM_CONFIG_CP_BACKEND", "torch")
         if self.sp_size is None:
             self.sp_size = int(os.environ.get("PARALLELISM_CONFIG_SP_SIZE", "1"))
+        if self.cp_backend is None:
+            self.cp_backend = os.environ.get("PARALLELISM_CONFIG_CP_BACKEND", "torch")
         if self.sp_backend is None:
             self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND", "deepspeed")
 
@@ -306,7 +334,21 @@ class ParallelismConfig:
 
         if self.sp_size > 1:
             if self.sp_handler is None:
-                self.sp_handler = DeepSpeedSequenceParallelConfig()
+                self.sp_handler = (
+                    AccelerateSequenceParallelConfig()
+                    if self.sp_backend == "accelerate"
+                    else DeepSpeedSequenceParallelConfig()
+                )
+            else:
+                sp_backends_config_map = dict(
+                    deepspeed=DeepSpeedSequenceParallelConfig,
+                    accelerate=AccelerateSequenceParallelConfig,
+                )
+                if not isinstance(self.sp_handler, sp_backends_config_map[self.sp_backend]):
+                    raise ValueError(
+                        f"ParallelismConfig's sp_backend={self.sp_backend} requires "
+                        f"{sp_backends_config_map[self.sp_backend]}, but sp_handler was set to {type(self.sp_handler)}"
+                    )
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
         if self.dp_shard_size < 1:
@@ -321,7 +363,7 @@ class ParallelismConfig:
 
         if self.sp_size < 1:
             raise ValueError(f"sp_size must be at least 1, but got {self.sp_size}")
-        valid_sp_backends = ["deepspeed"]
+        valid_sp_backends = ["deepspeed", "accelerate"]
         if self.sp_backend not in valid_sp_backends:
             raise ValueError(f"sp_backend must be one of {valid_sp_backends}, but got {self.sp_backend}")
 
@@ -352,8 +394,37 @@ class ParallelismConfig:
         self._sizes[parallelism] = size
         setattr(self, f"{parallelism}_size", size)
 
+    def _resolve_backends(self, accelerator: "Accelerator"):
+        """Resolve the sp (Ulysses) backend against the training engine, once ``distributed_type``
+        is known. ``"deepspeed"`` (ALST) only runs under the DeepSpeed engine; ``"accelerate"``
+        (native Ulysses) runs under any engine (DeepSpeed ZeRO, FSDP2, or DDP). When the user
+        didn't pin a backend it defaults to ``"deepspeed"`` under DeepSpeed and ``"accelerate"``
+        otherwise; an explicit ``"deepspeed"`` without the DeepSpeed engine falls back to
+        ``"accelerate"``. ``sp_handler`` is set to match the resolved backend."""
+        if self.sp_size <= 1:
+            return
+
+        is_deepspeed = accelerator.distributed_type == DistributedType.DEEPSPEED
+
+        if not self._sp_backend_explicit:
+            # ALST is the purpose-built path under DeepSpeed; native Ulysses under FSDP2 / DDP.
+            self.sp_backend = "deepspeed" if is_deepspeed else "accelerate"
+        elif self.sp_backend == "deepspeed" and not is_deepspeed:
+            # ALST needs the DeepSpeed engine; fall back to native Ulysses (runs under FSDP2 / DDP).
+            self.sp_backend = "accelerate"
+
+        handler_cls = (
+            DeepSpeedSequenceParallelConfig
+            if self.sp_backend == "deepspeed"
+            else AccelerateSequenceParallelConfig
+        )
+        if not isinstance(self.sp_handler, handler_cls):
+            self.sp_handler = handler_cls()
+
     def _validate_accelerator(self, accelerator: "Accelerator"):
         _warnings = set()
+        # Resolve auto backends + enforce backend<->engine compatibility now that the engine is known.
+        self._resolve_backends(accelerator)
         if not accelerator.multi_device and self.total_size == 1:
             # No distributed setup, valid parallelism config
             return

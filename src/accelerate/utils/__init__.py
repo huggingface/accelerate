@@ -64,9 +64,15 @@ from .dataclasses import (
     TERecipeKwargs,
     TorchContextParallelConfig,
     TorchDynamoPlugin,
+    AccelerateSequenceParallelConfig,
     TorchTensorParallelConfig,
     TorchTensorParallelPlugin,
     add_model_config_to_megatron_parser,
+)
+from .sequence_parallel import (
+    SequenceShardingDataLoader,
+    enable_ulysses_sp,
+    shard_sequence_batch,
 )
 from .environment import (
     are_libraries_initialized,

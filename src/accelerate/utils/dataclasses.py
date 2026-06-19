@@ -2291,6 +2291,19 @@ class DeepSpeedSequenceParallelConfig:
 
 
 @dataclass
+class AccelerateSequenceParallelConfig:
+    """
+    Configuration for native (torch-only) Ulysses sequence parallelism (`sp_backend="accelerate"`).
+
+    Unlike the DeepSpeed backend, this requires no DeepSpeed dependency: it registers a Ulysses
+    attention through transformers' `AttentionInterface`, reusing the model's own attention impl
+    (sdpa / flash) for the gathered full-sequence call. It composes with FSDP2 (the `sp` mesh dim
+    joins the FSDP shard mesh) or DeepSpeed ZeRO. This handler currently carries no options; it is
+    the typed marker selecting the native backend (cf. `DeepSpeedSequenceParallelConfig`).
+    """
+
+
+@dataclass
 class TorchTensorParallelConfig:
     """
     Use this object in your [`Accelerator`] to customize your torch tensor parallelism.
