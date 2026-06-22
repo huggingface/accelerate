@@ -777,6 +777,20 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    def test_dispatch_model_disk_only(self):
+        model = ModelForTest()
+
+        # note: non-expanded device maps for disk offloading is not supported
+        device_map = {"linear1": "disk", "batchnorm": "disk", "linear2": "disk"}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir)
+            output = model(x)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
     @require_non_cpu
     def test_dispatch_model_force_hooks(self):
         model = ModelForTest()
