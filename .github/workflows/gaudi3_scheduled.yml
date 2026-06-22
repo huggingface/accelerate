@@ -43,7 +43,7 @@ jobs:
           echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
 
       - name: Checkout to Accelerate
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - name: Install Accelerate with Transformers & DeepSpeed
         run: |
