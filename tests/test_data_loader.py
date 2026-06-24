@@ -645,6 +645,7 @@ class DataLoaderTester(AccelerateTestCase):
         assert batch_sampler.epoch == 0
         dataloader.set_epoch(1)
         assert batch_sampler.epoch == 1
+
     def test_skip_first_batches_preserves_iteration(self):
         # Regression test: skip_first_batches must carry the DataLoaderShard's iteration
         # forward so that __iter__ does not reset the sampler epoch to 0 on resume.
@@ -660,6 +661,7 @@ class DataLoaderTester(AccelerateTestCase):
             new_dataloader = skip_first_batches(dataloader, num_batches=2)
             # The new DataLoaderShard must inherit iteration=1, not default to 0.
             assert new_dataloader.iteration == 1
+
         test_iteration(DataLoaderShard)
         test_iteration(DataLoaderDispatcher)
 
@@ -677,6 +679,7 @@ class DataLoaderTester(AccelerateTestCase):
             next(iter(new_dataloader))
 
             assert sampler.epoch == 1
+
         test_sampler_epoch(DataLoaderShard)
         test_sampler_epoch(DataLoaderDispatcher)
 
