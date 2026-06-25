@@ -552,6 +552,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         use_stateful_dataloader=False,
         _drop_last: bool = False,
         _non_blocking: bool = False,
+        _total_num_processes: int = 1,
         torch_device_mesh=None,
         **kwargs,
     ):
@@ -563,6 +564,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.gradient_state = GradientState()
         self._drop_last = _drop_last
         self._non_blocking = _non_blocking
+        self._total_num_processes = _total_num_processes
         self.iteration = 0
 
     def adjust_state_dict_for_prefetch(self):
@@ -640,11 +642,12 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     @property
     def total_batch_size(self):
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
-        return (
-            batch_sampler.batch_size
-            if getattr(batch_sampler, "split_batches", False)
-            else (batch_sampler.batch_size * getattr(batch_sampler, "num_processes", 1))
-        )
+        if getattr(batch_sampler, "split_batches", False):
+            return batch_sampler.batch_size
+        # A `BatchSamplerShard` carries `num_processes`; an already-sharded dataloader keeps the user's plain
+        # batch sampler, so fall back to the process count captured at prepare time.
+        num_processes = getattr(batch_sampler, "num_processes", None) or self._total_num_processes
+        return batch_sampler.batch_size * num_processes
 
     @property
     def total_dataset_length(self):
@@ -1027,6 +1030,7 @@ def prepare_data_loader(
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
     torch_device_mesh=None,
+    already_sharded: bool = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -1096,6 +1100,13 @@ def prepare_data_loader(
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
         torch_device_mesh (`torch.distributed.DeviceMesh`, *optional*, defaults to `None`):
             PyTorch device mesh.
+        already_sharded (`bool`, *optional*, defaults to `False`):
+            If set to `True`, Accelerate assumes the `dataloader` is already sharded across processes (e.g. via a
+            rank-aware `DistributedSampler`) and skips its own sharding, so the data is not split twice. The other
+            wrapper features (device placement, `set_epoch` forwarding, state tracking) are preserved. The user is
+            responsible for ensuring each process receives the correct shard. Accelerate's `even_batches` padding is
+            also skipped, so every process must iterate the same number of batches to avoid hangs. Incompatible with
+            `dispatch_batches` and `split_batches`.
 
 
     Returns:
@@ -1108,6 +1119,22 @@ def prepare_data_loader(
 
     </Tip>
     """
+    if already_sharded:
+        # Validate against the user-provided values before `dispatch_batches` is auto-resolved below.
+        if dispatch_batches:
+            raise ValueError(
+                "`already_sharded=True` is incompatible with `dispatch_batches=True`: dispatch mode iterates the "
+                "dataloader on the main process and redistributes batches, which conflicts with a dataloader that is "
+                "already sharded per process."
+            )
+        if split_batches:
+            raise ValueError(
+                "`already_sharded=True` is incompatible with `split_batches=True`: split mode would split each "
+                "process's local batch again."
+            )
+        # An already-sharded dataloader is iterated independently on each process, never dispatched.
+        dispatch_batches = False
+
     if dispatch_batches is None:
         if not put_on_device:
             dispatch_batches = False
@@ -1217,8 +1244,12 @@ def prepare_data_loader(
         generator.manual_seed(seed)
         dataloader.generator = generator
         dataloader.sampler.generator = generator
-    # No change if no multiprocess
-    if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
+    # No change if no multiprocess, or if the dataloader is already sharded by the user
+    if (
+        (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM)
+        and not dispatch_batches
+        and not already_sharded
+    ):
         if is_datasets_available():
             from datasets import IterableDataset as DatasetsIterableDataset
         if (
@@ -1303,6 +1334,7 @@ def prepare_data_loader(
             rng_types=rng_types,
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
+            _total_num_processes=num_processes if already_sharded else 1,
             synchronized_generator=synchronized_generator,
             use_stateful_dataloader=use_stateful_dataloader,
             **kwargs,
@@ -1316,6 +1348,7 @@ def prepare_data_loader(
             synchronized_generator=synchronized_generator,
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
+            _total_num_processes=num_processes if already_sharded else 1,
             use_stateful_dataloader=use_stateful_dataloader,
             **kwargs,
         )
