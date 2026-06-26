@@ -87,6 +87,9 @@ class ParallelismConfig:
     sp_handler: Union[None, DeepSpeedSequenceParallelConfig, AccelerateSequenceParallelConfig] = None
 
     device_mesh = None
+    # Flattened submeshes (dp / dp_shard_cp / dp_cp) returned by `_flatten`, kept so consumers don't
+    # re-slice them off the root mesh (deprecated in torch >= 2.11). Populated by `build_device_mesh`.
+    _flattened_meshes = None
 
     def __repr__(self):
         return (
@@ -257,12 +260,16 @@ class ParallelismConfig:
             mesh_shape,
             mesh_dim_names=mesh_dim_names,
         )
+        # Keep the flattened submeshes that `_flatten` returns. Re-slicing a flattened dim off the root
+        # mesh (e.g. `device_mesh["dp_shard_cp"]`) is deprecated in torch >= 2.11, so consumers read them
+        # back through `get_submesh` instead.
+        self._flattened_meshes = {}
         if self.dp_dim_names:
-            device_mesh[self.dp_dim_names]._flatten("dp")
+            self._flattened_meshes["dp"] = device_mesh[self.dp_dim_names]._flatten("dp")
         if self.dp_shard_cp_dim_names:
-            device_mesh[self.dp_shard_cp_dim_names]._flatten("dp_shard_cp")
+            self._flattened_meshes["dp_shard_cp"] = device_mesh[self.dp_shard_cp_dim_names]._flatten("dp_shard_cp")
         if self.dp_cp_dim_names:
-            device_mesh[self.dp_cp_dim_names]._flatten("dp_cp")
+            self._flattened_meshes["dp_cp"] = device_mesh[self.dp_cp_dim_names]._flatten("dp_cp")
 
         return device_mesh
 
@@ -279,6 +286,16 @@ class ParallelismConfig:
                         f"The device_mesh is already created with device type {self.device_mesh.device_type}. However, you are trying to get a device mesh with device_type {device_type}. Please check if you correctly initialized your device_mesh"
                     )
         return self.device_mesh
+
+    def get_submesh(self, dim_names):
+        """Return the submesh for `dim_names`. A single flattened dim (`dp` / `dp_shard_cp` / `dp_cp`) is
+        returned from the handle stored at build time, since re-slicing a flattened dim off the root mesh
+        is deprecated in torch >= 2.11. Anything else falls through to normal mesh indexing."""
+        dim_names = tuple(dim_names)
+        flattened = self._flattened_meshes or {}
+        if len(dim_names) == 1 and dim_names[0] in flattened:
+            return flattened[dim_names[0]]
+        return self.device_mesh[dim_names]
 
     def _get_mesh(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
         """Generate mesh shape and dimension names for torch.distributed.init_device_mesh()."""

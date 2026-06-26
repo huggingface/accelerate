@@ -671,7 +671,9 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "offload_policy": fsdp2_plugin.cpu_offload,
         # `fully_shard` does not accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
-        "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
+        "mesh": accelerator.parallelism_config.get_submesh(accelerator.parallelism_config.fsdp_dim_names)
+        if mesh is not None
+        else None,
     }
 
     # `ignored_params` is only supported in torch >= 2.7.0
