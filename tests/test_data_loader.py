@@ -27,6 +27,7 @@ from accelerate.data_loader import (
     DataLoaderShard,
     DataLoaderStateMixin,
     IterableDatasetShard,
+    SeedableRandomSampler,
     SkipBatchSampler,
     SkipDataLoader,
     prepare_data_loader,
@@ -644,6 +645,43 @@ class DataLoaderTester(AccelerateTestCase):
         assert batch_sampler.epoch == 0
         dataloader.set_epoch(1)
         assert batch_sampler.epoch == 1
+
+    def test_skip_first_batches_preserves_iteration(self):
+        # Regression test: skip_first_batches must carry the DataLoaderShard's iteration
+        # forward so that __iter__ does not reset the sampler epoch to 0 on resume.
+        def test_iteration(dataloader_cls):
+            dataset = list(range(16))
+            generator = torch.Generator()
+            batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
+            dataloader = dataloader_cls(dataset, batch_sampler=batch_sampler)
+
+            dataloader.set_epoch(1)
+            assert dataloader.iteration == 1
+
+            new_dataloader = skip_first_batches(dataloader, num_batches=2)
+            # The new DataLoaderShard must inherit iteration=1, not default to 0.
+            assert new_dataloader.iteration == 1
+
+        test_iteration(DataLoaderShard)
+        test_iteration(DataLoaderDispatcher)
+
+    def test_skip_first_batches_does_not_reset_sampler_epoch(self):
+        # Regression test: skip_first_batches must preserve the original dataloader.batch_sampler.sampler's iteration.
+        def test_sampler_epoch(dataloader_cls):
+            dataset = list(range(16))
+            generator = torch.Generator()
+            sampler = SeedableRandomSampler(dataset)
+            batch_sampler = SimpleBatchSampler(sampler, batch_size=4, drop_last=False, generator=generator, seed=42)
+            dataloader = dataloader_cls(dataset, batch_sampler=batch_sampler)
+
+            dataloader.set_epoch(1)
+            new_dataloader = skip_first_batches(dataloader, num_batches=2)
+            next(iter(new_dataloader))
+
+            assert sampler.epoch == 1
+
+        test_sampler_epoch(DataLoaderShard)
+        test_sampler_epoch(DataLoaderDispatcher)
 
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
