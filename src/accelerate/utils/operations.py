@@ -43,10 +43,29 @@ if is_torch_distributed_available():
 
 
 def is_torch_tensor(tensor):
+    """
+    Checks whether `tensor` is a `torch.Tensor`.
+
+    Args:
+        tensor: The object to check.
+
+    Returns:
+        `bool`: `True` if `tensor` is a `torch.Tensor`, `False` otherwise.
+    """
     return isinstance(tensor, torch.Tensor)
 
 
 def is_torch_xpu_tensor(tensor):
+    """
+    Checks whether `tensor` is one of the XPU tensor types provided by PyTorch.
+
+    Args:
+        tensor: The object to check.
+
+    Returns:
+        `bool`: `True` if `tensor` is an XPU tensor (FloatTensor, ByteTensor, IntTensor,
+        LongTensor, HalfTensor, DoubleTensor, or BFloat16Tensor on XPU), `False` otherwise.
+    """
     return isinstance(
         tensor,
         torch.xpu.FloatTensor,
@@ -60,6 +79,15 @@ def is_torch_xpu_tensor(tensor):
 
 
 def is_tensor_information(tensor_info):
+    """
+    Checks whether `tensor_info` is a `TensorInformation` instance.
+
+    Args:
+        tensor_info: The object to check.
+
+    Returns:
+        `bool`: `True` if `tensor_info` is a `TensorInformation` instance, `False` otherwise.
+    """
     return isinstance(tensor_info, TensorInformation)
 
 
@@ -363,8 +391,6 @@ class DistributedOperationException(Exception):
     An exception class for distributed operations. Raised if the operation cannot be performed due to the shape of the
     tensors.
     """
-
-    pass
 
 
 def verify_operation(function):
