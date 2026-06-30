@@ -447,9 +447,9 @@ def named_module_tensors(
     Args:
         module (`torch.nn.Module`):
             The module we want the tensors on.
-        include_buffer (`bool`, *optional*, defaults to `True`):
+        include_buffers (`bool`, *optional*, defaults to `True`):
             Whether or not to include the buffers in the result.
-        recurse (`bool`, *optional`, defaults to `False`):
+        recurse (`bool`, *optional*, defaults to `False`):
             Whether or not to go look in every submodule or just return the direct parameters and buffers.
         remove_non_persistent (`bool`, *optional*, defaults to `False`):
             Whether or not to remove the non persistent buffer from the buffers. Useful only when include_buffers =
@@ -2070,8 +2070,6 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
     Args:
         native_amp (`bool`, *optional*, defaults to False):
             Whether mixed precision is actually enabled.
-        cache_enabled (`bool`, *optional*, defaults to True):
-            Whether the weight cache inside autocast should be enabled.
     """
     state = AcceleratorState()
     if autocast_kwargs is None:

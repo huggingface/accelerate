@@ -1150,7 +1150,7 @@ class DeepSpeedPlugin:
             `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention`, `JetMoEBlock`, etc.
         enable_msamp (`bool`, defaults to `None`):
             Flag to indicate whether to enable MS-AMP backend for FP8 training.
-        msasmp_opt_level (`Optional[Literal["O1", "O2"]]`, defaults to `None`):
+        msamp_opt_level (`Optional[Literal["O1", "O2"]]`, defaults to `None`):
             Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one
             of ['O1' or 'O2'].
     """
@@ -2331,7 +2331,7 @@ class MegatronLMPlugin:
             Enable sequence parallelism.
         recompute_activations (`bool`, defaults to `None`):
             Enable selective activation recomputation.
-        use_distributed_optimizr (`bool`, defaults to `None`):
+        use_distributed_optimizer (`bool`, defaults to `None`):
             Enable distributed optimizer.
         pipeline_model_parallel_split_rank (`int`, defaults to `None`):
             Rank where encoder and decoder should be split.

@@ -3071,7 +3071,7 @@ class Accelerator:
         used for gathering the inputs and targets for metric calculation.
 
         Args:
-            input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
+            input_data (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
                 The tensors or objects for calculating metrics across all processes
             use_gather_object(`bool`):
                 Whether to forcibly use gather_object instead of gather (which is already done if all objects passed do
