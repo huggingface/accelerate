@@ -517,6 +517,24 @@ class DataLoaderTester(AccelerateTestCase):
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=True)
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=True)
 
+    def test_iterable_dataset_shard_without_set_epoch(self):
+        # `__iter__` seeds a dataset generator with `self.epoch`; iterating a
+        # fresh shard without ever calling `set_epoch` used to raise
+        # `AttributeError: 'IterableDatasetShard' object has no attribute 'epoch'`.
+        class GeneratorIterableDataset(IterableDataset):
+            def __init__(self):
+                self.generator = torch.Generator()
+
+            def __iter__(self):
+                yield from torch.randperm(8, generator=self.generator).tolist()
+
+        shard = IterableDatasetShard(GeneratorIterableDataset(), batch_size=2)
+
+        first_epoch = list(shard)
+        assert sorted(first_epoch) == list(range(8))
+        # Without `set_epoch`, iteration seeds with the default epoch 0 every time.
+        assert list(shard) == first_epoch
+
     def test_iterable_dataset_using_none_batch_size(self):
         dataset = SimpleIterableDataset(100)
         dataloader = DataLoader(dataset, batch_size=None)
