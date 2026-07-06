@@ -15,7 +15,8 @@
 import argparse
 import unittest
 
-from accelerate.utils.launch import prepare_multi_gpu_env
+from accelerate.commands.launch import launch_command_parser
+from accelerate.utils.launch import prepare_extend_env_parallelism_config, prepare_multi_gpu_env
 
 
 class TestPrepareMultiGpuEnv(unittest.TestCase):
@@ -71,3 +72,25 @@ class TestPrepareMultiGpuEnv(unittest.TestCase):
         self.assertIn("master_port", args.__dict__)
         self.assertNotEqual(args.master_port, "0")
         self.assertTrue(args.master_port.isdigit())
+
+
+class TestPrepareExtendEnvParallelismConfig(unittest.TestCase):
+    def test_sp_seq_length_is_variable_false(self):
+        # Parse real CLI args, rather than building the Namespace by hand, so this
+        # also covers the parser's own string->bool conversion, not just serialization.
+        parser = launch_command_parser()
+        args = parser.parse_args(
+            [
+                "--use_parallelism_config",
+                "--parallelism_config_sp_size",
+                "2",
+                "--parallelism_config_sp_seq_length",
+                "128",
+                "--parallelism_config_sp_seq_length_is_variable",
+                "False",
+                "test.py",
+            ]
+        )
+
+        env = prepare_extend_env_parallelism_config(args, {})
+        self.assertEqual(env["PARALLELISM_CONFIG_SP_SEQ_LENGTH_IS_VARIABLE"], "False")
