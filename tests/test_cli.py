@@ -228,6 +228,20 @@ class LaunchArgTester(unittest.TestCase):
                 else:
                     assert bad_arg not in help_return, f"Found {bad_arg} in `accelerate launch -h`"
 
+    def test_parallelism_config_sp_seq_length_is_variable(self):
+        # bool("False") is truthy, so this arg needs a real string->bool converter, not `type=bool`
+        args = ["--parallelism_config_sp_seq_length_is_variable", "False", "test.py"]
+        result = self.parser.parse_args(args)
+        assert result.parallelism_config_sp_seq_length_is_variable is False
+
+        args = ["--parallelism_config_sp_seq_length_is_variable", "True", "test.py"]
+        result = self.parser.parse_args(args)
+        assert result.parallelism_config_sp_seq_length_is_variable is True
+
+        args = ["test.py"]
+        result = self.parser.parse_args(args)
+        assert result.parallelism_config_sp_seq_length_is_variable is True
+
 
 class ClusterConfigTester(unittest.TestCase):
     """
