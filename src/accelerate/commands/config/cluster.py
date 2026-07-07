@@ -824,7 +824,7 @@ def get_cluster_input():
                         default=0,
                     )
                     fp8_config["interval"] = _ask_field(
-                        "What interval should be used for for how often the scaling factor is recomputed? [1]: ",
+                        "What interval should be used for how often the scaling factor is recomputed? [1]: ",
                         int,
                         default=1,
                     )
@@ -846,7 +846,7 @@ def get_cluster_input():
                         default=0,
                     )
                     fp8_config["override_linear_precision"] = _ask_field(
-                        "Do you want to to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision? [yes/NO]: ",
+                        "Do you want to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision? [yes/NO]: ",
                         _convert_yes_no_to_bool,
                         default=False,
                     )
