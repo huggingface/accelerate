@@ -228,6 +228,38 @@ class LaunchArgTester(unittest.TestCase):
                 else:
                     assert bad_arg not in help_return, f"Found {bad_arg} in `accelerate launch -h`"
 
+    bool_args = [
+        "megatron_lm_use_custom_fsdp",
+        "megatron_lm_no_load_optim",
+        "megatron_lm_eod_mask_loss",
+        "megatron_lm_overlap_cpu_optimizer_d2h_h2d",
+        "megatron_lm_no_save_optim",
+        "megatron_lm_optimizer_cpu_offload",
+        "megatron_lm_use_precision_aware_optimizer",
+    ]
+
+    def test_bool_args(self):
+        # These args used `type=bool`, which parses any non-empty string (including "False") as `True`
+        for arg in self.bool_args:
+            for value in ("False", "false", "0", "no"):
+                with self.subTest(arg=arg, value=value):
+                    result = self.parser.parse_args([f"--{arg}", value, "test.py"])
+                    assert getattr(result, arg) is False
+            for value in ("True", "true", "1", "yes"):
+                with self.subTest(arg=arg, value=value):
+                    result = self.parser.parse_args([f"--{arg}", value, "test.py"])
+                    assert getattr(result, arg) is True
+
+    def test_bool_args_defaults(self):
+        result = self.parser.parse_args(["test.py"])
+        for arg in self.bool_args:
+            assert getattr(result, arg) is False
+
+    def test_bool_args_invalid_value(self):
+        for arg in self.bool_args:
+            with self.subTest(arg=arg), self.assertRaises(SystemExit):
+                self.parser.parse_args([f"--{arg}", "maybe", "test.py"])
+
 
 class ClusterConfigTester(unittest.TestCase):
     """
