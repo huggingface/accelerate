@@ -170,6 +170,25 @@ tracker = MyCustomTracker("some_run_name")
 accelerator = Accelerator(log_with=[tracker, "all"])
 ```
 
+### Registering a custom tracker by name
+
+Instead of passing an instance, you can register a custom tracker class so it can be selected by its `name`, just like the built-in trackers. This is handy when the trackers to use are read from a config file or the command line:
+
+```python
+from accelerate import Accelerator
+from accelerate.tracking import GeneralTracker, register_tracker_class
+
+
+class MyCustomTracker(GeneralTracker):
+    name = "my_tracker"
+    requires_logging_directory = False
+    # ... implement the rest of the `GeneralTracker` interface
+
+
+register_tracker_class(MyCustomTracker)
+accelerator = Accelerator(log_with="my_tracker")
+```
+
 ## Accessing the internal tracker 
 
 If some custom interactions with a tracker might be wanted directly, you can quickly access one using the 
