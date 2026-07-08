@@ -893,6 +893,11 @@ def get_cluster_input():
                         _convert_yes_no_to_bool,
                         default=True,
                     )
+                    fp8_config["force_recompute_fp8_weight_in_bwd"] = _ask_field(
+                        "Do you want to recompute the FP8 all-gathered weight in the backward pass instead of stashing it? This trades compute for memory savings and is only useful with FSDP2 float8 all gather. [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                    )
 
     if use_dynamo and mixed_precision == "no" and not use_cpu:
         print(

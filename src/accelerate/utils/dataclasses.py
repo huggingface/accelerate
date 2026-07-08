@@ -323,6 +323,8 @@ class AORecipeKwargs(KwargsHandler):
               operations to prevent runtime errors.
             - `enable_fsdp_float8_all_gather=True`: Enables FP8 all-gather for FSDP2. This provides memory bandwidth
               savings by casting parameters before the all-gather operation, saving 50% bandwidth compared to BF16.
+            - `force_recompute_fp8_weight_in_bwd=False`: Recomputes the FP8 cast for FSDP2 all-gathered weights
+              during the backward pass instead of stashing the casted weight, trading compute for memory savings.
 
             You can override these defaults by providing your own `Float8LinearConfig` instance.
         module_filter_func (`Callable`, *optional*, default to `None`):
@@ -335,6 +337,7 @@ class AORecipeKwargs(KwargsHandler):
     module_filter_func: Optional[Callable] = None
     pad_inner_dim: Optional[bool] = None
     enable_fsdp_float8_all_gather: Optional[bool] = None
+    force_recompute_fp8_weight_in_bwd: Optional[bool] = None
 
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
@@ -351,9 +354,14 @@ class AORecipeKwargs(KwargsHandler):
                 self.enable_fsdp_float8_all_gather = parse_flag_from_env(
                     env_prefix + "ENABLE_FSDP_FLOAT8_ALL_GATHER", default=True
                 )
+            if self.force_recompute_fp8_weight_in_bwd is None:
+                self.force_recompute_fp8_weight_in_bwd = parse_flag_from_env(
+                    env_prefix + "FORCE_RECOMPUTE_FP8_WEIGHT_IN_BWD", default=False
+                )
             self.config = Float8LinearConfig(
                 pad_inner_dim=self.pad_inner_dim,
                 enable_fsdp_float8_all_gather=self.enable_fsdp_float8_all_gather,
+                force_recompute_fp8_weight_in_bwd=self.force_recompute_fp8_weight_in_bwd,
             )
 
 
