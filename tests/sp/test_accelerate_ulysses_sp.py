@@ -43,7 +43,7 @@ class AccelerateUlyssesSPTest(TempDirTestCase):
 
     def _launch(self, num_processes, script_args):
         script = self.test_scripts_folder / "test_accelerate_ulysses_sp.py"
-        cmd = get_launch_command(num_processes=num_processes, num_machines=1, machine_rank=0, mixed_precision="bf16")
+        cmd = get_launch_command(num_processes=num_processes, num_machines=1, machine_rank=0)
         cmd.extend([str(script), *script_args])
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)

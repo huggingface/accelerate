@@ -13,22 +13,25 @@
 # limitations under the License.
 
 """
-Verify native ("accelerate") Ulysses sequence parallelism end-to-end. It's engine-agnostic, so the
-same script runs under DDP, FSDP2, and DeepSpeed ZeRO (`--engine`), optionally composed with data
-parallelism (the remaining `world // sp` becomes dp) and with packed/varlen sequences (`--packed`).
+Verify native ("accelerate") Ulysses sequence parallelism end-to-end. Engine-agnostic: the same
+script runs under DDP, FSDP2, and DeepSpeed ZeRO (`--engine`), optionally with data parallelism
+(the remaining `world // sp` becomes dp) and packed/varlen sequences (`--packed`).
 
-It checks that `prepare()`:
-  * registers the Ulysses attention on the model, and
-  * swaps the dataloader for a `SequenceShardingDataLoader` that gives every sp rank the SAME sample,
-    shards its sequence over the sp group, builds `position_ids`/`shift_labels`, and (packed) pushes
-    the global cu_seqlens onto the attention handler,
-then runs a few training steps with finite loss.
+Correctness is checked by **parity**: Ulysses only splits the sequence, so for the same dp the loss
+must not depend on sp. We compare the *global mean loss* (token-weighted over the whole world, which
+is invariant to how the global batch is split across dp and sp) between two runs:
+  * `--save-ref FILE` : an `sp=1` reference run (full sequences) saves its loss trajectory.
+  * `--ref FILE`      : the `sp>1` run loads it and asserts a per-step match.
+e.g. `dp=2,sp=1` on 2 GPUs vs `dp=2,sp=2` on 4 GPUs. Every sp run also checks the auto-wrapped
+`SequenceShardingDataLoader` (sequence sharded, shift_labels / position_ids built, packed cu_seqlens).
 """
 
 import argparse
+import json
 import os
 
 import torch
+import torch.distributed as dist
 from transformers import AutoModelForCausalLM
 
 from accelerate import Accelerator
@@ -38,6 +41,15 @@ from accelerate.utils.sequence_parallel import SequenceShardingDataLoader
 
 MODEL_NAME = "hf-internal-testing/tiny-random-LlamaForCausalLM"  # kv_heads=4, divisible by sp_size
 SEQLEN = 64  # must be divisible by sp_size
+STEPS = 8
+LR = 1e-3
+PARITY_TOL = 1e-2  # sp>1 vs sp=1 global-loss trajectory; tolerates fp32 reduction-order drift
+
+
+def shifted(ids, ignore_index=-100):
+    s = torch.full_like(ids, ignore_index)
+    s[..., :-1] = ids[..., 1:]
+    return s
 
 
 def main():
@@ -45,6 +57,8 @@ def main():
     parser.add_argument("--engine", choices=["ddp", "fsdp", "deepspeed"], default="ddp")
     parser.add_argument("--packed", action="store_true")
     parser.add_argument("--sp-size", type=int, default=2)
+    parser.add_argument("--save-ref", default=None, help="sp=1 reference: save the loss trajectory here")
+    parser.add_argument("--ref", default=None, help="compare the loss trajectory against this reference file")
     args = parser.parse_args()
 
     set_seed(42)
@@ -60,72 +74,82 @@ def main():
             auto_wrap_policy="transformer_based_wrap",
             transformer_cls_names_to_wrap=["LlamaDecoderLayer"],
         )
-    # ddp/fsdp from the args above; deepspeed engine comes from `accelerate launch --use_deepspeed`.
     accelerator = Accelerator(parallelism_config=ParallelismConfig(**pc_kwargs), fsdp_plugin=fsdp_plugin)
+    device = accelerator.device
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, attn_implementation="sdpa")
     model.config.use_cache = False
     vocab = model.config.vocab_size
 
-    # Each sample is a CONSTANT token (i+1) so that a sequence-sharded batch still reveals which
-    # sample it came from -> we can assert every sp rank received the SAME sample. Packed: two docs
-    # per sample, with position_ids resetting at the doc boundary.
+    # One batch per sample; deterministic (set_seed) so the same dp gets the same samples regardless
+    # of sp. Packed: two docs per sample, position_ids resetting at the boundary.
     n = 4 * dp
-    samples = torch.stack([torch.full((SEQLEN,), i % (vocab - 1) + 1, dtype=torch.long) for i in range(n)])
+    samples = torch.randint(1, vocab, (n, SEQLEN))
     if args.packed:
         half = SEQLEN // 2
-        positions = torch.cat([torch.arange(half), torch.arange(SEQLEN - half)]).unsqueeze(0).expand(n, -1)
-        ds = torch.utils.data.TensorDataset(samples, positions.contiguous())
-
-        def collate(b):
-            ids, pos = torch.stack([x[0] for x in b]), torch.stack([x[1] for x in b])
-            return {"input_ids": ids, "labels": ids.clone(), "position_ids": pos}
+        positions = torch.cat([torch.arange(half), torch.arange(SEQLEN - half)])[None].expand(n, -1).contiguous()
+        ds = torch.utils.data.TensorDataset(samples, positions)
+        collate = lambda b: {  # noqa: E731
+            "input_ids": torch.stack([x[0] for x in b]),
+            "labels": torch.stack([x[0] for x in b]),
+            "position_ids": torch.stack([x[1] for x in b]),
+        }
     else:
         ds = torch.utils.data.TensorDataset(samples)
-
-        def collate(b):
-            ids = torch.stack([x[0] for x in b])
-            return {"input_ids": ids, "labels": ids.clone()}
+        collate = lambda b: {"input_ids": torch.stack([x[0] for x in b]), "labels": torch.stack([x[0] for x in b])}  # noqa: E731
 
     dl = torch.utils.data.DataLoader(ds, batch_size=1, collate_fn=collate)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     model, optimizer, dl = accelerator.prepare(model, optimizer, dl)
-
-    sp_group = accelerator.torch_device_mesh["sp"].get_group()
-    sp_world = torch.distributed.get_world_size(sp_group)
     unwrapped = accelerator.unwrap_model(model)
 
-    # --- the dataloader did its job ---
-    assert isinstance(dl, SequenceShardingDataLoader), f"dataloader not wrapped: {type(dl)}"
-    batch = next(iter(dl))
-    assert batch["input_ids"].shape[1] == SEQLEN // sp_world, "sequence was not sharded over sp"
-    assert "shift_labels" in batch and "position_ids" in batch, "missing shift_labels / position_ids"
-    # every sp rank must hold the SAME sample (constant token -> compare the value across the sp group)
-    tok = batch["input_ids"].flatten()[:1].clone()
-    gathered = [torch.empty_like(tok) for _ in range(sp_world)]
-    torch.distributed.all_gather(gathered, tok, group=sp_group)
-    assert all(torch.equal(t, gathered[0]) for t in gathered), f"sp ranks got DIFFERENT samples: {gathered}"
-    if args.packed:
-        assert accelerator._sp_attention.cu_seqlens is not None, "packed batch did not set cu_seqlens"
+    if sp > 1:  # native SP enabled -> the dataloader is auto-wrapped and the sequence is sharded
+        sp_world = dist.get_world_size(accelerator.torch_device_mesh["sp"].get_group())
+        assert isinstance(dl, SequenceShardingDataLoader), f"dataloader not wrapped: {type(dl)}"
+        probe = next(iter(dl))
+        assert probe["input_ids"].shape[1] == SEQLEN // sp_world, "sequence was not sharded over sp"
+        assert "shift_labels" in probe and "position_ids" in probe, "missing shift_labels / position_ids"
+        if args.packed:
+            assert accelerator._sp_attention.cu_seqlens is not None, "packed batch did not set cu_seqlens"
 
-    # --- gradients flow + reduce correctly: overfit this one (sequence-sharded) batch and require
-    # the loss to drop. Step-0 alone would only test the forward; a multi-step decrease is what
-    # catches broken gradient flow / sp-dp reduction (e.g. if sp ranks weren't kept in sync). ---
-    batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+    # First batch (sequence-sharded when sp>1; full when sp=1 -> build shift_labels / position_ids).
+    batch = {k: v.to(device) for k, v in next(iter(dl)).items()}
+    if "position_ids" not in batch:
+        batch["position_ids"] = torch.arange(batch["input_ids"].shape[1], device=device)[None].expand_as(batch["input_ids"])
+    if "shift_labels" not in batch:
+        batch["shift_labels"] = shifted(batch["labels"])
+
+    def global_mean_loss(shard_loss, shift_labels):
+        # token-weighted mean over the WHOLE world == the global mean CE, invariant to how the global
+        # batch is split across dp (different samples) and sp (sequence shards).
+        if world == 1 or not dist.is_initialized():
+            return shard_loss.item()
+        good = (shift_labels != -100).sum().float()
+        losses = [torch.empty_like(shard_loss) for _ in range(world)]
+        goods = [torch.empty_like(good) for _ in range(world)]
+        dist.all_gather(losses, shard_loss.detach())
+        dist.all_gather(goods, good)
+        return (sum(loss * g for loss, g in zip(losses, goods)) / sum(goods)).item()
+
     losses = []
-    for step in range(8):
+    for step in range(STEPS):
         out = model(input_ids=batch["input_ids"], position_ids=batch["position_ids"])
         loss = unwrapped.loss_function(
             logits=out.logits, labels=None, shift_labels=batch["shift_labels"], vocab_size=vocab
         )
+        losses.append(global_mean_loss(loss, batch["shift_labels"]))
         accelerator.backward(loss)
         optimizer.step()
         optimizer.zero_grad()
-        losses.append(loss.item())
-        accelerator.print(f"[{args.engine} dp{dp}xsp{sp}{' packed' if args.packed else ''}] step {step}: {loss.item():.4f}")
+        accelerator.print(f"[{args.engine} dp{dp}xsp{sp}{' packed' if args.packed else ''}] step {step}: {losses[-1]:.5f}")
 
-    assert all(loss == loss for loss in losses), f"non-finite loss: {losses}"  # NaN check
-    assert losses[-1] < losses[0], f"loss did not decrease over steps: {losses}"
+    assert losses[-1] < losses[0], f"loss did not decrease: {losses}"
+    if args.save_ref and accelerator.is_main_process:
+        json.dump(losses, open(args.save_ref, "w"))
+    if args.ref:
+        ref = json.load(open(args.ref))
+        worst = max(abs(a - b) for a, b in zip(ref, losses))
+        assert worst < PARITY_TOL, f"sp={sp} loss != sp=1 reference (max abs diff {worst:.4g}): {losses} vs {ref}"
 
     accelerator.end_training()
 

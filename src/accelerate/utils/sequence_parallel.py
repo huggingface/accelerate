@@ -126,6 +126,7 @@ class UlyssesAttention:
         out, _ = self.attn_fn(module, q, k, v, None, **kwargs)
         return GatherHeadsScatterSeq.apply(out, group, sp), None
 
+
 def enable_ulysses_sp(model, sp_group):
     """Register pure Ulysses SP on ``model`` over ``sp_group``, reusing the model's own attention.
     Returns the handler (a dataloader pushes per-step varlen via ``handler.set_varlen``)."""
@@ -135,6 +136,7 @@ def enable_ulysses_sp(model, sp_group):
             f"Ulysses SP expects a HF Transformers model with a `config` attribute, got {type(model).__name__}."
         )
     from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
     _check_kv_divisible(model, dist.get_world_size(sp_group))
     # Capture the model's ORIGINAL attention. If SP was already enabled (re-prepare, second model),
     # the registered entry is our own handler — unwrap it so we don't wrap a wrapper (double all-to-all).

@@ -18,10 +18,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, Union
 
 from accelerate.utils.dataclasses import (
+    AccelerateSequenceParallelConfig,
     DeepSpeedSequenceParallelConfig,
     DistributedType,
     TorchContextParallelConfig,
-    AccelerateSequenceParallelConfig,
     TorchTensorParallelConfig,
 )
 from accelerate.utils.versions import is_torch_version
@@ -414,9 +414,7 @@ class ParallelismConfig:
             self.sp_backend = "accelerate"
 
         handler_cls = (
-            DeepSpeedSequenceParallelConfig
-            if self.sp_backend == "deepspeed"
-            else AccelerateSequenceParallelConfig
+            DeepSpeedSequenceParallelConfig if self.sp_backend == "deepspeed" else AccelerateSequenceParallelConfig
         )
         if not isinstance(self.sp_handler, handler_cls):
             self.sp_handler = handler_cls()

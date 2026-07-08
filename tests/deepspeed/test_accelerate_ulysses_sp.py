@@ -43,7 +43,6 @@ class AccelerateUlyssesSPDeepSpeedTest(TempDirTestCase):
             "--num_processes=2",
             "--num_machines=1",
             "--machine_rank=0",
-            "--mixed_precision=bf16",
             "--use_deepspeed",
             f"--zero_stage={zero_stage}",
             str(script),
