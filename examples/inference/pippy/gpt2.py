@@ -23,7 +23,7 @@ from accelerate.utils import set_seed
 
 synchronize_func = getattr(torch, torch_device, torch.cuda).synchronize
 
-# Set the random seed to have reproducable outputs
+# Set the random seed to have reproducible outputs
 set_seed(42)
 
 # Create an example model

@@ -57,7 +57,7 @@ def parse_args():
 def forward(model, batch, optimizer, accelerator: Accelerator):
     batch["position_ids"] = torch.arange(0, batch["input_ids"].size(1), device=batch["input_ids"].device).unsqueeze(0)
     # We need both labels and shift_labels, as the loss computation in the model is hidden behind `if labels is not None`, but the loss computation
-    # itself prioritzes shift_labels (if provided) which are the correct ones (due to labels being wrong if cp enabled)
+    # itself prioritizes shift_labels (if provided) which are the correct ones (due to labels being wrong if cp enabled)
     buffers = [batch["input_ids"], batch["shift_labels"], batch["labels"], batch["position_ids"]]
     with accelerator.maybe_context_parallel(
         buffers=buffers, buffer_seq_dims=[1, 1, 1, 1], no_restore_buffers=set(buffers)

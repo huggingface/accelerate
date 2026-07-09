@@ -32,7 +32,7 @@ if version.parse(accelerate_version) > version.parse("0.33.0"):
     )
 
 
-# Set the random seed to have reproducable outputs
+# Set the random seed to have reproducible outputs
 set_seed(42)
 
 # Create an example model
