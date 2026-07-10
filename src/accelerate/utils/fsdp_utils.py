@@ -100,7 +100,7 @@ def _prepare_sd_options(fsdp_plugin):
     return sd_options
 
 
-def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False):
+def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False, use_dcp=True):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -143,16 +143,28 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
             torch.save(state_dict, output_model_file)
             logger.info(f"Model saved to {output_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT:
-            weights_name = (
-                f"{FSDP_MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
-            )
-            output_model_file = os.path.join(output_dir, weights_name)
-            logger.info(f"Saving model to {output_model_file}")
-            torch.save(state_dict, output_model_file)
-            logger.info(f"Model saved to {output_model_file}")
+            if use_dcp:
+                import torch.distributed.checkpoint as dist_cp
+                from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
+
+                ckpt_dir = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{model_index}")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                logger.info(f"Saving model to {ckpt_dir}")
+                dist_cp.save(
+                    state_dict={"model": state_dict},
+                    storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
+                    planner=DefaultSavePlanner(),
+                )
+                logger.info(f"Model saved to {ckpt_dir}")
+            else:
+                weights_name = f"{FSDP_MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
+                output_model_file = os.path.join(output_dir, weights_name)
+                logger.info(f"Saving model to {output_model_file}")
+                torch.save(state_dict, output_model_file)
+                logger.info(f"Model saved to {output_model_file}")
 
 
-def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False):
+def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False, use_dcp=True):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -203,20 +215,37 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             state_dict = torch.load(input_model_file, weights_only=True)
             logger.info(f"Model loaded from {input_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT:
-            weights_name = (
-                f"{FSDP_MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
-            )
-            input_model_file = os.path.join(input_dir, weights_name)
-            logger.info(f"Loading model from {input_model_file}")
-            state_dict = torch.load(input_model_file, weights_only=True)
-            logger.info(f"Model loaded from {input_model_file}")
+            if use_dcp:
+                import torch.distributed.checkpoint as dist_cp
+                from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
+
+                ckpt_dir = (
+                    os.path.join(input_dir, f"{FSDP_MODEL_NAME}_{model_index}")
+                    if f"{FSDP_MODEL_NAME}" not in input_dir
+                    else input_dir
+                )
+                logger.info(f"Loading model from {ckpt_dir}")
+                state_dict = {"model": _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)}
+                dist_cp.load(
+                    state_dict=state_dict,
+                    storage_reader=dist_cp.FileSystemReader(ckpt_dir),
+                    planner=DefaultLoadPlanner(),
+                )
+                state_dict = state_dict["model"]
+                logger.info(f"Model loaded from {ckpt_dir}")
+            else:
+                weights_name = f"{FSDP_MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
+                input_model_file = os.path.join(input_dir, weights_name)
+                logger.info(f"Loading model from {input_model_file}")
+                state_dict = torch.load(input_model_file, weights_only=True)
+                logger.info(f"Model loaded from {input_model_file}")
 
         load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only, sd_options=sd_options)
     accelerator.wait_for_everyone()
     return load_result
 
 
-def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0):
+def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0, use_dcp=True):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -251,16 +280,28 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
                 torch.save(optim_state, output_optimizer_file)
                 logger.info(f"Optimizer state saved in {output_optimizer_file}")
         else:
-            optim_state_name = (
-                f"{OPTIMIZER_NAME}_{optimizer_index}_rank{accelerator.process_index}.bin"
-            )
-            output_optimizer_file = os.path.join(output_dir, optim_state_name)
-            logger.info(f"Saving Optimizer state to {output_optimizer_file}")
-            torch.save(optim_state, output_optimizer_file)
-            logger.info(f"Optimizer state saved in {output_optimizer_file}")
+            if use_dcp:
+                import torch.distributed.checkpoint as dist_cp
+                from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
+
+                ckpt_dir = os.path.join(output_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                logger.info(f"Saving Optimizer state to {ckpt_dir}")
+                dist_cp.save(
+                    state_dict={"optimizer": optim_state},
+                    storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
+                    planner=DefaultSavePlanner(),
+                )
+                logger.info(f"Optimizer state saved in {ckpt_dir}")
+            else:
+                optim_state_name = f"{OPTIMIZER_NAME}_{optimizer_index}_rank{accelerator.process_index}.bin"
+                output_optimizer_file = os.path.join(output_dir, optim_state_name)
+                logger.info(f"Saving Optimizer state to {output_optimizer_file}")
+                torch.save(optim_state, output_optimizer_file)
+                logger.info(f"Optimizer state saved in {output_optimizer_file}")
 
 
-def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False):
+def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False, use_dcp=True):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -286,13 +327,36 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
                 optim_state = torch.load(input_optimizer_file, weights_only=True)
                 logger.info(f"Optimizer state loaded from {input_optimizer_file}")
         else:
-            optimizer_name = (
-                f"{OPTIMIZER_NAME}_{optimizer_index}_rank{accelerator.process_index}.bin"
-            )
-            input_optimizer_file = os.path.join(input_dir, optimizer_name)
-            logger.info(f"Loading Optimizer from {input_optimizer_file}")
-            optim_state = torch.load(input_optimizer_file, weights_only=True)
-            logger.info(f"Optimizer loaded from {input_optimizer_file}")
+            if use_dcp:
+                import torch.distributed.checkpoint as dist_cp
+                from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
+
+                ckpt_dir = (
+                    os.path.join(input_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
+                    if f"{OPTIMIZER_NAME}" not in input_dir
+                    else input_dir
+                )
+                logger.info(f"Loading Optimizer from {ckpt_dir}")
+                if fsdp_plugin.fsdp_version == 2:
+                    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+
+                    optim_state = get_optimizer_state_dict(model, optimizer, options=sd_options)
+                else:
+                    optim_state = FSDP.optim_state_dict(model, optimizer)
+                optim_state = {"optimizer": optim_state}
+                dist_cp.load(
+                    state_dict=optim_state,
+                    storage_reader=dist_cp.FileSystemReader(ckpt_dir),
+                    planner=DefaultLoadPlanner(),
+                )
+                optim_state = optim_state["optimizer"]
+                logger.info(f"Optimizer loaded from {ckpt_dir}")
+            else:
+                optimizer_name = f"{OPTIMIZER_NAME}_{optimizer_index}_rank{accelerator.process_index}.bin"
+                input_optimizer_file = os.path.join(input_dir, optimizer_name)
+                logger.info(f"Loading Optimizer from {input_optimizer_file}")
+                optim_state = torch.load(input_optimizer_file, weights_only=True)
+                logger.info(f"Optimizer loaded from {input_optimizer_file}")
 
         if fsdp_plugin.fsdp_version == 1:
             flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
