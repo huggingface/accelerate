@@ -301,7 +301,9 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
                 logger.info(f"Optimizer state saved in {output_optimizer_file}")
 
 
-def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False, use_dcp=True):
+def load_fsdp_optimizer(
+    fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False, use_dcp=True
+):
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
