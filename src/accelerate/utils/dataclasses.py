@@ -719,6 +719,7 @@ class DynamoBackend(str, BaseEnum):
           more](https://github.com/pytorch/xla/blob/r2.0/docs/dynamo.md)
         - **TVM** -- Uses Apache TVM for inference optimizations. [Read more](https://tvm.apache.org/)
         - **HPU_BACKEND** -- Uses HPU backend for inference optimizations.
+        - **NEURON** -- Uses AWS Neuron backend for Trainium/Inferentia.
 
     """
 
@@ -738,6 +739,7 @@ class DynamoBackend(str, BaseEnum):
     TORCHXLA_TRACE_ONCE = "TORCHXLA_TRACE_ONCE"
     TVM = "TVM"
     HPU_BACKEND = "HPU_BACKEND"
+    NEURON = "NEURON"
 
 
 class LoggerType(BaseEnum):
