@@ -101,6 +101,22 @@ def _prepare_sd_options(fsdp_plugin):
 
 
 def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False, use_dcp=True):
+    """
+    Save an FSDP model checkpoint.
+
+    When ``state_dict_type`` is ``SHARDED_STATE_DICT``, the ``use_dcp`` parameter controls the saving strategy:
+
+    - ``use_dcp=True`` (default): Uses ``torch.distributed.checkpoint`` (DCP) to save sharded model state.
+      This is the standard approach and works well for typical training setups.
+    - ``use_dcp=False``: Uses per-rank ``torch.save`` instead of DCP. Each rank saves its own shard
+      independently to a separate file, avoiding cross-rank communication entirely. This is significantly
+      faster at large scale (e.g., 2800+ GPUs) where DCP's all-gather-based saving can cause timeouts
+      due to TCP congestion from Gloo-based collective communication.
+
+    .. note::
+        Checkpoints saved with ``use_dcp=False`` are saved as per-rank files
+        (``{prefix}_rank{local_rank}.bin``) and must be loaded with ``use_dcp=False`` as well.
+    """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -165,6 +181,22 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
 
 
 def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False, use_dcp=True):
+    """
+    Load an FSDP model checkpoint.
+
+    When ``state_dict_type`` is ``SHARDED_STATE_DICT``, the ``use_dcp`` parameter controls the loading strategy:
+
+    - ``use_dcp=True`` (default): Uses ``torch.distributed.checkpoint`` (DCP) to load sharded model state.
+      This is the standard approach and works well for typical training setups.
+    - ``use_dcp=False``: Uses per-rank ``torch.load`` instead of DCP. Each rank loads its own shard
+      independently from a separate file, avoiding cross-rank communication entirely. This is significantly
+      faster at large scale (e.g., 2800+ GPUs) where DCP's broadcast-based loading can cause timeouts
+      due to TCP congestion from Gloo-based collective communication.
+
+    .. note::
+        Checkpoints saved with ``use_dcp=False`` must be loaded with ``use_dcp=False`` as well, since the
+        file format differs (per-rank ``.bin`` files vs. DCP's sharded directory format).
+    """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -246,6 +278,20 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
 
 
 def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0, use_dcp=True):
+    """
+    Save an FSDP optimizer state checkpoint.
+
+    When ``state_dict_type`` is not ``FULL_STATE_DICT``, the ``use_dcp`` parameter controls the saving strategy:
+
+    - ``use_dcp=True`` (default): Uses ``torch.distributed.checkpoint`` (DCP) to save the optimizer state.
+    - ``use_dcp=False``: Uses per-rank ``torch.save`` instead of DCP, avoiding cross-rank communication.
+      This is useful at large scale (e.g., 2800+ GPUs) where DCP can cause timeouts due to TCP congestion
+      from Gloo-based collective communication.
+
+    .. note::
+        Checkpoints saved with ``use_dcp=False`` are saved as per-rank files
+        (``{prefix}_rank{local_rank}.bin``) and must be loaded with ``use_dcp=False`` as well.
+    """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -304,6 +350,20 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
 def load_fsdp_optimizer(
     fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False, use_dcp=True
 ):
+    """
+    Load an FSDP optimizer state checkpoint.
+
+    When ``state_dict_type`` is not ``FULL_STATE_DICT``, the ``use_dcp`` parameter controls the loading strategy:
+
+    - ``use_dcp=True`` (default): Uses ``torch.distributed.checkpoint`` (DCP) to load the optimizer state.
+    - ``use_dcp=False``: Uses per-rank ``torch.load`` instead of DCP, avoiding cross-rank communication.
+      This is useful at large scale (e.g., 2800+ GPUs) where DCP can cause timeouts due to TCP congestion
+      from Gloo-based collective communication.
+
+    .. note::
+        Checkpoints saved with ``use_dcp=False`` must be loaded with ``use_dcp=False`` as well, since the
+        file format differs (per-rank ``.bin`` files vs. DCP's sharded directory format).
+    """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
