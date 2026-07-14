@@ -719,7 +719,11 @@ def slice_tensors(data, tensor_slice, process_index=None, num_processes=None):
 def concatenate(data, dim=0):
     """
     Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors with the same shape.
-    If there is only a single batch of data, it is returned as-is.
+    Non-tensor leaves are returned as-is only when the top-level sequence has `len(data) == 1`. When
+    [`~data_loader.DataLoaderDispatcher`] concatenates batches with `dispatch_batches=True` and `split_batches=False`,
+    this normally corresponds to `num_processes == 1`. With multiple fetched batches, batch fields must be tensors or
+    nested structures whose leaves are tensors. Tensorize metadata in the collator before dispatching it: booleans and
+    numeric flags can be tensors, while strings require explicit encoding or must be excluded from the dispatched batch.
 
     Args:
         data (nested list/tuple/dictionary of lists of tensors `torch.Tensor`):
