@@ -813,6 +813,8 @@ class FSDPIntegrationTest(TempDirTestCase):
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         fsdp_version = self.current_fsdp_version
+        # Regression: checkpoint markers in parent paths must not be mistaken for the DCP shard directories.
+        checkpoint_output_dir = os.path.join(self.tmpdir, "optimizer_pytorch_model_fsdp_path")
         cmd = get_launch_command(
             num_processes=2,
             num_machines=1,
@@ -844,7 +846,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                 cmd_config.extend(
                     [
                         self.test_file_path,
-                        f"--output_dir={self.tmpdir}",
+                        f"--output_dir={checkpoint_output_dir}",
                         "--partial_train_epoch=1",
                     ]
                 )
@@ -852,7 +854,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                     execute_subprocess_async(cmd_config)
 
                 cmd_config = cmd_config[:-1]
-                resume_from_checkpoint = os.path.join(self.tmpdir, "epoch_0")
+                resume_from_checkpoint = os.path.join(checkpoint_output_dir, "epoch_0")
                 cmd_config.extend(
                     [
                         f"--resume_from_checkpoint={resume_from_checkpoint}",
