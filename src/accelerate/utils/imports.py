@@ -128,7 +128,7 @@ def is_cuda_available():
 
 
 @lru_cache
-def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
+def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
     """
     Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
     the USE_TORCH_XLA to false.
@@ -161,7 +161,7 @@ def is_pippy_available():
     return is_torch_version(">=", "2.4.0")
 
 
-def is_bf16_available(ignore_tpu=False):
+def is_bf16_available(ignore_tpu=False) -> bool:
     "Checks if bf16 is supported, optionally ignoring the TPU"
     if is_torch_xla_available(check_is_tpu=True):
         return not ignore_tpu
@@ -331,7 +331,7 @@ def is_mlflow_available():
     return False
 
 
-def is_mps_available(min_version="1.12"):
+def is_mps_available(min_version="1.12") -> bool:
     "Checks if MPS device is available. The minimum version required is 1.12."
     # With torch 1.12, you can use torch.backends.mps
     # With torch 2.0.0, you can use torch.mps
@@ -339,7 +339,7 @@ def is_mps_available(min_version="1.12"):
 
 
 @lru_cache
-def is_mlu_available(check_device=False):
+def is_mlu_available(check_device=False) -> bool:
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
     uninitialized.
@@ -356,7 +356,7 @@ def is_mlu_available(check_device=False):
 
 
 @lru_cache
-def is_musa_available(check_device=False):
+def is_musa_available(check_device=False) -> bool:
     "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
     if importlib.util.find_spec("torch_musa") is None:
         return False
@@ -374,7 +374,7 @@ def is_musa_available(check_device=False):
 
 
 @lru_cache
-def is_npu_available(check_device=False):
+def is_npu_available(check_device=False) -> bool:
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if importlib.util.find_spec("torch_npu") is None:
         return False
@@ -397,7 +397,7 @@ def is_npu_available(check_device=False):
 
 
 @lru_cache
-def is_sdaa_available(check_device=False):
+def is_sdaa_available(check_device=False) -> bool:
     "Checks if `torch_sdaa` is installed and potentially if a SDAA is in the environment"
     if importlib.util.find_spec("torch_sdaa") is None:
         return False
@@ -415,7 +415,7 @@ def is_sdaa_available(check_device=False):
 
 
 @lru_cache
-def is_hpu_available(init_hccl=False):
+def is_hpu_available(init_hccl=False) -> bool:
     "Checks if `torch.hpu` is installed and potentially if a HPU is in the environment"
     if (
         importlib.util.find_spec("habana_frameworks") is None
@@ -442,7 +442,7 @@ def is_habana_gaudi1():
 
 
 @lru_cache
-def is_xpu_available(check_device=False):
+def is_xpu_available(check_device=False) -> bool:
     """
     Checks if XPU acceleration is available via stock PyTorch (>=2.7) and
     potentially if a XPU is in the environment
