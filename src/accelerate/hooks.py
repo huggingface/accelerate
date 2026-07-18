@@ -67,7 +67,7 @@ class ModelHook:
 
     no_grad = False
 
-    def init_hook(self, module):
+    def init_hook(self, module: nn.Module):
         """
         To be executed when the hook is attached to the module.
 
@@ -76,7 +76,7 @@ class ModelHook:
         """
         return module
 
-    def pre_forward(self, module, *args, **kwargs):
+    def pre_forward(self, module: nn.Module, *args, **kwargs):
         """
         To be executed just before the forward method of the model.
 
@@ -90,7 +90,7 @@ class ModelHook:
         """
         return args, kwargs
 
-    def post_forward(self, module, output):
+    def post_forward(self, module: nn.Module, output):
         """
         To be executed just after the forward method of the model.
 
@@ -103,7 +103,7 @@ class ModelHook:
         """
         return output
 
-    def detach_hook(self, module):
+    def detach_hook(self, module: nn.Module):
         """
         To be executed when the hook is detached from a module.
 
