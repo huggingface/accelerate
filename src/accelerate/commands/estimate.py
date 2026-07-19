@@ -24,6 +24,7 @@ from accelerate.commands.utils import CustomArgumentParser
 from accelerate.utils import (
     calculate_maximum_sizes,
     convert_bytes,
+    is_span_marker_available,
     is_timm_available,
     is_transformers_available,
 )
@@ -35,6 +36,9 @@ if is_transformers_available():
 
 if is_timm_available():
     import timm
+
+if is_span_marker_available():
+    from span_marker import SpanMarkerModel
 
 
 def verify_on_hub(repo: str, token: Optional[str] = None):
@@ -59,6 +63,12 @@ def check_has_model(error):
         and "does not appear to have a file named" in error.args[0]
     ):
         return "transformers"
+    elif (
+        is_span_marker_available()
+        and isinstance(error, OSError)
+        and "does not appear to have a file named" in error.args[0]
+    ):
+        return "span-marker"
     else:
         return "unknown"
 
@@ -136,6 +146,16 @@ def create_empty_model(
         print(f"Loading pretrained config for `{model_name}` from `timm`...")
         with init_empty_weights():
             model = timm.create_model(model_name, pretrained=False)
+
+    elif library_name == "span-marker":
+        if not is_span_marker_available():
+            raise ImportError(
+                f"To check `{model_name}`, `span-marker` must be installed. Please install it via `pip install span-marker`"
+            )
+        print(f"Loading pretrained config for `{model_name}` from `span-marker`...")
+        with init_empty_weights():
+            model = SpanMarkerModel.from_pretrained(model_name)
+
     else:
         raise ValueError(
             f"Library `{library_name}` is not supported yet, please open an issue on GitHub for us to add support."
@@ -197,7 +217,7 @@ def estimate_command_parser(subparsers=None):
         "--library_name",
         type=str,
         help="The library the model has an integration with, such as `transformers`, needed only if this information is not stored on the Hub.",
-        choices=["timm", "transformers"],
+        choices=["timm", "transformers", "span-marker"],
     )
     parser.add_argument(
         "--dtypes",

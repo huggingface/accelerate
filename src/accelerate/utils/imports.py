@@ -254,6 +254,10 @@ def is_timm_available():
     return _is_package_available("timm")
 
 
+def is_span_marker_available():
+    return _is_package_available("span_marker", "span-marker")
+
+
 def is_triton_available():
     if is_xpu_available():
         return _is_package_available("triton", "triton-xpu")

@@ -34,6 +34,7 @@ from accelerate.test_utils.testing import (
     path_in_accelerate_package,
     require_multi_device,
     require_non_hpu,
+    require_span_marker,
     require_timm,
     require_transformers,
     run_command,
@@ -457,6 +458,13 @@ class ModelEstimatorTester(unittest.TestCase):
         with self.assertRaises(RuntimeError, msg="Tried to load `muellerzr/dummy` with `transformers` but"):
             args = self.parser.parse_args(["muellerzr/dummy", "--library_name", "transformers"])
             estimate_command(args)
+
+    @require_span_marker
+    def test_span_marker(self):
+        args = self.parser.parse_args(
+            ["tomaarsen/span-marker-bert-base-fewnerd-fine-super", "--library_name", "span-marker"]
+        )
+        estimate_command(args)
 
     def test_no_metadata(self):
         with self.assertRaises(

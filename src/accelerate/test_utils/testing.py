@@ -62,6 +62,7 @@ from ..utils import (
     is_pytest_available,
     is_schedulefree_available,
     is_sdaa_available,
+    is_span_marker_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_timm_available,
@@ -331,6 +332,13 @@ def require_timm(test_case):
     Decorator marking a test that requires timm. These tests are skipped when they are not.
     """
     return unittest.skipUnless(is_timm_available(), "test requires the timm library")(test_case)
+
+
+def require_span_marker(test_case):
+    """
+    Decorator marking a test that requires span-marker. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_span_marker_available(), "test requires the span-marker library")(test_case)
 
 
 def require_torchvision(test_case):
