@@ -103,8 +103,7 @@ class DataLoaderTester(AccelerateTestCase):
             for i in range(2)
         ]
         batch_sampler_lists = [list(batch_sampler_shard) for batch_sampler_shard in batch_sampler_shards]
-        if not split_batches:
-            assert [len(shard) for shard in batch_sampler_shards] == [len(e) for e in expected]
+        assert [len(shard) for shard in batch_sampler_shards] == [len(e) for e in expected]
         assert batch_sampler_lists == expected
 
     def test_batch_sampler_shards_with_no_splits(self):
@@ -348,6 +347,23 @@ class DataLoaderTester(AccelerateTestCase):
         batch_sampler = BatchSampler(range(2), batch_size=4, drop_last=True)
         expected = [[], []]
         self.check_batch_sampler_shards(batch_sampler, expected, split_batches=True, even_batches=False)
+
+    @parameterized.expand([(2, 2), (4, 2), (6, 2), (6, 3)])
+    def test_batch_sampler_shards_with_splits_no_even_len_matches_iteration(self, batch_size, num_processes):
+        # Regression test for #4122: with `split_batches=True` and `even_batches=False`, `len(shard)` must match the
+        # number of batches actually yielded for every process index. Only combinations where `batch_size` is a round
+        # multiple of `num_processes` are tested, since the others raise a `ValueError` at init.
+        for dataset_size in range(1, 20):
+            for drop_last in [False, True]:
+                batch_sampler = BatchSampler(range(dataset_size), batch_size=batch_size, drop_last=drop_last)
+                for process_index in range(num_processes):
+                    shard = BatchSamplerShard(
+                        batch_sampler, num_processes, process_index, split_batches=True, even_batches=False
+                    )
+                    assert len(shard) == len(list(shard)), (
+                        f"len mismatch for dataset_size={dataset_size}, batch_size={batch_size}, "
+                        f"num_processes={num_processes}, process_index={process_index}, drop_last={drop_last}"
+                    )
 
     def test_batch_sampler_with_varying_batch_size(self):
         batch_sampler = [[0, 1, 2], [3, 4], [5, 6, 7, 8], [9, 10, 11], [12, 13]]
