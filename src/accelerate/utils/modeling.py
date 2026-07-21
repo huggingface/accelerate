@@ -65,6 +65,59 @@ from safetensors import safe_open
 from safetensors.torch import load_file as safe_load_file
 
 
+# Ordered mapping of accelerator device types to their availability check and torch backend module getter.
+# The order defines the priority used when selecting the primary accelerator in `get_default_device_type()`.
+_ACCELERATOR_DEVICES = [
+    ("npu", is_npu_available, lambda: torch.npu),
+    ("mlu", is_mlu_available, lambda: torch.mlu),
+    ("sdaa", is_sdaa_available, lambda: torch.sdaa),
+    ("musa", is_musa_available, lambda: torch.musa),
+    ("xpu", is_xpu_available, lambda: torch.xpu),
+    ("hpu", is_hpu_available, lambda: torch.hpu),
+]
+
+
+def _get_available_accelerator():
+    """Return `(device_type, torch_backend)` for the first available accelerator, or `("cuda", torch.cuda)`."""
+    for device_type, is_available, get_backend in _ACCELERATOR_DEVICES:
+        if is_available():
+            return device_type, get_backend()
+    return "cuda", torch.cuda
+
+
+def _get_device_count(device_type: str) -> int:
+    """Return the number of devices of the given type (e.g. 'cuda', 'npu', 'xpu')."""
+    if device_type == "cuda":
+        return torch.cuda.device_count()
+    return getattr(torch, device_type).device_count()
+
+
+def _get_device_free_memory(device_type: str, index: int) -> int:
+    """Return free memory (in bytes) for the device at `index` of the given type."""
+    if device_type == "cuda":
+        return torch.cuda.mem_get_info(index)[0]
+    return getattr(torch, device_type).mem_get_info(index)[0]
+
+
+def _allocate_device_tensor(device_type: str, index: int):
+    """Allocate a small tensor on the given device to ensure it is initialized."""
+    if device_type == "cuda":
+        return torch.tensor([0], device=index)
+    return torch.tensor(0, device=torch.device(device_type, index))
+
+
+def get_default_device_type() -> str:
+    """
+    Return the device type of the first available accelerator, falling back to `"cuda"`.
+
+    The priority order is: npu, mlu, sdaa, musa, xpu, hpu, mps, cuda.
+    """
+    if is_mps_available():
+        return "mps"
+    device_type, _ = _get_available_accelerator()
+    return device_type
+
+
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
 logger = logging.getLogger(__name__)
@@ -763,62 +816,14 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
     if max_memory is None:
         max_memory = {}
         # Make sure device is initialized on each device to have the right memory info.
-        if is_npu_available():
-            for i in range(torch.npu.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("npu", i))
-                    max_memory[i] = torch.npu.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_mlu_available():
-            for i in range(torch.mlu.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("mlu", i))
-                    max_memory[i] = torch.mlu.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_sdaa_available():
-            for i in range(torch.sdaa.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("sdaa", i))
-                    max_memory[i] = torch.sdaa.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_musa_available():
-            for i in range(torch.musa.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("musa", i))
-                    max_memory[i] = torch.musa.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_xpu_available():
-            for i in range(torch.xpu.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("xpu", i))
-                    max_memory[i] = torch.xpu.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_hpu_available():
-            for i in range(torch.hpu.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("hpu", i))
-                    max_memory[i] = torch.hpu.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        else:
-            for i in range(torch.cuda.device_count()):
-                try:
-                    _ = torch.tensor([0], device=i)
-                    max_memory[i] = torch.cuda.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
+        device_type, _ = _get_available_accelerator()
+        for i in range(_get_device_count(device_type)):
+            try:
+                _allocate_device_tensor(device_type, i)
+                max_memory[i] = _get_device_free_memory(device_type, i)
+            except Exception:
+                logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                continue
         # allocate everything in the mps device as the RAM is shared
         if is_mps_available():
             max_memory["mps"] = psutil.virtual_memory().available
@@ -835,20 +840,8 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
     gpu_devices = [k for k in max_memory.keys() if isinstance(k, int)]
     gpu_devices.sort()
     # check if gpu/npu/xpu devices are available and if not, throw a warning
-    if is_npu_available():
-        num_devices = torch.npu.device_count()
-    elif is_mlu_available():
-        num_devices = torch.mlu.device_count()
-    elif is_sdaa_available():
-        num_devices = torch.sdaa.device_count()
-    elif is_musa_available():
-        num_devices = torch.musa.device_count()
-    elif is_xpu_available():
-        num_devices = torch.xpu.device_count()
-    elif is_hpu_available():
-        num_devices = torch.hpu.device_count()
-    else:
-        num_devices = torch.cuda.device_count()
+    device_type, _ = _get_available_accelerator()
+    num_devices = _get_device_count(device_type)
     for device in gpu_devices:
         if device >= num_devices or device < 0:
             logger.warning(f"Device {device} is not available, available devices are {list(range(num_devices))}")
@@ -968,22 +961,7 @@ def get_balanced_memory(
     user_not_set_max_memory = max_memory is None
     max_memory = get_max_memory(max_memory)
 
-    if is_npu_available():
-        expected_device_type = "npu"
-    elif is_mlu_available():
-        expected_device_type = "mlu"
-    elif is_sdaa_available():
-        expected_device_type = "sdaa"
-    elif is_musa_available():
-        expected_device_type = "musa"
-    elif is_xpu_available():
-        expected_device_type = "xpu"
-    elif is_hpu_available():
-        expected_device_type = "hpu"
-    elif is_mps_available():
-        expected_device_type = "mps"
-    else:
-        expected_device_type = "cuda"
+    expected_device_type = get_default_device_type()
     num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
 
     if num_devices == 0:
