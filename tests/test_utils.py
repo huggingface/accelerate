@@ -491,13 +491,55 @@ class UtilsTester(unittest.TestCase):
         assert result["a"].shape == torch.Size([4, 3])
         assert result["b"].shape == torch.Size([4, 4])
 
-        # NOTE: We can't merge multiple batches of non-tensor data
+        # NOTE: Multiple batches of scalar non-tensor data (e.g. one string per batch) are collected into a list
         data = [
             {"a": torch.randn(2, 3), "b": torch.randn(2, 4), "c": "test_string1"},
             {"a": torch.randn(2, 3), "b": torch.randn(2, 4), "c": "test_string2"},
         ]
-        with self.assertRaises(TypeError):
-            result = concatenate(data)
+        result = concatenate(data)
+        assert result["a"].shape == torch.Size([4, 3])
+        assert result["b"].shape == torch.Size([4, 4])
+        assert result["c"] == ["test_string1", "test_string2"]
+
+        # Reproduction from https://github.com/huggingface/accelerate/issues/4111
+        data = [
+            {"input_ids": torch.tensor([[1, 2]]), "label": True},
+            {"input_ids": torch.tensor([[3, 4]]), "label": False},
+        ]
+        result = concatenate(data)
+        assert torch.equal(result["input_ids"], torch.tensor([[1, 2], [3, 4]]))
+        assert result["label"] == [True, False]
+
+        # NOTE: Lists of non-tensor values are chained along the batch dimension
+        data = [{"key1": ["str1", "str2"]}, {"key1": ["str3", "str4"]}]
+        result = concatenate(data)
+        assert result["key1"] == ["str1", "str2", "str3", "str4"]
+
+        # Lists of non-tensor values with different batch sizes (e.g. the remainder with `drop_last=False`)
+        data = [
+            {"labels": [True, False, True], "input_ids": torch.randn(3, 2)},
+            {"labels": [False, False], "input_ids": torch.randn(2, 2)},
+        ]
+        result = concatenate(data)
+        assert result["labels"] == [True, False, True, False, False]
+        assert result["input_ids"].shape == torch.Size([5, 2])
+
+        # Non-tensor values in nested dictionaries
+        data = [
+            {"meta": {"ids": ["a", "b"], "flag": True}, "x": torch.randn(2, 2)},
+            {"meta": {"ids": ["c", "d"], "flag": False}, "x": torch.randn(2, 2)},
+        ]
+        result = concatenate(data)
+        assert result["meta"]["ids"] == ["a", "b", "c", "d"]
+        assert result["meta"]["flag"] == [True, False]
+        assert result["x"].shape == torch.Size([4, 2])
+
+        # NOTE: Tuples are still treated as a data structure (not as batch data), only their leaves are merged
+        data = [(torch.randn(2, 3), "s1"), (torch.randn(2, 3), "s2")]
+        result = concatenate(data)
+        assert isinstance(result, tuple)
+        assert result[0].shape == torch.Size([4, 3])
+        assert result[1] == ["s1", "s2"]
 
         batch1 = torch.randn(5, 10)
         batch2 = torch.randn(5, 10)
