@@ -430,6 +430,50 @@ class ModelingUtilsTester(unittest.TestCase):
             self.shard_test_model(model, tmp_dir)
             load_checkpoint_in_model(model, tmp_dir)
 
+    def test_load_checkpoint_in_model_rejects_path_traversal(self):
+        # A malicious/corrupted sharded-checkpoint index must not open shards outside
+        # the checkpoint folder (relative `..` escapes or absolute paths).
+        model = ModelForTest()
+        malicious_targets = (
+            "../escaped_shard.bin",
+            f"..{os.sep}escaped_shard.bin",
+            os.path.join(os.sep, "tmp", "escaped_shard.bin"),
+            "",
+        )
+        for malicious_target in malicious_targets:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                index = {name: malicious_target for name in model.state_dict()}
+                index_file = os.path.join(tmp_dir, "weight_map.index.json")
+                with open(index_file, "w") as f:
+                    json.dump(index, f)
+                with self.assertRaises(ValueError) as cm:
+                    load_checkpoint_in_model(model, index_file)
+                msg = str(cm.exception).lower()
+                self.assertTrue(
+                    any(token in msg for token in ("outside", "absolute", "escape", "non-empty", "relative")),
+                    msg=str(cm.exception),
+                )
+
+    def test_load_checkpoint_in_model_allows_nested_relative_shards(self):
+        # Nested relative shard paths under the checkpoint folder remain valid.
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            shard_dir = os.path.join(tmp_dir, "shards")
+            os.makedirs(shard_dir)
+            index = {}
+            module_index = {}
+            for i, name in enumerate(model.state_dict()):
+                module = name.split(".")[0]
+                if module not in module_index:
+                    module_index[module] = os.path.join("shards", f"part_{len(module_index)}.bin")
+                index[name] = module_index[module]
+            with open(os.path.join(tmp_dir, "weight_map.index.json"), "w") as f:
+                json.dump(index, f)
+            for module, rel_fname in module_index.items():
+                state_dict = {k: v for k, v in model.state_dict().items() if k.startswith(module)}
+                torch.save(state_dict, os.path.join(tmp_dir, rel_fname))
+            load_checkpoint_in_model(model, tmp_dir)
+
     @require_non_cpu
     def test_load_checkpoint_in_model_one_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}

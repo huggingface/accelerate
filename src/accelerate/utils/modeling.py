@@ -1802,6 +1802,50 @@ def get_state_dict_from_offload(
     return state_dict
 
 
+def _resolve_sharded_checkpoint_file(checkpoint_folder: Union[str, os.PathLike], shard_file: str) -> str:
+    """
+    Resolve a sharded-checkpoint `weight_map` entry under `checkpoint_folder`.
+
+    Untrusted index JSON may list absolute paths or `..` segments that escape the
+    checkpoint directory. Reject those before any shard is opened.
+    """
+    if not isinstance(shard_file, str) or not shard_file:
+        raise ValueError(
+            f"Invalid sharded checkpoint index: weight map entry {shard_file!r} is not a non-empty relative path."
+        )
+    if os.path.isabs(shard_file):
+        raise ValueError(
+            f"Invalid sharded checkpoint index: weight map entry {shard_file!r} is an absolute path. "
+            "Refusing to load a potentially malicious checkpoint."
+        )
+    # Normalize separators so Windows-style `..\\` segments are also rejected.
+    normalized = shard_file.replace("\\", "/")
+    parts = [p for p in normalized.split("/") if p not in ("", ".")]
+    if any(p == ".." for p in parts):
+        raise ValueError(
+            f"Invalid sharded checkpoint index: weight map entry {shard_file!r} escapes the checkpoint folder. "
+            "Refusing to load a potentially malicious checkpoint."
+        )
+
+    checkpoint_folder_abs = os.path.abspath(checkpoint_folder)
+    resolved = os.path.abspath(os.path.join(checkpoint_folder_abs, *parts))
+    try:
+        if os.path.commonpath([checkpoint_folder_abs, resolved]) != checkpoint_folder_abs:
+            raise ValueError(
+                f"Invalid sharded checkpoint index: weight map entry {shard_file!r} resolves outside "
+                f"the checkpoint folder. Refusing to load a potentially malicious checkpoint."
+            )
+    except ValueError as exc:
+        # commonpath raises when paths are on different drives (Windows).
+        if "outside" in str(exc):
+            raise
+        raise ValueError(
+            f"Invalid sharded checkpoint index: weight map entry {shard_file!r} resolves outside "
+            f"the checkpoint folder. Refusing to load a potentially malicious checkpoint."
+        ) from exc
+    return resolved
+
+
 def load_checkpoint_in_model(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
@@ -1929,7 +1973,7 @@ def load_checkpoint_in_model(
         if "weight_map" in index:
             index = index["weight_map"]
         checkpoint_files = sorted(list(set(index.values())))
-        checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
+        checkpoint_files = [_resolve_sharded_checkpoint_file(checkpoint_folder, f) for f in checkpoint_files]
 
     # Logic for missing/unexpected keys goes here.
 
