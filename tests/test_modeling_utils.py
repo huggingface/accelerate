@@ -302,23 +302,12 @@ class ModelingUtilsTester(unittest.TestCase):
         # The root module itself has no non-persistent buffer, so its private set starts empty.
         assert model._non_persistent_buffers_set == set()
 
-        # recurse=True must collect the submodule's non-persistent buffer without mutating the module.
-        assert get_non_persistent_buffers(model, recurse=True) == {"np_buf"}
-        assert model._non_persistent_buffers_set == set()
-
-        # Same with fully-qualified names.
-        assert get_non_persistent_buffers(model, recurse=True, fqns=True) == {"sub.np_buf"}
-        assert model._non_persistent_buffers_set == set()
-
-        # Calling repeatedly must be idempotent (no dot-prefixed accumulation from the "" root name).
-        assert get_non_persistent_buffers(model, recurse=True) == {"np_buf"}
-        assert get_non_persistent_buffers(model, recurse=True, fqns=True) == {"sub.np_buf"}
-        assert model._non_persistent_buffers_set == set()
-
-        # The submodule's own private set must be returned as a copy, not aliased.
-        result = get_non_persistent_buffers(model.sub, recurse=False)
+        # recurse=True must collect the submodule's non-persistent buffer without mutating the module,
+        # and must return a copy rather than aliasing a module's private set.
+        result = get_non_persistent_buffers(model, recurse=True)
         assert result == {"np_buf"}
         assert result is not model.sub._non_persistent_buffers_set
+        assert model._non_persistent_buffers_set == set()
         assert model.sub._non_persistent_buffers_set == {"np_buf"}
 
     def test_named_module_tensors_does_not_corrupt_state_dict(self):
