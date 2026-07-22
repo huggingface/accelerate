@@ -1618,6 +1618,18 @@ class FullyShardedDataParallelPlugin:
         ignored_modules (`Optional[Union[Iterable[torch.nn.Module], str]]`, defaults to `None`):
             A list of modules to ignore when wrapping with FSDP. When passing a string, will match the modules by name
             using regex fullmatch. If `fsdp_version` is set to 2, the modules are converted to parameters and used.
+        fp32_modules (`Optional[List[str]]`, defaults to `None`):
+            A list of class-name patterns (e.g. norm layers) to pre-shard with their own fp32 `MixedPrecisionPolicy`
+            before the rest of the model is wrapped, so they don't get folded into a lower-precision `fully_shard`
+            group. A pattern without a `.` matches as a suffix of the class name (`"RMSNorm"` matches
+            `LlamaRMSNorm`); a pattern with a `.` must exactly match `f"{cls.__module__}.{cls.__name__}"`.
+            Blank/whitespace-only patterns are ignored. Unioned with `fp32_modules_auto_detect`. Only supported when
+            `fsdp_version` is set to `2`.
+        fp32_modules_auto_detect (`bool`, defaults to `True`):
+            Whether to also union in the modules implied by the model's `_keep_in_fp32_modules_strict` attribute
+            (the 🤗 Transformers signal for the same purpose on the bf16 load path). These are matched as an
+            unanchored substring against each module's fully-qualified name, not as class-name patterns. Set to
+            `False` to only use `fp32_modules`. Only supported when `fsdp_version` is set to `2`.
         state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
             State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or
             `sharded_state_dict`.
@@ -1719,6 +1731,22 @@ class FullyShardedDataParallelPlugin:
     ignored_modules: Optional[Union[Iterable[torch.nn.Module], str]] = field(
         default=None,
         metadata={"help": "A list of modules to ignore when wrapping with FSDP."},
+    )
+    fp32_modules: Optional[list[str]] = field(
+        default=None,
+        metadata={
+            "help": "A list of class-name patterns for modules (e.g. norm layers) to keep in fp32 (storage and "
+            "compute) under FSDP2, pre-sharded with their own `MixedPrecisionPolicy` before the rest of the model "
+            "is wrapped. Only supported when `fsdp_version` is set to 2."
+        },
+    )
+    fp32_modules_auto_detect: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether to automatically union modules implied by the model's `_keep_in_fp32_modules_strict` "
+            "attribute into the fp32 module set used by `fp32_modules`. Defaults to `True`. Only supported when "
+            "`fsdp_version` is set to 2."
+        },
     )
 
     state_dict_type: Union[str, "torch.distributed.fsdp.StateDictType"] = field(
@@ -1954,6 +1982,25 @@ class FullyShardedDataParallelPlugin:
 
         if self.ignored_modules is None:
             self.ignored_modules = os.environ.get(env_prefix + "IGNORED_MODULES", None)
+
+        if self.fp32_modules is None:
+            fp32_modules_env = os.environ.get(env_prefix + "FP32_MODULES", None)
+            if fp32_modules_env is not None:
+                self.fp32_modules = fp32_modules_env.split(",")
+        elif isinstance(self.fp32_modules, str):
+            self.fp32_modules = self.fp32_modules.split(",")
+
+        if self.fp32_modules_auto_detect is None:
+            self.fp32_modules_auto_detect = (
+                str_to_bool(os.environ.get(env_prefix + "FP32_MODULES_AUTO_DETECT", "True")) == 1
+            )
+
+        if self.fp32_modules is not None and self.fsdp_version != 2:
+            _fsdp2_warnings.add(
+                "fp32_modules is only supported with `fsdp_version=2` (per-module `mp_policy` on `fully_shard`). "
+                "Setting fp32_modules to None."
+            )
+            self.fp32_modules = None
 
         if self.cpu_ram_efficient_loading is None:
             self.cpu_ram_efficient_loading = (

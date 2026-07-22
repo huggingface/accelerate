@@ -624,6 +624,82 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     return model
 
 
+def _fp32_class_pattern_matches(module: torch.nn.Module, pattern: str) -> bool:
+    """Matches a `fp32_modules`-style class-name pattern against `module`'s class.
+
+    A pattern without a `.` is a suffix match on `type(module).__name__` (so `"RMSNorm"` catches
+    `LlamaRMSNorm`); a pattern with a `.` must exactly match `f"{module.__module__}.{ClassName}"`.
+    Blank/whitespace-only patterns never match.
+    """
+    if not isinstance(pattern, str):
+        return False
+    pattern = pattern.strip()
+    if not pattern:
+        return False
+    cls = type(module)
+    if "." in pattern:
+        return f"{cls.__module__}.{cls.__name__}" == pattern
+    return cls.__name__.endswith(pattern)
+
+
+def resolve_fp32_module_patterns(fsdp2_plugin, model: torch.nn.Module) -> tuple[list[str], list[str]]:
+    """Returns `(class_patterns, name_patterns)`, the effective fp32-module selection for `fsdp2_prepare_model`.
+
+    `class_patterns` come from `fsdp2_plugin.fp32_modules`, matched via `_fp32_class_pattern_matches`.
+    `name_patterns` come from `model._keep_in_fp32_modules_strict` (unless `fp32_modules_auto_detect`
+    is `False`), matched as an unanchored substring against each module's fully-qualified name -
+    mirroring how `transformers` matches these same patterns against parameter names. A module is
+    selected for fp32 if it matches either list.
+    """
+    class_patterns = [p for p in (fsdp2_plugin.fp32_modules or []) if isinstance(p, str) and p.strip()]
+
+    name_patterns = []
+    if getattr(fsdp2_plugin, "fp32_modules_auto_detect", True):
+        auto_patterns = getattr(model, "_keep_in_fp32_modules_strict", None)
+        if auto_patterns:
+            name_patterns = [p for p in auto_patterns if isinstance(p, str) and p.strip()]
+
+    return class_patterns, name_patterns
+
+
+def _module_selected_for_fp32(
+    name: str, module: torch.nn.Module, class_patterns: list[str], name_patterns: list[str]
+) -> bool:
+    if any(_fp32_class_pattern_matches(module, pattern) for pattern in class_patterns):
+        return True
+    return bool(name) and any(pattern in name for pattern in name_patterns)
+
+
+def _upcast_module_to_fp32(module: torch.nn.Module, cpu_ram_efficient_loading: bool) -> None:
+    """Upcasts `module`'s own (non-recursive) floating-point parameters and buffers to fp32 in place.
+
+    `mp_policy.param_dtype` only controls FSDP2's compute dtype; storage dtype is fixed to whatever the
+    parameter has when `fully_shard` is called, so it must already be fp32 going in.
+
+    If the module is still on `meta` (mid-`cpu_ram_efficient_loading` reload), only the meta tensor's
+    dtype is updated - `fsdp2_load_full_state_dict` infers the real target dtype from it afterwards.
+    Outside that reload path there's no way to recover real values for a meta parameter, so we raise
+    instead of silently producing an empty fp32 meta tensor.
+    """
+    params = list(module.parameters(recurse=False))
+    buffers = list(module.buffers(recurse=False))
+    has_meta_tensors = any(t.is_meta for t in params) or any(t.is_meta for t in buffers)
+    if has_meta_tensors and not cpu_ram_efficient_loading:
+        raise RuntimeError(
+            f"Cannot promote module `{type(module).__name__}` to fp32 precision under FSDP2: its parameters are "
+            "on the `meta` device and `cpu_ram_efficient_loading` is not enabled, so there is no way to recover "
+            "their real values. Either enable `FullyShardedDataParallelPlugin(cpu_ram_efficient_loading=True)` "
+            "(accelerate's supported meta-device reload path) or materialize the model before calling "
+            "`accelerator.prepare()`."
+        )
+    for param in params:
+        if param.is_floating_point() and param.dtype != torch.float32:
+            param.data = param.data.to(torch.float32)
+    for buffer in buffers:
+        if buffer.is_floating_point() and buffer.dtype != torch.float32:
+            buffer.data = buffer.data.to(torch.float32)
+
+
 def _find_final_norm(model: torch.nn.Module) -> torch.nn.Module | None:
     """Find the final normalization layer before the output head.
 
@@ -740,6 +816,24 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # We assume `transformers` models have a `tie_weights` method if they support it
         if hasattr(model, "tie_weights"):
             model.tie_weights()
+
+    # Pre-shard fp32-selected modules (e.g. norms) with their own fp32 `MixedPrecisionPolicy` before the
+    # class-wrap loop below. Later wraps already skip `FSDPModule` instances, so this also carves a
+    # matching final norm out of the tail group further down.
+    fp32_class_patterns, fp32_name_patterns = resolve_fp32_module_patterns(fsdp2_plugin, model)
+    if fp32_class_patterns or fp32_name_patterns:
+        fp32_policy = MixedPrecisionPolicy(
+            param_dtype=torch.float32,
+            reduce_dtype=torch.float32,
+            output_dtype=fsdp2_kwargs["mp_policy"].param_dtype,
+        )
+        for name, module in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
+            if isinstance(module, FSDPModule):
+                continue
+            if not _module_selected_for_fp32(name, module, fp32_class_patterns, fp32_name_patterns):
+                continue
+            _upcast_module_to_fp32(module, fsdp2_plugin.cpu_ram_efficient_loading)
+            fully_shard(module, **{**fsdp2_kwargs, "mp_policy": fp32_policy})
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
     if auto_wrap_policy_func is not None:

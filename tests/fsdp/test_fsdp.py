@@ -502,6 +502,8 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         mock_plugin.cpu_offload = None
         mock_plugin.cpu_ram_efficient_loading = False
         mock_plugin.ignored_modules = None
+        mock_plugin.fp32_modules = None
+        mock_plugin.fp32_modules_auto_detect = True
         mock_accelerator.state.fsdp_plugin = mock_plugin
 
         with (
@@ -544,6 +546,8 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         mock_plugin.cpu_offload = None
         mock_plugin.cpu_ram_efficient_loading = False
         mock_plugin.ignored_modules = None
+        mock_plugin.fp32_modules = None
+        mock_plugin.fp32_modules_auto_detect = True
         mock_accelerator.state.fsdp_plugin = mock_plugin
 
         with (
@@ -583,6 +587,8 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         mock_plugin.cpu_offload = None
         mock_plugin.cpu_ram_efficient_loading = False
         mock_plugin.ignored_modules = None
+        mock_plugin.fp32_modules = None
+        mock_plugin.fp32_modules_auto_detect = True
         mock_accelerator.state.fsdp_plugin = mock_plugin
 
         with (
@@ -629,6 +635,8 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         mock_plugin.cpu_offload = None
         mock_plugin.cpu_ram_efficient_loading = False
         mock_plugin.ignored_modules = None
+        mock_plugin.fp32_modules = None
+        mock_plugin.fp32_modules_auto_detect = True
         mock_accelerator.state.fsdp_plugin = mock_plugin
 
         try:
@@ -688,6 +696,340 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         # And each block + non-repeated leaf is compiled in-place
         assert all(getattr(b, "_compiled_call_impl", None) is not None for b in model.layers)
         assert getattr(model.head, "_compiled_call_impl", None) is not None
+
+
+class _FakeRMSNorm(torch.nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        return x
+
+
+class _FakeDecoderLayer(torch.nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.input_layernorm = _FakeRMSNorm(dim)
+        self.mlp = torch.nn.Linear(dim, dim)
+
+    def forward(self, x):
+        return self.mlp(self.input_layernorm(x))
+
+
+class _FakeBaseModel(torch.nn.Module):
+    def __init__(self, dim, n_layers, vocab):
+        super().__init__()
+        self.embed_tokens = torch.nn.Embedding(vocab, dim)
+        self.layers = torch.nn.ModuleList([_FakeDecoderLayer(dim) for _ in range(n_layers)])
+        self.norm = _FakeRMSNorm(dim)
+
+    def forward(self, x):
+        x = self.embed_tokens(x)
+        for layer in self.layers:
+            x = layer(x)
+        return self.norm(x)
+
+
+class _FakeCausalLM(torch.nn.Module):
+    """Minimal tied-embedding decoder-only LM shaped the way `fsdp2_prepare_model` expects it
+    (`base_model_prefix`, `get_input/output_embeddings`, a final norm as a direct child of the base
+    model), without needing a real HF checkpoint."""
+
+    base_model_prefix = "model"
+
+    def __init__(self, dim=8, n_layers=2, vocab=16):
+        super().__init__()
+        self.model = _FakeBaseModel(dim, n_layers, vocab)
+        self.lm_head = torch.nn.Linear(dim, vocab, bias=False)
+        self.tie_weights()
+
+    def forward(self, x):
+        return self.lm_head(self.model(x))
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def tie_weights(self):
+        self.lm_head.weight = self.model.embed_tokens.weight
+
+
+@require_fsdp2
+class FSDP2Fp32ModulesTest(AccelerateTestCase):
+    """CPU-only tests for `fp32_modules`/`fp32_modules_auto_detect` and the fp32 pre-sharding pre-loop
+    in `fsdp2_prepare_model`. `fully_shard` is faked with a stand-in that mimics its real class-swap
+    behavior (mixing in `FSDPModule`) so the `isinstance(module, FSDPModule)` skip-guards elsewhere in
+    `fsdp2_prepare_model` behave like they would in production, without needing a real process group.
+    """
+
+    def _mock_plugin(self, fp32_modules=None, fp32_modules_auto_detect=True, param_dtype=torch.bfloat16):
+        from unittest.mock import Mock
+
+        mock_mp_policy = Mock()
+        mock_mp_policy.param_dtype = param_dtype
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = mock_mp_policy
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_plugin.fp32_modules = fp32_modules
+        mock_plugin.fp32_modules_auto_detect = fp32_modules_auto_detect
+        return mock_plugin
+
+    def _mock_accelerator(self, plugin):
+        from unittest.mock import Mock
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "no"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+        mock_accelerator.state.fsdp_plugin = plugin
+        return mock_accelerator
+
+    def _fake_fully_shard(self, calls):
+        from torch.distributed.fsdp import FSDPModule
+
+        def _mark_sharded(module):
+            cls = type(module)
+            if not issubclass(cls, FSDPModule):
+                module.__class__ = type(f"FSDP{cls.__name__}", (FSDPModule, cls), {})
+
+        def _fake(module_or_list, **kwargs):
+            calls.append((module_or_list, kwargs))
+            for m in module_or_list if isinstance(module_or_list, list) else [module_or_list]:
+                _mark_sharded(m)
+
+        return _fake
+
+    def test_class_pattern_matcher_suffix(self):
+        from accelerate.utils.fsdp_utils import _fp32_class_pattern_matches
+
+        class LlamaRMSNorm(torch.nn.Module):
+            pass
+
+        assert _fp32_class_pattern_matches(LlamaRMSNorm(), "RMSNorm")
+        assert _fp32_class_pattern_matches(torch.nn.LayerNorm(4), "LayerNorm")
+        assert not _fp32_class_pattern_matches(torch.nn.Linear(2, 2), "RMSNorm")
+
+    def test_class_pattern_matcher_fully_qualified(self):
+        from accelerate.utils.fsdp_utils import _fp32_class_pattern_matches
+
+        layer_norm = torch.nn.LayerNorm(4)
+        cls = type(layer_norm)
+        fq_name = f"{cls.__module__}.{cls.__name__}"
+
+        assert _fp32_class_pattern_matches(layer_norm, fq_name)
+        assert not _fp32_class_pattern_matches(layer_norm, "some.other.module." + cls.__name__)
+
+    def test_class_pattern_matcher_blank_patterns_never_match(self):
+        from accelerate.utils.fsdp_utils import _fp32_class_pattern_matches
+
+        linear = torch.nn.Linear(2, 2)
+        for pattern in ("", "   ", None):
+            assert not _fp32_class_pattern_matches(linear, pattern)
+
+    def test_resolve_fp32_module_patterns_explicit_only(self):
+        from accelerate.utils.fsdp_utils import resolve_fp32_module_patterns
+
+        model = torch.nn.Linear(2, 2)
+        plugin = self._mock_plugin(fp32_modules=["RMSNorm", " ", "LayerNorm"], fp32_modules_auto_detect=True)
+        class_patterns, name_patterns = resolve_fp32_module_patterns(plugin, model)
+
+        assert class_patterns == ["RMSNorm", "LayerNorm"]
+        assert name_patterns == []
+
+    def test_resolve_fp32_module_patterns_auto_detect_union(self):
+        from accelerate.utils.fsdp_utils import resolve_fp32_module_patterns
+
+        model = torch.nn.Linear(2, 2)
+        model._keep_in_fp32_modules_strict = ["input_layernorm", "  ", "norm"]
+        plugin = self._mock_plugin(fp32_modules=["RMSNorm"], fp32_modules_auto_detect=True)
+
+        class_patterns, name_patterns = resolve_fp32_module_patterns(plugin, model)
+        assert class_patterns == ["RMSNorm"]
+        assert name_patterns == ["input_layernorm", "norm"]
+
+    def test_resolve_fp32_module_patterns_auto_detect_disabled(self):
+        from accelerate.utils.fsdp_utils import resolve_fp32_module_patterns
+
+        model = torch.nn.Linear(2, 2)
+        model._keep_in_fp32_modules_strict = ["input_layernorm"]
+        plugin = self._mock_plugin(fp32_modules=None, fp32_modules_auto_detect=False)
+
+        class_patterns, name_patterns = resolve_fp32_module_patterns(plugin, model)
+        assert class_patterns == []
+        assert name_patterns == []
+
+    def test_module_selected_for_fp32(self):
+        from accelerate.utils.fsdp_utils import _module_selected_for_fp32
+
+        class RMSNorm(torch.nn.Module):
+            pass
+
+        norm = RMSNorm()
+        linear = torch.nn.Linear(2, 2)
+
+        assert _module_selected_for_fp32("model.norm", norm, ["RMSNorm"], [])
+        assert _module_selected_for_fp32("model.layers.0.input_layernorm", linear, [], ["input_layernorm"])
+        assert not _module_selected_for_fp32("model.layers.0.mlp", linear, ["RMSNorm"], ["input_layernorm"])
+
+    def test_upcast_module_to_fp32(self):
+        from accelerate.utils.fsdp_utils import _upcast_module_to_fp32
+
+        module = torch.nn.LayerNorm(4).to(torch.bfloat16)
+        module.register_buffer("running_stat", torch.ones(4, dtype=torch.bfloat16))
+
+        _upcast_module_to_fp32(module, cpu_ram_efficient_loading=False)
+
+        assert module.weight.dtype == torch.float32
+        assert module.bias.dtype == torch.float32
+        assert module.running_stat.dtype == torch.float32
+
+    def test_upcast_module_to_fp32_meta_with_cpu_ram_efficient_loading(self):
+        from accelerate.utils.fsdp_utils import _upcast_module_to_fp32
+
+        module = torch.nn.LayerNorm(4).to(torch.device("meta")).to(torch.bfloat16)
+
+        _upcast_module_to_fp32(module, cpu_ram_efficient_loading=True)
+
+        assert module.weight.is_meta
+        assert module.weight.dtype == torch.float32
+
+    def test_upcast_module_to_fp32_meta_without_cpu_ram_efficient_loading_raises(self):
+        from accelerate.utils.fsdp_utils import _upcast_module_to_fp32
+
+        module = torch.nn.LayerNorm(4).to(torch.device("meta"))
+
+        with self.assertRaises(RuntimeError) as cm:
+            _upcast_module_to_fp32(module, cpu_ram_efficient_loading=False)
+        assert "meta" in str(cm.exception)
+
+    def test_fsdp2_prepare_model_fp32_modules_noop_when_unset(self):
+        """Unset `fp32_modules` (and no `_keep_in_fp32_modules_strict`) must reproduce today's
+        `fully_shard` call structure exactly: one call per decoder layer, one tail call grouping
+        [final_norm, tied_embedding], one root call - all sharing the same global `mp_policy`."""
+        from unittest.mock import patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = _FakeCausalLM(n_layers=2)
+        plugin = self._mock_plugin(fp32_modules=None, fp32_modules_auto_detect=True)
+        mock_accelerator = self._mock_accelerator(plugin)
+
+        calls = []
+        with (
+            patch("torch.distributed.fsdp.fully_shard", side_effect=self._fake_fully_shard(calls)),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch(
+                "accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy",
+                return_value=lambda m: isinstance(m, _FakeDecoderLayer),
+            ),
+        ):
+            fsdp2_prepare_model(mock_accelerator, model)
+
+        assert len(calls) == 4  # 2 decoder layers + 1 tail + 1 root
+        for _, kwargs in calls:
+            assert kwargs["mp_policy"] is plugin.mixed_precision_policy
+
+        tail_calls = [c for c, _ in calls if isinstance(c, list)]
+        assert len(tail_calls) == 1
+        assert tail_calls[0] == [model.model.norm, model.model.embed_tokens]
+
+    def test_fsdp2_prepare_model_pre_shards_matching_norms_in_fp32(self):
+        """Norms matching `fp32_modules` get pre-sharded with their own fp32 `MixedPrecisionPolicy`
+        (output_dtype = the global compute dtype) before the class-wrap loop; everything else keeps
+        the global policy, and the tail carve-out excludes the already-sharded final norm."""
+        from unittest.mock import patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = _FakeCausalLM(n_layers=2)
+        plugin = self._mock_plugin(fp32_modules=["RMSNorm"], param_dtype=torch.bfloat16)
+        mock_accelerator = self._mock_accelerator(plugin)
+
+        calls = []
+        with (
+            patch("torch.distributed.fsdp.fully_shard", side_effect=self._fake_fully_shard(calls)),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch(
+                "accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy",
+                return_value=lambda m: isinstance(m, _FakeDecoderLayer),
+            ),
+        ):
+            fsdp2_prepare_model(mock_accelerator, model)
+
+        fp32_calls = [(m, kw) for m, kw in calls if not isinstance(m, list) and isinstance(m, _FakeRMSNorm)]
+        # 2 per-layer input_layernorms + 1 final norm.
+        assert len(fp32_calls) == 3
+        for _, kwargs in fp32_calls:
+            assert kwargs["mp_policy"].param_dtype == torch.float32
+            assert kwargs["mp_policy"].reduce_dtype == torch.float32
+            assert kwargs["mp_policy"].output_dtype == torch.bfloat16
+
+        other_calls = [c for c in calls if c not in fp32_calls]
+        for _, kwargs in other_calls:
+            assert kwargs["mp_policy"] is plugin.mixed_precision_policy
+
+        # Final norm already sharded -> excluded from the [final_norm, tied_embedding] tail group.
+        tail_calls = [c for c, _ in calls if isinstance(c, list)]
+        assert len(tail_calls) == 1
+        assert tail_calls[0] == [model.model.embed_tokens]
+
+    def test_fsdp2_prepare_model_auto_detects_keep_in_fp32_modules_strict(self):
+        """`model._keep_in_fp32_modules_strict` alone (no explicit `fp32_modules`) is enough to
+        trigger fp32 pre-sharding, matched as a substring against the module's fully-qualified name."""
+        from unittest.mock import patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = _FakeCausalLM(n_layers=2)
+        model._keep_in_fp32_modules_strict = ["model.norm"]
+        plugin = self._mock_plugin(fp32_modules=None, fp32_modules_auto_detect=True)
+        mock_accelerator = self._mock_accelerator(plugin)
+
+        calls = []
+        with (
+            patch("torch.distributed.fsdp.fully_shard", side_effect=self._fake_fully_shard(calls)),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch(
+                "accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy",
+                return_value=lambda m: isinstance(m, _FakeDecoderLayer),
+            ),
+        ):
+            fsdp2_prepare_model(mock_accelerator, model)
+
+        fp32_calls = [(m, kw) for m, kw in calls if not isinstance(m, list) and isinstance(m, _FakeRMSNorm)]
+        assert len(fp32_calls) == 1
+        assert fp32_calls[0][0] is model.model.norm
+        assert fp32_calls[0][1]["mp_policy"].param_dtype == torch.float32
+
+        tail_calls = [c for c, _ in calls if isinstance(c, list)]
+        assert tail_calls == [[model.model.embed_tokens]]
+
+    def test_fp32_modules_env_override(self):
+        with patch_environment(FSDP_FP32_MODULES="RMSNorm,LayerNorm"):
+            plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+        assert plugin.fp32_modules == ["RMSNorm", "LayerNorm"]
+
+    def test_fp32_modules_auto_detect_env_override(self):
+        with patch_environment(FSDP_FP32_MODULES_AUTO_DETECT="False"):
+            plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+        assert plugin.fp32_modules_auto_detect is False
+
+    def test_fp32_modules_string_is_split_on_comma(self):
+        plugin = FullyShardedDataParallelPlugin(fsdp_version=2, fp32_modules="RMSNorm,LayerNorm")
+        assert plugin.fp32_modules == ["RMSNorm", "LayerNorm"]
+
+    def test_fp32_modules_cleared_outside_fsdp2(self):
+        with self.assertLogs("accelerate.utils.dataclasses", level="WARNING") as cm:
+            plugin = FullyShardedDataParallelPlugin(fsdp_version=1, fp32_modules=["RMSNorm"])
+        assert plugin.fp32_modules is None
+        assert any("fp32_modules is only supported" in out for out in cm.output)
 
 
 @run_first
