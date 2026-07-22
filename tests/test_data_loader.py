@@ -460,6 +460,41 @@ class DataLoaderTester(AccelerateTestCase):
         with pytest.raises(ValueError, match="round multiple"):
             BatchSamplerShard(batch_sampler, 2, 0, split_batches=True)
 
+    def test_already_sharded_skips_resharding(self):
+        """`already_sharded=True` must not split a dataloader a second time (issues #3520/#4062/#4075)."""
+        from torch.utils.data.distributed import DistributedSampler
+
+        dataset = list(range(16))
+        # Without already_sharded, accelerate shards across the 2 processes -> length is halved.
+        resharded = prepare_data_loader(DataLoader(dataset, batch_size=4), num_processes=2, process_index=0)
+        assert len(resharded) == 2
+
+        # With already_sharded, the user's own DistributedSampler is preserved (no second split): across the two
+        # ranks the data is covered exactly once, with no overlap, and total_batch_size accounts for all processes.
+        seen = []
+        for rank in range(2):
+            sampler = DistributedSampler(dataset, num_replicas=2, rank=rank, shuffle=False)
+            dl = prepare_data_loader(
+                DataLoader(dataset, batch_size=4, sampler=sampler),
+                num_processes=2,
+                process_index=rank,
+                already_sharded=True,
+            )
+            assert len(dl) == 2  # 8 samples / batch_size 4, not re-split down to 1
+            assert dl.total_batch_size == 8  # batch_size 4 * 2 processes, not the per-process 4
+            seen.append([int(x) for batch in dl for x in batch])
+        assert set(seen[0]).isdisjoint(seen[1])
+        assert sorted(seen[0] + seen[1]) == list(range(16))
+
+    def test_already_sharded_rejects_incompatible_options(self):
+        dataset = list(range(16))
+        with pytest.raises(ValueError, match="dispatch_batches"):
+            prepare_data_loader(
+                DataLoader(dataset, batch_size=4), already_sharded=True, dispatch_batches=True, put_on_device=True
+            )
+        with pytest.raises(ValueError, match="split_batches"):
+            prepare_data_loader(DataLoader(dataset, batch_size=4), already_sharded=True, split_batches=True)
+
     def check_iterable_dataset_shards(
         self, dataset, seed, batch_size, drop_last=False, num_processes=2, split_batches=False
     ):
