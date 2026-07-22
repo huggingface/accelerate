@@ -71,7 +71,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
             config["distributed_type"] = "MULTI_MLU"
         else:
             config["distributed_type"] = "NO"
-    if is_sdaa_available():
+    elif is_sdaa_available():
         num_sdaas = torch.sdaa.device_count()
         config["num_processes"] = num_sdaas
         config["use_cpu"] = False
