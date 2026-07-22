@@ -103,7 +103,7 @@ These are classes which can be configured and passed through to the appropriate 
 
 These are environmental variables that can be enabled for different use cases
 
-* `ACCELERATE_DEBUG_MODE` (`str`): Whether to run accelerate in debug mode. More info available [here](../usage_guides/debug.md).
+* `ACCELERATE_DEBUG_MODE` (`str`): Whether to run accelerate in debug mode. More info available [here](../basic_tutorials/troubleshooting#mismatched-tensor-shapes).
 
 
 
