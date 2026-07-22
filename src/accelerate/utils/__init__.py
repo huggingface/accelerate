@@ -156,6 +156,7 @@ from .modeling import (
     dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
+    get_default_device_type,
     get_grad_scaler,
     get_max_layer_size,
     get_max_memory,
