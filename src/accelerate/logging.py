@@ -46,7 +46,7 @@ class MultiProcessAdapter(logging.LoggerAdapter):
         msg = f"[RANK {state.process_index}] {msg}"
         return msg, kwargs
 
-    def log(self, level, msg, *args, **kwargs):
+    def log(self, level: int, msg: object, *args, **kwargs):
         """
         Delegates logger call after checking if we should log.
 
