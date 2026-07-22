@@ -141,6 +141,13 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         """
         if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
             self.optimizer.eval()
+        elif (
+            hasattr(self.optimizer, "optimizer")
+            and hasattr(self.optimizer.optimizer, "eval")
+            and callable(self.optimizer.optimizer.eval)
+        ):
+            # the deepspeed optimizer further wraps the optimizer
+            self.optimizer.optimizer.eval()
 
     def step(self, closure=None):
         if is_lomo_available():
