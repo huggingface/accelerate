@@ -36,7 +36,7 @@ torchrun --nproc-per-node {NUM_GPUS} bert.py
 
 ## General speedups
 
-One can expect that PiPPy will outperform native model parallism by a multiplicative factor since all GPUs are running at all times with inputs, rather than one input being passed through a GPU at a time waiting for the prior to finish. 
+One can expect that PiPPy will outperform native model parallelism by a multiplicative factor since all GPUs are running at all times with inputs, rather than one input being passed through a GPU at a time waiting for the prior to finish. 
 
 Below are some benchmarks we have found when using the accelerate-pippy integration for a few models when running on 2x4090's:
 

@@ -231,7 +231,7 @@ def training_function(config, args):
             num_items_in_batch = accelerator.gather(local_num_items_in_batch).sum().item()
             losses = []
             for i, batch in enumerate(batch_samples):
-                # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unecessary communications when accumulating
+                # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unnecessary communications when accumulating
                 # cf: https://muellerzr.github.io/blog/gradient_accumulation.html
                 ctx = (
                     model.no_sync

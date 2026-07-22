@@ -104,7 +104,7 @@ Follow these steps to start contributing:
 
 3. Create a new branch to hold your development changes, and do this for every new PR you work on.
 
-   Start by synchronizing your `main` branch with the `upstream/main` branch (ore details in the [GitHub Docs](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/syncing-a-fork)):
+   Start by synchronizing your `main` branch with the `upstream/main` branch (more details in the [GitHub Docs](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/syncing-a-fork)):
 
    ```bash
    $ git checkout main

@@ -165,7 +165,7 @@ class Stage2(Scene):
 
         self.remove(step_1)
         step_2 = MarkupText(
-            f"This behavior is undesireable, because we want\neach GPU to see different data for efficient training.",
+            f"This behavior is undesirable, because we want\neach GPU to see different data for efficient training.",
             font_size=18
         )
         step_2.move_to([0, -2.5, 0])

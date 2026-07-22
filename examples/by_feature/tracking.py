@@ -260,7 +260,7 @@ def main():
         "--project_dir",
         type=str,
         default="logs",
-        help="Location on where to store experiment tracking logs` and relevent project information",
+        help="Location on where to store experiment tracking logs` and relevant project information",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
