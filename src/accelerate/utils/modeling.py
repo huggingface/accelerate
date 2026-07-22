@@ -480,7 +480,7 @@ def get_non_persistent_buffers(module: nn.Module, recurse: bool = False, fqns: b
             Whether or not to return the fully-qualified names of the non persistent buffers.
     """
 
-    non_persistent_buffers_set = module._non_persistent_buffers_set
+    non_persistent_buffers_set = set(module._non_persistent_buffers_set)
     if recurse:
         for n, m in module.named_modules():
             if fqns:
