@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 
 import torch
@@ -613,43 +614,43 @@ def launch_command_parser(subparsers=None):
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_use_custom_fsdp",
-        type=bool,
+        type=partial(str_to_bool, to_bool=True),
         default=False,
         help="Whether to use custom FSDP. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_no_load_optim",
-        type=bool,
+        type=partial(str_to_bool, to_bool=True),
         default=False,
         help="Whether to not load optimizer. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_eod_mask_loss",
-        type=bool,
+        type=partial(str_to_bool, to_bool=True),
         default=False,
         help="Whether to use eod mask loss. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_overlap_cpu_optimizer_d2h_h2d",
-        type=bool,
+        type=partial(str_to_bool, to_bool=True),
         default=False,
         help="Whether to overlap CPU optimizer step, gradients D2H and updated parameters H2D. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_no_save_optim",
-        type=bool,
+        type=partial(str_to_bool, to_bool=True),
         default=False,
         help="Whether to not save optimizer. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_optimizer_cpu_offload",
-        type=bool,
+        type=partial(str_to_bool, to_bool=True),
         default=False,
         help="Whether to use CPU offload for optimizer. (useful only when `use_megatron_lm` flag is passed).",
     )
     megatron_lm_args.add_argument(
         "--megatron_lm_use_precision_aware_optimizer",
-        type=bool,
+        type=partial(str_to_bool, to_bool=True),
         default=False,
         help="Whether to use precision aware optimizer. (useful only when `use_megatron_lm` flag is passed).",
     )
