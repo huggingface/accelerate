@@ -392,6 +392,19 @@ class UtilsTester(unittest.TestCase):
         # We should expect there to be 66 items now
         assert result.shape == torch.Size([66, 4, 4])
 
+    def test_pad_input_tensors_divisibility(self):
+        # pad_input_tensors must pad dim-0 up to the next multiple of num_processes
+        # (0 padding when already divisible), so the batch can be split evenly.
+        # Regression: the old code padded 8->10 and 6->9 (not divisible by 4).
+        assert pad_input_tensors(torch.rand(8, 4), 8, 4).shape == torch.Size([8, 4])
+        assert pad_input_tensors(torch.rand(6, 4), 6, 4).shape == torch.Size([8, 4])
+        # Invariant across sizes: result >= batch_size and divisible by num_processes.
+        for num_processes in range(1, 9):
+            for batch_size in range(1, 30):
+                padded = pad_input_tensors(torch.zeros(batch_size, 2), batch_size, num_processes)
+                assert padded.shape[0] >= batch_size
+                assert padded.shape[0] % num_processes == 0
+
     def test_send_to_device_compiles(self):
         compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
         compiled_send_to_device(torch.zeros([1], dtype=torch.bfloat16), "cpu")

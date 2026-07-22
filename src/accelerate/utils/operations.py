@@ -814,16 +814,9 @@ def pad_input_tensors(tensor, batch_size, num_processes, dim=0):
     """
 
     def _pad_input_tensors(tensor, batch_size, num_processes, dim=0):
-        remainder = batch_size // num_processes
-        last_inputs = batch_size - (remainder * num_processes)
-        if batch_size // num_processes == 0:
-            to_pad = num_processes - batch_size
-        else:
-            to_pad = num_processes - (batch_size // num_processes)
-        # In the rare case that `to_pad` is negative,
-        # we need to pad the last inputs - the found `to_pad`
-        if last_inputs > to_pad & to_pad < 1:
-            to_pad = last_inputs - to_pad
+        # Pad dim-0 up to the next multiple of num_processes so the batch can be split
+        # evenly across processes (0 padding when batch_size is already divisible).
+        to_pad = (num_processes - batch_size % num_processes) % num_processes
         old_size = tensor.shape
         new_size = list(old_size)
         new_size[0] = batch_size + to_pad
