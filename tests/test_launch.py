@@ -15,7 +15,36 @@
 import argparse
 import unittest
 
-from accelerate.utils.launch import prepare_multi_gpu_env
+from accelerate.commands.launch import launch_command_parser
+from accelerate.utils.launch import prepare_extend_env_parallelism_config, prepare_multi_gpu_env
+
+
+class TestLaunchParser(unittest.TestCase):
+    def test_parallelism_sp_fixed_sequence_length_parses_false(self):
+        parser = launch_command_parser()
+        args = parser.parse_args(["--parallelism_config_sp_seq_length_is_variable", "False", "train.py"])
+
+        self.assertFalse(args.parallelism_config_sp_seq_length_is_variable)
+
+    def test_parallelism_sp_fixed_sequence_length_env(self):
+        parser = launch_command_parser()
+        args = parser.parse_args(
+            [
+                "--use_parallelism_config",
+                "--parallelism_config_sp_size",
+                "2",
+                "--parallelism_config_sp_seq_length",
+                "128",
+                "--parallelism_config_sp_seq_length_is_variable",
+                "False",
+                "train.py",
+            ]
+        )
+
+        env = prepare_extend_env_parallelism_config(args, {})
+
+        self.assertEqual(env["PARALLELISM_CONFIG_SP_SEQ_LENGTH"], "128")
+        self.assertEqual(env["PARALLELISM_CONFIG_SP_SEQ_LENGTH_IS_VARIABLE"], "False")
 
 
 class TestPrepareMultiGpuEnv(unittest.TestCase):
