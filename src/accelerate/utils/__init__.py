@@ -34,6 +34,7 @@ from .constants import (
     XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .dataclasses import (
+    AccelerateSequenceParallelConfig,
     AORecipeKwargs,
     AutocastKwargs,
     BnbQuantizationConfig,
@@ -207,6 +208,11 @@ from .operations import (
     reduce,
     send_to_device,
     slice_tensors,
+)
+from .sequence_parallel import (
+    SequenceShardingDataLoader,
+    enable_ulysses_sp,
+    shard_sequence_batch,
 )
 from .versions import compare_versions, is_torch_version
 

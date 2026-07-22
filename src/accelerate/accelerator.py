@@ -1539,6 +1539,8 @@ class Accelerator:
 
         if self.parallelism_config and self.parallelism_config.cp_enabled:
             args = self._prepare_cp(*args)
+        if self.parallelism_config and self.parallelism_config.sp_enabled:
+            args = self._prepare_sp(*args)
         # for megatron-lm, we don't need to prepare TE AO at this moment
         if self.distributed_type != DistributedType.MEGATRON_LM:
             if self.fp8_backend == FP8BackendType.TE:
@@ -1558,6 +1560,8 @@ class Accelerator:
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
+        if self.parallelism_config and self.parallelism_config._sequence_sharding_enabled:
+            result = self._wrap_sequence_sharding_dataloaders(result)
         if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
@@ -1669,6 +1673,40 @@ class Accelerator:
                 _attach_context_parallel_hooks(arg)
 
         return args
+
+    def _prepare_sp(self, *args):
+        """Native ('accelerate') Ulysses sequence parallelism: register the Ulysses attention on each
+        model over the `sp` mesh dim. No-op for the deepspeed sp backend (handled in
+        `_prepare_deepspeed`)."""
+        if self.parallelism_config.sp_backend != "accelerate":
+            return args
+
+        from .utils.sequence_parallel import enable_ulysses_sp
+
+        self._sp_attention = None
+        sp_group = self.torch_device_mesh["sp"].get_group()
+        for arg in args:
+            if isinstance(arg, torch.nn.Module):
+                # the handler is stashed so `prepare` can wire a packed dataloader to push per-step
+                # cu_seqlens onto it (`handler.set_varlen`).
+                self._sp_attention = enable_ulysses_sp(arg, sp_group)
+
+        return args
+
+    def _wrap_sequence_sharding_dataloaders(self, result):
+        """Wrap each prepared DataLoader in a `SequenceShardingDataLoader` that shards the sequence
+        contiguously over the `sp` group. `prepare_data_loader` already hands sp ranks the same
+        sample (dp-aware sharding divides out tp*cp*sp), so the wrapper only does the sequence
+        split; packed cu_seqlens are pushed onto the handler (`set_varlen`)."""
+        from .utils.sequence_parallel import SequenceShardingDataLoader
+
+        shard_group = self.torch_device_mesh["sp"].get_group()
+        wrapped = []
+        for obj in result:
+            if isinstance(obj, torch.utils.data.DataLoader) and not isinstance(obj, SequenceShardingDataLoader):
+                obj = SequenceShardingDataLoader(obj, shard_group, attention=self._sp_attention)
+            wrapped.append(obj)
+        return tuple(wrapped)
 
     def _prepare_fsdp2(self, *args):
         # First pass: prepare everything except schedulers (and model, which is prepared separately below)
@@ -2219,12 +2257,17 @@ class Accelerator:
         }
         # This block is skipped when preparing just a model and DL is absent from current call's args
         if batch_size_per_device is not None:
+            # `sp_size` divides only for the deepspeed/ALST backend, where the mpu tells DeepSpeed
+            # that sp is model-parallel (DP world = num_processes // sp). The native "accelerate"
+            # backend sets up no mpu, so DeepSpeed counts the sp ranks as data-parallel and expects
+            # train_batch_size == micro * grad_acc * num_processes (no // sp).
+            sp_divisor = sp_size if sp_backend == "deepspeed" else 1
             config_kwargs["train_micro_batch_size_per_gpu"] = batch_size_per_device
             config_kwargs["train_batch_size"] = (
                 batch_size_per_device
                 * deepspeed_plugin.get_value("gradient_accumulation_steps")
                 * self.num_processes
-                // sp_size
+                // sp_divisor
             )
 
         model = None
@@ -2383,12 +2426,7 @@ class Accelerator:
                 os.environ["DEEPSPEED_USE_HPU"] = "true"
 
             mpu = None
-            if sp_size > 1:
-                if sp_backend != "deepspeed":
-                    raise ValueError(
-                        f"In order to use the configured {sp_size=} with DeepSpeed, you need to configure sp_backend='deepspeed', yet you configured it to be {sp_backend=}."
-                    )
-
+            if sp_size > 1 and sp_backend == "deepspeed":
                 ver_min_required = "0.18.2"
                 if not compare_versions("deepspeed", ">=", ver_min_required):
                     raise ImportError(
@@ -2726,6 +2764,7 @@ class Accelerator:
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
             torch_device_mesh=device_mesh,
+            parallelism_config=self.parallelism_config,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader

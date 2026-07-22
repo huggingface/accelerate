@@ -1029,6 +1029,7 @@ def prepare_data_loader(
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
     torch_device_mesh=None,
+    parallelism_config=None,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -1129,15 +1130,17 @@ def prepare_data_loader(
     if torch_device_mesh:
         if state.distributed_type == DistributedType.DEEPSPEED:
             # In DeepSpeed, the optimizer sharing level in DP is determined by the config file.
-            # Only considers "dp" and "tp".
-            # Given a device mesh (dp, tp) = (2, 3):
+            # tp ranks receive the SAME batch. Given a device mesh (dp, tp) = (2, 3):
             # - From the data parallel perspective, ranks should be structured as: 0 0 0 1 1 1
             # - Processes with the same DP rank will receive the same batch.
-            submesh_tp_size = 1
-            if "tp" in torch_device_mesh.mesh_dim_names:
-                submesh_tp_size = torch_device_mesh["tp"].size()
-            process_index = process_index // submesh_tp_size
-            num_processes = num_processes // submesh_tp_size
+            inner = torch_device_mesh["tp"].size() if "tp" in torch_device_mesh.mesh_dim_names else 1
+            # Native ("accelerate") sp/cp shard the sequence, so those ranks also get the SAME batch.
+            # The DeepSpeed (ALST) sp backend manages its own data adapter + mpu, so leave it untouched.
+            if parallelism_config is not None:
+                if parallelism_config.sp_backend == "accelerate" and "sp" in torch_device_mesh.mesh_dim_names:
+                    inner *= torch_device_mesh["sp"].size()
+            process_index = process_index // inner
+            num_processes = num_processes // inner
         else:
             # when device mesh is used, specifically with TP
             # then there is need to update process_index and num_processes
@@ -1153,15 +1156,20 @@ def prepare_data_loader(
             submesh_dp_size = 1
             submesh_tp_size = 1
             submesh_cp_size = 1
+            submesh_sp_size = 1
             if "tp" in torch_device_mesh.mesh_dim_names:
                 submesh_tp_size = torch_device_mesh["tp"].size()
             if "cp" in torch_device_mesh.mesh_dim_names:
                 submesh_cp_size = torch_device_mesh["cp"].size()
+            if "sp" in torch_device_mesh.mesh_dim_names:
+                submesh_sp_size = torch_device_mesh["sp"].size()
             if "dp_replicate" in torch_device_mesh.mesh_dim_names:
                 submesh_dp_size = torch_device_mesh["dp_replicate"].size()
             if "dp_shard" in torch_device_mesh.mesh_dim_names:
                 submesh_fsdp_size = torch_device_mesh["dp_shard"].size()
-            process_index = process_index // (submesh_tp_size * submesh_cp_size)
+            # tp/cp/sp are non-data-parallel inner dims: ranks within them get the SAME batch
+            # (cp/sp then shard its sequence). Only dp_replicate x dp_shard get distinct batches.
+            process_index = process_index // (submesh_tp_size * submesh_cp_size * submesh_sp_size)
             num_processes = submesh_fsdp_size * submesh_dp_size
 
     # Sanity check
