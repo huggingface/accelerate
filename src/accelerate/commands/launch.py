@@ -851,6 +851,13 @@ def launch_command_parser(subparsers=None):
         type=str_to_bool,
         help="Whether to pad the inner dimension for FP8 GEMMs (useful only when `--fp8_backend=ao` is passed).",
     )
+    fp8_args.add_argument(
+        "--fp8_force_recompute_fp8_weight_in_bwd",
+        default="false",
+        type=str_to_bool,
+        help="Whether to recompute the FP8 all-gathered weight in the backward pass instead of stashing it, "
+        "trading compute for memory savings (useful only when `--fp8_backend=ao` is passed).",
+    )
 
     # AWS arguments
     aws_args = parser.add_argument_group("AWS Arguments", "Arguments related to AWS.")

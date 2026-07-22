@@ -239,6 +239,7 @@ class TestTorchAO(unittest.TestCase):
                       backend: AO
                       pad_inner_dim: true
                       enable_fsdp_float8_all_gather: false
+                      force_recompute_fp8_weight_in_bwd: true
                     """
                 )
             )

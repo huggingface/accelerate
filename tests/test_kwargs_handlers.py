@@ -27,10 +27,12 @@ from accelerate.test_utils import (
     require_fp16,
     require_multi_device,
     require_non_cpu,
+    require_torchao,
     run_first,
 )
 from accelerate.test_utils.testing import AccelerateTestCase, slow
 from accelerate.utils import (
+    AORecipeKwargs,
     AutocastKwargs,
     KwargsHandler,
     ProfileKwargs,
@@ -54,6 +56,27 @@ class KwargsHandlerTester(AccelerateTestCase):
         assert MockClass(a=2).to_kwargs() == {"a": 2}
         assert MockClass(a=2, b=True).to_kwargs() == {"a": 2, "b": True}
         assert MockClass(a=2, c=2.25).to_kwargs() == {"a": 2, "c": 2.25}
+
+    @require_torchao
+    def test_ao_recipe_kwargs_force_recompute_fp8_weight_in_bwd_default(self):
+        # torchao's `Float8LinearConfig.force_recompute_fp8_weight_in_bwd` defaults to `False`.
+        recipe_handler = AORecipeKwargs()
+        assert recipe_handler.force_recompute_fp8_weight_in_bwd is False
+        assert recipe_handler.config.force_recompute_fp8_weight_in_bwd is False
+
+    @require_torchao
+    def test_ao_recipe_kwargs_force_recompute_fp8_weight_in_bwd_explicit(self):
+        recipe_handler = AORecipeKwargs(force_recompute_fp8_weight_in_bwd=True)
+        assert recipe_handler.force_recompute_fp8_weight_in_bwd is True
+        assert recipe_handler.config.force_recompute_fp8_weight_in_bwd is True
+
+    @require_torchao
+    def test_ao_recipe_kwargs_force_recompute_fp8_weight_in_bwd_env_override(self):
+        with clear_environment():
+            os.environ["ACCELERATE_FP8_FORCE_RECOMPUTE_FP8_WEIGHT_IN_BWD"] = "true"
+            recipe_handler = AORecipeKwargs()
+            assert recipe_handler.force_recompute_fp8_weight_in_bwd is True
+            assert recipe_handler.config.force_recompute_fp8_weight_in_bwd is True
 
     @require_fp16
     @require_non_cpu
