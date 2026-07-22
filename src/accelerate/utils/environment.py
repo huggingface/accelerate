@@ -38,10 +38,10 @@ def convert_dict_to_env_variables(current_env: dict):
 
     Example:
     ```python
-    >>> from accelerate.utils.environment import verify_env
+    >>> from accelerate.utils.environment import convert_dict_to_env_variables
 
     >>> env = {"ACCELERATE_DEBUG_MODE": "1", "BAD_ENV_NAME": "<mything", "OTHER_ENV": "2"}
-    >>> valid_env_items = verify_env(env)
+    >>> valid_env_items = convert_dict_to_env_variables(env)
     >>> print(valid_env_items)
     ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
     ```
