@@ -23,3 +23,9 @@ Or:
 ```bash
 torchrun --nproc-per-node {NUM_GPUS} phi2.py
 ```
+
+## Distributed image captioning
+
+```bash
+accelerate launch --num_processes {NUM_GPUS} distributed_image_captioning.py --batch_size 8
+```
