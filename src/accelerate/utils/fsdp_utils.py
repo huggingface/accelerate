@@ -252,9 +252,9 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
                 from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
 
                 ckpt_dir = (
-                    os.path.join(input_dir, f"{FSDP_MODEL_NAME}_{model_index}")
-                    if f"{FSDP_MODEL_NAME}" not in input_dir
-                    else input_dir
+                    Path(input_dir) / f"{FSDP_MODEL_NAME}_{model_index}"
+                    if Path(input_dir).name != f"{FSDP_MODEL_NAME}_{model_index}"
+                    else Path(input_dir)
                 )
                 logger.info(f"Loading model from {ckpt_dir}")
                 state_dict = {"model": _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)}
@@ -394,9 +394,9 @@ def load_fsdp_optimizer(
                 from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
 
                 ckpt_dir = (
-                    os.path.join(input_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
-                    if f"{OPTIMIZER_NAME}" not in input_dir
-                    else input_dir
+                    Path(input_dir) / f"{OPTIMIZER_NAME}_{optimizer_index}"
+                    if Path(input_dir).name != f"{OPTIMIZER_NAME}_{optimizer_index}"
+                    else Path(input_dir)
                 )
                 logger.info(f"Loading Optimizer from {ckpt_dir}")
                 if fsdp_plugin.fsdp_version == 2:
