@@ -517,6 +517,25 @@ class DataLoaderTester(AccelerateTestCase):
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=True)
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=True)
 
+    def test_iterable_dataset_shard_len_matches_iteration(self):
+        # `__len__` must agree with the number of items actually yielded by `__iter__`, including in
+        # `split_batches` mode (where the per-process batch size differs from the global batch size).
+        batch_size, num_processes = 4, 2
+        for num_samples in [20, 22, 12]:
+            dataset = SimpleIterableDataset(num_samples=num_samples)
+            for drop_last in [False, True]:
+                for split_batches in [False, True]:
+                    for process_index in range(num_processes):
+                        shard = IterableDatasetShard(
+                            dataset,
+                            batch_size=batch_size,
+                            drop_last=drop_last,
+                            num_processes=num_processes,
+                            process_index=process_index,
+                            split_batches=split_batches,
+                        )
+                        assert len(shard) == len(list(shard))
+
     def test_iterable_dataset_using_none_batch_size(self):
         dataset = SimpleIterableDataset(100)
         dataloader = DataLoader(dataset, batch_size=None)
