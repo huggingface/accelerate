@@ -41,6 +41,16 @@ from .utils import (
 )
 
 
+# HF `datasets` IterableDatasets created via `.skip()`/`.take()` (and similar) forbid
+# reshuffling their data sources between epochs; Accelerate sets a nonzero epoch on the
+# dataset before each pass, which makes such datasets raise this at iteration time. Import
+# it defensively (empty tuple when unavailable) so the dataloaders below can recover.
+try:
+    from datasets.iterable_dataset import DataSourcesShufflingDisallowed
+except ImportError:
+    DataSourcesShufflingDisallowed = ()
+
+
 logger = get_logger(__name__)
 
 # kwargs of the DataLoader in min version 2.0
@@ -584,6 +594,18 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         # We iterate one batch ahead to check when we are at the end
         try:
             current_batch = next(dataloader_iter)
+        except DataSourcesShufflingDisallowed:
+            # The wrapped HF `datasets` IterableDataset forbids reshuffling its data sources
+            # between epochs (e.g. it was built via `.skip()`/`.take()`). Reset its epoch so it
+            # can still be iterated; per-epoch source reshuffling is unavailable for such datasets.
+            if hasattr(self.dataset, "set_epoch"):
+                self.dataset.set_epoch(0)
+            dataloader_iter = self.base_dataloader.__iter__()
+            try:
+                current_batch = next(dataloader_iter)
+            except StopIteration:
+                self.end()
+                return
         except StopIteration:
             self.end()
             return
@@ -883,7 +905,16 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
-        next_batch, next_batch_info = self._fetch_batches(main_iterator)
+        try:
+            next_batch, next_batch_info = self._fetch_batches(main_iterator)
+        except DataSourcesShufflingDisallowed:
+            # The wrapped HF `datasets` IterableDataset forbids reshuffling its data sources
+            # between epochs (e.g. it was built via `.skip()`/`.take()`). Reset its epoch so it
+            # can still be iterated; per-epoch source reshuffling is unavailable for such datasets.
+            if hasattr(self.dataset, "set_epoch"):
+                self.dataset.set_epoch(0)
+            main_iterator = self.base_dataloader.__iter__()
+            next_batch, next_batch_info = self._fetch_batches(main_iterator)
         batch_index = 0
         while not stop_iteration:
             batch, batch_info = next_batch, next_batch_info
