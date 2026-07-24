@@ -285,6 +285,8 @@ def replace_with_bnb_layers(model, bnb_quantization_config, modules_to_not_conve
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
+        bnb_quantization_config (`BnbQuantizationConfig`):
+            The bitsandbytes quantization parameters
         modules_to_not_convert (`List[str]`):
             Names of the modules to not quantize convert. In practice we keep the `lm_head` in full precision for
             numerical stability reasons.
