@@ -16,7 +16,7 @@ jobs:
     outputs:
       changed: ${{ steps.was_changed.outputs.changed }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: 
           fetch-depth: "2"
       
