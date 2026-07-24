@@ -35,8 +35,8 @@ The following articles go into a very detailed explanation of the differences be
 - https://huggingface.co/blog/exploding-gradients/ulysses-ring-attention
 
 A quick summary adapting from one of the articles:
-- Ulysses SP has a relatively low communication overhead, but is limited by the number of Attention Heads and thus it has certain requirements for network topology (number of attention heads has has to be divisible by the number of participating gpus for a single replica). All-to-all communication is sensitive to latency and it requires Deepspeed.
-- FSDP CP Ring-Attention's P2P ring communication has no aforementioned divisibilty requirements, but has a higher communication volume.
+- Ulysses SP has a relatively low communication overhead, but is limited by the number of Attention Heads and thus it has certain requirements for network topology (number of attention heads has to be divisible by the number of participating gpus for a single replica). All-to-all communication is sensitive to latency and it requires Deepspeed.
+- FSDP CP Ring-Attention's P2P ring communication has no aforementioned divisibility requirements, but has a higher communication volume.
 
 Finally it should be possible to combine SP + CP as explained in the paper [USP: A Unified Sequence Parallelism Approach for Long Context Generative AI](https://arxiv.org/abs/2405.07719) to support an even longer sequence length, albeit this is not yet integrated into 🤗`accelerate`.
 
@@ -57,7 +57,7 @@ parallelism_config = ParallelismConfig(
 +     sp_size=4,
 +     dp_shard_size=1,  # Explicit: no data parallelism
 +     sp_handler=DeepSpeedSequenceParallelConfig(
-+         sp_seq_length_is_variable: true,
++         sp_seq_length_is_variable=True,
 +         sp_attn_implementation="sdpa",
 +     ),
 + )
