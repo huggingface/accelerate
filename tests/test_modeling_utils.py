@@ -478,6 +478,48 @@ class ModelingUtilsTester(unittest.TestCase):
             self.shard_test_model(model, tmp_dir)
             load_checkpoint_in_model(model, tmp_dir)
 
+    def test_load_checkpoint_in_model_rejects_shard_paths_outside_folder(self):
+        # The `weight_map` of a sharded checkpoint is attacker-controlled for an untrusted
+        # checkpoint. Shard names that escape the checkpoint folder must be refused rather
+        # than opened.
+        model = ModelForTest()
+        for escaping_name in ["../outside.bin", "sub/../../outside.bin", os.path.join(os.sep, "tmp", "outside.bin")]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                index = dict.fromkeys(model.state_dict(), escaping_name)
+                with open(os.path.join(tmp_dir, "weight_map.index.json"), "w") as f:
+                    json.dump(index, f)
+
+                with self.assertRaises(ValueError):
+                    load_checkpoint_in_model(model, tmp_dir)
+
+    def test_load_checkpoint_in_model_allows_shard_paths_inside_folder(self):
+        # Nested shard names and symlinked shards (as laid out by the Hugging Face hub cache)
+        # stay inside the checkpoint folder and must keep loading.
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            os.makedirs(os.path.join(tmp_dir, "shards"))
+            shard_name = os.path.join("shards", "checkpoint.bin")
+            torch.save(model.state_dict(), os.path.join(tmp_dir, shard_name))
+            index = dict.fromkeys(model.state_dict(), shard_name)
+            with open(os.path.join(tmp_dir, "weight_map.index.json"), "w") as f:
+                json.dump(index, f)
+
+            load_checkpoint_in_model(model, tmp_dir)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            blob_dir = os.path.join(tmp_dir, "blobs")
+            snapshot_dir = os.path.join(tmp_dir, "snapshot")
+            os.makedirs(blob_dir)
+            os.makedirs(snapshot_dir)
+            blob = os.path.join(blob_dir, "deadbeef")
+            torch.save(model.state_dict(), blob)
+            os.symlink(os.path.relpath(blob, snapshot_dir), os.path.join(snapshot_dir, "checkpoint.bin"))
+            index = dict.fromkeys(model.state_dict(), "checkpoint.bin")
+            with open(os.path.join(snapshot_dir, "weight_map.index.json"), "w") as f:
+                json.dump(index, f)
+
+            load_checkpoint_in_model(model, snapshot_dir)
+
     @require_non_cpu
     def test_load_checkpoint_in_model_one_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
