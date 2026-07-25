@@ -532,6 +532,15 @@ class UtilsTester(unittest.TestCase):
         result = concatenate(data)
         assert result["meta"]["ids"] == ["a", "b", "c", "d"]
         assert result["meta"]["flag"] == [True, False]
+
+        # NOTE: Non-scalar, non-tensor values (e.g. numpy arrays) are not silently collected; they still raise,
+        # since collecting them into a list would hide a case where concatenation was almost certainly intended.
+        data = [
+            {"x": np.array([1, 2])},
+            {"x": np.array([3, 4])},
+        ]
+        with pytest.raises(TypeError):
+            concatenate(data)
         assert result["x"].shape == torch.Size([4, 2])
 
         # NOTE: Tuples are still treated as a data structure (not as batch data), only their leaves are merged

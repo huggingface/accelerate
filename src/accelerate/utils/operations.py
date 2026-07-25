@@ -726,8 +726,9 @@ def concatenate(data, dim=0):
     - If there is only a single batch of data, it is returned as-is, even if it contains non-tensor values.
     - Lists of non-tensor values (e.g. a list of strings, holding one value per sample in the batch) are chained
       into a single list, mimicking a concatenation along the batch dimension.
-    - Any other non-tensor value (e.g. a string or a boolean shared by a whole batch) is collected into a list
-      holding the value of each batch.
+    - Any other scalar non-tensor value (e.g. a string or a boolean shared by a whole batch) is collected into a
+      list holding the value of each batch. Non-scalar, non-tensor values (e.g. numpy arrays) are not concatenated
+      and raise, as before.
 
     Args:
         data (nested list/tuple/dictionary of lists of tensors `torch.Tensor`):
@@ -752,12 +753,15 @@ def concatenate(data, dim=0):
         return torch.cat(data, dim=dim)
     elif isinstance(data, (tuple, list)) and len(data) == 1:
         return data[0]
-    elif isinstance(data, (tuple, list)):
-        # Multiple batches of non-tensor values (e.g. a string or a boolean shared by a whole batch) cannot be
-        # concatenated, so we collect the value of each batch into a list instead.
+    elif isinstance(data, (tuple, list)) and all(
+        isinstance(d, (str, int, float, bool, bytes, type(None))) for d in data
+    ):
+        # Multiple batches of a scalar non-tensor value (e.g. a string or a boolean shared by a whole batch)
+        # cannot be concatenated along the batch dim, so we collect the value of each batch into a list instead.
+        # Non-scalar non-tensor values (e.g. numpy arrays) fall through and raise, preserving prior behavior.
         return list(data)
     else:
-        raise TypeError(f"Can only concatenate a list or tuple of batches but got {type(data)}")
+        raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
 
 
 class CannotPadNestedTensorWarning(UserWarning):
