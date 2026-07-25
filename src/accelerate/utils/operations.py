@@ -757,7 +757,7 @@ def concatenate(data, dim=0):
         # concatenated, so we collect the value of each batch into a list instead.
         return list(data)
     else:
-        raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
+        raise TypeError(f"Can only concatenate a list or tuple of batches but got {type(data)}")
 
 
 class CannotPadNestedTensorWarning(UserWarning):
