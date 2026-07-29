@@ -658,8 +658,9 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
 def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping: dict):
     """
-    Switches the parameters of the optimizer to new ones (sharded parameters in usual case). This function modifies the
-    optimizer in-place.
+    Switches the parameters and any eagerly initialized parameter state of the optimizer to new ones (sharded
+    parameters in the usual case). Parameter-shaped state tensors are distributed like their new parameter. This
+    function modifies the optimizer in-place.
 
     Args:
         optimizer (`torch.optim.Optimizer`): Optimizer instance which contains the original model parameters
@@ -671,14 +672,40 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
             indicates a bug. If we kept the original params instead of raising, the training wouldn't be numerically
             correct and weights wouldn't get updated.
     """
-    from torch.distributed.tensor import DTensor
+    from torch.distributed.tensor import DTensor, distribute_tensor
 
-    accessor_mapping = {}
+    def get_data_ptr(parameter):
+        if isinstance(parameter, DTensor):
+            return parameter._local_tensor.data_ptr()
+        data_ptr = parameter.data_ptr
+        return data_ptr() if callable(data_ptr) else data_ptr
 
-    accessor_mapping[DTensor] = "_local_tensor"
     try:
         for param_group in optimizer.param_groups:
-            param_group["params"] = [mapping[p.data_ptr] for p in param_group["params"]]
+            param_group["params"] = [mapping[get_data_ptr(p)] for p in param_group["params"]]
+
+        for old_parameter in list(optimizer.state):
+            if isinstance(old_parameter, torch.Tensor):
+                new_parameter = mapping[get_data_ptr(old_parameter)]
+                if old_parameter is not new_parameter:
+                    state = optimizer.state.pop(old_parameter)
+                    if isinstance(new_parameter, DTensor):
+                        for key, value in state.items():
+                            if isinstance(value, torch.Tensor) and value.shape == new_parameter.shape:
+                                if (
+                                    isinstance(value, DTensor)
+                                    and value.device_mesh == new_parameter.device_mesh
+                                    and value.placements == new_parameter.placements
+                                ):
+                                    continue
+                                if isinstance(value, DTensor):
+                                    value = value.full_tensor().detach()
+                                state[key] = distribute_tensor(
+                                    value,
+                                    device_mesh=new_parameter.device_mesh,
+                                    placements=new_parameter.placements,
+                                ).to(new_parameter.device)
+                    optimizer.state[new_parameter] = state
     except KeyError:
         # This shouldn't ever happen, but we want to fail here else training wouldn't be numerically correct
         # This basically means that we're missing a mapping from the original parameter to the sharded parameter

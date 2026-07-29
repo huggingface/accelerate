@@ -1718,12 +1718,18 @@ class Accelerator:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
                     for i, p in enumerate(param_group["params"]):
-                        # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
+                        # We drop references to the original param here, so that _move_states_to_device triggers a reallocation
                         # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
-                        param_group["params"][i] = torch.empty(1, dtype=p.dtype, device=p.device)
-                        param_group["params"][i].data_ptr = (
-                            p._local_tensor.data_ptr() if isinstance(p, DTensor) else p.data_ptr()
+                        old_parameter = p
+                        new_parameter = torch.empty(1, dtype=p.dtype, device=p.device)
+                        new_parameter.data_ptr = (
+                            old_parameter._local_tensor.data_ptr()
+                            if isinstance(old_parameter, DTensor)
+                            else old_parameter.data_ptr()
                         )
+                        param_group["params"][i] = new_parameter
+                        if old_parameter in obj.state:
+                            obj.state[new_parameter] = obj.state.pop(old_parameter)
 
         self._models.append(model)
 

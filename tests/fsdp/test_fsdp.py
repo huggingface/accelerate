@@ -925,3 +925,22 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
+
+    def test_adagrad_with_eager_optimizer_state(self):
+        test_file_path = os.path.join(os.path.dirname(__file__), "fsdp2_adagrad.py")
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+        )
+        cmd.extend(
+            [
+                "--fsdp_reshard_after_forward=true",
+                "--fsdp_auto_wrap_policy=SIZE_BASED_WRAP",
+                "--fsdp_min_num_params=1",
+                test_file_path,
+            ]
+        )
+        execute_subprocess_async(cmd)
