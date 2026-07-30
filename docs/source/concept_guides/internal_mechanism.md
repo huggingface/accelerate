@@ -44,6 +44,10 @@ The [`~data_loader.DataLoaderShard`] subclasses `DataLoader` to add the followin
   
 The [`~data_loader.DataLoaderDispatcher`] subclasses differs from the [`~data_loader.DataLoaderShard`] in that when iterating through the `DataLoader`, the data is all starting from process 0 and *then* split and sent off to each process rather than it happening at the dataset level.
 
+An `IterableDataset` has no `batch_sampler` to change, so it is sharded by wrapping it in an
+[`~data_loader.IterableDatasetShard`] instead, which has different cost and correctness implications. See
+[Sharding iterable datasets](iterable_dataset_sharding).
+
 The random number generator synchronization will by default synchronize:
 
 - the `generator` attribute of a given sampler (like the PyTorch `RandomSampler`) for PyTorch >= 1.6
