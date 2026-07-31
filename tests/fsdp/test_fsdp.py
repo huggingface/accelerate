@@ -689,6 +689,205 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         assert all(getattr(b, "_compiled_call_impl", None) is not None for b in model.layers)
         assert getattr(model.head, "_compiled_call_impl", None) is not None
 
+    @staticmethod
+    def _additional_modules_toy_model():
+        # No `get_input_embeddings`/`get_output_embeddings` and no `*Norm` child, so the embed/norm heuristic in
+        # `fsdp2_prepare_model` is a no-op and we can assert purely on `additional_modules_to_shard` behavior.
+        class _Block(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.mlp = torch.nn.Linear(4, 4)
+
+        class _Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.ModuleList([_Block(), _Block()])
+                self.head = torch.nn.Linear(4, 8)
+                self.extra = torch.nn.Linear(4, 4)
+
+        return _Model()
+
+    def _additional_modules_shard_calls(self, model, additional_modules_to_shard, auto_wrap_policy_func=None):
+        """Run `fsdp2_prepare_model` with `fully_shard` replaced by a spy.
+
+        Returns the list of `(module_or_modules, kwargs)` recorded for each `fully_shard` call, so we can assert which
+        modules get sharded (and with which kwargs) without a real distributed backend, mirroring the dtype tests.
+        """
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = None
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_plugin.additional_modules_to_shard = additional_modules_to_shard
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "no"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        calls = []
+
+        def _record(module, **kwargs):
+            calls.append((module, kwargs))
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard", side_effect=_record),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=auto_wrap_policy_func),
+            patch("accelerate.utils.fsdp_utils.logger"),
+        ):
+            fsdp2_prepare_model(mock_accelerator, model)
+        return calls
+
+    def test_additional_modules_to_shard_single(self):
+        """A single-module selector shards exactly that module, and the root is still sharded last."""
+        model = self._additional_modules_toy_model()
+        calls = self._additional_modules_shard_calls(model, {"head": {}})
+        assert any(module is model.head for module, _ in calls)
+        assert calls[-1][0] is model
+
+    def test_additional_modules_to_shard_glob(self):
+        """A glob selector shards each matched module as its own unit."""
+        model = self._additional_modules_toy_model()
+        calls = self._additional_modules_shard_calls(model, {"layers.*.mlp": {}})
+        sharded = [module for module, _ in calls]
+        assert any(module is model.layers[0].mlp for module in sharded)
+        assert any(module is model.layers[1].mlp for module in sharded)
+
+    def test_additional_modules_to_shard_kwarg_overrides(self):
+        """Per-module overrides are merged on top of the model-wide `fully_shard` kwargs."""
+        from torch.distributed.fsdp import MixedPrecisionPolicy
+
+        model = self._additional_modules_toy_model()
+        mp_policy = MixedPrecisionPolicy(param_dtype=torch.float32)
+        calls = self._additional_modules_shard_calls(
+            model, {"head": {"reshard_after_forward": False, "mp_policy": mp_policy}}
+        )
+        head_kwargs = next(kwargs for module, kwargs in calls if module is model.head)
+        assert head_kwargs["reshard_after_forward"] is False
+        assert head_kwargs["mp_policy"] is mp_policy
+
+    def test_additional_modules_to_shard_group(self):
+        """A tuple selector groups the referenced modules into a single `fully_shard` call, applied after the traversal.
+
+        Grouped units are sharded right before the root (after the bottom-up single-module/auto-wrap pass) so that a
+        member's already-sharded descendants are skipped by `fully_shard` (nested composition). We assert that ordering
+        here: a single-module selector targeting a descendant of a grouped member is sharded *before* the group, which
+        is exactly why the group pass must run after the traversal rather than earlier.
+        """
+        model = self._additional_modules_toy_model()
+        calls = self._additional_modules_shard_calls(
+            model,
+            {("layers.0", "head"): {"reshard_after_forward": False}, "layers.0.mlp": {}},
+        )
+        # The group is a single `fully_shard` call over both members.
+        grouped = [(i, module, kwargs) for i, (module, kwargs) in enumerate(calls) if isinstance(module, list)]
+        assert len(grouped) == 1
+        group_index, modules, kwargs = grouped[0]
+        assert modules == [model.layers[0], model.head]
+        assert kwargs["reshard_after_forward"] is False
+        # `layers.0.mlp` (a descendant of the grouped `layers.0`) must be sharded *before* the group, preserving the
+        # bottom-up (child-before-parent) order that keeps nested `fully_shard` composition correct.
+        mlp_index = next(i for i, (module, _) in enumerate(calls) if module is model.layers[0].mlp)
+        assert mlp_index < group_index
+        # The root is still sharded last.
+        assert calls[-1][0] is model
+
+    def test_additional_modules_to_shard_precedence_over_auto_wrap(self):
+        """An explicit selector takes precedence over the auto wrap policy for the same module."""
+        model = self._additional_modules_toy_model()
+        calls = self._additional_modules_shard_calls(
+            model,
+            {"head": {"reshard_after_forward": False}},
+            auto_wrap_policy_func=lambda module: isinstance(module, torch.nn.Linear),
+        )
+        head_kwargs = next(kwargs for module, kwargs in calls if module is model.head)
+        extra_kwargs = next(kwargs for module, kwargs in calls if module is model.extra)
+        # `head` uses the explicit override; `extra` falls back to the auto-wrap (model-wide) kwargs.
+        assert head_kwargs["reshard_after_forward"] is False
+        assert extra_kwargs["reshard_after_forward"] is True
+
+    def test_additional_modules_to_shard_canonicalizes_names(self):
+        """A selector written against original names still matches after activation-checkpointing decoration."""
+        model = self._additional_modules_toy_model()
+
+        class _CheckpointWrapper(torch.nn.Module):
+            def __init__(self, inner):
+                super().__init__()
+                self._checkpoint_wrapped_module = inner
+
+        inner = model.layers[0]
+        model.layers[0] = _CheckpointWrapper(inner)
+        # Actual FQN is `layers.0._checkpoint_wrapped_module.mlp`; the user still refers to it as `layers.0.mlp`.
+        calls = self._additional_modules_shard_calls(model, {"layers.0.mlp": {}})
+        assert any(module is inner.mlp for module, _ in calls)
+
+    def test_additional_modules_to_shard_validation(self):
+        env = self.fsdp_envs[2].copy()
+        with patch_environment(**env):
+            # Must be a dict of `selector -> overrides`.
+            with self.assertRaises(ValueError):
+                FullyShardedDataParallelPlugin(fsdp_version=2, additional_modules_to_shard=["head"])
+            # Only `reshard_after_forward` / `mp_policy` overrides are allowed.
+            with self.assertRaises(ValueError):
+                FullyShardedDataParallelPlugin(
+                    fsdp_version=2, additional_modules_to_shard={"head": {"offload_policy": True}}
+                )
+            # `reshard_after_forward` must be a bool.
+            with self.assertRaises(ValueError):
+                FullyShardedDataParallelPlugin(
+                    fsdp_version=2, additional_modules_to_shard={"head": {"reshard_after_forward": "yes"}}
+                )
+            # A valid spec is preserved as-is.
+            plugin = FullyShardedDataParallelPlugin(
+                fsdp_version=2,
+                additional_modules_to_shard={("norm", "head"): {"reshard_after_forward": False}, "extra": {}},
+            )
+            assert plugin.additional_modules_to_shard == {
+                ("norm", "head"): {"reshard_after_forward": False},
+                "extra": {},
+            }
+
+    def test_additional_modules_to_shard_ignored_in_fsdp1(self):
+        # `additional_modules_to_shard` is FSDP2 only; under FSDP1 it is reset to None (with a warning).
+        env = self.fsdp_envs[1].copy()
+        with patch_environment(**env):
+            plugin = FullyShardedDataParallelPlugin(fsdp_version=1, additional_modules_to_shard={"head": {}})
+        assert plugin.additional_modules_to_shard is None
+
+    def test_set_additional_modules_to_shard(self):
+        # Simulates a plugin created from the CLI/YAML config (which cannot express `additional_modules_to_shard`)
+        # and then post-modified in Python via the setter.
+        env = self.fsdp_envs[2].copy()
+        with patch_environment(**env):
+            plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+            assert plugin.additional_modules_to_shard is None
+
+            plugin.set_additional_modules_to_shard({("norm", "head"): {"reshard_after_forward": False}})
+            assert plugin.additional_modules_to_shard == {("norm", "head"): {"reshard_after_forward": False}}
+
+            # The setter validates just like `__post_init__`.
+            with self.assertRaises(ValueError):
+                plugin.set_additional_modules_to_shard({"head": {"offload_policy": True}})
+
+            # Passing `None` clears it.
+            plugin.set_additional_modules_to_shard(None)
+            assert plugin.additional_modules_to_shard is None
+
+        # Under FSDP1 the setter resets the value to None (FSDP2 only).
+        env = self.fsdp_envs[1].copy()
+        with patch_environment(**env):
+            plugin = FullyShardedDataParallelPlugin(fsdp_version=1)
+            plugin.set_additional_modules_to_shard({"head": {}})
+        assert plugin.additional_modules_to_shard is None
+
 
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.

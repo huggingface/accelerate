@@ -738,6 +738,92 @@ def _find_final_norm(model: torch.nn.Module) -> torch.nn.Module | None:
     return final_norm
 
 
+def _canonicalize_fqn(fqn: str) -> str:
+    """Strips the module-name modifiers that `torch.compile` and activation checkpointing inject into FQNs.
+
+    This mirrors `fsdp2_canonicalize_names` so that user-provided selectors (written against the original, undecorated
+    module names) still match after the model has been wrapped by `torch.compile` (`_orig_mod`) or activation
+    checkpointing (`_checkpoint_wrapped_module`).
+    """
+    fqn = fqn.replace("._checkpoint_wrapped_module", "")
+    if fqn.startswith("_orig_mod."):
+        fqn = fqn.replace("_orig_mod.", "")
+    fqn = fqn.replace("._orig_mod", "")
+    return fqn
+
+
+def _params_already_sharded(module: torch.nn.Module) -> bool:
+    """Returns whether `module`'s own (non-recursive) parameters are already sharded (`DTensor`).
+
+    A module whose direct parameters are already `DTensor`s has been claimed by another FSDP2 unit (e.g. it sits
+    inside an already auto-wrapped layer), so it cannot be sharded again.
+    """
+    from torch.distributed.tensor import DTensor
+
+    return any(isinstance(param, DTensor) for param in module.parameters(recurse=False))
+
+
+def _resolve_modules_to_shard(
+    additional_modules_to_shard: dict, model: torch.nn.Module
+) -> tuple[dict[torch.nn.Module, dict], list[tuple[list[torch.nn.Module], dict]]]:
+    """Resolves the `additional_modules_to_shard` mapping into concrete module objects.
+
+    Args:
+        additional_modules_to_shard (`dict`):
+            Mapping of `selector -> overrides` as documented on `FullyShardedDataParallelPlugin`. A `selector` is a
+            module identifier (an exact fully-qualified module name, or an `fnmatch`-style glob) or a `tuple` of such
+            identifiers, and `overrides` is a `dict` of per-module `fully_shard` kwargs.
+        model (`torch.nn.Module`): The model whose submodules are being resolved.
+
+    Returns:
+        `tuple[dict[torch.nn.Module, dict], list[tuple[list[torch.nn.Module], dict]]]`:
+            - `single_targets`: maps a module (matched by a `str` selector) to its overrides. Each becomes its own
+              FSDP2 unit, sharded in the bottom-up traversal so children are always sharded before their parents.
+            - `group_targets`: a list of `(modules, overrides)` for `tuple` selectors, each grouped into one FSDP2 unit.
+
+    Raises:
+        ValueError: If any identifier does not match a module in the model.
+    """
+    import fnmatch
+
+    # Canonical name -> module. `named_modules` yields parents before children, so on a canonical-name collision
+    # (e.g. an activation-checkpointing wrapper and its inner module map to the same canonical name) we keep the
+    # outermost module, which is the one that should become the FSDP2 unit.
+    canonical_modules: list[tuple[str, torch.nn.Module]] = []
+    seen_names: set[str] = set()
+    for fqn, module in model.named_modules():
+        canonical_fqn = _canonicalize_fqn(fqn)
+        if canonical_fqn in seen_names:
+            continue
+        seen_names.add(canonical_fqn)
+        canonical_modules.append((canonical_fqn, module))
+
+    def _match(identifier: str) -> list[torch.nn.Module]:
+        # `.` is a literal separator (not a regex wildcard); exact match or `fnmatch` glob against canonical names.
+        matched = [m for name, m in canonical_modules if name == identifier or fnmatch.fnmatchcase(name, identifier)]
+        if not matched:
+            raise ValueError(
+                f"`additional_modules_to_shard` identifier {identifier!r} did not match any module in the model."
+            )
+        return matched
+
+    single_targets: dict[torch.nn.Module, dict] = {}
+    group_targets: list[tuple[list[torch.nn.Module], dict]] = []
+    for selector, overrides in additional_modules_to_shard.items():
+        if isinstance(selector, tuple):
+            modules: list[torch.nn.Module] = []
+            for identifier in selector:
+                for module in _match(identifier):
+                    if module not in modules:
+                        modules.append(module)
+            group_targets.append((modules, overrides))
+        else:
+            for module in _match(selector):
+                single_targets.setdefault(module, overrides)
+
+    return single_targets, group_targets
+
+
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
 
@@ -838,10 +924,26 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             model.tie_weights()
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
-    if auto_wrap_policy_func is not None:
-        # We skip the model itself, as that one is always wrapped
+
+    # Resolve user-specified extra modules to shard (FSDP2 only). Single-module selectors are folded into the
+    # bottom-up traversal below (so they are always sharded child-before-parent); grouped (`tuple`) selectors are
+    # handled after the embed/norm heuristic. This lets non-standard models replicate the embed/norm/tail treatment
+    # and lets users carve out modules that need different sharding kwargs (e.g. `mp_policy`, `reshard_after_forward`).
+    single_targets: dict[torch.nn.Module, dict] = {}
+    group_targets: list[tuple[list[torch.nn.Module], dict]] = []
+    if fsdp2_plugin.additional_modules_to_shard:
+        single_targets, group_targets = _resolve_modules_to_shard(fsdp2_plugin.additional_modules_to_shard, model)
+
+    if auto_wrap_policy_func is not None or single_targets:
+        # We skip the model itself, as that one is always wrapped. Bottom-up order guarantees that children are
+        # sharded before their parents, which is required for correct nested `fully_shard` composition.
         for module in get_module_children_bottom_up(model)[:-1]:
-            if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
+            if isinstance(module, FSDPModule):
+                continue
+            if module in single_targets:
+                # Explicit `additional_modules_to_shard` selectors take precedence over the auto wrap policy.
+                fully_shard(module, **{**fsdp2_kwargs, **single_targets[module]})
+            elif auto_wrap_policy_func is not None and auto_wrap_policy_func(module):
                 fully_shard(module, **fsdp2_kwargs)
 
     # Carve embed + tail=[final_norm, lm_head] into their own units. Tail gets `False`
@@ -862,6 +964,24 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     tail = [m for m in (final_norm, tail_embed) if m is not None and not isinstance(m, FSDPModule)]
     if tail:
         fully_shard(tail, **{**fsdp2_kwargs, "reshard_after_forward": False})
+
+    # Grouped `additional_modules_to_shard` selectors: shard several modules into a single FSDP2 unit (e.g. a custom
+    # final norm + lm_head). Done after the auto wrap + embed/norm passes so that already-sharded descendants are
+    # skipped by `fully_shard` (nested composition). Members already owned by another unit (their own params are
+    # already sharded, e.g. they sit inside an auto-wrapped layer) cannot be re-sharded, so they are dropped.
+    for modules, overrides in group_targets:
+        members = []
+        for module in modules:
+            if module is model or isinstance(module, FSDPModule) or _params_already_sharded(module):
+                if accelerator.is_main_process:
+                    warnings.warn(
+                        "Skipping a module in a grouped `additional_modules_to_shard` entry because it is already "
+                        "sharded (its own FSDP2 unit, the root, or owned by an ancestor unit)."
+                    )
+                continue
+            members.append(module)
+        if members:
+            fully_shard(members, **{**fsdp2_kwargs, **overrides})
 
     if not isinstance(model, FSDPModule):
         # Defer to PyTorch's `reshard_after_forward=None` heuristic, which resolves to `False`
