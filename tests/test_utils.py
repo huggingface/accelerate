@@ -392,6 +392,15 @@ class UtilsTester(unittest.TestCase):
         # We should expect there to be 66 items now
         assert result.shape == torch.Size([66, 4, 4])
 
+    def test_slice_and_concatenate_dim(self):
+        # `pad_input_tensors` should be able to pad on a dimension other than 0
+        num_processes = 9
+        batch_size = 4
+        batch = torch.rand(batch_size, 6)
+        result = pad_input_tensors(batch, batch_size, num_processes, dim=1)
+        # We should expect dim 1 to grow from 6 to 9, dim 0 to stay at 4
+        assert result.shape == torch.Size([4, 9])
+
     def test_send_to_device_compiles(self):
         compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
         compiled_send_to_device(torch.zeros([1], dtype=torch.bfloat16), "cpu")
