@@ -16,7 +16,7 @@ import pickle
 import tempfile
 import unittest
 import warnings
-from collections import UserDict, namedtuple
+from collections import UserDict, defaultdict, namedtuple
 from typing import NamedTuple, Optional
 from unittest.mock import Mock, patch
 
@@ -113,6 +113,12 @@ class UtilsTester(unittest.TestCase):
         assert torch.equal(result4["b"][0].cpu(), tensor)
         assert torch.equal(result4["b"][1].cpu(), tensor)
         assert result4["c"] == 1
+
+        result5 = send_to_device(defaultdict(list, {"a": tensor}), device)
+        assert isinstance(result5, defaultdict)
+        assert result5.default_factory is list
+        assert torch.equal(result5["a"].cpu(), tensor)
+        assert result5["missing"] == []
 
     def test_honor_type(self):
         with self.assertRaises(TypeError) as cm:

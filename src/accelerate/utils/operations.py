@@ -17,6 +17,7 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 
 import pickle
 import warnings
+from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import contextmanager, nullcontext
 from functools import update_wrapper, wraps
@@ -181,12 +182,13 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             skip_keys = [skip_keys]
         elif skip_keys is None:
             skip_keys = []
-        return type(tensor)(
-            {
-                k: t if k in skip_keys else send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys)
-                for k, t in tensor.items()
-            }
-        )
+        new_mapping = {
+            k: t if k in skip_keys else send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys)
+            for k, t in tensor.items()
+        }
+        if isinstance(tensor, defaultdict):
+            return type(tensor)(tensor.default_factory, new_mapping)
+        return type(tensor)(new_mapping)
     else:
         return tensor
 
