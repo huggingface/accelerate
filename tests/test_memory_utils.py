@@ -146,6 +146,94 @@ class MemoryTest(unittest.TestCase):
             mock_training_loop_function()
             assert "No executable batch size found, reached zero." in cm.exception.args[0]
 
+    def test_reduce_batch_size_fn_is_used_by_the_decorator(self):
+        """The decorator-with-arguments form is what the docstring's example uses,
+        so the custom back-off has to survive being bound there."""
+        batch_sizes = []
+
+        def halve():
+            nonlocal current
+            current //= 2
+            return current
+
+        current = 256
+
+        @find_executable_batch_size(starting_batch_size=256, reduce_batch_size_fn=halve)
+        def mock_training_loop_function(batch_size):
+            nonlocal batch_sizes
+            batch_sizes.append(batch_size)
+            if batch_size > 16:
+                raise_fake_out_of_memory()
+            return batch_size
+
+        mock_training_loop_function()
+        assert batch_sizes == [256, 128, 64, 32, 16]
+
+    def test_reduce_batch_size_fn_matches_the_direct_call(self):
+        """Passing the function directly already worked; the two forms must agree."""
+
+        def run(decorator_form):
+            batch_sizes = []
+            current = 256
+
+            def halve():
+                nonlocal current
+                current //= 2
+                return current
+
+            def loop(batch_size):
+                batch_sizes.append(batch_size)
+                if batch_size > 16:
+                    raise_fake_out_of_memory()
+                return batch_size
+
+            if decorator_form:
+                find_executable_batch_size(starting_batch_size=256, reduce_batch_size_fn=halve)(loop)()
+            else:
+                find_executable_batch_size(loop, starting_batch_size=256, reduce_batch_size_fn=halve)()
+            return batch_sizes
+
+        assert run(decorator_form=True) == run(decorator_form=False)
+
+    def test_default_back_off_is_unchanged(self):
+        """Without a custom function the 0.9 multiplier must still apply."""
+        batch_sizes = []
+
+        @find_executable_batch_size(starting_batch_size=128)
+        def mock_training_loop_function(batch_size):
+            nonlocal batch_sizes
+            batch_sizes.append(batch_size)
+            if batch_size != 8:
+                raise_fake_out_of_memory()
+            return batch_size
+
+        mock_training_loop_function()
+        assert batch_sizes == [
+            128,
+            115,
+            103,
+            92,
+            82,
+            73,
+            65,
+            58,
+            52,
+            46,
+            41,
+            36,
+            32,
+            28,
+            25,
+            22,
+            19,
+            17,
+            15,
+            13,
+            11,
+            9,
+            8,
+        ]
+
     def test_verbose_guard(self):
         @find_executable_batch_size(starting_batch_size=128)
         def mock_training_loop_function(batch_size, arg1, arg2):
