@@ -17,6 +17,7 @@ import pickle
 import torch
 
 from accelerate import Accelerator
+from accelerate.optimizer import AcceleratedOptimizer
 from accelerate.test_utils import require_cpu, require_fp16, require_non_cpu
 from accelerate.test_utils.testing import AccelerateTestCase
 
@@ -32,6 +33,36 @@ class CPUOptimizerTester(AccelerateTestCase):
             pickle.loads(pickle.dumps(optimizer))
         except Exception as e:
             self.fail(f"Accelerated optimizer pickling failed with {e}")
+
+
+class OptimizerModeTester(AccelerateTestCase):
+    def test_accelerated_optimizer_eval_reaches_deepspeed_wrapper(self):
+        class ScheduleFreeLikeOptimizer(torch.optim.SGD):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.mode = None
+
+            def eval(self):
+                self.mode = "eval"
+
+        class DeepSpeedLikeOptimizerWrapper:
+            def __init__(self, optimizer):
+                self.optimizer = optimizer
+
+            def state_dict(self):
+                return self.optimizer.state_dict()
+
+            def load_state_dict(self, state_dict):
+                self.optimizer.load_state_dict(state_dict)
+
+        Accelerator()
+        model = torch.nn.Linear(10, 10)
+        inner = ScheduleFreeLikeOptimizer(model.parameters(), lr=0.1)
+        optimizer = AcceleratedOptimizer(DeepSpeedLikeOptimizerWrapper(inner), device_placement=False)
+
+        optimizer.eval()
+
+        assert inner.mode == "eval"
 
 
 @require_fp16
