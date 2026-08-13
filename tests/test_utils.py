@@ -16,7 +16,7 @@ import pickle
 import tempfile
 import unittest
 import warnings
-from collections import UserDict, namedtuple
+from collections import UserDict, defaultdict, namedtuple
 from typing import NamedTuple, Optional
 from unittest.mock import Mock, patch
 
@@ -113,6 +113,22 @@ class UtilsTester(unittest.TestCase):
         assert torch.equal(result4["b"][0].cpu(), tensor)
         assert torch.equal(result4["b"][1].cpu(), tensor)
         assert result4["c"] == 1
+
+    def test_send_to_device_defaultdict(self):
+        # Regression test: `defaultdict`'s constructor takes `default_factory` as its first positional
+        # argument, so naively doing `type(tensor)(new_mapping)` raises `TypeError: first argument must be
+        # callable or None`. See https://github.com/huggingface/accelerate/issues/4154
+        tensor = torch.randn(5, 2)
+        device = torch.device(f"{torch_device}:0")
+
+        data = defaultdict(list, {"a": tensor})
+        result = send_to_device(data, device)
+
+        assert isinstance(result, defaultdict)
+        assert result.default_factory is list
+        assert torch.equal(result["a"].cpu(), tensor)
+        # missing keys should still fall back to the default factory
+        assert result["missing"] == []
 
     def test_honor_type(self):
         with self.assertRaises(TypeError) as cm:
