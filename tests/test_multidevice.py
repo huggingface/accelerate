@@ -36,6 +36,7 @@ from accelerate.test_utils import (
     run_first,
     torch_device,
 )
+from accelerate.test_utils.testing import require_torchdata_stateful_dataloader
 from accelerate.utils import is_hpu_available, patch_environment
 
 
@@ -107,6 +108,7 @@ class MultiDeviceTester(unittest.TestCase):
             execute_subprocess_async(cmd)
 
     @run_first
+    @require_torchdata_stateful_dataloader
     def test_stateful_dataloader_checkpoint_cpu(self):
         cmd = [
             sys.executable,
