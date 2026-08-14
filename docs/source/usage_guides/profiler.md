@@ -165,11 +165,10 @@ If you need one or two aggregate numbers for experiment tracking instead of a fu
 
 ```python
 import torch
-from accelerate import Accelerator, ProfileKwargs
+from accelerate import Accelerator, PartialState, ProfileKwargs
 
-accelerator = Accelerator()
-# Resolve the device module (torch.cuda, torch.xpu, ...) instead of hardcoding CUDA
-device_type = accelerator.device.type
+# Resolve the device type/module (cuda, xpu, ...) instead of hardcoding CUDA
+device_type = PartialState().device.type
 device_module = getattr(torch, device_type)
 
 
@@ -210,10 +209,14 @@ You can examine the sequence of profiled operators and CUDA kernels in Chrome tr
 <hfoption id="PyTorch">
 
 ```python
-model = models.resnet18().cuda()
-inputs = torch.randn(5, 3, 224, 224).cuda()
+# Pick the available accelerator (cuda, xpu, ...) instead of hardcoding CUDA
+device = torch.accelerator.current_accelerator()
+device_activity = getattr(ProfilerActivity, device.type.upper())
 
-with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+model = models.resnet18().to(device)
+inputs = torch.randn(5, 3, 224, 224).to(device)
+
+with profile(activities=[ProfilerActivity.CPU, device_activity]) as prof:
     model(inputs)
 
 prof.export_chrome_trace("trace.json")
@@ -224,16 +227,14 @@ prof.export_chrome_trace("trace.json")
 
 ```python
 model = models.resnet18()
-inputs = torch.randn(5, 3, 224, 224)
-accelerator = Accelerator()
-device_type = accelerator.device.type
 profile_kwargs = ProfileKwargs(
-    activities=["cpu", device_type],
+    activities=["cpu", PartialState().device.type],
     output_trace_dir="trace"
 )
 
 accelerator = Accelerator(kwargs_handlers=[profile_kwargs])
-model, inputs = accelerator.prepare(model, inputs)
+model = accelerator.prepare(model)
+inputs = torch.randn(5, 3, 224, 224).to(accelerator.device)
 
 with accelerator.profile() as prof:
     model(inputs)
@@ -268,12 +269,12 @@ my_schedule = schedule(
 )
 
 def trace_handler(p):
-    output = p.key_averages().table(sort_by="self_cuda_time_total", row_limit=10)
+    output = p.key_averages().table(sort_by=f"self_{device.type}_time_total", row_limit=10)
     print(output)
     p.export_chrome_trace("/tmp/trace_" + str(p.step_num) + ".json")
 
 with profile(
-    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+    activities=[ProfilerActivity.CPU, device_activity],
     schedule=my_schedule,
     on_trace_ready=trace_handler
 ) as p:
@@ -286,6 +287,8 @@ with profile(
 <hfoption id="Accelerate">
 
 ```python
+device_type = PartialState().device.type
+
 def trace_handler(p):
     output = p.key_averages().table(sort_by=f"self_{device_type}_time_total", row_limit=10)
     print(output)
@@ -320,7 +323,7 @@ To measure floating-point operations (FLOPS):
 
 ```python
 with profile(
-    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+    activities=[ProfilerActivity.CPU, device_activity],
     with_flops=True
 ) as prof:
     model(inputs)
