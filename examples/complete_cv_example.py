@@ -24,7 +24,6 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
 
 from accelerate import Accelerator, DataLoaderConfiguration
-from accelerate.utils import is_xpu_available
 
 
 ########################################################################
@@ -126,10 +125,11 @@ def training_function(config, args):
     # Set the seed before splitting the data.
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    elif is_xpu_available():
-        torch.xpu.manual_seed_all(seed)
+    # New Code #
+    # Use the device module matching the accelerator in use (cuda, xpu, npu, ...) instead of hardcoding CUDA
+    device_module = getattr(torch, accelerator.device.type, None)
+    if device_module is not None and hasattr(device_module, "manual_seed_all"):
+        device_module.manual_seed_all(seed)
 
     # Split our filenames between train and validation
     random_perm = np.random.permutation(len(file_names))

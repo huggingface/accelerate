@@ -29,8 +29,7 @@ from transformers import (
     set_seed,
 )
 
-from accelerate import Accelerator, DistributedType, FullyShardedDataParallelPlugin
-from accelerate.utils import is_npu_available, is_xpu_available
+from accelerate import Accelerator, DistributedType, FullyShardedDataParallelPlugin, PartialState
 
 
 ########################################################################
@@ -66,20 +65,27 @@ def b2mb(x):
 # New Code #
 # This context manager is used to track the peak memory usage of the process
 class TorchTracemalloc:
+    # New Code #
+    # Resolve the device module (torch.cuda, torch.xpu, torch.npu, ...) from the current accelerator
+    # so the example is not hardcoded to CUDA
+    @property
+    def device_module(self):
+        device_type = PartialState().device.type
+        device_module = getattr(torch, device_type, None)
+        if device_module is None or not hasattr(device_module, "memory_allocated"):
+            return None
+        return device_module
+
     def __enter__(self):
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.cuda.memory_allocated()
-        elif is_xpu_available():
-            torch.xpu.empty_cache()
-            torch.xpu.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.xpu.memory_allocated()
-        elif is_npu_available():
-            torch.npu.empty_cache()
-            torch.npu.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.npu.memory_allocated()
+        self.begin = 0
+        self.end = 0
+        self.peak = 0
+        device_module = self.device_module
+        if device_module is not None:
+            device_module.empty_cache()
+            device_module.reset_max_memory_allocated()  # reset the peak gauge to zero
+            self.begin = device_module.memory_allocated()
         self.process = psutil.Process()
 
         self.cpu_begin = self.cpu_mem_used()
@@ -109,18 +115,11 @@ class TorchTracemalloc:
         self.peak_monitoring = False
 
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            self.end = torch.cuda.memory_allocated()
-            self.peak = torch.cuda.max_memory_allocated()
-        elif is_xpu_available():
-            torch.xpu.empty_cache()
-            self.end = torch.xpu.memory_allocated()
-            self.peak = torch.xpu.max_memory_allocated()
-        elif is_npu_available():
-            torch.npu.empty_cache()
-            self.end = torch.npu.memory_allocated()
-            self.peak = torch.npu.max_memory_allocated()
+        device_module = self.device_module
+        if device_module is not None:
+            device_module.empty_cache()
+            self.end = device_module.memory_allocated()
+            self.peak = device_module.max_memory_allocated()
         self.used = b2mb(self.end - self.begin)
         self.peaked = b2mb(self.peak - self.begin)
 
