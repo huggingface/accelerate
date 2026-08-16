@@ -126,6 +126,25 @@ class MemoryTest(unittest.TestCase):
         ]
         assert [bs, arg1] == [8, "hello"]
 
+    def test_custom_reduce_batch_size_fn(self):
+        # The parenthesized decorator form must forward `reduce_batch_size_fn`
+        # to the wrapped call: the custom reducer was silently dropped before,
+        # falling back to the default *0.9 behavior.
+        calls = []
+
+        def reduce_to_one():
+            calls.append("called")
+            return 1
+
+        @find_executable_batch_size(starting_batch_size=128, reduce_batch_size_fn=reduce_to_one)
+        def mock_training_loop_function(batch_size):
+            if batch_size > 1:
+                raise_fake_out_of_memory()
+            return batch_size
+
+        assert mock_training_loop_function() == 1
+        assert calls == ["called"]
+
     def test_start_zero(self):
         @find_executable_batch_size(starting_batch_size=0)
         def mock_training_loop_function(batch_size):
