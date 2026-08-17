@@ -45,6 +45,7 @@ from accelerate.utils.modeling import (
     find_tied_parameters,
     get_balanced_memory,
     get_module_size_with_ties,
+    get_non_persistent_buffers,
     get_state_dict_offloaded_model,
     infer_auto_device_map,
     load_checkpoint_in_model,
@@ -93,6 +94,29 @@ class LinearWithNonPersistentBuffers(nn.Module):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return torch.nn.functional.linear(input, self.weight, self.bias)
+
+
+class SubmoduleWithNonPersistentBuffer(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("np_buf", torch.rand(4), persistent=False)
+
+
+class RootWithNonPersistentSubmodule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("persistent_buf", torch.rand(4))
+        self.sub = SubmoduleWithNonPersistentBuffer()
+
+
+class RootWithCollidingBufferName(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # Persistent buffer on the root that shares its name with a
+        # non-persistent buffer deeper in the module tree.
+        self.register_buffer("mask", torch.rand(4))
+        self.sub = nn.Module()
+        self.sub.register_buffer("mask", torch.rand(4), persistent=False)
 
 
 class ModelSeveralDtypes(nn.Module):
@@ -272,6 +296,30 @@ class ModelingUtilsTester(unittest.TestCase):
 
         named_tensors = named_module_tensors(model, include_buffers=True, remove_non_persistent=True)
         assert [name for name, _ in named_tensors] == ["weight"]
+
+    def test_get_non_persistent_buffers_does_not_mutate_module(self):
+        model = RootWithNonPersistentSubmodule()
+        # The root module itself has no non-persistent buffer, so its private set starts empty.
+        assert model._non_persistent_buffers_set == set()
+
+        # recurse=True must collect the submodule's non-persistent buffer without mutating the module,
+        # and must return a copy rather than aliasing a module's private set.
+        result = get_non_persistent_buffers(model, recurse=True)
+        assert result == {"np_buf"}
+        assert result is not model.sub._non_persistent_buffers_set
+        assert model._non_persistent_buffers_set == set()
+        assert model.sub._non_persistent_buffers_set == {"np_buf"}
+
+    def test_named_module_tensors_does_not_corrupt_state_dict(self):
+        model = RootWithCollidingBufferName()
+        assert "mask" in model.state_dict()
+
+        # This is exactly the call AlignDevicesHook makes when offloading a model.
+        list(named_module_tensors(model, recurse=True, remove_non_persistent=True))
+
+        # The root's private set must be untouched, so its persistent "mask" buffer must survive.
+        assert model._non_persistent_buffers_set == set()
+        assert "mask" in model.state_dict()
 
     def test_find_tied_parameters(self):
         model = sequential_model(4)
