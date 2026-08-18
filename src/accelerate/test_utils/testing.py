@@ -32,7 +32,7 @@ import torch
 
 import accelerate
 
-from ..state import AcceleratorState
+from ..state import AcceleratorState, GradientState
 from ..utils import (
     check_cuda_fp8_capability,
     compare_versions,
@@ -675,6 +675,9 @@ class AccelerateTestCase(unittest.TestCase):
         super().tearDown()
         # Reset the state of the AcceleratorState singleton.
         AcceleratorState._reset_state(True)
+        # `GradientState` keeps weakrefs to dataloaders that were never exhausted, which leaks into
+        # later tests (e.g. making an `AcceleratedOptimizer` unpicklable).
+        GradientState._reset_state()
 
 
 class MockingTestCase(unittest.TestCase):
