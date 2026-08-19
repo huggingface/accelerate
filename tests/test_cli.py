@@ -19,6 +19,7 @@ from unittest.mock import patch
 import torch
 from huggingface_hub.utils import GatedRepoError
 
+import accelerate.commands.env as accelerate_env_cmd
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
@@ -41,6 +42,16 @@ from accelerate.test_utils.testing import (
 )
 from accelerate.utils import patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
+
+
+class EnvCommandTester(unittest.TestCase):
+    @patch("accelerate.commands.env.which", return_value=None)
+    def test_executable_not_found(self, _):
+        args = accelerate_env_cmd.env_command_parser().parse_args([])
+
+        info = accelerate_env_cmd.env_command(args)
+
+        self.assertEqual(info["`accelerate` bash location"], "Not found")
 
 
 class AccelerateLauncherTester(unittest.TestCase):
