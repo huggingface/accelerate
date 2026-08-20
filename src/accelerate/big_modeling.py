@@ -782,8 +782,13 @@ def _attach_context_parallel_hooks(
     # shape error for such models, so nothing that works today starts failing here.
     config = getattr(model, "config", None)
     config = config.get_text_config() if hasattr(config, "get_text_config") else config
-    layer_types = getattr(config, "layer_types", None) or []
-    non_full = {layer_type for layer_type in layer_types if layer_type != "full_attention"}
+    layer_types = getattr(config, "layer_types", None)
+    if layer_types is not None:
+        non_full = {layer_type for layer_type in layer_types if layer_type != "full_attention"}
+    else:
+        # Models that predate `layer_types` (Mistral, for one) apply a sliding window to every layer
+        # whenever `sliding_window` is set.
+        non_full = {"sliding_attention"} if getattr(config, "sliding_window", None) else set()
     if non_full:
         raise ValueError(
             f"Context parallelism does not support attention layers of type {sorted(non_full)} "
