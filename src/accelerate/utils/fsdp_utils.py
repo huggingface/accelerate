@@ -706,16 +706,8 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(accelerator.state.fsdp_plugin, model)
 
     for layer_name, layer in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
-        if len(layer_name.split(".")) > 1:
-            parent_name, child_name = layer_name.rsplit(".", 1)
-        else:
-            parent_name = None
-            child_name = layer_name
-
-        parent_module = model.get_submodule(parent_name) if parent_name else model
         if auto_wrap_policy_func(layer):
-            layer = checkpoint_wrapper(layer, preserve_rng_state=False)
-            parent_module.register_module(child_name, layer)
+            model.set_submodule(layer_name, checkpoint_wrapper(layer, preserve_rng_state=False))
 
     return model
 
