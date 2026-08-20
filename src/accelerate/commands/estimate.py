@@ -51,12 +51,13 @@ def check_has_model(error):
     """
     Checks what library spawned `error` when a model is not found
     """
-    if is_timm_available() and isinstance(error, RuntimeError) and "Unknown model" in error.args[0]:
+    message = str(error)
+    if is_timm_available() and isinstance(error, RuntimeError) and "Unknown model" in message:
         return "timm"
     elif (
         is_transformers_available()
-        and isinstance(error, OSError)
-        and "does not appear to have a file named" in error.args[0]
+        and isinstance(error, (OSError, ValueError))
+        and ("does not appear to have a file named" in message or "Unrecognized model in" in message)
     ):
         return "transformers"
     else:
@@ -262,7 +263,7 @@ def gather_data(args):
         model = create_empty_model(
             args.model_name, library_name=args.library_name, trust_remote_code=args.trust_remote_code
         )
-    except (RuntimeError, OSError) as e:
+    except (RuntimeError, OSError, ValueError) as e:
         library = check_has_model(e)
         if library != "unknown":
             raise RuntimeError(
