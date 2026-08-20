@@ -856,10 +856,15 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         fully_shard(input_embed, **fsdp2_kwargs)
 
     final_norm = _find_final_norm(model)
-    # Tied case uses `input_embed` so the pre-forward hook fires at forward-start
+    # Tied case puts `input_embed` first so the pre-forward hook fires at forward-start
     # (embed's use of the shared tensor), not at forward-end with `output_embed`.
-    tail_embed = input_embed if is_weights_tied else output_embed
-    tail = [m for m in (final_norm, tail_embed) if m is not None and not isinstance(m, FSDPModule)]
+    # `output_embed` must still be in the same group: torch >= 2.13 raises if a shared
+    # parameter is visible to two FSDP groups (here: the tail group and the root).
+    if is_weights_tied:
+        tail_modules = (final_norm, input_embed, output_embed)
+    else:
+        tail_modules = (final_norm, output_embed)
+    tail = [m for m in tail_modules if m is not None and not isinstance(m, FSDPModule)]
     if tail:
         fully_shard(tail, **{**fsdp2_kwargs, "reshard_after_forward": False})
 
