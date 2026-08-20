@@ -713,10 +713,6 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
             child_name = layer_name
 
         parent_module = model.get_submodule(parent_name) if parent_name else model
-        # Wrap the matched module itself (e.g. the whole decoder layer). Wrapping each of its
-        # children separately keeps every inter-child activation (norm outputs, attention
-        # output, residuals) saved for backward — ~4 sequence-length tensors per layer
-        # instead of 1, which at long sequence lengths multiplies activation memory by ~4x.
         if auto_wrap_policy_func(layer):
             layer = checkpoint_wrapper(layer, preserve_rng_state=False)
             parent_module.register_module(child_name, layer)
