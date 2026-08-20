@@ -13,6 +13,7 @@
 # limitations under the License.
 import subprocess
 import sys
+import unittest
 
 from accelerate.test_utils import require_transformer_engine
 from accelerate.test_utils.testing import TempDirTestCase, require_import_timer
@@ -98,3 +99,56 @@ class LazyImportTester(TempDirTestCase):
         output = run_import_time("import accelerate, accelerate.utils.transformer_engine")
 
         self.assertFalse(" transformer_engine" in output, "`transformer_engine` should not be imported on import")
+
+
+class ConcurrentImportTester(unittest.TestCase):
+    """Regression for huggingface/accelerate#4173.
+
+    `utils.bnb` imported `big_modeling` at module level, which closed a cycle
+    (`utils` -> `bnb` -> `big_modeling` -> `hooks` -> `utils`). Single-threaded
+    imports usually survived by accident; concurrent submodule imports failed
+    with a partial-initialization ImportError.
+    """
+
+    def test_concurrent_utils_and_big_modeling_imports(self):
+        # Fresh interpreter so accelerate is not already in sys.modules.
+        script = r"""
+import importlib
+import threading
+
+barrier = threading.Barrier(2)
+errors = []
+
+
+def do_import(name):
+    barrier.wait()
+    try:
+        importlib.import_module(name)
+    except BaseException as exc:
+        errors.append(f"{name} -> {type(exc).__name__}: {exc}")
+
+
+threads = [
+    threading.Thread(target=do_import, args=(name,))
+    for name in ("accelerate.utils", "accelerate.big_modeling")
+]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+
+if errors:
+    raise SystemExit("\n".join(errors))
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            msg=f"concurrent imports failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+        )
