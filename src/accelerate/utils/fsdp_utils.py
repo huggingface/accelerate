@@ -761,6 +761,19 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     fsdp2_plugin.set_auto_wrap_policy(model)
 
     mesh = getattr(accelerator, "torch_device_mesh", None)
+    pc = accelerator.parallelism_config
+
+    # `fsdp_dim_names` always asks for `dp_shard_cp`, but that joint dimension is only flattened into the mesh when
+    # `dp_shard` or `cp` is enabled. Without either, slicing the mesh below raises a `KeyError` from `device_mesh`.
+    if mesh is not None and not pc.dp_shard_enabled and not pc.cp_enabled:
+        raise ValueError(
+            f"FSDP is enabled but the device mesh is {tuple(mesh.mesh_dim_names)}, which has no dimension for FSDP "
+            "to shard across (both `dp_shard_size` and `cp_size` are 1). This usually means a model that is already "
+            "parallelized another way -- e.g. loaded with `DistributedConfig(tp_size=N)` or "
+            "`enable_expert_parallel=True`, which makes the whole world size tensor/expert parallel -- was launched "
+            "under an FSDP config. Either launch it without the FSDP config, or leave ranks for FSDP to use by "
+            "lowering `tp_size`."
+        )
 
     fsdp2_kwargs = {
         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
