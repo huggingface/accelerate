@@ -1872,9 +1872,7 @@ class Accelerator:
                     "If you want train the 8-bit or 4-bit model in CPU, please install bitsandbytes with multi-backend, see https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
                 )
         elif device_placement and not self.verify_device_map(model) and not model_has_dtensor(model):
-            # A DTensor-sharded model (e.g. sharded at load by transformers' DistributedConfig)
-            # manages its own placement; `.to()` on FSDP2-managed or CPU-offloaded parameters
-            # raises `_apply(): Couldn't swap ...`.
+            # DTensor-sharded models manage their own placement; `.to()` on FSDP2-managed or CPU-offloaded params raises `_apply(): Couldn't swap ...`
             model = model.to(self.device)
         if not evaluation_mode:
             if self.multi_device and not (self.parallelism_config and self.parallelism_config.tp_enabled):
