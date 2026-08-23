@@ -1009,7 +1009,8 @@ def get_sampler(dataloader):
     if sampler_is_batch_sampler:
         sampler = getattr(dataloader.sampler, "sampler", None)
     else:
-        sampler = getattr(dataloader.batch_sampler, "sampler", None)
+        batch_sampler = getattr(dataloader, "batch_sampler", None)
+        sampler = getattr(batch_sampler, "sampler", None) if batch_sampler is not None else None
     return sampler
 
 
@@ -1188,7 +1189,7 @@ def prepare_data_loader(
 
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
-    new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
+    new_batch_sampler = getattr(dataloader, "batch_sampler", None) if not isinstance(new_dataset, IterableDataset) else None
     sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
     synchronized_generator = None
 
@@ -1250,7 +1251,7 @@ def prepare_data_loader(
                     seed = int(torch.empty((), dtype=torch.int64).random_().item())
                     sampler.generator.manual_seed(seed)
                 synchronized_generator = sampler.generator
-            batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
+            batch_sampler = dataloader.sampler if sampler_is_batch_sampler else getattr(dataloader, "batch_sampler", None)
             new_batch_sampler = BatchSamplerShard(
                 batch_sampler,
                 num_processes=num_processes,
