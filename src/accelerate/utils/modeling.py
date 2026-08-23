@@ -20,7 +20,6 @@ import logging
 import os
 import re
 import shutil
-import sys
 import tempfile
 import warnings
 from collections import OrderedDict, defaultdict
@@ -74,15 +73,10 @@ logger = logging.getLogger(__name__)
 def is_peft_model(model):
     from .other import extract_model_from_parallel
 
-    # `is_peft_available()` checks distribution metadata, which misses a peft provided only through
-    # `PYTHONPATH` / `sys.path` (no dist-info). If peft is already imported, trust the import: a
-    # `PeftModel` instance can only exist if its module does.
-    peft = sys.modules.get("peft")
-    if peft is None and is_peft_available():
-        import peft
-    if peft is None:
-        return False
-    return isinstance(extract_model_from_parallel(model), peft.PeftModel)
+    if is_peft_available():
+        from peft import PeftModel
+
+    return is_peft_available() and isinstance(extract_model_from_parallel(model), PeftModel)
 
 
 def check_device_same(first_device, second_device):
