@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+from types import MethodType
 from unittest import skip
 
 import torch
@@ -145,3 +146,64 @@ class RegionalCompilationTester(unittest.TestCase):
         )
 
         release_memory(model, full_compilation_model, regional_compilation_model)
+
+
+class RegionalCompilationBlock(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = torch.nn.Linear(4, 4, bias=False)
+
+    def forward(self, x):
+        return self.linear(x)
+
+
+class RegionalCompilationModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.blocks = torch.nn.ModuleList([RegionalCompilationBlock(), RegionalCompilationBlock()])
+        self.tag = "original"
+
+    def forward(self, x):
+        self.trace = (self.tag, type(self.blocks[0]).__name__)
+        for block in self.blocks:
+            x = block(x)
+        return x
+
+
+class RegionalCompilationRebindTester(unittest.TestCase):
+    def _get_model_and_inputs(self):
+        return RegionalCompilationModel(), torch.ones(1, 4)
+
+    def test_instance_bound_methods_are_rebound(self):
+        model, inputs = self._get_model_and_inputs()
+
+        def forward_wrapper(self, *args, **kwargs):
+            return type(self).forward(self, *args, **kwargs)
+
+        model.forward = MethodType(forward_wrapper, model)
+        assert model.__dict__["forward"].__self__ is model
+
+        compiled_model = compile_regions(model, backend="eager")
+        compiled_model.tag = "twin"
+
+        assert compiled_model is not model
+        assert compiled_model.__dict__["forward"].__self__ is compiled_model
+
+        compiled_model(inputs)
+
+        assert not hasattr(model, "trace")
+        assert compiled_model.trace == ("twin", "OptimizedModule")
+
+    def test_no_instance_bound_methods_is_a_no_op(self):
+        model, inputs = self._get_model_and_inputs()
+        assert "forward" not in model.__dict__
+
+        compiled_model = compile_regions(model, backend="eager")
+        compiled_model.tag = "twin"
+
+        assert "forward" not in compiled_model.__dict__
+
+        compiled_model(inputs)
+
+        assert not hasattr(model, "trace")
+        assert compiled_model.trace == ("twin", "OptimizedModule")
