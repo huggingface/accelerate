@@ -706,16 +706,8 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(accelerator.state.fsdp_plugin, model)
 
     for layer_name, layer in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
-        if len(layer_name.split(".")) > 1:
-            parent_name, child_name = layer_name.rsplit(".", 1)
-        else:
-            parent_name = None
-            child_name = layer_name
-
-        parent_module = model.get_submodule(parent_name) if parent_name else model
-        if auto_wrap_policy_func(parent_module):
-            layer = checkpoint_wrapper(layer, preserve_rng_state=False)
-            parent_module.register_module(child_name, layer)
+        if auto_wrap_policy_func(layer):
+            model.set_submodule(layer_name, checkpoint_wrapper(layer, preserve_rng_state=False))
 
     return model
 
@@ -856,10 +848,15 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         fully_shard(input_embed, **fsdp2_kwargs)
 
     final_norm = _find_final_norm(model)
-    # Tied case uses `input_embed` so the pre-forward hook fires at forward-start
+    # Tied case puts `input_embed` first so the pre-forward hook fires at forward-start
     # (embed's use of the shared tensor), not at forward-end with `output_embed`.
-    tail_embed = input_embed if is_weights_tied else output_embed
-    tail = [m for m in (final_norm, tail_embed) if m is not None and not isinstance(m, FSDPModule)]
+    # `output_embed` must still be in the same group: torch >= 2.13 raises if a shared
+    # parameter is visible to two FSDP groups (here: the tail group and the root).
+    if is_weights_tied:
+        tail_modules = (final_norm, input_embed, output_embed)
+    else:
+        tail_modules = (final_norm, output_embed)
+    tail = [m for m in tail_modules if m is not None and not isinstance(m, FSDPModule)]
     if tail:
         fully_shard(tail, **{**fsdp2_kwargs, "reshard_after_forward": False})
 
@@ -941,6 +938,12 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
         def policy(module: torch.nn.Module) -> bool:
             if not transformer_cls_to_wrap:
                 return False
+            # Activation checkpointing (applied before sharding) wraps matched layers in
+            # `CheckpointWrapper`; look through it so such layers still get their own FSDP group.
+            from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointWrapper
+
+            if isinstance(module, CheckpointWrapper):
+                module = module._checkpoint_wrapped_module
             return isinstance(module, tuple(transformer_cls_to_wrap))
 
     elif fn is size_based_auto_wrap_policy:

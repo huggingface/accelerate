@@ -984,7 +984,16 @@ def get_balanced_memory(
         expected_device_type = "mps"
     else:
         expected_device_type = "cuda"
-    num_devices = len([d for d in max_memory if torch.device(d).type == expected_device_type and max_memory[d] > 0])
+    # Integer keys always refer to accelerator devices, so they are counted directly: resolving them through
+    # `torch.device` errors out on machines without an accelerator ("Cannot access accelerator device when
+    # none is available.").
+    num_devices = len(
+        [
+            d
+            for d in max_memory
+            if (isinstance(d, int) or torch.device(d).type == expected_device_type) and max_memory[d] > 0
+        ]
+    )
 
     if num_devices == 0:
         return max_memory
