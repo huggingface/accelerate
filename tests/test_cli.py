@@ -430,6 +430,20 @@ class TpuConfigTester(unittest.TestCase):
             in output
         )
 
+    def test_accelerate_install_invalid_version(self):
+        args = self.parser.parse_args(
+            [
+                "--config_file",
+                "tests/test_configs/latest.yaml",
+                "--install_accelerate",
+                "--accelerate_version",
+                "not-a-version",
+                "--debug",
+            ]
+        )
+
+        with self.assertRaisesRegex(ValueError, "--accelerate_version must be"):
+            tpu_command_launcher(args)
 
 class ModelEstimatorTester(unittest.TestCase):
     """
