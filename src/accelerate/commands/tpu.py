@@ -18,7 +18,7 @@ import argparse
 import os
 import subprocess
 
-from packaging.version import Version, parse
+from packaging.version import InvalidVersion, Version
 
 from accelerate.commands.config.config_args import default_config_file, load_config_from_file
 
@@ -105,7 +105,13 @@ def tpu_command_launcher(args):
         args.accelerate_version = "git+https://github.com/huggingface/accelerate.git"
     elif args.accelerate_version == "latest":
         args.accelerate_version = "accelerate -U"
-    elif isinstance(parse(args.accelerate_version), Version):
+    else:
+        try:
+            Version(args.accelerate_version)
+        except InvalidVersion as exc:
+            raise ValueError(
+                "--accelerate_version must be 'latest', 'dev', or a valid Python package version."
+            ) from exc
         args.accelerate_version = f"accelerate=={args.accelerate_version}"
 
     if not args.command_file and not args.command:
