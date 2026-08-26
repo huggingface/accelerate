@@ -444,6 +444,7 @@ class TpuConfigTester(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "--accelerate_version must be"):
             tpu_command_launcher(args)
+            
 
 class ModelEstimatorTester(unittest.TestCase):
     """
