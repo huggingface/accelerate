@@ -19,12 +19,14 @@ import os
 import unittest
 from collections import OrderedDict
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate.big_modeling import (
+    _refuse_recurrent_layers_under_sequence_parallelism,
     cpu_offload,
     cpu_offload_with_hook,
     disk_offload,
@@ -1111,3 +1113,25 @@ class BigModelingTester(unittest.TestCase):
 
         assert model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8
         assert model.h[0].self_attention.query_key_value.weight.device.index == 0
+
+
+class RefuseRecurrentLayersTester(unittest.TestCase):
+    """Sequence parallelism must refuse layers that carry a recurrent state along the sequence."""
+
+    @staticmethod
+    def _model(layer_types):
+        config = SimpleNamespace(layer_types=layer_types, get_text_config=lambda: config)
+        return SimpleNamespace(config=config, __class__=type("FakeModel", (), {}))
+
+    def test_refuses_linear_attention(self):
+        model = self._model(["full_attention", "linear_attention"])
+        with self.assertRaises(ValueError) as raised:
+            _refuse_recurrent_layers_under_sequence_parallelism(model)
+        assert "linear_attention" in str(raised.exception)
+
+    def test_allows_full_attention(self):
+        _refuse_recurrent_layers_under_sequence_parallelism(self._model(["full_attention"]))
+
+    def test_allows_models_without_layer_types(self):
+        config = SimpleNamespace(get_text_config=lambda: config)
+        _refuse_recurrent_layers_under_sequence_parallelism(SimpleNamespace(config=config))

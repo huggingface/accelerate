@@ -757,6 +757,33 @@ def _attach_layerwise_casting_hooks(
         )
 
 
+def _refuse_recurrent_layers_under_sequence_parallelism(model: nn.Module):
+    """Refuse models whose layers carry a recurrent state across the sequence, under Ulysses.
+
+    Ulysses gathers the full sequence before attention, so ordinary attention layers are unaffected by the
+    sharding. Linear-attention layers are not: they carry a recurrent state along the sequence and are
+    computed inside the model's own layer code rather than through the attention interface Ulysses wraps,
+    so each rank restarts that state from zero and never exchanges it. The forward output of the first
+    shard is still correct, which makes the resulting gradients wrong in a way a loss curve does not show.
+
+    Args:
+        model (`nn.Module`):
+            The model about to be prepared for sequence parallelism.
+    """
+    config = getattr(model, "config", None)
+    config = config.get_text_config() if hasattr(config, "get_text_config") else config
+    layer_types = getattr(config, "layer_types", None) or []
+    recurrent = sorted({layer_type for layer_type in layer_types if "linear_attention" in layer_type})
+    if recurrent:
+        raise ValueError(
+            f"Sequence parallelism does not support attention layers of type {recurrent} (model "
+            f"{model.__class__.__name__}). Those layers carry a recurrent state along the sequence and "
+            "bypass the attention interface, so sharding the sequence restarts the state on every rank "
+            "and produces wrong gradients without failing. Use a full-attention model, or disable "
+            "sequence parallelism."
+        )
+
+
 def _attach_context_parallel_hooks(
     model: nn.Module,
 ):
