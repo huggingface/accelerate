@@ -87,13 +87,20 @@ class CPUOptimizerTester(AccelerateTestCase):
         assert inner.mode == "eval"
 
     def test_accelerated_optimizer_train_eval_without_mode_support(self):
+        # Control for the reach-through: neither a plain optimizer nor a wrapper whose
+        # inner optimizer lacks the methods tracks a mode, so both calls stay no-ops
+        # instead of raising, and neither grows a mode it never had.
         Accelerator()
         model = torch.nn.Linear(10, 10)
-        inner = torch.optim.SGD(model.parameters(), 0.1)
-        optimizer = AcceleratedOptimizer(inner)
+        plain = torch.optim.SGD(model.parameters(), 0.1)
 
-        optimizer.train()
-        optimizer.eval()
+        for inner in (plain, DeepSpeedLikeOptimizerWrapper(plain)):
+            optimizer = AcceleratedOptimizer(inner)
+
+            optimizer.train()
+            optimizer.eval()
+
+            assert not hasattr(plain, "mode")
 
 
 @require_fp16
