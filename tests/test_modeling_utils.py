@@ -18,7 +18,9 @@ import tempfile
 import unittest
 import warnings
 from collections import OrderedDict
+from types import SimpleNamespace
 from typing import Optional
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -34,6 +36,7 @@ from accelerate.test_utils import (
     require_non_hpu,
     torch_device,
 )
+from accelerate.utils import modeling
 from accelerate.utils.modeling import (
     align_module_device,
     check_device_map,
@@ -44,6 +47,7 @@ from accelerate.utils.modeling import (
     dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
+    get_max_memory,
     get_module_size_with_ties,
     get_non_persistent_buffers,
     get_state_dict_offloaded_model,
@@ -1092,6 +1096,24 @@ class ModelingUtilsTester(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             convert_file_size_to_int("-1GB")
+
+    def test_get_max_memory_integrated_cuda_does_not_add_cpu(self):
+        with (
+            patch.object(modeling, "is_npu_available", return_value=False),
+            patch.object(modeling, "is_mlu_available", return_value=False),
+            patch.object(modeling, "is_sdaa_available", return_value=False),
+            patch.object(modeling, "is_musa_available", return_value=False),
+            patch.object(modeling, "is_xpu_available", return_value=False),
+            patch.object(modeling, "is_hpu_available", return_value=False),
+            patch.object(modeling, "is_mps_available", return_value=False),
+            patch.object(torch.cuda, "device_count", return_value=1),
+            patch.object(torch.cuda, "mem_get_info", return_value=(1234, 5678)),
+            patch.object(torch.cuda, "get_device_properties", return_value=SimpleNamespace(is_integrated=True)),
+            patch.object(torch, "tensor"),
+        ):
+            max_memory = get_max_memory()
+
+        assert max_memory == {0: 1234}
 
     def test_get_state_dict_offloaded_model(self):
         for model_cls in (ModelForTest, NestedModelForTest):
