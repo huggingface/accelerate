@@ -460,7 +460,7 @@ def named_module_tensors(
     if include_buffers:
         non_persistent_buffers = set()
         if remove_non_persistent:
-            non_persistent_buffers = get_non_persistent_buffers(module, recurse=recurse)
+            non_persistent_buffers = get_non_persistent_buffers(module, recurse=recurse, fqns=True)
         for named_buffer in module.named_buffers(recurse=recurse):
             name, _ = named_buffer
             if name not in non_persistent_buffers:
@@ -484,7 +484,9 @@ def get_non_persistent_buffers(module: nn.Module, recurse: bool = False, fqns: b
     if recurse:
         for n, m in module.named_modules():
             if fqns:
-                non_persistent_buffers_set |= {n + "." + b for b in m._non_persistent_buffers_set}
+                # `named_modules` yields the root as "", which must not become a leading dot.
+                prefix = f"{n}." if n else ""
+                non_persistent_buffers_set |= {prefix + b for b in m._non_persistent_buffers_set}
             else:
                 non_persistent_buffers_set |= m._non_persistent_buffers_set
 

@@ -52,6 +52,34 @@ class ModelForTest(nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
+class SubWithNonPersistentBuffer(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(3, 4)
+        self.register_buffer("np_buf", torch.rand(4), persistent=False)
+
+    def forward(self, x):
+        return self.linear(x) + self.np_buf
+
+
+class PreloadedBlock(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.sub = SubWithNonPersistentBuffer()
+
+    def forward(self, x):
+        return self.sub(x)
+
+
+class ModelWithNonPersistentBufferInSubmodule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.block = PreloadedBlock()
+
+    def forward(self, x):
+        return self.block(x)
+
+
 class PreForwardHook(ModelHook):
     def pre_forward(self, module, *args, **kwargs):
         return (args[0] + 1,) + args[1:], kwargs
@@ -330,6 +358,27 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear1.weight.device == torch.device("cpu")
         assert model.batchnorm.weight.device == torch.device("cpu")
         assert model.linear2.weight.device == torch.device("cpu")
+
+    def test_attach_align_device_hook_offload_buffers_with_preloaded_submodules(self):
+        # `preload_module_classes` is the only path that combines offload with place_submodules,
+        # so the non-persistent buffers of submodules must be addressed by fully-qualified name.
+        model = ModelWithNonPersistentBufferInSubmodule()
+
+        attach_align_device_hook(
+            model,
+            execution_device=torch_device,
+            offload=True,
+            offload_buffers=True,
+            preload_module_classes=["PreloadedBlock"],
+        )
+
+        # Non-persistent buffers are not offloaded, so they stay on the execution device.
+        assert model.block.sub.np_buf.device == torch.device(torch_device)
+
+        output = model(torch.randn(2, 3))
+        assert output.device == torch.device(torch_device)
+
+        remove_hook_from_submodules(model)
 
     def test_attach_align_device_hook_as_cpu_offload_with_weight_map(self):
         model = ModelForTest()

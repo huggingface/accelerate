@@ -109,6 +109,13 @@ class RootWithNonPersistentSubmodule(nn.Module):
         self.sub = SubmoduleWithNonPersistentBuffer()
 
 
+class RootAndSubWithNonPersistentBuffers(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("root_np_buf", torch.rand(4), persistent=False)
+        self.sub = SubmoduleWithNonPersistentBuffer()
+
+
 class RootWithCollidingBufferName(nn.Module):
     def __init__(self):
         super().__init__()
@@ -309,6 +316,19 @@ class ModelingUtilsTester(unittest.TestCase):
         assert result is not model.sub._non_persistent_buffers_set
         assert model._non_persistent_buffers_set == set()
         assert model.sub._non_persistent_buffers_set == {"np_buf"}
+
+    def test_get_non_persistent_buffers_fqns_are_fully_qualified(self):
+        model = RootAndSubWithNonPersistentBuffers()
+
+        # Every name must be usable against `named_buffers()`, so the root's own buffer
+        # keeps its bare name rather than picking up the empty root prefix.
+        assert get_non_persistent_buffers(model, recurse=True, fqns=True) == {"root_np_buf", "sub.np_buf"}
+
+    def test_named_module_tensors_removes_non_persistent_buffers_when_recursing(self):
+        model = RootAndSubWithNonPersistentBuffers()
+
+        names = [name for name, _ in named_module_tensors(model, recurse=True, remove_non_persistent=True)]
+        assert names == []
 
     def test_named_module_tensors_does_not_corrupt_state_dict(self):
         model = RootWithCollidingBufferName()
