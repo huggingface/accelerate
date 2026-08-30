@@ -536,7 +536,13 @@ def check_os_kernel():
     if system != "Linux":
         return
 
-    _, version, *_ = re.split(r"(\d+\.\d+\.\d+)", info.release)
+    # Some kernels report a release string without a full X.Y.Z version (e.g. custom builds,
+    # certain containers/WSL). In that case we cannot meaningfully compare versions, so we skip
+    # the check rather than raising -- this function is only meant to emit a best-effort warning.
+    match = re.search(r"\d+\.\d+\.\d+", info.release)
+    if match is None:
+        return
+    version = match.group()
     min_version = "5.5.0"
     if Version(version) < Version(min_version):
         msg = (
