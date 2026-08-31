@@ -364,8 +364,6 @@ class DistributedOperationException(Exception):
     tensors.
     """
 
-    pass
-
 
 def verify_operation(function):
     """
@@ -502,6 +500,40 @@ def _gpu_gather_object(object: Any):
     return [x for y in output_objects for x in y]
 
 
+def _xla_gather_object(object: Any):
+    """Gather picklable objects from all XLA devices using padded byte tensors.
+
+    XLA does not provide ``all_gather_object``. Serializing to bytes first lets us
+    use the regular tensor collective while keeping the gathered tensor shape
+    identical on every rank.
+    """
+    state = PartialState()
+    serialized = pickle.dumps(object)
+    payload = torch.frombuffer(serialized, dtype=torch.uint8).clone().to(state.device)
+    payload_size = torch.tensor([payload.numel()], dtype=torch.int64, device=state.device)
+
+    sizes = xm.all_gather(payload_size, dim=0)
+    sizes = sizes.reshape(-1).cpu().tolist()
+    max_size = max(sizes, default=0)
+
+    padded_payload = torch.zeros(max_size, dtype=torch.uint8, device=state.device)
+    if payload.numel() > 0:
+        padded_payload[: payload.numel()] = payload
+    gathered = xm.all_gather(padded_payload, dim=0)
+    gathered = (
+        gathered.reshape(state.num_processes, max_size) if max_size else gathered.reshape(state.num_processes, 0)
+    )
+
+    result = []
+    for rank, size in enumerate(sizes):
+        value = pickle.loads(gathered[rank, :size].cpu().numpy().tobytes())
+        if isinstance(value, list):
+            result.extend(value)
+        else:
+            result.append(value)
+    return result
+
+
 def gather_object(object: Any):
     """
     Recursively gather object in a nested list/tuple/dictionary of objects from all devices.
@@ -514,7 +546,7 @@ def gather_object(object: Any):
         The same data structure as `object` with all the objects sent to every device.
     """
     if PartialState().distributed_type == DistributedType.XLA:
-        raise NotImplementedError("gather objects in TPU is not supported")
+        return _xla_gather_object(object)
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         if PartialState().device.type == "neuron":
             return _neuron_gather_object(object)
