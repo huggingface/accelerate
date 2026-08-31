@@ -707,14 +707,7 @@ class _OffloadedCheckpointWrapper(ActivationWrapper):
     """
 
     def __init__(self, module: torch.nn.Module):
-        # `ActivationWrapper` sets `_checkpoint_wrapped_module` and registers the state-dict hooks
-        # that hide this wrapper from parameter names, so checkpoints stay loadable by an
-        # unwrapped model.
         super().__init__(module)
-        # (weakref to the gpu tensor, cpu copy, original storage size) per in-flight forward.
-        # The reference is weak so that an entry whose forward is never followed by a backward
-        # (an aborted step) is collected with the tensor instead of pinning its host copy: while
-        # the checkpoint frame is alive it holds the tensor, so the weakref stays valid.
         self._stash = []
 
     def _run(self, hidden_states, *args, **kwargs):
