@@ -186,7 +186,7 @@ class BatchSamplerShard(BatchSampler):
             return length + 1 if self.process_index < len(self.batch_sampler) % self.num_processes else length
 
     def __iter__(self):
-        return self._iter_with_split() if self.split_batches else self._iter_with_no_split()
+        return _BatchSamplerShardIterator(self)
 
     def _iter_with_split(self):
         initial_data = []
@@ -269,6 +269,43 @@ class BatchSamplerShard(BatchSampler):
                         cycle_index = end_index
                     batch = []
                     idx += 1
+
+
+class _BatchSamplerShardIterator:
+    def __init__(self, batch_sampler):
+        self.batch_sampler = batch_sampler
+        sampler = getattr(batch_sampler.batch_sampler, "sampler", None)
+        self.generator = getattr(sampler, "generator", None)
+        self.generator_state = self.generator.get_state() if self.generator is not None else None
+        self.yielded = 0
+        self.iterator = self._new_iterator()
+
+    def _new_iterator(self):
+        return (
+            self.batch_sampler._iter_with_split()
+            if self.batch_sampler.split_batches
+            else self.batch_sampler._iter_with_no_split()
+        )
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        batch = next(self.iterator)
+        self.yielded += 1
+        return batch
+
+    def state_dict(self):
+        return {"yielded": self.yielded, "generator_state": self.generator_state}
+
+    def load_state_dict(self, state_dict):
+        self.generator_state = state_dict["generator_state"]
+        if self.generator is not None:
+            self.generator.set_state(self.generator_state)
+        self.yielded = 0
+        self.iterator = self._new_iterator()
+        for _ in range(state_dict["yielded"]):
+            next(self)
 
 
 class IterableDatasetShard(IterableDataset):
