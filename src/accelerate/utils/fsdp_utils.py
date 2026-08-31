@@ -710,30 +710,41 @@ class _OffloadedCheckpointWrapper(ActivationWrapper):
         super().__init__(module)
         self._stash = []
 
-    def _run(self, hidden_states, *args, **kwargs):
+    def _restore(self, hidden_states):
         storage = hidden_states.untyped_storage()
-        if storage.size() == 0:
-            # Recompute path: refill the freed storage from the host copy, then drop the entry.
-            for i, (ref, cpu, size) in enumerate(self._stash):
-                if ref() is hidden_states:
-                    storage.resize_(size)
-                    hidden_states.copy_(cpu)
-                    del self._stash[i]
-                    break
+        if storage.size() != 0:
+            return
+        for i, (ref, cpu, size) in enumerate(self._stash):
+            if ref() is hidden_states:
+                storage.resize_(size)
+                hidden_states.copy_(cpu)
+                del self._stash[i]
+                break
+
+    def _can_offload(self, hidden_states):
+        return torch.is_grad_enabled() and hidden_states.is_cuda
+
+    def _offload(self, hidden_states):
+        self._stash = [entry for entry in self._stash if entry[0]() is not None]
+        storage = hidden_states.untyped_storage()
+        size = storage.size()
+        cpu = torch.empty_like(hidden_states, device="cpu", pin_memory=True)
+        cpu.copy_(hidden_states, non_blocking=False)
+        storage.resize_(0)
+        self._stash.append((weakref.ref(hidden_states), cpu, size))
+
+    def _run(self, hidden_states, *args, **kwargs):
+        # Called twice per step: once for the original forward, and once for the checkpoint
+        # recompute during backward, where the input's storage has to be brought back first.
+        self._restore(hidden_states)
         return self._checkpoint_wrapped_module(hidden_states, *args, **kwargs)
 
     def forward(self, hidden_states, *args, **kwargs):
         output = torch.utils.checkpoint.checkpoint(
             self._run, hidden_states, *args, use_reentrant=False, preserve_rng_state=False, **kwargs
         )
-        if torch.is_grad_enabled() and hidden_states.is_cuda:
-            self._stash = [entry for entry in self._stash if entry[0]() is not None]
-            storage = hidden_states.untyped_storage()
-            size = storage.size()
-            cpu = torch.empty_like(hidden_states, device="cpu", pin_memory=True)
-            cpu.copy_(hidden_states, non_blocking=False)
-            storage.resize_(0)
-            self._stash.append((weakref.ref(hidden_states), cpu, size))
+        if self._can_offload(hidden_states):
+            self._offload(hidden_states)
         return output
 
 
