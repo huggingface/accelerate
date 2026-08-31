@@ -802,11 +802,8 @@ def _attach_context_parallel_hooks(
 
     """
 
-    # The hook below discards the attention mask and forces `is_causal=True`, which only matches the
-    # model's own masking for plain causal attention. `supports_context_parallel` is transformers'
-    # answer for whether that substitution is safe; it also lets a model rule context parallelism out
-    # whatever its config, which inspecting `layer_types` here could not express. Defaults to allowed,
-    # so a transformers without the property behaves as before.
+    # The hook below drops the attention mask and forces `is_causal=True`; transformers says whether
+    # that substitution is safe. Defaults to allowed, so an older transformers behaves as before.
     if not getattr(model, "supports_context_parallel", True):
         raise ValueError(
             f"{model.__class__.__name__} does not support context parallelism. Context parallelism can "
