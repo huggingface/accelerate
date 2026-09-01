@@ -158,6 +158,9 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
         elif has_repeated_blocks(module):
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
+            for name, value in list(new_module.__dict__.items()):
+                if hasattr(value, "__func__") and getattr(value, "__self__", None) is module:
+                    new_module.__dict__[name] = MethodType(value.__func__, new_module)
             new_module._modules = {}
             for name, submodule in module.named_children():
                 new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
