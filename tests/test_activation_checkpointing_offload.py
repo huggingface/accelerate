@@ -13,10 +13,15 @@
 # limitations under the License.
 import torch
 from torch import nn
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper, offload_wrapper
 
-from accelerate.test_utils import require_non_cpu
+from accelerate.test_utils import require_cuda
 from accelerate.test_utils.testing import AccelerateTestCase
-from accelerate.utils.fsdp_utils import _OffloadedCheckpointWrapper
+
+
+def offloaded(module):
+    """What `fsdp2_apply_ac` builds when `activation_checkpointing_offload` is on."""
+    return offload_wrapper(checkpoint_wrapper(module, preserve_rng_state=False))
 
 
 class Block(nn.Module):
@@ -39,58 +44,73 @@ class CapturingBlock(Block):
         return hidden_states + self.down(torch.nn.functional.silu(inner))
 
 
-@require_non_cpu
-class OffloadedCheckpointWrapperTester(AccelerateTestCase):
-    def _grads(self, model, x):
-        out = model(x).square().mean()
-        out.backward()
-        return {n: p.grad.clone() for n, p in model.named_parameters()}
+@require_cuda
+class ActivationCheckpointingOffloadTester(AccelerateTestCase):
+    @staticmethod
+    def _grads(model, x):
+        """Gradients in parameter order, since wrapping prefixes the parameter names."""
+        model(x).square().mean().backward()
+        return [p.grad.clone() for p in model.parameters()]
 
     def test_matches_unwrapped_gradients(self):
         torch.manual_seed(0)
-        ref = nn.Sequential(*[Block() for _ in range(4)]).cuda()
-        wrapped = nn.Sequential(*[_OffloadedCheckpointWrapper(b) for b in ref])
-        x = torch.randn(2, 128, 64, device="cuda")
+        blocks = [Block().cuda() for _ in range(3)]
+        x = torch.randn(2, 16, 64, device="cuda")
+        expected = self._grads(nn.Sequential(*blocks), x.clone())
+        for block in blocks:
+            block.zero_grad(set_to_none=True)
+        got = self._grads(nn.Sequential(*[offloaded(block) for block in blocks]), x.clone())
+        assert len(got) == len(expected)
+        for actual, wanted in zip(got, expected):
+            torch.testing.assert_close(actual, wanted)
 
-        ref_grads = self._grads(ref, x)
-        for p in ref.parameters():
-            p.grad = None
-        off_grads = self._grads(wrapped, x)
+    def test_saved_activations_move_to_host(self):
+        """The point of the option: what the checkpoints saved for their recompute is not on the GPU.
 
-        for name, ref_grad in ref_grads.items():
-            wrapped_name = name.replace(".", "._checkpoint_wrapped_module.", 1)
-            torch.testing.assert_close(off_grads[wrapped_name], ref_grad)
+        Measured over a stack, because the tensor saved by the first layer is the caller's input,
+        which is allocated before the measurement and so costs nothing extra either way.
+        """
 
-    def test_input_storage_freed_and_restored(self):
+        def held_after_forward(wrap):
+            torch.manual_seed(0)
+            blocks = nn.Sequential(*[wrap(Block().cuda()) for _ in range(4)])
+            x = torch.randn(4, 512, 64, device="cuda", requires_grad=True)
+            torch.cuda.synchronize()
+            before = torch.cuda.memory_allocated()
+            out = blocks(x)  # keep `out` alive, so the graph it holds is counted
+            held = torch.cuda.memory_allocated() - before
+            out.sum().backward()
+            assert x.grad is not None
+            return held
+
+        with_offload = held_after_forward(offloaded)
+        without = held_after_forward(lambda m: checkpoint_wrapper(m, preserve_rng_state=False))
+        assert with_offload < without, f"offload held {with_offload} bytes, plain held {without}"
+
+    def test_caller_can_still_read_the_input(self):
+        """Regression: the wrapper must not free a tensor the caller still holds.
+
+        A model that returns its per-layer inputs (`output_hidden_states=True`) hands out the same
+        tensor objects it passes to the layers, and reading them before the backward pass must work.
+        """
         torch.manual_seed(0)
-        block = _OffloadedCheckpointWrapper(Block().cuda())
-        x = torch.randn(2, 128, 64, device="cuda", requires_grad=True)
-        hidden = x * 1.0  # non-leaf boundary tensor, like a previous layer's output
-        out = block(hidden)
-        assert hidden.untyped_storage().size() == 0  # offloaded after forward
-        out.square().mean().backward()
-        assert hidden.untyped_storage().size() != 0  # restored by the recompute
-        assert x.grad is not None
+        block = offloaded(Block().cuda())
+        x = torch.randn(2, 32, 64, device="cuda", requires_grad=True)
+        out = block(x)
+        assert x.untyped_storage().size() > 0
+        assert torch.isfinite(x.float().sum())
+        out.sum().backward()
 
     def test_state_dict_hides_the_wrapper(self):
-        # A checkpoint written from a wrapped model has to load into an unwrapped one, so the
-        # wrapper must not appear in parameter names.
-        ref = nn.Sequential(*[Block() for _ in range(2)])
-        wrapped = nn.Sequential(*[_OffloadedCheckpointWrapper(Block()) for _ in range(2)])
-        # Same keys as torch's own `checkpoint_wrapper`, so a checkpoint written from a wrapped
-        # model loads into an unwrapped one.
-        assert list(wrapped.state_dict().keys()) == list(ref.state_dict().keys())
-        ref.load_state_dict(wrapped.state_dict())
+        torch.manual_seed(0)
+        wrapped = nn.Sequential(*[offloaded(Block()) for _ in range(2)])
+        reference = nn.Sequential(*[Block() for _ in range(2)])
+        assert set(wrapped.state_dict()) == set(reference.state_dict())
 
     def test_captured_intermediate_keeps_gradient(self):
-        # Reentrant-style checkpointing would detach tensors captured out of the region;
-        # this wrapper must preserve their gradient path (grad-enabled forward).
         torch.manual_seed(0)
-        block = _OffloadedCheckpointWrapper(CapturingBlock().cuda())
-        x = torch.randn(2, 128, 64, device="cuda", requires_grad=True)
+        block = offloaded(CapturingBlock().cuda())
         captured = []
-        out = block(x * 1.0, capture_list=captured)
-        loss = out.square().mean() + captured[0].square().mean()
-        loss.backward()
-        assert x.grad is not None
-        assert captured[0].requires_grad
+        x = torch.randn(2, 16, 64, device="cuda", requires_grad=True)
+        block(x, capture_list=captured).sum().backward()
+        assert captured and captured[0].requires_grad

@@ -17,7 +17,6 @@ import os
 import re
 import shutil
 import warnings
-import weakref
 from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import nullcontext
@@ -25,7 +24,6 @@ from pathlib import Path
 from typing import Callable, Union
 
 import torch
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import ActivationWrapper
 
 from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, OPTIMIZER_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_NAME
@@ -689,65 +687,6 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
         )
 
 
-class _OffloadedCheckpointWrapper(ActivationWrapper):
-    """Non-reentrant activation checkpointing with the layer input offloaded to pinned CPU memory.
-
-    Non-reentrant `torch.utils.checkpoint.checkpoint` runs the forward grad-enabled (so tensors
-    captured out of the region — e.g. MoE router logits recorded for the aux loss — keep real
-    gradients) and stashes the layer input in the recompute closure, where it stays on GPU for
-    the whole forward+backward: `num_layers x seq_len x hidden` bytes, the dominant activation
-    cost at long sequence lengths. This wrapper frees that memory by swapping the input's
-    storage out to pinned host memory after the layer's forward
-    (`untyped_storage().resize_(0)`) and refilling it just-in-time when the recompute calls
-    back into the layer during backward.
-
-    Only the first positional tensor argument (`hidden_states`) is offloaded: it is uniquely
-    owned by its layer's closure, while other tensor arguments (rope embeddings, masks) are
-    shared across layers and must stay resident during the forward pass.
-    """
-
-    def __init__(self, module: torch.nn.Module):
-        super().__init__(module)
-        self._stash = []
-
-    def _restore(self, hidden_states):
-        storage = hidden_states.untyped_storage()
-        if storage.size() != 0:
-            return
-        for i, (ref, cpu, size) in enumerate(self._stash):
-            if ref() is hidden_states:
-                storage.resize_(size)
-                hidden_states.copy_(cpu)
-                del self._stash[i]
-                break
-
-    def _can_offload(self, hidden_states):
-        return torch.is_grad_enabled() and hidden_states.is_cuda
-
-    def _offload(self, hidden_states):
-        self._stash = [entry for entry in self._stash if entry[0]() is not None]
-        storage = hidden_states.untyped_storage()
-        size = storage.size()
-        cpu = torch.empty_like(hidden_states, device="cpu", pin_memory=True)
-        cpu.copy_(hidden_states, non_blocking=False)
-        storage.resize_(0)
-        self._stash.append((weakref.ref(hidden_states), cpu, size))
-
-    def _run(self, hidden_states, *args, **kwargs):
-        # Called twice per step: once for the original forward, and once for the checkpoint
-        # recompute during backward, where the input's storage has to be brought back first.
-        self._restore(hidden_states)
-        return self._checkpoint_wrapped_module(hidden_states, *args, **kwargs)
-
-    def forward(self, hidden_states, *args, **kwargs):
-        output = torch.utils.checkpoint.checkpoint(
-            self._run, hidden_states, *args, use_reentrant=False, preserve_rng_state=False, **kwargs
-        )
-        if self._can_offload(hidden_states):
-            self._offload(hidden_states)
-        return output
-
-
 def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
     """
     Applies the activation checkpointing to the model.
@@ -762,16 +701,19 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
 
     from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
         checkpoint_wrapper,
+        offload_wrapper,
     )
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(accelerator.state.fsdp_plugin, model)
 
     for layer_name, layer in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
         if auto_wrap_policy_func(layer):
+            wrapped = checkpoint_wrapper(layer, preserve_rng_state=False)
             if accelerator.state.fsdp_plugin.activation_checkpointing_offload:
-                wrapped = _OffloadedCheckpointWrapper(layer)
-            else:
-                wrapped = checkpoint_wrapper(layer, preserve_rng_state=False)
+                # `offload_wrapper` puts `save_on_cpu` around the checkpoint, so what moves to host
+                # is the input the checkpoint saved for its recompute: `layers x seq x hidden` bytes,
+                # the activation that dominates at long sequence lengths.
+                wrapped = offload_wrapper(wrapped)
             model.set_submodule(layer_name, wrapped)
 
     return model
