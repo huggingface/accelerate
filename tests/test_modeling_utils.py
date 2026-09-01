@@ -18,7 +18,9 @@ import tempfile
 import unittest
 import warnings
 from collections import OrderedDict
+from types import SimpleNamespace
 from typing import Optional
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -34,6 +36,7 @@ from accelerate.test_utils import (
     require_non_hpu,
     torch_device,
 )
+from accelerate.utils import modeling
 from accelerate.utils.modeling import (
     align_module_device,
     check_device_map,
@@ -44,6 +47,7 @@ from accelerate.utils.modeling import (
     dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
+    get_max_memory,
     get_module_size_with_ties,
     get_non_persistent_buffers,
     get_state_dict_offloaded_model,
@@ -135,6 +139,34 @@ def sequential_model(num_layers):
 
 
 class ModelingUtilsTester(unittest.TestCase):
+    @parameterized.expand(
+        [
+            (True, {0: 1234}),
+            (False, {0: 1234, "cpu": 4321}),
+            (None, {0: 1234, "cpu": 4321}),
+        ]
+    )
+    def test_get_max_memory_integrated_cuda(self, is_integrated, expected):
+        properties = SimpleNamespace()
+        if is_integrated is not None:
+            properties.is_integrated = is_integrated
+
+        with (
+            patch.object(modeling, "is_npu_available", return_value=False),
+            patch.object(modeling, "is_mlu_available", return_value=False),
+            patch.object(modeling, "is_sdaa_available", return_value=False),
+            patch.object(modeling, "is_musa_available", return_value=False),
+            patch.object(modeling, "is_xpu_available", return_value=False),
+            patch.object(modeling, "is_hpu_available", return_value=False),
+            patch.object(modeling, "is_mps_available", return_value=False),
+            patch.object(torch.cuda, "device_count", return_value=1),
+            patch.object(torch.cuda, "mem_get_info", return_value=(1234, 5678)),
+            patch.object(torch.cuda, "get_device_properties", return_value=properties),
+            patch.object(torch, "tensor"),
+            patch("psutil.virtual_memory", return_value=SimpleNamespace(available=4321)),
+        ):
+            self.assertEqual(get_max_memory(), expected)
+
     def test_dtype_byte_size(self):
         self.assertEqual(dtype_byte_size(torch.bool), 1 / 8)
         self.assertEqual(dtype_byte_size(torch.float16), 2)
