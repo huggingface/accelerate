@@ -333,11 +333,21 @@ def _restore_shuffle_state(batch_sampler, state):
         sampler.generator.set_state(state["generator_state"])
 
 
+def _is_accelerate_sampler_iter_state(state):
+    return isinstance(state, dict) and "yielded" in state and "shuffle_state" in state
+
+
 def _replace_sampler_iter_state(state_dict, new_iter_state):
-    """Point a torchdata state_dict at the start of the next epoch's permutation."""
+    """Point a *BatchSamplerShard* iterator snapshot at the start of the next epoch.
+
+    Only overwrite `_sampler_iter_state` when it is already Accelerate's
+    `{yielded, shuffle_state}` payload. Torchdata's own iterator uses
+    `{samples_yielded, ...}`; replacing that schema makes `load_state_dict`
+    raise `KeyError: 'samples_yielded'`.
+    """
     if not isinstance(state_dict, dict):
         return
-    if "_sampler_iter_state" in state_dict:
+    if _is_accelerate_sampler_iter_state(state_dict.get("_sampler_iter_state")):
         state_dict["_sampler_iter_state"] = new_iter_state
     if "_num_yielded" in state_dict:
         state_dict["_num_yielded"] = 0
@@ -631,16 +641,23 @@ class DataLoaderAdapter:
             self.adjust_state_dict_for_prefetch()
             iteration = getattr(self, "iteration", 0)
             if getattr(self, "end_of_dataloader", False):
-                # Last batch of this epoch: persist the *next* epoch. The finished
-                # iterator still holds the pre-epoch shuffle snapshot, which would
-                # replay the epoch that just ended.
-                self.dl_state_dict["_iterator_finished"] = False
+                # Last batch of this epoch: persist the *next* epoch.
                 self.dl_state_dict[_ACCELERATE_ITERATION] = iteration + 1
                 batch_sampler = getattr(self, "batch_sampler", None)
-                if batch_sampler is None:
+                if not isinstance(batch_sampler, BatchSamplerShard):
                     batch_sampler = getattr(self, "sampler", None)
-                post = _capture_shuffle_state(batch_sampler) if batch_sampler is not None else {}
-                _replace_sampler_iter_state(self.dl_state_dict, {"yielded": 0, "shuffle_state": post})
+                if isinstance(batch_sampler, BatchSamplerShard):
+                    # The finished shard iterator still holds the pre-epoch
+                    # shuffle snapshot; rewrite it to the post-epoch state.
+                    self.dl_state_dict["_iterator_finished"] = False
+                    _replace_sampler_iter_state(
+                        self.dl_state_dict,
+                        {"yielded": 0, "shuffle_state": _capture_shuffle_state(batch_sampler)},
+                    )
+                else:
+                    # Leave torchdata's iterator schema intact so a plain
+                    # DataLoaderShard/Dispatcher can start a fresh pass.
+                    self.dl_state_dict["_iterator_finished"] = True
             else:
                 self.dl_state_dict["_iterator_finished"] = False
                 if iteration:

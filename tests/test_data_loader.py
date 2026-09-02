@@ -1137,6 +1137,50 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         assert third_epoch, "expected a third epoch of batches"
         self._assert_fresh_loader_resume_matches(third_epoch, state_dict, process_index, use_seedable_sampler)
 
+    @require_torchdata_stateful_dataloader
+    def test_completed_epoch_resume_plain_dataloader_shard(self):
+        """A finished `DataLoaderShard(batch_size=...)` must not smash torchdata's iterator schema."""
+
+        def make():
+            return DataLoaderShard(list(range(64)), batch_size=4, use_stateful_dataloader=True)
+
+        loader = make()
+        first = [self._batch_values(batch) for batch in loader]
+        state_dict = loader.state_dict()
+        second = [self._batch_values(batch) for batch in loader]
+        assert first == second
+        resumed = make()
+        resumed.load_state_dict(state_dict)
+        assert [self._batch_values(batch) for batch in resumed] == second
+
+    @require_torchdata_stateful_dataloader
+    def test_completed_epoch_resume_plain_shuffled_dataloader_shard(self):
+        """Same public constructor with `shuffle=True` must load without KeyError."""
+
+        def make():
+            return DataLoaderShard(list(range(64)), batch_size=4, shuffle=True, use_stateful_dataloader=True)
+
+        loader = make()
+        list(loader)
+        state_dict = loader.state_dict()
+        resumed = make()
+        resumed.load_state_dict(state_dict)
+        assert sum(1 for _ in resumed) == 16
+
+    @require_torchdata_stateful_dataloader
+    def test_completed_epoch_resume_dataloader_dispatcher(self):
+        def make():
+            return DataLoaderDispatcher(list(range(64)), batch_size=4, use_stateful_dataloader=True)
+
+        loader = make()
+        first = [self._batch_values(batch) for batch in loader]
+        state_dict = loader.state_dict()
+        second = [self._batch_values(batch) for batch in loader]
+        assert first == second
+        resumed = make()
+        resumed.load_state_dict(state_dict)
+        assert [self._batch_values(batch) for batch in resumed] == second
+
     @parameterized.expand([(0, False), (1, False), (0, True), (1, True)])
     @require_torchdata_stateful_dataloader
     def test_stateful_shuffle_resume_mid_first_epoch(self, process_index, use_seedable_sampler):
