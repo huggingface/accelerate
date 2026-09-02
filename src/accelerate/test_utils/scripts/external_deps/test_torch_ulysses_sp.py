@@ -23,7 +23,7 @@ import argparse
 
 import torch
 import torch.distributed as dist
-from transformers import AutoModelForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForImageTextToText
 
 from accelerate import Accelerator
 from accelerate.utils import FullyShardedDataParallelPlugin, ParallelismConfig, set_seed
@@ -70,19 +70,28 @@ def main():
 
     test_all_to_all_roundtrip(sp_group)
 
-    # Reference model: same weights, plain attention, whole sequence on every rank. `use_cache=False` as in training:
-    # with a cache, transformers' sdpa ignores the packing carried by `position_ids`.
-    model_kwargs = dict(attn_implementation=args.attn_implementation, dtype=dtype, use_cache=False)
+    # Reference model: same weights, plain attention, whole sequence on every rank. Forwards run with
+    # `use_cache=False` as in training: with a cache, transformers' sdpa ignores the packing carried by `position_ids`.
+    model_kwargs = dict(attn_implementation=args.attn_implementation, dtype=dtype)
     if args.sliding_window is not None:
         model_kwargs["sliding_window"] = args.sliding_window
-    reference = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **model_kwargs).to(accelerator.device)
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **model_kwargs)
+    # Vision-language models train on text only here; they take the text-only path with `input_ids` alone
+    config = AutoConfig.from_pretrained(args.model_name_or_path)
+    model_cls = (
+        AutoModelForImageTextToText if getattr(config, "vision_config", None) is not None else AutoModelForCausalLM
+    )
+    reference = model_cls.from_pretrained(args.model_name_or_path, **model_kwargs).to(accelerator.device)
+    model = model_cls.from_pretrained(args.model_name_or_path, **model_kwargs)
+    # tiny test checkpoints may lack a weight (Qwen2.5-VL's lm_head), which is then initialized at random per load
+    model.load_state_dict(reference.state_dict())
     optimizer = torch.optim.SGD(model.parameters(), lr=0.0)
     model, optimizer = accelerator.prepare(model, optimizer)
 
     # Each data parallel rank gets its own batch; sequence parallel ranks share it.
     generator = torch.Generator().manual_seed(accelerator.data_parallel_shard_rank)
-    input_ids = torch.randint(10, reference.config.vocab_size, (1, args.seq_len), generator=generator)
+    input_ids = torch.randint(
+        10, reference.config.get_text_config().vocab_size, (1, args.seq_len), generator=generator
+    )
     input_ids = input_ids.to(accelerator.device)
     if args.packed:
         half = args.seq_len // 2
@@ -94,9 +103,9 @@ def main():
     shift_labels = torch.nn.functional.pad(labels[:, 1:], (0, 1), value=-100)
 
     # Reference forward/backward over the full sequence, averaged over the data parallel ranks by hand.
-    reference_out = reference(input_ids=input_ids, position_ids=position_ids, labels=labels)
+    reference_out = reference(input_ids=input_ids, position_ids=position_ids, labels=labels, use_cache=False)
     reference_out.loss.backward()
-    reference_grad = reference.model.embed_tokens.weight.grad.clone()
+    reference_grad = reference.get_input_embeddings().weight.grad.clone()
     if args.dp_shard_size > 1:
         dist.all_reduce(reference_grad, op=dist.ReduceOp.AVG, group=mesh["dp_shard"].get_group())
 
@@ -107,7 +116,9 @@ def main():
         buffers=buffers, buffer_seq_dims=[1, 1, 1, 1], no_restore_buffers=set(buffers)
     ):
         assert input_ids.shape[1] == args.seq_len // args.sp_size, input_ids.shape
-        outputs = model(input_ids=input_ids, position_ids=position_ids, labels=labels, shift_labels=shift_labels)
+        outputs = model(
+            input_ids=input_ids, position_ids=position_ids, labels=labels, shift_labels=shift_labels, use_cache=False
+        )
         # Every rank gets the mean loss of its own tokens. Weight the per-rank losses by their token counts through a
         # differentiable all_gather: FSDP then averages the gradients across `dp_shard_cp`, which gives the gradient
         # of the global mean loss, as if the whole sequence had been processed on one rank.
@@ -123,7 +134,7 @@ def main():
     local_reference_logits = reference_out.logits.chunk(args.sp_size, dim=1)[sp_rank]
     torch.testing.assert_close(outputs.logits.float(), local_reference_logits.float(), **tolerance)
     torch.testing.assert_close(loss.float(), reference_out.loss.float(), **tolerance)
-    grad = model.model.embed_tokens.weight.grad.full_tensor()
+    grad = model.get_input_embeddings().weight.grad.full_tensor()
     torch.testing.assert_close(grad.float(), reference_grad.float(), **tolerance)
     accelerator.print(f"Ulysses SP ({args.attn_implementation}, packed={args.packed}) matches the reference: {loss=}")
 

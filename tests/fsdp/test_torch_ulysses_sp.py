@@ -103,7 +103,13 @@ class TorchUlyssesSPModelChecks(unittest.TestCase):
 
     def test_refuses_chunked_attention(self):
         model = self._model(layer_types=["chunked_attention", "full_attention"])
-        with self.assertRaisesRegex(ValueError, "attention layers of type \\['chunked_attention'\\]"):
+        with self.assertRaisesRegex(ValueError, "layers of type \\['chunked_attention'\\]"):
+            _attach_sequence_parallel_hooks(model, _FakeMesh(2))
+
+    def test_refuses_non_attention_sequence_mixing_layers(self):
+        # LFM2-style short convolutions run on the local shard and never see the gathered sequence
+        model = self._model("kernels-community/flash-attn2", layer_types=["conv", "full_attention"])
+        with self.assertRaisesRegex(ValueError, "layers of type \\['conv'\\]"):
             _attach_sequence_parallel_hooks(model, _FakeMesh(2))
 
 
@@ -150,6 +156,28 @@ class TorchUlyssesSPIntegrationTest(TempDirTestCase):
             "--dtype=bfloat16",
             "--model_name_or_path=hf-internal-testing/tiny-random-MistralForCausalLM",
             "--sliding_window=16",
+        )
+
+    @unittest.skipUnless(
+        _is_package_available("kernels"), "test requires the kernels library for the hub flash-attn2 kernel"
+    )
+    def test_attention_sinks(self):
+        """gpt-oss: one sink logit per head, sliced to the heads each rank holds after the all-to-all."""
+        self._launch(
+            2,
+            "--sp_size=2",
+            "--attn_implementation=kernels-community/flash-attn2",
+            "--dtype=bfloat16",
+            "--model_name_or_path=trl-internal-testing/tiny-GptOssForCausalLM",
+        )
+
+    def test_vision_language_model_on_text(self):
+        """Qwen2.5-VL: text-only training, attention layers get no `position_ids` and use the model-level ones."""
+        self._launch(
+            2,
+            "--sp_size=2",
+            "--attn_implementation=sdpa",
+            "--model_name_or_path=trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration",
         )
 
     def test_sp_composes_with_fsdp(self):

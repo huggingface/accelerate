@@ -269,9 +269,14 @@ The loss is aggregated exactly like with the `deepspeed` backend, with a differe
 
 Everything else in the model sees its local shard of the sequence. Keeping the original key means every other code path that inspects `config._attn_implementation` (mask creation, flash-attention kwargs) is untouched, and the wrapper only acts on modules of prepared models, so a reference model living in the same process keeps its plain attention. The DeepSpeed backend hooks in at the same point.
 
-### Limitations
+### What works, what is refused
+
+Verified against an unsharded forward/backward (logits, loss and gradients) on tiny checkpoints: Llama 3.x, Qwen3, Phi-3, Qwen3-MoE, GLM-4-MoE, DeepSeek-V3 (MLA), Cohere2 and Gemma3 (sliding windows, flash attention), gpt-oss (attention sinks, flash attention), and Qwen2.5-VL, Qwen3-VL, Gemma3 and Idefics3 trained on text only. Refused up front, with the reason in the error:
 
 - `sp_size` must divide the number of attention heads and of key/value heads (no key/value head replication yet).
-- Models with sliding-window layers need a flash attention implementation (the window is applied by the kernel); with `sdpa` they are refused. Chunked attention and linear-attention layers are refused with any implementation.
+- Sliding-window layers need a flash attention implementation (the window is applied by the kernel); with `sdpa` they are refused. Layers that mix tokens along the sequence outside of the attention interface (chunked attention, linear attention, Mamba, short convolutions as in LFM2) are refused with any implementation, since they would silently be cut at the shard boundaries.
+- `eager`, `flex_attention` and paged attention implementations are refused.
 - Context parallelism and sequence parallelism are still mutually exclusive.
+
+Vision-language models are supported for text-only batches: the vision tower never runs, and attention layers that only receive the rotary embeddings (Qwen2.5-VL) fall back to the `position_ids` of the model's forward. Some models ignore the `shift_labels` kwarg and shift `labels` inside the shard (Qwen3-VL and Gemma3ForConditionalGeneration, see [transformers#48491](https://github.com/huggingface/transformers/issues/48491)); compute the loss from the logits and `shift_labels` yourself for those, as the [DeepSpeed example script](https://github.com/huggingface/accelerate/blob/main/src/accelerate/test_utils/scripts/external_deps/test_ds_alst_ulysses_sp.py) does.
 
