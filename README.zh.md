@@ -32,7 +32,7 @@ limitations under the License.
 </p>
 
 <h3 align="center">
-<p>在任意类型的计算设备上运行*原生* PyTorch 训练脚本
+<p>在任意类型的计算设备上运行*原生* PyTorch 训练脚本</p>
 </h3>
 
 <h3 align="center">
