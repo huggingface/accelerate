@@ -1005,6 +1005,19 @@ class AcceleratorState:
                         raise ValueError(
                             "Using `cp_size>1` requires FSDP2, but the provided `fsdp_plugin` is using FSDP1. "
                         )
+                if (
+                    self.parallelism_config is not None
+                    and self.parallelism_config.sp_enabled
+                    and self.parallelism_config.sp_backend == "torch"
+                ):
+                    if fsdp_plugin is None:
+                        raise ValueError(
+                            "`sp_size > 1` with `sp_backend='torch'` specified in the `parallelism_config`, but no `fsdp_plugin` was provided. We need a `fsdp_plugin` to use Ulysses sequence parallelism with `sp_backend=torch`, as we also shard the model across the device mesh to save more memory"
+                        )
+                    if fsdp_plugin.fsdp_version == 1:
+                        raise ValueError(
+                            "Using `sp_size>1` with `sp_backend='torch'` requires FSDP2, but the provided `fsdp_plugin` is using FSDP1. "
+                        )
                 if (os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None) or (
                     self.parallelism_config is not None and self.parallelism_config.cp_enabled
                 ):

@@ -53,6 +53,7 @@ from .utils import (
 )
 from .utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 from .utils.other import recursive_getattr
+from .utils.ulysses import register_ulysses_attention
 
 
 logger = logging.getLogger(__name__)
@@ -770,9 +771,7 @@ def _refuse_recurrent_layers_under_sequence_parallelism(model: nn.Module):
         model (`nn.Module`):
             The model about to be prepared for sequence parallelism.
     """
-    config = getattr(model, "config", None)
-    config = config.get_text_config() if hasattr(config, "get_text_config") else config
-    layer_types = getattr(config, "layer_types", None) or []
+    layer_types = getattr(_get_text_config(model), "layer_types", None) or []
     recurrent = sorted({layer_type for layer_type in layer_types if "linear_attention" in layer_type})
     if recurrent:
         raise ValueError(
@@ -782,6 +781,22 @@ def _refuse_recurrent_layers_under_sequence_parallelism(model: nn.Module):
             "and produces wrong gradients without failing. Use a full-attention model, or disable "
             "sequence parallelism."
         )
+
+
+def _get_text_config(model: nn.Module):
+    config = getattr(model, "config", None)
+    return config.get_text_config() if hasattr(config, "get_text_config") else config
+
+
+def _non_full_attention_layer_types(model: nn.Module) -> set[str]:
+    """Attention layer types of `model` whose mask is stricter than plain causal (sliding-window or chunked)."""
+    config = _get_text_config(model)
+    layer_types = getattr(config, "layer_types", None)
+    if layer_types is not None:
+        return {layer_type for layer_type in layer_types if layer_type != "full_attention"}
+    # Models that predate `layer_types` (Mistral, for one) apply a sliding window to every layer
+    # whenever `sliding_window` is set.
+    return {"sliding_attention"} if getattr(config, "sliding_window", None) else set()
 
 
 def _attach_context_parallel_hooks(
@@ -807,15 +822,7 @@ def _attach_context_parallel_hooks(
     # a *stricter* mask (sliding-window or chunked attention) would otherwise be trained with
     # full causal attention silently, so refuse them up front. Without this hook torch raises a
     # shape error for such models, so nothing that works today starts failing here.
-    config = getattr(model, "config", None)
-    config = config.get_text_config() if hasattr(config, "get_text_config") else config
-    layer_types = getattr(config, "layer_types", None)
-    if layer_types is not None:
-        non_full = {layer_type for layer_type in layer_types if layer_type != "full_attention"}
-    else:
-        # Models that predate `layer_types` (Mistral, for one) apply a sliding window to every layer
-        # whenever `sliding_window` is set.
-        non_full = {"sliding_attention"} if getattr(config, "sliding_window", None) else set()
+    non_full = _non_full_attention_layer_types(model)
     if non_full:
         raise ValueError(
             f"Context parallelism does not support attention layers of type {sorted(non_full)} "
@@ -846,3 +853,85 @@ def _attach_context_parallel_hooks(
         if name.endswith("self_attn"):
             # we want the hook to be executed first, to avoid any other hooks doing work on the attention mask
             module.register_forward_pre_hook(_self_attn_pre_forward_hook, with_kwargs=True, prepend=True)
+
+
+def _attach_sequence_parallel_hooks(model: nn.Module, sp_mesh):
+    """
+    Prepare a `transformers` model for Ulysses sequence parallelism (`sp_backend="torch"`) over the `sp` mesh.
+
+    Routes the model's attention calls through [`~utils.ulysses.UlyssesAttention`], which wraps the model's own
+    attention implementation in the two all-to-alls, and attaches a forward pre-hook that fills in global
+    `position_ids` when the caller passes none: each rank only holds a shard of the sequence, and the model would
+    otherwise number its shard from zero (wrong rotary positions, and a gathered sequence that looks packed). Models
+    whose attention implementation or layer types cannot express attention over the gathered sequence are rejected up
+    front. This function modifies the model in place.
+
+    Args:
+        model (`nn.Module`):
+            The model to prepare.
+        sp_mesh (`torch.distributed.device_mesh.DeviceMesh`):
+            The `sp` sub-mesh of the accelerator's device mesh.
+    """
+    config = getattr(model, "config", None)
+    attn_implementation = getattr(config, "_attn_implementation", None)
+    if attn_implementation is None:
+        raise ValueError(
+            "Ulysses sequence parallelism wraps the attention implementation of a `transformers` model, but "
+            f"{model.__class__.__name__} has no `config._attn_implementation`."
+        )
+    if attn_implementation == "eager" or "flex_attention" in attn_implementation or "paged|" in attn_implementation:
+        raise ValueError(
+            f"Ulysses sequence parallelism does not support the `{attn_implementation}` attention implementation: it "
+            "relies on `position_ids` rather than on a materialized attention mask over the gathered sequence. Load "
+            "the model with `sdpa`, `flash_attention_2`, `flash_attention_3` or a hub flash kernel instead."
+        )
+
+    sp_size = sp_mesh.size()
+    non_full = _non_full_attention_layer_types(model)
+    chunked = {layer_type for layer_type in non_full if "chunked" in layer_type}
+    if chunked:
+        raise ValueError(
+            f"Ulysses sequence parallelism does not support attention layers of type {sorted(chunked)} (model "
+            f"{model.__class__.__name__}): their mask cannot be rebuilt over the gathered sequence. Use another "
+            "model, or disable sequence parallelism."
+        )
+    # Flash attention applies the sliding window through its `sliding_window` kwarg on the gathered sequence, SDPA
+    # only gets `is_causal` and would silently attend over the full window.
+    if non_full and attn_implementation == "sdpa":
+        raise ValueError(
+            f"Ulysses sequence parallelism with `sdpa` does not support attention layers of type {sorted(non_full)} "
+            f"(model {model.__class__.__name__}): the per-layer mask is dropped, so those layers would silently be "
+            "trained with full causal attention. Load the model with `flash_attention_2`, `flash_attention_3` or a "
+            "hub flash kernel, which apply the sliding window themselves, or disable sequence parallelism."
+        )
+
+    text_config = _get_text_config(model)
+    num_heads = text_config.num_attention_heads
+    num_kv_heads = getattr(text_config, "num_key_value_heads", None) or num_heads
+    if num_heads % sp_size != 0 or num_kv_heads % sp_size != 0:
+        raise ValueError(
+            f"Ulysses sequence parallelism splits attention heads across the sequence parallel ranks, so `sp_size` "
+            f"({sp_size}) must divide both the number of attention heads ({num_heads}) and the number of key/value "
+            f"heads ({num_kv_heads}) of {model.__class__.__name__}."
+        )
+
+    register_ulysses_attention(model, sp_mesh.get_group())
+
+    sp_rank = sp_mesh.get_local_rank()
+
+    def _position_ids_pre_forward_hook(_module, module_args, module_kwargs):
+        if module_kwargs.get("position_ids") is not None:
+            return module_args, module_kwargs
+        tokens = module_kwargs.get("input_ids")
+        if tokens is None:
+            tokens = module_kwargs.get("inputs_embeds")
+        if tokens is None and module_args:
+            tokens = module_args[0]
+        if tokens is not None:
+            local_seq_len = tokens.shape[1]
+            module_kwargs["position_ids"] = torch.arange(
+                sp_rank * local_seq_len, (sp_rank + 1) * local_seq_len, device=tokens.device
+            ).unsqueeze(0)
+        return module_args, module_kwargs
+
+    model.register_forward_pre_hook(_position_ids_pre_forward_hook, with_kwargs=True)

@@ -21,6 +21,7 @@ from accelerate.utils.dataclasses import (
     DeepSpeedSequenceParallelConfig,
     DistributedType,
     TorchContextParallelConfig,
+    TorchSequenceParallelConfig,
     TorchTensorParallelConfig,
 )
 from accelerate.utils.versions import is_torch_version
@@ -56,7 +57,8 @@ class ParallelismConfig:
         sp_size (`int`, defaults to `1`):
             The size of the sequence parallel group.
         sp_backend (`str`, defaults to `deepspeed`):
-            Which SP backend to use:`deepspeed` (ALST/Ulysses)
+            Which SP backend to use: `deepspeed` (ALST/Ulysses, requires DeepSpeed) or `torch` (Ulysses on FSDP2,
+            with `sp` as a device mesh dimension).
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
     together:
@@ -73,12 +75,12 @@ class ParallelismConfig:
     cp_size: Optional[int] = None
     cp_backend: Literal["torch"] = None
     sp_size: Optional[int] = None
-    sp_backend: Literal["deepspeed"] = None
+    sp_backend: Literal["deepspeed", "torch"] = None
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
     cp_handler: Union[None, TorchContextParallelConfig] = None
-    sp_handler: Union[None, DeepSpeedSequenceParallelConfig] = None
+    sp_handler: Union[None, DeepSpeedSequenceParallelConfig, TorchSequenceParallelConfig] = None
 
     device_mesh = None
 
@@ -94,7 +96,8 @@ class ParallelismConfig:
             f"\tsp_backend={self.sp_backend},\n"
             f"\ttotal_size={self.total_size}\n"
             f"\ttp_handler={self.tp_handler},\n"
-            f"\tcp_handler={self.cp_handler})\n"
+            f"\tcp_handler={self.cp_handler},\n"
+            f"\tsp_handler={self.sp_handler})\n"
         )
 
     def to_json(self):
@@ -134,12 +137,18 @@ class ParallelismConfig:
 
     @property
     def dp_shard_cp_dim_names(self):
-        """Names of enabled dimensions which will be flattened into a joint mesh across which is model sharded in FSDP."""
+        """
+        Names of enabled dimensions which will be flattened into a joint mesh across which is model sharded in FSDP.
+        Context and sequence parallel ranks hold different parts of the same batch, so their gradients are partial
+        and FSDP's reduce-scatter across this joint mesh is what sums them.
+        """
         dims = []
         if self.dp_shard_enabled:
             dims += ["dp_shard"]
         if self.cp_enabled:
             dims += ["cp"]
+        if self.sp_enabled:
+            dims += ["sp"]
         return dims
 
     @property
@@ -152,6 +161,8 @@ class ParallelismConfig:
             dims += ["dp_shard"]
         if self.cp_enabled:
             dims += ["cp"]
+        if self.sp_enabled:
+            dims += ["sp"]
         return dims
 
     @property
@@ -200,7 +211,7 @@ class ParallelismConfig:
 
     @property
     def sp_enabled(self):
-        """True if context parallelism is enabled, i.e. `sp_size > 1`."""
+        """True if sequence parallelism is enabled, i.e. `sp_size > 1`."""
         return self.sp_size > 1
 
     @property
@@ -217,6 +228,7 @@ class ParallelismConfig:
         """
         # Skip mesh creation for DeepSpeed SP - DeepSpeed handles its own SP groups
         # Only skip when SP is actually enabled (sp_size > 1), otherwise user might still want TP/CP/FSDP
+        # With `sp_backend="torch"`, `sp` is a regular mesh dimension, folded into the FSDP sharding mesh.
         if self.sp_backend == "deepspeed" and self.sp_size > 1:
             return None
 
@@ -305,8 +317,20 @@ class ParallelismConfig:
                     )
 
         if self.sp_size > 1:
+            sp_backends_config_map = dict(
+                deepspeed=DeepSpeedSequenceParallelConfig,
+                torch=TorchSequenceParallelConfig,
+            )
+            if self.sp_backend not in sp_backends_config_map:
+                raise ValueError(
+                    f"sp_backend must be one of {list(sp_backends_config_map)}, but got {self.sp_backend}"
+                )
             if self.sp_handler is None:
-                self.sp_handler = DeepSpeedSequenceParallelConfig()
+                self.sp_handler = sp_backends_config_map[self.sp_backend]()
+            elif not isinstance(self.sp_handler, sp_backends_config_map[self.sp_backend]):
+                raise ValueError(
+                    f"ParallelismConfig's sp_backend={self.sp_backend} requires {sp_backends_config_map[self.sp_backend]}, but sp_handler was set to {type(self.sp_handler)}"
+                )
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
         if self.dp_shard_size < 1:
@@ -321,7 +345,7 @@ class ParallelismConfig:
 
         if self.sp_size < 1:
             raise ValueError(f"sp_size must be at least 1, but got {self.sp_size}")
-        valid_sp_backends = ["deepspeed"]
+        valid_sp_backends = ["deepspeed", "torch"]
         if self.sp_backend not in valid_sp_backends:
             raise ValueError(f"sp_backend must be one of {valid_sp_backends}, but got {self.sp_backend}")
 
@@ -368,12 +392,27 @@ class ParallelismConfig:
         # 2. num_processes is per-node in multi-node, but total_size is local parallelism config
         # 3. The actual global parallelism (SP × DP) is handled by DeepSpeed's process groups
         if self.sp_backend == "deepspeed" and self.sp_size > 1:
-            pass
+            if accelerator.distributed_type != DistributedType.DEEPSPEED:
+                raise ValueError(
+                    "`sp_backend='deepspeed'` needs DeepSpeed to drive the sequence parallel groups, but the "
+                    f"distributed type is {accelerator.distributed_type}. Use `sp_backend='torch'` to run Ulysses "
+                    "sequence parallelism on FSDP2 without DeepSpeed."
+                )
         elif self.total_size != accelerator.num_processes:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
                 f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
                 f"dp_shard_size/tp_size/cp_size/sp_size."
+            )
+
+        if (
+            self.sp_backend == "torch"
+            and self.sp_size > 1
+            and accelerator.distributed_type == DistributedType.DEEPSPEED
+        ):
+            raise ValueError(
+                "`sp_backend='torch'` runs Ulysses sequence parallelism on FSDP2 and cannot be used with DeepSpeed. "
+                "Use `sp_backend='deepspeed'` with DeepSpeed."
             )
 
         if self.total_size > 1 and not (

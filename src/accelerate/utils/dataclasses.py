@@ -33,6 +33,7 @@ import torch
 
 from .constants import (
     BETA_CP_AVAILABLE_PYTORCH_VERSION,
+    BETA_SP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
     FSDP2_PYTORCH_VERSION,
@@ -2307,6 +2308,22 @@ class DeepSpeedSequenceParallelConfig:
                         f"Must be one of {_builtin_sp_attn} or a hub-hosted flash attention kernel "
                         f"(e.g. 'kernels-community/flash-attn2')."
                     )
+
+
+@dataclass
+class TorchSequenceParallelConfig:
+    """
+    Use this object in your [`Accelerator`] to customize Ulysses sequence parallelism with `sp_backend="torch"`. It
+    runs on FSDP2 and wraps whatever attention implementation the model was loaded with (`sdpa`, `flash_attention_2`,
+    `flash_attention_3` or a hub flash kernel), so there is nothing to configure yet.
+    """
+
+    def __post_init__(self):
+        if not is_torch_version(">=", BETA_SP_AVAILABLE_PYTORCH_VERSION):
+            raise ValueError(
+                f"FSDP2-based Ulysses sequence parallelism is only available in PyTorch {BETA_SP_AVAILABLE_PYTORCH_VERSION} and later versions. "
+                "Please upgrade your PyTorch version."
+            )
 
 
 @dataclass

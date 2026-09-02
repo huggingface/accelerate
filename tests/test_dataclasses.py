@@ -21,6 +21,7 @@ from accelerate.utils import patch_environment
 from accelerate.utils.constants import (
     BETA_CP_AVAILABLE_PYTORCH_VERSION,
     BETA_SP_AVAILABLE_DEEPSPEED_VERSION,
+    BETA_SP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
 )
@@ -40,6 +41,11 @@ def _should_skip_sp_test(sp_size):
     if not is_deepspeed_available():
         return True
     return not compare_versions("deepspeed", ">=", BETA_SP_AVAILABLE_DEEPSPEED_VERSION)
+
+
+def _should_skip_torch_sp_test(sp_size):
+    """Check if a torch SP test should be skipped based on sp_size and torch version."""
+    return sp_size > 1 and not is_torch_version(">=", BETA_SP_AVAILABLE_PYTORCH_VERSION)
 
 
 def _should_skip_tp_test(tp_size):
@@ -255,6 +261,71 @@ class TestParallelismConfig:
             with patch_environment(PARALLELISM_CONFIG_CP_COMM_STRATEGY=setting):
                 with pytest.raises(ValueError, match=f"Invalid cp_comm_strategy: {setting}"):
                     pc = ParallelismConfig(cp_size=2)
+
+    @pytest.mark.parametrize(
+        "dp_replicate_size, dp_shard_size, tp_size, sp_size, expected_shape, expected_dim_names",
+        [
+            (1, 1, 1, 4, (4,), ("sp",)),  # SP only
+            (1, 4, 1, 2, (4, 2), ("dp_shard", "sp")),  # FSDP + SP
+            (1, 2, 2, 2, (2, 2, 2), ("dp_shard", "sp", "tp")),  # FSDP + SP + TP
+            (2, 2, 1, 2, (2, 2, 2), ("dp_replicate", "dp_shard", "sp")),  # HSDP + SP
+        ],
+    )
+    def test_build_device_mesh_torch_sp(
+        self, dp_replicate_size, dp_shard_size, tp_size, sp_size, expected_shape, expected_dim_names
+    ):
+        """With `sp_backend="torch"`, `sp` is a real mesh dimension, folded into the FSDP and loss meshes."""
+        if _should_skip_torch_sp_test(sp_size):
+            pytest.skip(f"tests with `sp_backend='torch'` require torch >= {BETA_SP_AVAILABLE_PYTORCH_VERSION}")
+        if _should_skip_tp_test(tp_size):
+            pytest.skip(
+                f"tests with `tp_size>1` require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+            )
+
+        config = ParallelismConfig(
+            dp_replicate_size=dp_replicate_size,
+            dp_shard_size=dp_shard_size,
+            tp_size=tp_size,
+            sp_size=sp_size,
+            sp_backend="torch",
+        )
+        assert config._get_mesh() == (expected_dim_names, expected_shape)
+        assert config.dp_shard_cp_dim_names == (["dp_shard"] if dp_shard_size > 1 else []) + ["sp"]
+        assert config.dp_cp_dim_names == config.dp_dim_names + ["sp"]
+
+        device_mesh = config.build_device_mesh("cpu")
+        assert device_mesh.shape == expected_shape
+        assert device_mesh.mesh_dim_names == expected_dim_names
+        assert (config.dp_shard_cp_dim_names, "dp_shard_cp") in device_mesh.flattened_dims
+        assert (config.dp_cp_dim_names, "dp_cp") in device_mesh.flattened_dims
+
+    def test_build_device_mesh_deepspeed_sp_is_skipped(self):
+        """The DeepSpeed backend owns its process groups, so no mesh is built for it."""
+        if _should_skip_sp_test(2):
+            pytest.skip(f"tests with `sp_size>1` require deepspeed >= {BETA_SP_AVAILABLE_DEEPSPEED_VERSION}")
+
+        config = ParallelismConfig(sp_size=2, sp_backend="deepspeed")
+        assert config.build_device_mesh("cpu") is None
+
+    def test_sp_torch_handler(self):
+        """Test the SP torch handler is created by default and checked against the backend."""
+        if _should_skip_torch_sp_test(2):
+            pytest.skip(f"tests with `sp_backend='torch'` require torch >= {BETA_SP_AVAILABLE_PYTORCH_VERSION}")
+
+        from accelerate.utils import DeepSpeedSequenceParallelConfig, TorchSequenceParallelConfig
+
+        pc = ParallelismConfig(sp_size=2, sp_backend="torch")
+        assert isinstance(pc.sp_handler, TorchSequenceParallelConfig), "SP handler should be set from the backend"
+
+        pc = ParallelismConfig(sp_size=2, sp_backend="torch", sp_handler=TorchSequenceParallelConfig())
+        assert isinstance(pc.sp_handler, TorchSequenceParallelConfig)
+
+        if not _should_skip_sp_test(2):
+            with pytest.raises(ValueError, match="sp_backend=torch requires"):
+                ParallelismConfig(sp_size=2, sp_backend="torch", sp_handler=DeepSpeedSequenceParallelConfig())
+
+        with pytest.raises(ValueError, match="sp_backend must be one of"):
+            ParallelismConfig(sp_size=2, sp_backend="foobar")
 
     def test_sp_deepspeed_handler(self):
         """Test SP DeepSpeed/ALST/UlyssesSP handler with various configurations."""
