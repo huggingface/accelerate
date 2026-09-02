@@ -1116,6 +1116,29 @@ class StatefulDataLoaderTester(AccelerateTestCase):
 
     @parameterized.expand([(0, False), (1, False), (0, True), (1, True)])
     @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_resume_after_completed_epoch(self, process_index, use_seedable_sampler):
+        """Checkpointing after `list(loader)` must resume at the *next* epoch's permutation."""
+        loader = self._make_shuffled_stateful_loader(process_index, use_seedable_sampler=use_seedable_sampler)
+        list(loader)
+        state_dict = loader.state_dict()
+        next_epoch = [self._batch_values(batch) for batch in loader]
+        assert next_epoch, "expected a second epoch of batches"
+        self._assert_fresh_loader_resume_matches(next_epoch, state_dict, process_index, use_seedable_sampler)
+
+    @parameterized.expand([(0, False), (1, False), (0, True), (1, True)])
+    @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_resume_on_last_batch_of_second_epoch(self, process_index, use_seedable_sampler):
+        """A last-batch snapshot of epoch 1 must resume at epoch 2, not replay epoch 1."""
+        loader = self._make_shuffled_stateful_loader(process_index, use_seedable_sampler=use_seedable_sampler)
+        list(loader)
+        list(loader)
+        state_dict = loader.state_dict()
+        third_epoch = [self._batch_values(batch) for batch in loader]
+        assert third_epoch, "expected a third epoch of batches"
+        self._assert_fresh_loader_resume_matches(third_epoch, state_dict, process_index, use_seedable_sampler)
+
+    @parameterized.expand([(0, False), (1, False), (0, True), (1, True)])
+    @require_torchdata_stateful_dataloader
     def test_stateful_shuffle_resume_mid_first_epoch(self, process_index, use_seedable_sampler):
         loader = self._make_shuffled_stateful_loader(process_index, use_seedable_sampler=use_seedable_sampler)
         iterator = iter(loader)

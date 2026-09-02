@@ -333,6 +333,27 @@ def _restore_shuffle_state(batch_sampler, state):
         sampler.generator.set_state(state["generator_state"])
 
 
+def _replace_sampler_iter_state(state_dict, new_iter_state):
+    """Point a torchdata state_dict at the start of the next epoch's permutation."""
+    if not isinstance(state_dict, dict):
+        return
+    if "_sampler_iter_state" in state_dict:
+        state_dict["_sampler_iter_state"] = new_iter_state
+    if "_num_yielded" in state_dict:
+        state_dict["_num_yielded"] = 0
+    if "_sampler_iter_yielded" in state_dict:
+        state_dict["_sampler_iter_yielded"] = 0
+    index_state = state_dict.get("_index_sampler_state")
+    if isinstance(index_state, dict) and "samples_yielded" in index_state:
+        index_state["samples_yielded"] = 0
+    snapshot = state_dict.get("_snapshot")
+    if isinstance(snapshot, dict):
+        _replace_sampler_iter_state(snapshot, new_iter_state)
+        main = snapshot.get("_main_snapshot")
+        if isinstance(main, dict):
+            _replace_sampler_iter_state(main, new_iter_state)
+
+
 class _BatchSamplerShardIterator:
     """Stateful iterator over a `BatchSamplerShard`.
 
@@ -608,12 +629,22 @@ class DataLoaderAdapter:
             self.dl_state_dict = self.base_dataloader.state_dict()
             # Potentially modify the state_dict to adjust for prefetching
             self.adjust_state_dict_for_prefetch()
-            # Then tag if we are at the end of the dataloader
-            self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
-            # Persist the sampler epoch so a fresh loader does not restart at epoch 0.
             iteration = getattr(self, "iteration", 0)
-            if iteration:
-                self.dl_state_dict[_ACCELERATE_ITERATION] = iteration
+            if getattr(self, "end_of_dataloader", False):
+                # Last batch of this epoch: persist the *next* epoch. The finished
+                # iterator still holds the pre-epoch shuffle snapshot, which would
+                # replay the epoch that just ended.
+                self.dl_state_dict["_iterator_finished"] = False
+                self.dl_state_dict[_ACCELERATE_ITERATION] = iteration + 1
+                batch_sampler = getattr(self, "batch_sampler", None)
+                if batch_sampler is None:
+                    batch_sampler = getattr(self, "sampler", None)
+                post = _capture_shuffle_state(batch_sampler) if batch_sampler is not None else {}
+                _replace_sampler_iter_state(self.dl_state_dict, {"yielded": 0, "shuffle_state": post})
+            else:
+                self.dl_state_dict["_iterator_finished"] = False
+                if iteration:
+                    self.dl_state_dict[_ACCELERATE_ITERATION] = iteration
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
