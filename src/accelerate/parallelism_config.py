@@ -56,9 +56,10 @@ class ParallelismConfig:
             Which CP backend to use: `torch` (FSDP2)
         sp_size (`int`, defaults to `1`):
             The size of the sequence parallel group.
-        sp_backend (`str`, defaults to `deepspeed`):
+        sp_backend (`str`, *optional*):
             Which SP backend to use: `deepspeed` (ALST/Ulysses, requires DeepSpeed) or `torch` (Ulysses on FSDP2,
-            with `sp` as a device mesh dimension).
+            with `sp` as a device mesh dimension). If unset, resolves to `deepspeed` under DeepSpeed and `torch`
+            otherwise; an explicit value that does not match the distributed type raises.
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
     together:
@@ -298,7 +299,8 @@ class ParallelismConfig:
         if self.sp_size is None:
             self.sp_size = int(os.environ.get("PARALLELISM_CONFIG_SP_SIZE", "1"))
         if self.sp_backend is None:
-            self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND", "deepspeed")
+            # May stay `None`: it is then resolved from the distributed type in `_resolve_sp_backend`
+            self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND")
 
         if self.tp_size > 1:
             if self.tp_handler is None:
@@ -316,21 +318,8 @@ class ParallelismConfig:
                         f"ParallelismConfig's cp_backend={self.cp_backend} requires {cp_backends_config_map[self.cp_backend]}, but cp_handler was set to {type(self.cp_handler)}"
                     )
 
-        if self.sp_size > 1:
-            sp_backends_config_map = dict(
-                deepspeed=DeepSpeedSequenceParallelConfig,
-                torch=TorchSequenceParallelConfig,
-            )
-            if self.sp_backend not in sp_backends_config_map:
-                raise ValueError(
-                    f"sp_backend must be one of {list(sp_backends_config_map)}, but got {self.sp_backend}"
-                )
-            if self.sp_handler is None:
-                self.sp_handler = sp_backends_config_map[self.sp_backend]()
-            elif not isinstance(self.sp_handler, sp_backends_config_map[self.sp_backend]):
-                raise ValueError(
-                    f"ParallelismConfig's sp_backend={self.sp_backend} requires {sp_backends_config_map[self.sp_backend]}, but sp_handler was set to {type(self.sp_handler)}"
-                )
+        if self.sp_size > 1 and self.sp_backend is not None:
+            self._init_sp_handler()
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
         if self.dp_shard_size < 1:
@@ -346,7 +335,7 @@ class ParallelismConfig:
         if self.sp_size < 1:
             raise ValueError(f"sp_size must be at least 1, but got {self.sp_size}")
         valid_sp_backends = ["deepspeed", "torch"]
-        if self.sp_backend not in valid_sp_backends:
+        if self.sp_backend is not None and self.sp_backend not in valid_sp_backends:
             raise ValueError(f"sp_backend must be one of {valid_sp_backends}, but got {self.sp_backend}")
 
         # CP and SP are mutually exclusive
@@ -370,6 +359,30 @@ class ParallelismConfig:
             "cp": self.cp_size,
             "sp": self.sp_size,
         }
+
+    def _init_sp_handler(self):
+        """Create the `sp_handler` matching `sp_backend`, or check the one given matches it."""
+        sp_backends_config_map = dict(
+            deepspeed=DeepSpeedSequenceParallelConfig,
+            torch=TorchSequenceParallelConfig,
+        )
+        if self.sp_backend not in sp_backends_config_map:
+            raise ValueError(f"sp_backend must be one of {list(sp_backends_config_map)}, but got {self.sp_backend}")
+        if self.sp_handler is None:
+            self.sp_handler = sp_backends_config_map[self.sp_backend]()
+        elif not isinstance(self.sp_handler, sp_backends_config_map[self.sp_backend]):
+            raise ValueError(
+                f"ParallelismConfig's sp_backend={self.sp_backend} requires {sp_backends_config_map[self.sp_backend]}, but sp_handler was set to {type(self.sp_handler)}"
+            )
+
+    def _resolve_sp_backend(self, distributed_type: DistributedType):
+        """
+        Pick the sequence parallel backend when the user left it unset: ALST/Ulysses under DeepSpeed, Ulysses on
+        FSDP2 otherwise. Has to run before the device mesh is built, since the DeepSpeed backend builds none.
+        """
+        if self.sp_size > 1 and self.sp_backend is None:
+            self.sp_backend = "deepspeed" if distributed_type == DistributedType.DEEPSPEED else "torch"
+            self._init_sp_handler()
 
     def _set_size(self, parallelism: str, size: int):
         assert parallelism in self._sizes.keys(), f"Parallelism must be one of {self._sizes.keys()}"

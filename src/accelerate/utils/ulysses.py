@@ -12,21 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Ulysses sequence parallelism on plain PyTorch, the `sp_backend="torch"` backend of `ParallelismConfig`.
+Ulysses sequence parallelism on plain PyTorch (`sp_backend="torch"`).
 
-Ulysses shards the sequence across the ranks of the `sp` mesh dimension and leaves the model's own attention call
-untouched. Every attention call is wrapped in two all-to-all collectives over the `sp` group: the first scatters the
-attention heads and gathers the sequence, so each rank runs its usual attention kernel over the full sequence with
-`num_heads / sp_size` heads; the second reverses it, so the rest of the layer sees its local sequence shard again with
-all heads. Because the local attention call stays intact, any attention implementation that only needs `position_ids`
-(SDPA, FlashAttention 2/3, hub flash kernels) works, packed sequences included.
-
-The hook into `transformers` is the attention interface: models resolve the function to call from
-`ALL_ATTENTION_FUNCTIONS[config._attn_implementation]` on every forward, so [`UlyssesAttention`] is registered under the
-model's own implementation key (`sdpa`, `flash_attention_2`, ...) and calls the original function between the two
-all-to-alls. Keeping the key means every other code path that looks at `config._attn_implementation` (mask creation,
-flash-attention kwargs, ...) is unaffected. The wrapper only acts on the modules registered through
-[`register_ulysses_attention`], so other models living in the same process keep their plain attention.
+Each rank holds a shard of the sequence. Around every attention call, an all-to-all scatters the heads and gathers the
+sequence, the model's own attention runs on the full sequence with `num_heads / sp_size` heads, and a second
+all-to-all reverses it. The hook is transformers' `ALL_ATTENTION_FUNCTIONS`: [`UlyssesAttention`] is registered under
+the model's own implementation key and only acts on modules registered through [`register_ulysses_attention`].
 """
 
 import weakref

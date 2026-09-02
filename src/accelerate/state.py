@@ -971,6 +971,8 @@ class AcceleratorState:
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true" and not cpu:
                 self.distributed_type = DistributedType.DEEPSPEED
+                if self.parallelism_config is not None:
+                    self.parallelism_config._resolve_sp_backend(self.distributed_type)
                 if not isinstance(deepspeed_plugin, dict):
                     deepspeed_plugin.set_mixed_precision(mixed_precision)
                     deepspeed_plugin.select(_from_accelerator_state=True)
@@ -991,6 +993,8 @@ class AcceleratorState:
                 DistributedType.MULTI_HPU,
                 DistributedType.MULTI_NEURON,
             ]:
+                if self.parallelism_config is not None:
+                    self.parallelism_config._resolve_sp_backend(self.distributed_type)
                 # TODO: Siro - remove when axolotl fixes their side
                 if not os.environ.get("ACCELERATE_ALLOW_CP_STANDALONE", "false").lower() == "true":
                     if self.parallelism_config and self.parallelism_config.cp_enabled and fsdp_plugin is None:

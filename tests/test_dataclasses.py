@@ -327,6 +327,32 @@ class TestParallelismConfig:
         with pytest.raises(ValueError, match="sp_backend must be one of"):
             ParallelismConfig(sp_size=2, sp_backend="foobar")
 
+    def test_sp_backend_resolves_from_distributed_type(self):
+        """An unset `sp_backend` is picked from the engine: DeepSpeed under DeepSpeed, torch otherwise."""
+        from accelerate.utils import DistributedType, TorchSequenceParallelConfig
+
+        pc = ParallelismConfig(sp_size=2)
+        assert pc.sp_backend is None and pc.sp_handler is None, "nothing to resolve before the engine is known"
+
+        if not _should_skip_torch_sp_test(2):
+            pc._resolve_sp_backend(DistributedType.FSDP)
+            assert pc.sp_backend == "torch"
+            assert isinstance(pc.sp_handler, TorchSequenceParallelConfig)
+
+        if not _should_skip_sp_test(2):
+            from accelerate.utils import DeepSpeedSequenceParallelConfig
+
+            pc = ParallelismConfig(sp_size=2)
+            pc._resolve_sp_backend(DistributedType.DEEPSPEED)
+            assert pc.sp_backend == "deepspeed"
+            assert isinstance(pc.sp_handler, DeepSpeedSequenceParallelConfig)
+
+        # explicit values are kept as they are
+        with patch_environment(PARALLELISM_CONFIG_SP_BACKEND="torch"):
+            pc = ParallelismConfig(sp_size=2)
+            pc._resolve_sp_backend(DistributedType.DEEPSPEED)
+            assert pc.sp_backend == "torch"
+
     def test_sp_deepspeed_handler(self):
         """Test SP DeepSpeed/ALST/UlyssesSP handler with various configurations."""
 
