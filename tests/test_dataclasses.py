@@ -215,6 +215,7 @@ class TestParallelismConfig:
             "PARALLELISM_CONFIG_DP_SHARD_SIZE": dp_shard_size,
             "PARALLELISM_CONFIG_TP_SIZE": tp_size,
             "PARALLELISM_CONFIG_CP_SIZE": cp_size,
+            "PARALLELISM_CONFIG_EP_SIZE": 1,
         }
 
         with patch_environment(**new_env):
@@ -275,3 +276,145 @@ class TestParallelismConfig:
 
     def test_tp_handler(self):
         assert True, "Tensor parallelism handler doesn't hold any logic yet"
+
+    @pytest.mark.parametrize(
+        "dp_replicate_size, dp_shard_size, tp_size, ep_size, expected_shape, expected_dim_names",
+        [
+            (1, 1, 1, 4, (4,), ("ep",)),  # EP only
+            (1, 2, 1, 4, (2, 4), ("dp_shard", "ep")),  # FSDP + EP
+            (1, 2, 2, 2, (2, 2, 2), ("dp_shard", "ep", "tp")),  # FSDP + EP + TP
+            (2, 2, 1, 2, (2, 2, 2), ("dp_replicate", "dp_shard", "ep")),  # HSDP + EP
+        ],
+    )
+    def test_get_mesh_with_ep(
+        self,
+        dp_replicate_size,
+        dp_shard_size,
+        tp_size,
+        ep_size,
+        expected_shape,
+        expected_dim_names,
+    ):
+        # Dummy handler avoids TorchTensorParallelConfig version checks; we only assert mesh layout.
+        config = ParallelismConfig(
+            dp_replicate_size=dp_replicate_size,
+            dp_shard_size=dp_shard_size,
+            tp_size=tp_size,
+            ep_size=ep_size,
+            tp_handler=Mock() if tp_size > 1 else None,
+        )
+        mesh_dim_names, mesh_shape = config._get_mesh()
+        assert mesh_shape == expected_shape
+        assert mesh_dim_names == expected_dim_names
+
+    @pytest.mark.parametrize(
+        "dp_replicate_size, dp_shard_size, tp_size, ep_size, expected_shape, expected_dim_names",
+        [
+            (1, 1, 1, 4, (4,), ("ep",)),
+            (1, 2, 1, 4, (2, 4), ("dp_shard", "ep")),
+            (1, 2, 2, 2, (2, 2, 2), ("dp_shard", "ep", "tp")),
+            (2, 2, 1, 2, (2, 2, 2), ("dp_replicate", "dp_shard", "ep")),
+        ],
+    )
+    def test_build_device_mesh_with_ep(
+        self,
+        dp_replicate_size,
+        dp_shard_size,
+        tp_size,
+        ep_size,
+        expected_shape,
+        expected_dim_names,
+    ):
+        """EP must appear on the mesh but must not be flattened into FSDP dims."""
+        config = ParallelismConfig(
+            dp_replicate_size=dp_replicate_size,
+            dp_shard_size=dp_shard_size,
+            tp_size=tp_size,
+            ep_size=ep_size,
+            tp_handler=Mock() if tp_size > 1 else None,
+        )
+        device_mesh = config.build_device_mesh("cpu")
+
+        assert device_mesh.shape == expected_shape
+        assert device_mesh.mesh_dim_names == expected_dim_names
+
+        expected_flattened = []
+        if config.dp_dim_names:
+            expected_flattened.append((config.dp_dim_names, "dp"))
+        if config.dp_shard_cp_dim_names:
+            expected_flattened.append((config.dp_shard_cp_dim_names, "dp_shard_cp"))
+        if config.dp_cp_dim_names:
+            expected_flattened.append((config.dp_cp_dim_names, "dp_cp"))
+
+        assert device_mesh.flattened_dims == expected_flattened
+        for flattened_keys, flattened_name in device_mesh.flattened_dims:
+            assert "ep" not in flattened_keys
+            assert flattened_name != "ep"
+        assert "ep" not in config.fsdp_dim_names
+        assert "ep" not in config.dp_shard_cp_dim_names
+        assert "ep" not in config.dp_cp_dim_names
+        assert "ep" not in config.dp_dim_names
+
+    def test_from_env_ep_size(self):
+        with patch_environment(PARALLELISM_CONFIG_EP_SIZE=4):
+            config = ParallelismConfig()
+            assert config.ep_size == 4
+            assert config.ep_enabled
+
+    def test_ep_size_zero_raises(self):
+        with pytest.raises(ValueError, match="ep_size must be at least 1"):
+            ParallelismConfig(ep_size=0)
+
+    def test_ep_dim_names_and_sizes(self):
+        config = ParallelismConfig(dp_shard_size=2, ep_size=4)
+
+        assert config.ep_enabled
+        assert "ep" in config.non_dp_dim_names
+        assert "ep" not in config.dp_dim_names
+        assert "ep" not in config.fsdp_dim_names
+        assert "ep" not in config.dp_shard_cp_dim_names
+        assert "ep" not in config.dp_cp_dim_names
+        assert config.total_size == 8
+        assert config.non_data_parallel_size == 4
+        assert config.data_parallel_size == 2
+
+    def test_default_ep_size_does_not_change_existing_mesh(self):
+        if _should_skip_cp_test(2):
+            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
+        config = ParallelismConfig(dp_shard_size=2, cp_size=2)
+        mesh_dim_names, mesh_shape = config._get_mesh()
+        assert config.ep_size == 1
+        assert not config.ep_enabled
+        assert "ep" not in mesh_dim_names
+        assert mesh_shape == (2, 2)
+        assert mesh_dim_names == ("dp_shard", "cp")
+        assert config.total_size == 4
+        assert config.non_data_parallel_size == 2
+
+    def test_ep_with_dp_replicate_is_allowed(self):
+        """Replicating an expert-parallel model is a valid layout; the TP/CP DDP restriction does not apply to EP."""
+        config = ParallelismConfig(dp_replicate_size=2, ep_size=2)
+        mesh_dim_names, mesh_shape = config._get_mesh()
+        assert mesh_shape == (2, 2)
+        assert mesh_dim_names == ("dp_replicate", "ep")
+        assert config.total_size == 4
+
+    def test_ep_same_batch_rank_mapping(self):
+        """EP ranks receive the same batch, like TP/CP: process_index // (tp * cp * ep)."""
+        config = ParallelismConfig(dp_shard_size=2, ep_size=4)
+        mesh_dim_names, mesh_shape = config._get_mesh()
+        assert mesh_dim_names == ("dp_shard", "ep")
+        assert mesh_shape == (2, 4)
+
+        sizes = dict(zip(mesh_dim_names, mesh_shape))
+        submesh_tp_size = sizes.get("tp", 1)
+        submesh_cp_size = sizes.get("cp", 1)
+        submesh_ep_size = sizes.get("ep", 1)
+        submesh_fsdp_size = sizes.get("dp_shard", 1)
+        submesh_dp_size = sizes.get("dp_replicate", 1)
+
+        remapped_indices = [
+            process_index // (submesh_tp_size * submesh_cp_size * submesh_ep_size) for process_index in range(8)
+        ]
+        assert remapped_indices == [0, 0, 0, 0, 1, 1, 1, 1]
+        assert submesh_fsdp_size * submesh_dp_size == 2

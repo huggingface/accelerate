@@ -57,6 +57,12 @@ class ParallelismConfig:
             The size of the sequence parallel group.
         sp_backend (`str`, defaults to `deepspeed`):
             Which SP backend to use:`deepspeed` (ALST/Ulysses)
+        ep_size (`int`, defaults to `1`):
+            The size of the expert parallel group. If `ep_size` is set to `1`, the expert parallel group will not be
+            used. Expert parallelism is a non-data-parallel dimension (every EP rank sees the same batch) and is **not**
+            an FSDP shard dimension. With FSDP2 + EP, `dp_shard` shards non-expert parameters while `ep` is the expert
+            mesh; the model is responsible for placing expert weights on that submesh. Accelerate only builds the `ep`
+            `DeviceMesh` dimension and does not implement expert routing or all-to-all token dispatch.
 
     You may obtain different distributed data parallel paradigms by configuring `dp_replicate_size` and `dp_shard_size`
     together:
@@ -64,6 +70,9 @@ class ParallelismConfig:
         - `dp_replicate_size > 1` and `dp_shard_size > 1`, we obtain Hybrid Sharded Data Parallel (HSDP).
         - `dp_replicate_size > 1` and `dp_shard_size == 1` is an invalid configuration, to use pure DP, use
           `DistributedDataParallelKwargs` instead.
+
+    The product of all parallelism sizes (`dp_replicate_size * dp_shard_size * tp_size * cp_size * sp_size * ep_size`)
+    must equal `num_processes`.
 
     """
 
@@ -74,6 +83,7 @@ class ParallelismConfig:
     cp_backend: Literal["torch"] = None
     sp_size: Optional[int] = None
     sp_backend: Literal["deepspeed"] = None
+    ep_size: Optional[int] = None
 
     # we use Union because we might support other x parallel plugins (i.e. deepspeed, etc)
     tp_handler: Union[None, TorchTensorParallelConfig] = None
@@ -92,6 +102,7 @@ class ParallelismConfig:
             f"\tcp_backend={self.cp_backend},\n"
             f"\tsp_size={self.sp_size},\n"
             f"\tsp_backend={self.sp_backend},\n"
+            f"\tep_size={self.ep_size},\n"
             f"\ttotal_size={self.total_size}\n"
             f"\ttp_handler={self.tp_handler},\n"
             f"\tcp_handler={self.cp_handler})\n"
@@ -130,6 +141,8 @@ class ParallelismConfig:
             dims += ["cp"]
         if self.sp_enabled:
             dims += ["sp"]
+        if self.ep_enabled:
+            dims += ["ep"]
         return dims
 
     @property
@@ -166,12 +179,12 @@ class ParallelismConfig:
     @property
     def total_size(self):
         """The total size of the parallelism configuration, which is the product of all sizes."""
-        return self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size * self.sp_size
+        return self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size * self.sp_size * self.ep_size
 
     @property
     def non_data_parallel_size(self):
-        """The size of the non-data parallel dimensions, which is the product of tensor and context parallel sizes."""
-        return self.tp_size * self.cp_size * self.sp_size
+        """The size of the non-data parallel dimensions, which is the product of tensor, context, sequence, and expert parallel sizes."""
+        return self.tp_size * self.cp_size * self.sp_size * self.ep_size
 
     @property
     def data_parallel_size(self):
@@ -202,6 +215,11 @@ class ParallelismConfig:
     def sp_enabled(self):
         """True if context parallelism is enabled, i.e. `sp_size > 1`."""
         return self.sp_size > 1
+
+    @property
+    def ep_enabled(self):
+        """True if expert parallelism is enabled, i.e. `ep_size > 1`."""
+        return self.ep_size > 1
 
     @property
     def active_mesh_dims(self):
@@ -264,7 +282,7 @@ class ParallelismConfig:
         mesh_dims = {parallelism: self._sizes[parallelism] for parallelism in self.active_mesh_dims}
 
         # Apply canonical ordering
-        mesh_order = ["dp_replicate", "dp_shard", "cp", "sp", "tp"]
+        mesh_order = ["dp_replicate", "dp_shard", "cp", "sp", "ep", "tp"]
         sorted_items = sorted(
             mesh_dims.items(),
             key=lambda x: (mesh_order.index(x[0])),
@@ -287,6 +305,8 @@ class ParallelismConfig:
             self.sp_size = int(os.environ.get("PARALLELISM_CONFIG_SP_SIZE", "1"))
         if self.sp_backend is None:
             self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND", "deepspeed")
+        if self.ep_size is None:
+            self.ep_size = int(os.environ.get("PARALLELISM_CONFIG_EP_SIZE", "1"))
 
         if self.tp_size > 1:
             if self.tp_handler is None:
@@ -321,6 +341,8 @@ class ParallelismConfig:
 
         if self.sp_size < 1:
             raise ValueError(f"sp_size must be at least 1, but got {self.sp_size}")
+        if self.ep_size < 1:
+            raise ValueError(f"ep_size must be at least 1, but got {self.ep_size}")
         valid_sp_backends = ["deepspeed"]
         if self.sp_backend not in valid_sp_backends:
             raise ValueError(f"sp_backend must be one of {valid_sp_backends}, but got {self.sp_backend}")
@@ -345,6 +367,7 @@ class ParallelismConfig:
             "tp": self.tp_size,
             "cp": self.cp_size,
             "sp": self.sp_size,
+            "ep": self.ep_size,
         }
 
     def _set_size(self, parallelism: str, size: int):
@@ -373,7 +396,7 @@ class ParallelismConfig:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
                 f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
-                f"dp_shard_size/tp_size/cp_size/sp_size."
+                f"dp_shard_size/tp_size/cp_size/sp_size/ep_size."
             )
 
         if self.total_size > 1 and not (

@@ -697,6 +697,44 @@ class DataLoaderTester(AccelerateTestCase):
         # n_shards (2) == num_processes (2): should use native sharding, not IterableDatasetShard
         assert not isinstance(result.dataset, IterableDatasetShard)
 
+    def test_device_mesh_ep_shares_batch_across_ep_ranks(self):
+        """EP is a same-batch dim: ranks in one EP group map to the same process_index."""
+
+        class _FakeDeviceMesh:
+            def __init__(self, sizes):
+                self.mesh_dim_names = list(sizes)
+                self._sizes = sizes
+
+            def __getitem__(self, key):
+                class _Submesh:
+                    def __init__(self, size):
+                        self._size = size
+
+                    def size(self):
+                        return self._size
+
+                return _Submesh(self._sizes[key])
+
+        dataset = list(range(16))
+        mesh = _FakeDeviceMesh({"dp_shard": 2, "ep": 4})
+        prepared = [
+            prepare_data_loader(
+                DataLoader(dataset, batch_size=4),
+                num_processes=8,
+                process_index=rank,
+                torch_device_mesh=mesh,
+            )
+            for rank in range(8)
+        ]
+
+        # EP ranks 0-3 share dp_shard=0; ranks 4-7 share dp_shard=1
+        for rank in range(4):
+            assert prepared[rank].batch_sampler.process_index == 0
+            assert prepared[rank].batch_sampler.num_processes == 2
+        for rank in range(4, 8):
+            assert prepared[rank].batch_sampler.process_index == 1
+            assert prepared[rank].batch_sampler.num_processes == 2
+
     def test_ensure_dataloader_gets_cleaned_up(self):
         # Ensure that the dataloader gets cleaned up properly
         class Dummy:

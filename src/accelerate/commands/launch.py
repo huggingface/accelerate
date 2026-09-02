@@ -981,6 +981,13 @@ def launch_command_parser(subparsers=None):
         help="Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3', 'sdpa', or a hub-hosted kernel (e.g. 'kernels-community/flash-attn2'). Defaults to `sdpa`.",
     )
 
+    parallelism_config_args.add_argument(
+        "--parallelism_config_ep_size",
+        type=int,
+        default=1,
+        help="The number of processes for expert parallel training. Defaults to 1 (no expert parallelism).",
+    )
+
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 

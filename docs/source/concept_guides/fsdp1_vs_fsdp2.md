@@ -103,3 +103,13 @@ accelerate to-fsdp2 --config_file config.yaml --output_file new_config.yaml
 ```
 
 This will automatically convert all FSDP1 settings to their FSDP2 equivalents. Use `--overwrite` to update the existing file instead of creating a new one.
+
+## FSDP2 and expert parallelism
+
+`ParallelismConfig` accepts `ep_size` to add an `ep` dimension to the `DeviceMesh`. Expert parallelism is **not** an FSDP shard dimension:
+
+- `dp_shard` (and optionally `cp`) is used by FSDP2 to shard non-expert parameters.
+- `ep` is the expert mesh. The model is responsible for placing expert weights on this submesh.
+- Accelerate does not route tokens or implement all-to-all expert communication; it only builds the `ep` `DeviceMesh` dimension.
+
+Because every expert-parallel rank sees the same batch (like tensor or context parallelism), `ep_size` is a non-data-parallel dimension. The product of all parallelism sizes, including `ep_size`, must equal `num_processes`.
