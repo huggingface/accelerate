@@ -288,6 +288,19 @@ class FSDPPluginIntegration(AccelerateTestCase):
         fsdp_plugin.set_auto_wrap_policy(model)
         assert fsdp_plugin.auto_wrap_policy is None
 
+    def test_activation_checkpointing_requires_auto_wrap_policy(self):
+        fsdp_version = self.current_fsdp_version
+        error_message = "`activation_checkpointing=True` requires an auto wrap policy"
+
+        env = self.fsdp_envs[fsdp_version].copy()
+        env["FSDP_AUTO_WRAP_POLICY"] = "NO_WRAP"
+        env["FSDP_ACTIVATION_CHECKPOINTING"] = "true"
+        with patch_environment(**env), self.assertRaisesRegex(ValueError, error_message):
+            FullyShardedDataParallelPlugin()
+
+        with patch_environment(**self.fsdp_envs[fsdp_version]), self.assertRaisesRegex(ValueError, error_message):
+            FullyShardedDataParallelPlugin(auto_wrap_policy="NO_WRAP", activation_checkpointing=True)
+
     def test_mixed_precision(self):
         fsdp_version = self.current_fsdp_version
         if fsdp_version == 2:

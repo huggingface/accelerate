@@ -1959,6 +1959,11 @@ class FullyShardedDataParallelPlugin:
             self.activation_checkpointing = (
                 str_to_bool(os.environ.get(env_prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
             )
+        if self.activation_checkpointing and self.auto_wrap_policy is None:
+            raise ValueError(
+                "`activation_checkpointing=True` requires an auto wrap policy. Please choose "
+                "`TRANSFORMER_BASED_WRAP` or `SIZE_BASED_WRAP` instead of `NO_WRAP`."
+            )
 
         if self.activation_checkpointing_offload is None:
             self.activation_checkpointing_offload = (
