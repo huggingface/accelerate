@@ -1794,7 +1794,10 @@ class Accelerator:
         ```
         """
         if device_placement is None:
-            device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
+            # DTensor-sharded models manage their own placement; `.to()` on FSDP2-managed or CPU-offloaded params raises `_apply(): Couldn't swap ...`
+            device_placement = (
+                self.device_placement and self.distributed_type != DistributedType.FSDP and not model_has_dtensor(model)
+            )
 
         # Ensure we can't double wrap a model
         if getattr(model, "_is_accelerate_prepared", False):
@@ -1871,8 +1874,7 @@ class Accelerator:
                     "You can't train a model that has been loaded in 8-bit or 4-bit precision with CPU or disk offload. "
                     "If you want train the 8-bit or 4-bit model in CPU, please install bitsandbytes with multi-backend, see https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
                 )
-        elif device_placement and not self.verify_device_map(model) and not model_has_dtensor(model):
-            # DTensor-sharded models manage their own placement; `.to()` on FSDP2-managed or CPU-offloaded params raises `_apply(): Couldn't swap ...`
+        elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
             if self.multi_device and not (self.parallelism_config and self.parallelism_config.tp_enabled):
