@@ -888,11 +888,15 @@ def _attach_sequence_parallel_hooks(model: nn.Module, sp_mesh):
 
     sp_size = sp_mesh.size()
     non_full = _non_full_attention_layer_types(model)
-    chunked = {layer_type for layer_type in non_full if "chunked" in layer_type}
-    if chunked:
+    # Only attention layers go through the attention interface Ulysses wraps. Anything else that mixes tokens along
+    # the sequence (short convolutions, Mamba, linear attention, ...) runs inside the layer on the local shard and
+    # would silently be cut at the shard boundaries. Chunked attention needs a mask that cannot be rebuilt here.
+    unsupported = {layer_type for layer_type in non_full if layer_type != "sliding_attention"}
+    if unsupported:
         raise ValueError(
-            f"Ulysses sequence parallelism does not support attention layers of type {sorted(chunked)} (model "
-            f"{model.__class__.__name__}): their mask cannot be rebuilt over the gathered sequence. Use another "
+            f"Ulysses sequence parallelism does not support layers of type {sorted(unsupported)} (model "
+            f"{model.__class__.__name__}): only full and sliding-window attention layers see the gathered "
+            "sequence, other sequence-mixing layers would silently be cut at the shard boundaries. Use another "
             "model, or disable sequence parallelism."
         )
     # Flash attention applies the sliding window through its `sliding_window` kwarg on the gathered sequence, SDPA
@@ -915,23 +919,23 @@ def _attach_sequence_parallel_hooks(model: nn.Module, sp_mesh):
             f"heads ({num_kv_heads}) of {model.__class__.__name__}."
         )
 
-    register_ulysses_attention(model, sp_mesh.get_group())
+    ulysses_attention = register_ulysses_attention(model, sp_mesh.get_group())
 
     sp_rank = sp_mesh.get_local_rank()
 
     def _position_ids_pre_forward_hook(_module, module_args, module_kwargs):
-        if module_kwargs.get("position_ids") is not None:
-            return module_args, module_kwargs
-        tokens = module_kwargs.get("input_ids")
-        if tokens is None:
-            tokens = module_kwargs.get("inputs_embeds")
-        if tokens is None and module_args:
-            tokens = module_args[0]
-        if tokens is not None:
-            local_seq_len = tokens.shape[1]
-            module_kwargs["position_ids"] = torch.arange(
-                sp_rank * local_seq_len, (sp_rank + 1) * local_seq_len, device=tokens.device
-            ).unsqueeze(0)
+        if module_kwargs.get("position_ids") is None:
+            tokens = module_kwargs.get("input_ids")
+            if tokens is None:
+                tokens = module_kwargs.get("inputs_embeds")
+            if tokens is None and module_args:
+                tokens = module_args[0]
+            if tokens is not None:
+                local_seq_len = tokens.shape[1]
+                module_kwargs["position_ids"] = torch.arange(
+                    sp_rank * local_seq_len, (sp_rank + 1) * local_seq_len, device=tokens.device
+                ).unsqueeze(0)
+        ulysses_attention.set_position_ids(model, module_kwargs.get("position_ids"))
         return module_args, module_kwargs
 
     model.register_forward_pre_hook(_position_ids_pre_forward_hook, with_kwargs=True)

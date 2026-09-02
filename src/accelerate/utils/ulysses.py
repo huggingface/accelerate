@@ -106,9 +106,16 @@ class UlyssesAttention:
         self.attn_implementation = attn_implementation
         self.attention_function = attention_function
         self._groups = weakref.WeakKeyDictionary()
+        self._owners = weakref.WeakKeyDictionary()
+        self._model_position_ids = weakref.WeakKeyDictionary()
 
-    def register_module(self, module: torch.nn.Module, group):
+    def register_module(self, module: torch.nn.Module, group, owner: torch.nn.Module):
         self._groups[module] = group
+        self._owners[module] = owner
+
+    def set_position_ids(self, owner: torch.nn.Module, position_ids: torch.Tensor | None):
+        """Record the local `position_ids` of the forward `owner` is running, for attention modules that don't get them."""
+        self._model_position_ids[owner] = position_ids
 
     def __call__(
         self,
@@ -123,21 +130,31 @@ class UlyssesAttention:
         if group is None:
             return self.attention_function(module, query, key, value, attention_mask, **kwargs)
 
+        # Some models only hand their attention layers the rotary embeddings (Qwen2.5-VL, for one); fall back to
+        # the `position_ids` seen at the model's forward. Multimodal rotary positions are `[3, batch, seq]`, the
+        # text axis is what matters here.
         position_ids = kwargs.get("position_ids")
+        if position_ids is None:
+            position_ids = self._model_position_ids.get(self._owners[module])
         if position_ids is None:
             raise ValueError(
                 "Ulysses sequence parallelism needs `position_ids` in every attention call: after gathering the "
                 "sequence, they tell the attention kernel where each token sits and where packed documents start. "
-                f"{module.__class__.__name__} was called without them, so this model does not forward "
-                "`position_ids` to its attention layers. Pass `position_ids` explicitly, or disable sequence "
-                "parallelism for this model."
+                f"{module.__class__.__name__} was called without them and none were seen at the model's forward. "
+                "Pass `position_ids` explicitly, or disable sequence parallelism for this model."
             )
+        if position_ids.ndim == 3:
+            position_ids = position_ids[0]
 
         # [batch, heads, local_seq, head_dim] -> [batch, heads / sp_size, seq, head_dim]
         query = _SeqAllToAll.apply(group, query, 1, 2)
         key = _SeqAllToAll.apply(group, key, 1, 2)
         value = _SeqAllToAll.apply(group, value, 1, 2)
         kwargs["position_ids"] = _gather_along_dim(position_ids, 1, group)
+        # Attention sinks (gpt-oss) are one learnable logit per head: keep the ones of the heads this rank now holds.
+        s_aux = kwargs.get("s_aux")
+        if isinstance(s_aux, torch.Tensor) and s_aux.ndim == 1:
+            kwargs["s_aux"] = s_aux.chunk(dist.get_world_size(group))[dist.get_rank(group)]
 
         # The model built `attention_mask` for its local shard, it does not apply to the gathered sequence. Flash
         # attention derives document boundaries from `position_ids`; SDPA gets a rebuilt mask when sequences are
@@ -179,7 +196,8 @@ def register_ulysses_attention(model: torch.nn.Module, group):
         ALL_ATTENTION_FUNCTIONS.register(attn_implementation, ulysses_attention)
         _ulysses_attention_functions[attn_implementation] = ulysses_attention
     for module in model.modules():
-        ulysses_attention.register_module(module, group)
+        ulysses_attention.register_module(module, group, model)
+    return ulysses_attention
 
 
 @contextmanager
