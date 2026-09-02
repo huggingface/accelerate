@@ -82,8 +82,10 @@ class SeedableRandomSampler(RandomSampler):
     Needed specifically in distributed cases, when the random generator for each GPU needs to start from the same seed
     and be fully reproducible on multiple iterations.
 
-    If a custom `generator` is passed, it will rely on its initial seed as well as the current iteration it is on
-    (stored in `self.epoch`).
+    The permutation for an epoch is `manual_seed(self.epoch + self.initial_seed)`. `set_epoch` only assigns
+    `self.epoch`; `__iter__` never increments it. Callers (including [`DataLoaderShard`]) must call `set_epoch`
+    between passes. An implicit increment during iteration would shift the next permutation when a completed-epoch
+    checkpoint is restored, because the restore path may replay one extra full sampler cycle.
     """
 
     def __init__(self, *args, **kwargs):
@@ -105,10 +107,9 @@ class SeedableRandomSampler(RandomSampler):
         # print("Setting seed at epoch", self.epoch, seed)
         self.generator.manual_seed(seed)
         yield from super().__iter__()
-        self.set_epoch(self.epoch + 1)
 
     def set_epoch(self, epoch: int):
-        "Sets the current iteration of the sampler."
+        "Sets the current iteration of the sampler. Does not increment; assignment only."
         self.epoch = epoch
 
 
@@ -649,10 +650,16 @@ class DataLoaderAdapter:
                 if isinstance(batch_sampler, BatchSamplerShard):
                     # The finished shard iterator still holds the pre-epoch
                     # shuffle snapshot; rewrite it to the post-epoch state.
+                    # SeedableRandomSampler.__iter__ no longer auto-increments,
+                    # so persist the *next* epoch explicitly. Otherwise restore
+                    # would replay the permutation that just finished.
+                    shuffle_state = _capture_shuffle_state(batch_sampler)
+                    if "epoch" in shuffle_state:
+                        shuffle_state["epoch"] = iteration + 1
                     self.dl_state_dict["_iterator_finished"] = False
                     _replace_sampler_iter_state(
                         self.dl_state_dict,
-                        {"yielded": 0, "shuffle_state": _capture_shuffle_state(batch_sampler)},
+                        {"yielded": 0, "shuffle_state": shuffle_state},
                     )
                 else:
                     # Leave torchdata's iterator schema intact so a plain

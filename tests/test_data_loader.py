@@ -685,6 +685,37 @@ class DataLoaderTester(AccelerateTestCase):
         test_sampler_epoch(DataLoaderShard)
         test_sampler_epoch(DataLoaderDispatcher)
 
+    def test_seedable_random_sampler_set_epoch_only_assigns(self):
+        """`set_epoch` must only assign. `__iter__` must not auto-increment.
+
+        A completed-epoch restore can replay one extra full sampler cycle. If
+        `__iter__` increments `self.epoch`, that extra cycle shifts the next
+        permutation by one epoch.
+        """
+        dataset = list(range(16))
+        sampler = SeedableRandomSampler(dataset, data_seed=1234)
+        first = list(sampler)
+        assert sampler.epoch == 0
+        second = list(sampler)
+        assert first == second
+        sampler.set_epoch(1)
+        assert sampler.epoch == 1
+        third = list(sampler)
+        assert sampler.epoch == 1
+        assert first != third
+
+    def test_seedable_sampler_epochs_still_advance_via_dataloader_set_epoch(self):
+        """DataLoaderShard must keep changing the permutation across epochs via `set_epoch`."""
+        dataset = TensorDataset(torch.arange(32))
+        sampler = SeedableRandomSampler(dataset, data_seed=1234)
+        loader = DataLoaderShard(dataset, sampler=sampler, batch_size=4)
+        epoch0 = [batch[0].tolist() for batch in loader]
+        epoch1 = [batch[0].tolist() for batch in loader]
+        assert epoch0 != epoch1
+        loader.set_epoch(0)
+        replay = [batch[0].tolist() for batch in loader]
+        assert replay == epoch0
+
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
         """When n_shards == num_processes, native HF dataset sharding should be used."""
@@ -1086,9 +1117,23 @@ class StatefulDataLoaderTester(AccelerateTestCase):
             use_seedable_sampler=use_seedable_sampler,
         )
 
+    @staticmethod
+    def _consume_extra_rng():
+        """Draw from the global RNG the way a real resume would (init, eval, augments).
+
+        Without persisted sampler state, torchdata rebuilds the permutation from
+        the global RNG. A same-seed resume with no other consumers can match by
+        coincidence; these draws make that path fail.
+        """
+        _ = torch.randn(32, 32)
+        eval_loader = DataLoader(TensorDataset(torch.arange(16)), batch_size=4, shuffle=True)
+        list(eval_loader)
+        _ = torch.randperm(64)
+
     def _assert_fresh_loader_resume_matches(
         self, remaining, state_dict, process_index, use_seedable_sampler, seed=9999
     ):
+        self._consume_extra_rng()
         resumed_loader = self._make_shuffled_stateful_loader(
             process_index, use_seedable_sampler=use_seedable_sampler, seed=seed
         )
@@ -1255,7 +1300,71 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             save_accelerator_state(tmpdir, [], [], [], [loader], process_index=0, step=0)
             remaining = [self._batch_values(batch) for batch in iterator]
+            self._consume_extra_rng()
             resumed_loader = self._make_shuffled_stateful_loader(0, seed=9999)
             load_accelerator_state(tmpdir, [], [], [], [resumed_loader], process_index=0)
         resumed = [self._batch_values(batch) for batch in resumed_loader]
         assert resumed == remaining
+
+    @parameterized.expand(
+        [
+            (0, False, "mid_epoch_0"),
+            (1, False, "mid_epoch_0"),
+            (0, True, "mid_epoch_0"),
+            (1, True, "mid_epoch_0"),
+            (0, False, "mid_epoch_n"),
+            (1, False, "mid_epoch_n"),
+            (0, True, "mid_epoch_n"),
+            (1, True, "mid_epoch_n"),
+            (0, False, "epoch_boundary"),
+            (1, False, "epoch_boundary"),
+            (0, True, "epoch_boundary"),
+            (1, True, "epoch_boundary"),
+        ]
+    )
+    @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_resume_matches_uninterrupted_reference(
+        self, process_index, use_seedable_sampler, checkpoint
+    ):
+        """Resumed batches must match a never-interrupted reference stream bit-for-bit.
+
+        Covers the four restore bars under simulated DDP (`num_processes=2`):
+        mid-epoch-0, mid-epoch-N (N=1), completed-epoch N→N+1, and resume
+        without the caller re-seeding torch.
+        """
+        n_mid = 3
+        ref_loader = self._make_shuffled_stateful_loader(
+            process_index, use_seedable_sampler=use_seedable_sampler, seed=1234
+        )
+        epoch0 = [self._batch_values(batch) for batch in ref_loader]
+        epoch1 = [self._batch_values(batch) for batch in ref_loader]
+        reference = epoch0 + epoch1
+        assert len(epoch0) > n_mid
+
+        loader = self._make_shuffled_stateful_loader(
+            process_index, use_seedable_sampler=use_seedable_sampler, seed=1234
+        )
+        if checkpoint == "mid_epoch_0":
+            iterator = iter(loader)
+            consumed = [self._batch_values(next(iterator)) for _ in range(n_mid)]
+            state_dict = loader.state_dict()
+        elif checkpoint == "mid_epoch_n":
+            consumed = [self._batch_values(batch) for batch in loader]
+            iterator = iter(loader)
+            consumed.extend(self._batch_values(next(iterator)) for _ in range(n_mid))
+            state_dict = loader.state_dict()
+        elif checkpoint == "epoch_boundary":
+            consumed = [self._batch_values(batch) for batch in loader]
+            state_dict = loader.state_dict()
+        else:
+            raise AssertionError(checkpoint)
+
+        self._consume_extra_rng()
+        resumed_loader = self._make_shuffled_stateful_loader(
+            process_index, use_seedable_sampler=use_seedable_sampler, seed=None
+        )
+        resumed_loader.load_state_dict(state_dict)
+        resumed = [self._batch_values(batch) for batch in resumed_loader]
+        if checkpoint == "mid_epoch_0":
+            resumed.extend(self._batch_values(batch) for batch in resumed_loader)
+        assert consumed + resumed == reference
