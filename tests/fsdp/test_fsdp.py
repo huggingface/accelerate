@@ -33,6 +33,7 @@ from accelerate.test_utils.testing import (
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
+    require_peft,
     run_first,
     slow,
 )
@@ -925,3 +926,32 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
+
+    @require_fsdp2
+    @require_peft
+    def test_peft_checkpointing(self):
+        """Every rank's shard of the adapter must survive a `save_fsdp_model`/`load_fsdp_model` round-trip."""
+        test_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "peft_checkpointing.py")
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+            fsdp_auto_wrap_policy="TRANSFORMER_BASED_WRAP",
+            fsdp_transformer_layer_cls_to_wrap="Block",
+        )
+        cmd.append("--fsdp_reshard_after_forward=true")
+
+        for state_dict_type in FSDP2_STATE_DICT_TYPE:
+            # `transformers.Trainer` always passes `adapter_only=True`, but the flag is optional for other callers
+            for adapter_only in (True, False):
+                cmd_config = cmd + [
+                    f"--fsdp_state_dict_type={state_dict_type}",
+                    test_file_path,
+                    f"--output_dir={os.path.join(self.tmpdir, state_dict_type, str(adapter_only))}",
+                ]
+                if adapter_only:
+                    cmd_config.append("--adapter_only")
+                with patch_environment(omp_num_threads=1):
+                    execute_subprocess_async(cmd_config)

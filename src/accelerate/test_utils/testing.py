@@ -58,6 +58,7 @@ from ..utils import (
     is_neuron_available,
     is_npu_available,
     is_pandas_available,
+    is_peft_available,
     is_pippy_available,
     is_pytest_available,
     is_schedulefree_available,
@@ -257,6 +258,13 @@ def require_fp8(test_case):
 
 def require_fsdp2(test_case):
     return unittest.skipUnless(is_torch_version(">=", "2.5.0"), "test requires FSDP2 (torch >= 2.5.0)")(test_case)
+
+
+def require_peft(test_case):
+    """
+    Decorator marking a test that requires PEFT. These tests are skipped when PEFT isn't installed.
+    """
+    return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
 
 
 def require_mlu(test_case):

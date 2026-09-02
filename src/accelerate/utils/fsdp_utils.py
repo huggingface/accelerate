@@ -20,6 +20,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import nullcontext
+from dataclasses import replace
 from pathlib import Path
 from typing import Callable, Union
 
@@ -55,6 +56,13 @@ def disable_fsdp_ram_efficient_loading():
 
 def _get_model_state_dict(model, adapter_only=False, sd_options=None):
     if adapter_only and is_peft_model(model):
+        if sd_options is not None and sd_options.full_state_dict:
+            from torch.distributed.checkpoint.state_dict import get_model_state_dict
+
+            # NOTE: Under FSDP2 `get_peft_model_state_dict` returns sharded `DTensor`s
+            #  that it has no handling for.
+            return get_model_state_dict(model, options=replace(sd_options, ignore_frozen_params=True))
+
         from peft import get_peft_model_state_dict
 
         return get_peft_model_state_dict(model, adapter_name=model.active_adapter)
@@ -70,6 +78,12 @@ def _get_model_state_dict(model, adapter_only=False, sd_options=None):
 
 def _set_model_state_dict(model, state_dict, adapter_only=False, sd_options=None):
     if adapter_only and is_peft_model(model):
+        # Invariant: `sd_options` is not None only for FSDP2
+        if sd_options is not None and sd_options.full_state_dict:
+            from torch.distributed.checkpoint.state_dict import set_model_state_dict
+
+            return set_model_state_dict(model, state_dict, options=replace(sd_options, strict=False))
+
         from peft import set_peft_model_state_dict
 
         return set_peft_model_state_dict(model, state_dict, adapter_name=model.active_adapter)
