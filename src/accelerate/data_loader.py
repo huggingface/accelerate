@@ -402,10 +402,17 @@ class DataLoaderStateMixin:
     def begin(self):
         "Prepares the gradient state for the current dataloader"
         self.reset()
-        with suppress(Exception):
-            if not self._drop_last:
-                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-                self.remainder = length % self.total_batch_size
+        if getattr(self, "_already_sharded", False):
+            # No Accelerate padding on this path, so `gather_for_metrics` must not
+            # treat `len(dataset) % (batch_size * num_processes)` as leftover samples.
+            # That formula assumes a global dataset length; a per-rank subset would
+            # invent a remainder and drop real eval rows.
+            self.remainder = 0
+        else:
+            with suppress(Exception):
+                if not self._drop_last:
+                    length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+                    self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 
     def end(self):
@@ -553,6 +560,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         _drop_last: bool = False,
         _non_blocking: bool = False,
         _total_num_processes: int = 1,
+        _already_sharded: bool = False,
         torch_device_mesh=None,
         iteration=0,
         **kwargs,
@@ -566,6 +574,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self._drop_last = _drop_last
         self._non_blocking = _non_blocking
         self._total_num_processes = _total_num_processes
+        self._already_sharded = _already_sharded
         self.iteration = iteration
 
     def adjust_state_dict_for_prefetch(self):
@@ -1337,6 +1346,7 @@ def prepare_data_loader(
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
             _total_num_processes=num_processes if already_sharded else 1,
+            _already_sharded=already_sharded,
             synchronized_generator=synchronized_generator,
             use_stateful_dataloader=use_stateful_dataloader,
             **kwargs,
@@ -1351,6 +1361,7 @@ def prepare_data_loader(
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
             _total_num_processes=num_processes if already_sharded else 1,
+            _already_sharded=already_sharded,
             use_stateful_dataloader=use_stateful_dataloader,
             **kwargs,
         )
@@ -1492,6 +1503,7 @@ def skip_first_batches(dataloader, num_batches=0):
             synchronized_generator=dataloader.synchronized_generator,
             iteration=dataloader.iteration,
             _total_num_processes=getattr(dataloader, "_total_num_processes", 1),
+            _already_sharded=getattr(dataloader, "_already_sharded", False),
             **kwargs,
         )
     else:

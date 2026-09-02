@@ -858,6 +858,44 @@ class DataLoaderTester(AccelerateTestCase):
         assert hasattr(result, "set_epoch")
         assert hasattr(result, "gradient_state")
 
+    def test_already_sharded_local_subset_does_not_invent_remainder(self):
+        """A per-rank subset must not report a remainder against the global batch size."""
+        loader = prepare_data_loader(
+            DataLoader(list(range(8)), batch_size=4),
+            num_processes=4,
+            process_index=0,
+            already_sharded=True,
+        )
+        loader.begin()
+        try:
+            assert loader.remainder == 0
+        finally:
+            loader.end()
+
+    def test_already_sharded_join_uneven_inputs_skips_missing_even_batches(self):
+        """`join_uneven_inputs(..., even_batches=False)` must not read a missing attribute."""
+        from unittest.mock import MagicMock, patch
+
+        accelerator = Accelerator()
+        loader = prepare_data_loader(
+            DataLoader(list(range(8)), batch_size=4),
+            num_processes=4,
+            process_index=0,
+            already_sharded=True,
+        )
+        accelerator._dataloaders = [loader]
+        assert not hasattr(loader.batch_sampler, "even_batches")
+
+        join_cm = MagicMock()
+        join_cm.__enter__.return_value = None
+        join_cm.__exit__.return_value = None
+        with (
+            patch.object(type(accelerator), "multi_device", new=True),
+            patch("accelerate.accelerator.Join", return_value=join_cm),
+        ):
+            with accelerator.join_uneven_inputs([object()], even_batches=False):
+                pass
+
     def test_ensure_dataloader_gets_cleaned_up(self):
         # Ensure that the dataloader gets cleaned up properly
         class Dummy:
