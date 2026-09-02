@@ -47,6 +47,7 @@ from accelerate.utils.modeling import (
     get_module_size_with_ties,
     get_non_persistent_buffers,
     get_state_dict_offloaded_model,
+    has_offloaded_params,
     infer_auto_device_map,
     load_checkpoint_in_model,
     load_state_dict,
@@ -78,6 +79,19 @@ class NestedModelForTest(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+
+class ModelWithRootTensorsForTest(nn.Module):
+    """Registers a parameter and a buffer on the root module, as vision models do for `cls_token`/`pos_embed`."""
+
+    def __init__(self):
+        super().__init__()
+        self.cls_token = nn.Parameter(torch.randn(1, 1, 3))
+        self.register_buffer("pos_embed", torch.randn(3))
+        self.model = ModelForTest()
+
+    def forward(self, x):
+        return self.model(x + self.cls_token + self.pos_embed)
 
 
 class LinearWithNonPersistentBuffers(nn.Module):
@@ -1094,7 +1108,7 @@ class ModelingUtilsTester(unittest.TestCase):
             convert_file_size_to_int("-1GB")
 
     def test_get_state_dict_offloaded_model(self):
-        for model_cls in (ModelForTest, NestedModelForTest):
+        for model_cls in (ModelForTest, NestedModelForTest, ModelWithRootTensorsForTest):
             model = model_cls()
             execution_device = torch.device(torch_device)
             original_state_dict = model.state_dict()
@@ -1152,6 +1166,18 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.linear1.weight.device == offload_device
         assert model.batchnorm.weight.device == offload_device
         assert model.linear2.weight.device == offload_device
+
+    def test_align_module_device_offloaded_root(self):
+        # offloading attaches a SequentialHook to the root module, which must still be recognized as offloaded
+        model = ModelWithRootTensorsForTest()
+        cpu_offload(model, execution_device=torch.device(torch_device), offload_buffers=True)
+
+        assert has_offloaded_params(model)
+        with align_module_device(model, execution_device="cpu"):
+            assert model.cls_token.device == torch.device("cpu")
+            assert model.pos_embed.device == torch.device("cpu")
+        assert model.cls_token.device == torch.device("meta")
+        assert model.pos_embed.device == torch.device("meta")
 
     def test_align_module_device_offloaded_nested(self):
         model = NestedModelForTest()

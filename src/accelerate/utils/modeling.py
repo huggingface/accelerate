@@ -1750,8 +1750,8 @@ def get_state_dict_offloaded_model(model: nn.Module):
     state_dict = {}
     placeholders = set()
     for name, module in model.named_modules():
-        if name == "":
-            continue
+        # the root module is included so that parameters and buffers registered directly on it are saved
+        prefix = f"{name}." if name else ""
 
         try:
             with align_module_device(module, "cpu"):
@@ -1762,10 +1762,10 @@ def get_state_dict_offloaded_model(model: nn.Module):
         for key in module_state_dict:
             # ignore placeholder parameters that are still on the meta device
             if module_state_dict[key].device == torch.device("meta"):
-                placeholders.add(name + f".{key}")
+                placeholders.add(prefix + key)
                 continue
             params = module_state_dict[key]
-            state_dict[name + f".{key}"] = params.to("cpu")  # move buffers to cpu
+            state_dict[prefix + key] = params.to("cpu")  # move buffers to cpu
     for key in placeholders.copy():
         if key in state_dict:
             placeholders.remove(key)
@@ -2156,6 +2156,21 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
             return torch.cuda.amp.GradScaler(**kwargs)
 
 
+def _get_offload_hook(module: torch.nn.Module):
+    """
+    Returns the `AlignDevicesHook` that offloads `module`, or `None` if there is none. Hooks chained on a module are
+    wrapped in a `SequentialHook`, which is what `cpu_offload`, `disk_offload` and `dispatch_model` attach to the root
+    module, so the wrapper is unpacked before looking for the offloading hook.
+    """
+    from ..hooks import AlignDevicesHook, SequentialHook  # avoid circular import
+
+    hook = getattr(module, "_hf_hook", None)
+    for candidate in hook.hooks if isinstance(hook, SequentialHook) else (hook,):
+        if isinstance(candidate, AlignDevicesHook) and candidate.offload:
+            return candidate
+    return None
+
+
 def has_offloaded_params(module: torch.nn.Module) -> bool:
     """
     Checks if a module has offloaded parameters by checking if the given module has a AlignDevicesHook attached with
@@ -2167,9 +2182,7 @@ def has_offloaded_params(module: torch.nn.Module) -> bool:
     Returns:
         bool: `True` if the module has an offload hook and offloading is enabled, `False` otherwise.
     """
-    from ..hooks import AlignDevicesHook  # avoid circular import
-
-    return hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload
+    return _get_offload_hook(module) is not None
 
 
 @contextlib.contextmanager
@@ -2184,18 +2197,19 @@ def align_module_device(module: torch.nn.Module, execution_device: Optional[torc
             If provided, overrides the module's execution device within the context. Otherwise, use hook execution
             device or pass
     """
-    if has_offloaded_params(module):
+    offload_hook = _get_offload_hook(module)
+    if offload_hook is not None:
         if execution_device is not None:
-            original_device = module._hf_hook.execution_device
-            module._hf_hook.execution_device = execution_device
+            original_device = offload_hook.execution_device
+            offload_hook.execution_device = execution_device
 
         try:
-            module._hf_hook.pre_forward(module)
+            offload_hook.pre_forward(module)
             yield
         finally:
-            module._hf_hook.post_forward(module, None)
+            offload_hook.post_forward(module, None)
             if execution_device is not None:
-                module._hf_hook.execution_device = original_device
+                offload_hook.execution_device = original_device
 
     elif execution_device is not None:
         devices = {name: param.device for name, param in module.named_parameters(recurse=False)}
