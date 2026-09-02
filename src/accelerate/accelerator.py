@@ -718,6 +718,10 @@ class Accelerator:
         return False
 
     @property
+    def already_sharded(self):
+        return getattr(self.dataloader_config, "already_sharded", False)
+
+    @property
     def project_dir(self):
         return self.project_configuration.project_dir
 
@@ -2728,6 +2732,7 @@ class Accelerator:
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
             torch_device_mesh=device_mesh,
+            already_sharded=self.already_sharded,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader

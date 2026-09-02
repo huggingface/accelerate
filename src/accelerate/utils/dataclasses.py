@@ -854,6 +854,12 @@ class DataLoaderConfiguration:
             If set to `True`, the dataloader prepared by the Accelerator will be backed by
             [torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed.
+        already_sharded (`bool`, defaults to `False`):
+            If set to `True`, Accelerate assumes each process's `DataLoader` is already sharded (for example via a
+            rank-aware `DistributedSampler`, a pre-sliced iterable, or `datasets.IterableDataset.shard()`) and skips
+            its own sharding so the data is not split twice. The wrapper features (device placement, `set_epoch`
+            forwarding, state tracking) are preserved. `even_batches` does not apply in this mode, so the user is
+            responsible for equal step counts across ranks. Incompatible with `dispatch_batches` and `split_batches`.
     """
 
     split_batches: bool = field(
@@ -910,6 +916,16 @@ class DataLoaderConfiguration:
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
+        },
+    )
+    already_sharded: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, Accelerate assumes each process's `DataLoader` is already sharded (e.g. via a"
+            " rank-aware `DistributedSampler`, a pre-sliced iterable, or `datasets.IterableDataset.shard()`) and skips"
+            " its own sharding so the data is not split twice, while preserving device placement, `set_epoch`"
+            " forwarding, and state tracking. `even_batches` does not apply; the user is responsible for equal step"
+            " counts across ranks. Incompatible with `dispatch_batches` and `split_batches`."
         },
     )
 
