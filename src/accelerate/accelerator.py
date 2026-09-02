@@ -34,7 +34,7 @@ import torch.utils.hooks as hooks
 
 from accelerate.utils.dataclasses import FP8BackendType
 
-from .big_modeling import _attach_context_parallel_hooks
+from .big_modeling import _attach_context_parallel_hooks, _refuse_recurrent_layers_under_sequence_parallelism
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -2405,6 +2405,8 @@ class Accelerator:
                     raise ValueError(
                         "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
                     )
+
+                _refuse_recurrent_layers_under_sequence_parallelism(model)
 
                 kwagrs = {}
                 signature = inspect.signature(UlyssesSPAttentionHF.register_with_transformers)
