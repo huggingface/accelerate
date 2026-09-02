@@ -13,14 +13,16 @@
 # limitations under the License.
 
 import random
+import tempfile
 import weakref
 
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler, TensorDataset
 
 from accelerate import Accelerator, PartialState
+from accelerate.checkpointing import load_accelerator_state, save_accelerator_state
 from accelerate.data_loader import (
     BatchSamplerShard,
     DataLoaderDispatcher,
@@ -1064,3 +1066,129 @@ class StatefulDataLoaderTester(AccelerateTestCase):
 
         gradient_state = GradientState()
         assert gradient_state.active_dataloader is None
+
+    @staticmethod
+    def _batch_values(batch):
+        tensor = batch[0] if isinstance(batch, (list, tuple)) else batch
+        return tensor.detach().cpu().tolist()
+
+    @staticmethod
+    def _make_shuffled_stateful_loader(process_index, use_seedable_sampler=False, seed=1234):
+        if seed is not None:
+            torch.manual_seed(seed)
+        dataset = TensorDataset(torch.arange(64))
+        dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0)
+        return prepare_data_loader(
+            dataloader,
+            num_processes=2,
+            process_index=process_index,
+            use_stateful_dataloader=True,
+            use_seedable_sampler=use_seedable_sampler,
+        )
+
+    def _assert_fresh_loader_resume_matches(
+        self, remaining, state_dict, process_index, use_seedable_sampler, seed=9999
+    ):
+        resumed_loader = self._make_shuffled_stateful_loader(
+            process_index, use_seedable_sampler=use_seedable_sampler, seed=seed
+        )
+        resumed_loader.load_state_dict(state_dict)
+        resumed = [self._batch_values(batch) for batch in resumed_loader]
+        assert resumed == remaining
+
+    @parameterized.expand([(0, False), (1, False), (0, True), (1, True)])
+    @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_resume_after_epoch_boundary(self, process_index, use_seedable_sampler):
+        """Fresh-loader resume after a full epoch plus N batches of the next epoch.
+
+        Regression test for https://github.com/huggingface/accelerate/issues/4195:
+        the cursor was restored but the shuffle permutation was not.
+        """
+        loader = self._make_shuffled_stateful_loader(process_index, use_seedable_sampler=use_seedable_sampler)
+        list(loader)
+        iterator = iter(loader)
+        for _ in range(3):
+            next(iterator)
+        state_dict = loader.state_dict()
+        remaining = [self._batch_values(batch) for batch in iterator]
+        assert remaining, "expected leftover batches in the second epoch"
+        self._assert_fresh_loader_resume_matches(remaining, state_dict, process_index, use_seedable_sampler)
+
+    @parameterized.expand([(0, False), (1, False), (0, True), (1, True)])
+    @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_resume_mid_first_epoch(self, process_index, use_seedable_sampler):
+        loader = self._make_shuffled_stateful_loader(process_index, use_seedable_sampler=use_seedable_sampler)
+        iterator = iter(loader)
+        for _ in range(3):
+            next(iterator)
+        state_dict = loader.state_dict()
+        remaining = [self._batch_values(batch) for batch in iterator]
+        self._assert_fresh_loader_resume_matches(remaining, state_dict, process_index, use_seedable_sampler)
+
+    @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_orders_differ_across_ranks(self):
+        batches_by_rank = []
+        for process_index in (0, 1):
+            loader = self._make_shuffled_stateful_loader(process_index)
+            batches_by_rank.append([self._batch_values(batch) for batch in loader])
+        assert batches_by_rank[0] != batches_by_rank[1]
+
+    @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_resume_without_reseed(self):
+        """Resume must not depend on the caller re-seeding torch before building the new loader."""
+        loader = self._make_shuffled_stateful_loader(0, seed=1234)
+        iterator = iter(loader)
+        for _ in range(3):
+            next(iterator)
+        state_dict = loader.state_dict()
+        remaining = [self._batch_values(batch) for batch in iterator]
+
+        torch.manual_seed(42)
+        resumed_loader = self._make_shuffled_stateful_loader(0, seed=None)
+        resumed_loader.load_state_dict(state_dict)
+        resumed = [self._batch_values(batch) for batch in resumed_loader]
+        assert resumed == remaining
+
+    @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_resume_random_sampler_generator_none(self):
+        dataset = TensorDataset(torch.arange(64))
+        sampler = RandomSampler(dataset)
+        assert sampler.generator is None
+        batch_sampler = BatchSamplerShard(
+            BatchSampler(sampler, batch_size=4, drop_last=False),
+            num_processes=2,
+            process_index=0,
+        )
+        loader = DataLoaderShard(dataset, batch_sampler=batch_sampler, use_stateful_dataloader=True)
+        iterator = iter(loader)
+        for _ in range(3):
+            next(iterator)
+        state_dict = loader.state_dict()
+        remaining = [self._batch_values(batch) for batch in iterator]
+
+        sampler2 = RandomSampler(dataset)
+        assert sampler2.generator is None
+        batch_sampler2 = BatchSamplerShard(
+            BatchSampler(sampler2, batch_size=4, drop_last=False),
+            num_processes=2,
+            process_index=0,
+        )
+        resumed_loader = DataLoaderShard(dataset, batch_sampler=batch_sampler2, use_stateful_dataloader=True)
+        resumed_loader.load_state_dict(state_dict)
+        resumed = [self._batch_values(batch) for batch in resumed_loader]
+        assert resumed == remaining
+
+    @require_torchdata_stateful_dataloader
+    def test_stateful_shuffle_resume_via_accelerator_save_state(self):
+        loader = self._make_shuffled_stateful_loader(0)
+        list(loader)
+        iterator = iter(loader)
+        for _ in range(3):
+            next(iterator)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_accelerator_state(tmpdir, [], [], [], [loader], process_index=0, step=0)
+            remaining = [self._batch_values(batch) for batch in iterator]
+            resumed_loader = self._make_shuffled_stateful_loader(0, seed=9999)
+            load_accelerator_state(tmpdir, [], [], [], [resumed_loader], process_index=0)
+        resumed = [self._batch_values(batch) for batch in resumed_loader]
+        assert resumed == remaining

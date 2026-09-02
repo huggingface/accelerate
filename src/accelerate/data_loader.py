@@ -43,6 +43,11 @@ from .utils import (
 
 logger = get_logger(__name__)
 
+# Extra key stored in DataLoaderAdapter.state_dict so a fresh loader can resume
+# the same sampler epoch after a completed pass. Omitted when iteration == 0
+# to keep adapter state_dicts comparable to a raw StatefulDataLoader.
+_ACCELERATE_ITERATION = "_accelerate_iteration"
+
 # kwargs of the DataLoader in min version 2.0
 _PYTORCH_DATALOADER_KWARGS = {
     "batch_size": 1,
@@ -186,6 +191,9 @@ class BatchSamplerShard(BatchSampler):
             return length + 1 if self.process_index < len(self.batch_sampler) % self.num_processes else length
 
     def __iter__(self):
+        return _BatchSamplerShardIterator(self)
+
+    def _raw_iter(self):
         return self._iter_with_split() if self.split_batches else self._iter_with_no_split()
 
     def _iter_with_split(self):
@@ -269,6 +277,97 @@ class BatchSamplerShard(BatchSampler):
                         cycle_index = end_index
                     batch = []
                     idx += 1
+
+
+def _make_torch_generator():
+    device = torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
+    generator = torch.Generator(device=device)
+    seed = int(torch.empty((), dtype=torch.int64).random_().item())
+    generator.manual_seed(seed)
+    return generator
+
+
+def _get_inner_index_sampler(batch_sampler):
+    """Return the sampler that produces dataset indices, unwrapping BatchSamplerShard."""
+    inner_batch_sampler = getattr(batch_sampler, "batch_sampler", None)
+    if inner_batch_sampler is not None:
+        inner_sampler = getattr(inner_batch_sampler, "sampler", None)
+        if inner_sampler is not None:
+            return inner_sampler
+    return getattr(batch_sampler, "sampler", None)
+
+
+def _capture_shuffle_state(batch_sampler):
+    """Snapshot the state needed to regenerate the current epoch's permutation."""
+    sampler = _get_inner_index_sampler(batch_sampler)
+    if sampler is None:
+        return {}
+    state = {}
+    if isinstance(sampler, SeedableRandomSampler):
+        state["epoch"] = sampler.epoch
+        state["initial_seed"] = sampler.initial_seed
+    if isinstance(sampler, RandomSampler):
+        # RandomSampler(generator=None) draws from the global RNG each epoch, which
+        # cannot be restored. Attach a dedicated generator so the permutation is
+        # a function of serializable state. SeedableRandomSampler reseeds from
+        # (epoch, initial_seed) and should not consume extra global RNG here.
+        if sampler.generator is None and not isinstance(sampler, SeedableRandomSampler):
+            sampler.generator = _make_torch_generator()
+        if sampler.generator is not None:
+            state["generator_state"] = sampler.generator.get_state()
+    return state
+
+
+def _restore_shuffle_state(batch_sampler, state):
+    sampler = _get_inner_index_sampler(batch_sampler)
+    if sampler is None or not state:
+        return
+    if isinstance(sampler, SeedableRandomSampler):
+        if "initial_seed" in state:
+            sampler.initial_seed = state["initial_seed"]
+        if "epoch" in state:
+            sampler.set_epoch(state["epoch"])
+    if "generator_state" in state and isinstance(sampler, RandomSampler):
+        if sampler.generator is None:
+            sampler.generator = _make_torch_generator()
+        sampler.generator.set_state(state["generator_state"])
+
+
+class _BatchSamplerShardIterator:
+    """Stateful iterator over a `BatchSamplerShard`.
+
+    `StatefulDataLoader` will persist this object's `state_dict` as
+    `_sampler_iter_state` when the iterator implements the torchdata Stateful
+    protocol. That lets a freshly constructed loader restore both the shuffle
+    permutation (generator / SeedableRandomSampler epoch) and the cursor.
+    """
+
+    def __init__(self, shard: "BatchSamplerShard"):
+        self.shard = shard
+        # Snapshot *before* iterating the inner sampler, which consumes the generator.
+        self._snapshot = _capture_shuffle_state(shard)
+        self._inner = shard._raw_iter()
+        self._yielded = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        batch = next(self._inner)
+        self._yielded += 1
+        return batch
+
+    def state_dict(self):
+        return {"yielded": self._yielded, "shuffle_state": self._snapshot}
+
+    def load_state_dict(self, state_dict):
+        self._snapshot = state_dict.get("shuffle_state", {})
+        _restore_shuffle_state(self.shard, self._snapshot)
+        self._inner = self.shard._raw_iter()
+        self._yielded = 0
+        for _ in range(state_dict.get("yielded", 0)):
+            next(self._inner)
+            self._yielded += 1
 
 
 class IterableDatasetShard(IterableDataset):
@@ -454,6 +553,12 @@ class DataLoaderAdapter:
         return self.dl_state_dict
 
     def load_state_dict(self, state_dict):
+        state_dict = dict(state_dict)
+        iteration = state_dict.pop(_ACCELERATE_ITERATION, None)
+        if iteration is not None and hasattr(self, "set_epoch"):
+            self.set_epoch(iteration)
+        elif iteration is not None and hasattr(self, "iteration"):
+            self.iteration = iteration
         self.base_dataloader.load_state_dict(state_dict)
 
     @property
@@ -505,6 +610,10 @@ class DataLoaderAdapter:
             self.adjust_state_dict_for_prefetch()
             # Then tag if we are at the end of the dataloader
             self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
+            # Persist the sampler epoch so a fresh loader does not restart at epoch 0.
+            iteration = getattr(self, "iteration", 0)
+            if iteration:
+                self.dl_state_dict[_ACCELERATE_ITERATION] = iteration
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -1324,6 +1433,16 @@ def prepare_data_loader(
 
     if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
         dataloader.set_sampler(sampler)
+        # DataLoaderAdapter may have already created a StatefulDataLoader iterator
+        # (to snapshot the initial state_dict) against the original RandomSampler.
+        # Drop it so the first epoch uses SeedableRandomSampler.
+        if use_stateful_dataloader:
+            base = getattr(dataloader, "base_dataloader", None)
+            if base is not None and hasattr(base, "state_dict"):
+                base._iterator = None
+                if hasattr(base, "_initial_iter_for_state_dict"):
+                    base._initial_iter_for_state_dict = False
+                dataloader.dl_state_dict = base.state_dict()
     if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
