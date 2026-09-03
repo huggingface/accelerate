@@ -324,6 +324,9 @@ class IterableDatasetShard(IterableDataset):
         self.num_processes = num_processes
         self.process_index = process_index
         self.split_batches = split_batches
+        # `__iter__` seeds the underlying dataset's generator with `self.epoch`,
+        # so it must exist even if `set_epoch` is never called.
+        self.epoch = 0
 
     def set_epoch(self, epoch):
         self.epoch = epoch
