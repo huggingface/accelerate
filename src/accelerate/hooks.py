@@ -335,7 +335,7 @@ class AlignDevicesHook(ModelHook):
                         module, name, self.execution_device, tied_params_map=self.tied_params_map
                     )
             elif self.offload_buffers and self.execution_device is not None:
-                for name in get_non_persistent_buffers(module, recurse=self.place_submodules):
+                for name in get_non_persistent_buffers(module, recurse=self.place_submodules, fqns=True):
                     set_module_tensor_to_device(
                         module, name, self.execution_device, tied_params_map=self.tied_params_map
                     )
