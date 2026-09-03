@@ -128,11 +128,14 @@ def convert_file_size_to_int(size: Union[int, str]):
         if isinstance(size, int):
             mem_size = size
         elif size.upper().endswith("GIB"):
-            mem_size = int(float(size[:-3]) * (2**30))
+            int_size = int(float(size[:-3]) * (2**30))
+            mem_size = int_size // 8 if size.endswith("b") else int_size
         elif size.upper().endswith("MIB"):
-            mem_size = int(float(size[:-3]) * (2**20))
+            int_size = int(float(size[:-3]) * (2**20))
+            mem_size = int_size // 8 if size.endswith("b") else int_size
         elif size.upper().endswith("KIB"):
-            mem_size = int(float(size[:-3]) * (2**10))
+            int_size = int(float(size[:-3]) * (2**10))
+            mem_size = int_size // 8 if size.endswith("b") else int_size
         elif size.upper().endswith("GB"):
             int_size = int(float(size[:-2]) * (10**9))
             mem_size = int_size // 8 if size.endswith("b") else int_size

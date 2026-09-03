@@ -1084,6 +1084,19 @@ class ModelingUtilsTester(unittest.TestCase):
         result = convert_file_size_to_int(500)
         assert result == 500
 
+        # A lowercase trailing "b" is bits, so the byte count is an eighth of the same unit
+        # spelled with an uppercase "B". That holds for the binary units as well as the decimal
+        # ones: "1Gib" is a gibibit, "1GiB" a gibibyte.
+        for spelling, expected in [
+            ("100Kb", (100 * (10**3)) // 8),
+            ("100Mb", (100 * (10**6)) // 8),
+            ("2Gb", (2 * (10**9)) // 8),
+            ("512Kib", (512 * (2**10)) // 8),
+            ("100Mib", (100 * (2**20)) // 8),
+            ("2Gib", (2 * (2**30)) // 8),
+        ]:
+            assert convert_file_size_to_int(spelling) == expected, spelling
+
         with self.assertRaises(ValueError):
             convert_file_size_to_int("5MBB")
 
