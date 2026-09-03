@@ -185,7 +185,10 @@ def dtype_byte_size(dtype: torch.dtype):
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
-    return bit_size // 8
+    # torch has no sub-byte storage: torch.uint4, torch.int4, torch.float4_e2m1fn_x2 and the rest of
+    # the sub-byte dtypes all report element_size() == 1. Without the floor they divide down to zero
+    # bytes, and a module holding them measures as free.
+    return max(bit_size // 8, 1)
 
 
 def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:

@@ -153,6 +153,27 @@ class ModelingUtilsTester(unittest.TestCase):
         ):
             if hasattr(torch, name):
                 self.assertEqual(dtype_byte_size(getattr(torch, name)), 1, msg=name)
+        # Sub-byte dtypes occupy a whole byte per element in torch (element_size() == 1), so they
+        # must not floor to zero bytes, which would make a module holding them measure as free.
+        for name in (
+            "uint1",
+            "uint2",
+            "uint3",
+            "uint4",
+            "uint5",
+            "uint6",
+            "uint7",
+            "int1",
+            "int2",
+            "int3",
+            "int4",
+            "int5",
+            "int6",
+            "int7",
+            "float4_e2m1fn_x2",
+        ):
+            if hasattr(torch, name):
+                self.assertEqual(dtype_byte_size(getattr(torch, name)), 1, msg=name)
 
     def check_set_module_tensor_for_device(self, model, device1, device2):
         assert model.linear1.weight.device == torch.device(device1)
