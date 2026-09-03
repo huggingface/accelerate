@@ -26,7 +26,6 @@ from accelerate.utils.imports import (
     is_8bit_bnb_available,
 )
 
-from ..big_modeling import dispatch_model, init_empty_weights
 from .dataclasses import BnbQuantizationConfig
 from .modeling import (
     find_tied_parameters,
@@ -84,6 +83,7 @@ def load_and_quantize_model(
     Returns:
         `torch.nn.Module`: The quantized model
     """
+    from ..big_modeling import dispatch_model, init_empty_weights
 
     load_in_4bit = bnb_quantization_config.load_in_4bit
     load_in_8bit = bnb_quantization_config.load_in_8bit
@@ -386,6 +386,8 @@ def get_keys_to_not_convert(model):
     model (`torch.nn.Module`):
         Input model
     """
+    from ..big_modeling import init_empty_weights
+
     # Create a copy of the model
     with init_empty_weights():
         tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
