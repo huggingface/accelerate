@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import torch
@@ -314,6 +315,27 @@ def launch_command_parser(subparsers=None):
         help=(
             "Base directory to use for log files when using torchrun/torch.distributed.run as launcher. "
             "Use with --tee to redirect std streams info log files."
+        ),
+    )
+    distributed_args.add_argument(
+        "-r",
+        "--redirects",
+        type=str,
+        default="0",
+        help=(
+            "Redirect std streams into per-rank log files under --log_dir (e.g. `3` for stdout+stderr on all "
+            "ranks, `0:1,1:2` for per-rank control). Passed through to torch.distributed.run."
+        ),
+    )
+    distributed_args.add_argument(
+        "--local_ranks_filter",
+        "--local-ranks-filter",
+        type=str,
+        default="",
+        help=(
+            "Only echo logs from these local ranks to the console (e.g. `0`). Passed through to "
+            "torch.distributed.run. Per-rank log files are still written in full; if --tee/--log_dir are unset "
+            "they are enabled automatically so that muted output is never lost."
         ),
     )
     distributed_args.add_argument(
@@ -989,11 +1011,68 @@ def launch_command_parser(subparsers=None):
     return parser
 
 
+def _guard_console_filter(args):
+    """Never mute a rank whose output is not being written to disk.
+
+    torchrun routes a filtered rank's console stream to os.devnull when no redirect is
+    configured, which would destroy the muted output instead of demoting it to a file.
+    """
+    if not getattr(args, "local_ranks_filter", None):
+        return args
+    if args.log_dir is None:
+        args.log_dir = os.path.join(tempfile.gettempdir(), f"accelerate_logs_{os.getpid()}")
+        logger.warning(
+            f"--local_ranks_filter was set without --log_dir; per-rank logs will be written to "
+            f"{args.log_dir} so that muted output is preserved."
+        )
+    if args.tee in (None, "", "0") and args.redirects in (None, "", "0"):
+        args.tee = "3"
+        logger.warning("--local_ranks_filter was set without --tee/--redirects; enabling --tee 3.")
+    return args
+
+
+def _report_child_failure(error, entrypoint, quiet=False, log_dir=None, tee=None):
+    """Print one aggregated diagnostic for a multi-rank failure, then exit or re-raise.
+
+    Additive by default: the original ``ChildFailedError`` is re-raised unchanged (same
+    exception type, same exit semantics). With ``--quiet``, exits with the first failure's
+    code mapped to the shell convention (signal ``-N`` -> ``128 + N``). If the formatter
+    returns ``None`` (disabled, no per-rank data, or an internal formatting error), the
+    original exception propagates exactly as before.
+
+    Accelerate-side values (``quiet``/``log_dir``/``tee``) must be captured by the caller
+    BEFORE ``_filter_args`` replaces the namespace with torchrun-recognized args only.
+    """
+    from accelerate.utils.error_reporting import classify_rank_failures, summarize_child_failure
+
+    summary = summarize_child_failure(error, entrypoint=entrypoint, log_dir=log_dir, tee=tee)
+    if summary is None:
+        raise error
+    print(summary, file=sys.stderr, flush=True)
+    if quiet:
+        sys.exit(classify_rank_failures(error.failures)["exitcode"])
+    raise error
+
+
 def simple_launcher(args):
     cmd, current_env = prepare_simple_launcher_cmd_env(args)
 
     process = subprocess.Popen(cmd, env=current_env)
-    process.wait()
+    try:
+        process.wait()
+    except KeyboardInterrupt:
+        # The child already received SIGINT from the terminal's process group. Wait briefly,
+        # escalate once, and exit with the conventional 128 + SIGINT code instead of dumping
+        # accelerate's own traceback (see https://github.com/huggingface/accelerate/issues/1089).
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        sys.exit(130)
     if process.returncode != 0:
         if not args.quiet:
             raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
@@ -1003,6 +1082,7 @@ def simple_launcher(args):
 
 def multi_gpu_launcher(args):
     import torch.distributed.run as distrib_run
+    from torch.distributed.elastic.multiprocessing.errors import ChildFailedError
 
     current_env = prepare_multi_gpu_env(args)
     if not check_cuda_p2p_ib_support():
@@ -1018,6 +1098,9 @@ def multi_gpu_launcher(args):
             logger.warning(message)
 
     debug = getattr(args, "debug", False)
+    entrypoint = args.training_script
+    args = _guard_console_filter(args)
+    quiet, log_dir, tee = args.quiet, args.log_dir, args.tee
     args = _filter_args(
         args,
         distrib_run.get_args_parser(),
@@ -1027,6 +1110,8 @@ def multi_gpu_launcher(args):
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
+        except ChildFailedError as e:
+            _report_child_failure(e, entrypoint, quiet=quiet, log_dir=log_dir, tee=tee)
         except Exception:
             if is_rich_available() and debug:
                 console = get_console()
@@ -1038,6 +1123,7 @@ def multi_gpu_launcher(args):
 
 def deepspeed_launcher(args):
     import torch.distributed.run as distrib_run
+    from torch.distributed.elastic.multiprocessing.errors import ChildFailedError
 
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
@@ -1072,6 +1158,9 @@ def deepspeed_launcher(args):
                 sys.exit(1)
     else:
         debug = getattr(args, "debug", False)
+        entrypoint = args.training_script
+        args = _guard_console_filter(args)
+        quiet, log_dir, tee = args.quiet, args.log_dir, args.tee
         args = _filter_args(
             args,
             distrib_run.get_args_parser(),
@@ -1080,6 +1169,8 @@ def deepspeed_launcher(args):
         with patch_environment(**current_env):
             try:
                 distrib_run.run(args)
+            except ChildFailedError as e:
+                _report_child_failure(e, entrypoint, quiet=quiet, log_dir=log_dir, tee=tee)
             except Exception:
                 if is_rich_available() and debug:
                     console = get_console()
