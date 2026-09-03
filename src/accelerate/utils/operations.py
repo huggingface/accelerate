@@ -719,7 +719,16 @@ def slice_tensors(data, tensor_slice, process_index=None, num_processes=None):
 def concatenate(data, dim=0):
     """
     Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors with the same shape.
-    If there is only a single batch of data, it is returned as-is.
+
+    Non-tensor values are only supported along the first dimension (`dim` is ignored for them) and are handled as
+    follows:
+
+    - If there is only a single batch of data, it is returned as-is, even if it contains non-tensor values.
+    - Lists of non-tensor values (e.g. a list of strings, holding one value per sample in the batch) are chained
+      into a single list, mimicking a concatenation along the batch dimension.
+    - Any other scalar non-tensor value (e.g. a string or a boolean shared by a whole batch) is collected into a
+      list holding the value of each batch. Non-scalar, non-tensor values (e.g. numpy arrays) are not concatenated
+      and raise, as before.
 
     Args:
         data (nested list/tuple/dictionary of lists of tensors `torch.Tensor`):
@@ -731,6 +740,12 @@ def concatenate(data, dim=0):
         The same data structure as `data` with all the tensors concatenated.
     """
     if isinstance(data[0], (tuple, list)):
+        if isinstance(data[0], list) and not any(
+            isinstance(sample, (torch.Tensor, tuple, list, Mapping)) for sample in data[0]
+        ):
+            # Lists of non-tensor values hold one value per sample in the batch, so we chain them into a single
+            # list, mimicking a concatenation along the batch dimension.
+            return [sample for batch in data for sample in batch]
         return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
     elif isinstance(data[0], Mapping):
         return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
@@ -738,6 +753,13 @@ def concatenate(data, dim=0):
         return torch.cat(data, dim=dim)
     elif isinstance(data, (tuple, list)) and len(data) == 1:
         return data[0]
+    elif isinstance(data, (tuple, list)) and all(
+        isinstance(d, (str, int, float, bool, bytes, type(None))) for d in data
+    ):
+        # Multiple batches of a scalar non-tensor value (e.g. a string or a boolean shared by a whole batch)
+        # cannot be concatenated along the batch dim, so we collect the value of each batch into a list instead.
+        # Non-scalar non-tensor values (e.g. numpy arrays) fall through and raise, preserving prior behavior.
+        return list(data)
     else:
         raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
 
