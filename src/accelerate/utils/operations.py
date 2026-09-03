@@ -824,9 +824,15 @@ def pad_input_tensors(tensor, batch_size, num_processes, dim=0):
         # we need to pad the last inputs - the found `to_pad`
         if last_inputs > to_pad & to_pad < 1:
             to_pad = last_inputs - to_pad
+        if dim >= len(tensor.shape) or dim < -len(tensor.shape):
+            return tensor
+        # Convert negative dimensions to non-negative
+        if dim < 0:
+            dim += len(tensor.shape)
+
         old_size = tensor.shape
         new_size = list(old_size)
-        new_size[0] = batch_size + to_pad
+        new_size[dim] = batch_size + to_pad
         new_tensor = tensor.new_zeros(tuple(new_size))
         indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(new_size)))
         new_tensor[indices] = tensor
