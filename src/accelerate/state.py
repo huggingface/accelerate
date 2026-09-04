@@ -25,15 +25,18 @@ from typing import Any, Callable
 
 import torch
 
-from .utils import (
-    DistributedType,
-    DynamoBackend,
-    GradientAccumulationPlugin,
+from .utils.dataclasses import DistributedType, DynamoBackend, GradientAccumulationPlugin, SageMakerDistributedType
+from .utils.environment import (
     check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
-    deepspeed_required,
     get_cpu_distributed_information,
     get_int_from_env,
+    parse_choice_from_env,
+    parse_flag_from_env,
+    set_numa_affinity,
+)
+from .utils.imports import (
+    deepspeed_required,
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
@@ -48,11 +51,7 @@ from .utils import (
     is_torch_xla_available,
     is_xccl_available,
     is_xpu_available,
-    parse_choice_from_env,
-    parse_flag_from_env,
-    set_numa_affinity,
 )
-from .utils.dataclasses import SageMakerDistributedType
 
 
 if is_torch_xla_available():

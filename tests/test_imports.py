@@ -11,9 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import ast
 import subprocess
 import sys
+import unittest
+from pathlib import Path
 
+import accelerate
 from accelerate.test_utils import require_transformer_engine
 from accelerate.test_utils.testing import TempDirTestCase, require_import_timer
 from accelerate.utils import is_import_timer_available
@@ -98,3 +102,38 @@ class LazyImportTester(TempDirTestCase):
         output = run_import_time("import accelerate, accelerate.utils.transformer_engine")
 
         self.assertFalse(" transformer_engine" in output, "`transformer_engine` should not be imported on import")
+
+
+def _top_level_relative_imports(module_path):
+    """Returns the set of module names imported with `from .name import ...` at the top of `module_path`."""
+    tree = ast.parse(Path(module_path).read_text())
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
+            names.add(node.module)
+    return names
+
+
+class CircularImportTester(unittest.TestCase):
+    """
+    Test suite which statically checks that modules which several `accelerate.utils` submodules import back from
+    (such as `accelerate.state`) are not themselves importing the aggregating `accelerate.utils` package.
+
+    `accelerate.utils.operations`, `accelerate.utils.modeling`, `accelerate.utils.other`, `accelerate.utils.tqdm`
+    and `accelerate.utils.random` all do `from ..state import ...`. Since `accelerate/utils/__init__.py` eagerly
+    imports all of them, anything that does `from .utils import ...` from within `accelerate.state` (or another
+    module `accelerate.utils` submodules import back from) creates a circular import. This resolves by accident
+    in a normal single-threaded import because of a fixed import order, but breaks as soon as two threads import
+    different `accelerate` submodules at the same time, see huggingface/accelerate#4173 for the same bug in
+    `accelerate.utils.bnb`.
+    """
+
+    def test_state_does_not_import_utils_package(self):
+        src_dir = Path(accelerate.__file__).parent
+        imported = _top_level_relative_imports(src_dir / "state.py")
+        self.assertNotIn("utils", imported)
+
+    def test_optimizer_does_not_import_utils_package(self):
+        src_dir = Path(accelerate.__file__).parent
+        imported = _top_level_relative_imports(src_dir / "optimizer.py")
+        self.assertNotIn("utils", imported)

@@ -17,7 +17,9 @@ import inspect
 import torch
 
 from .state import AcceleratorState, GradientState
-from .utils import DistributedType, honor_type, is_lomo_available, is_torch_xla_available
+from .utils.dataclasses import DistributedType
+from .utils.imports import is_lomo_available, is_torch_xla_available
+from .utils.operations import honor_type
 
 
 if is_torch_xla_available():
