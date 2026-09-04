@@ -97,6 +97,15 @@ class SimpleBatchSampler(BatchSampler):
 
 
 class DataLoaderTester(AccelerateTestCase):
+    def test_split_batches_length_tracks_partial_batch(self):
+        batch_sampler = BatchSampler(range(3), batch_size=2, drop_last=False)
+        shards = [
+            BatchSamplerShard(batch_sampler, 2, i, split_batches=True, even_batches=False)
+            for i in range(2)
+        ]
+        assert [len(shard) for shard in shards] == [2, 1]
+        assert [len(list(shard)) for shard in shards] == [2, 1]
+
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False, even_batches=True):
         batch_sampler_shards = [
             BatchSamplerShard(batch_sampler, 2, i, split_batches=split_batches, even_batches=even_batches)
