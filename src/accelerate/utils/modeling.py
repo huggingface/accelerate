@@ -1811,6 +1811,50 @@ def get_state_dict_from_offload(
     return state_dict
 
 
+def _resolve_shard_file(checkpoint_folder: str, shard_file: str) -> str:
+    """Join a shard name from a checkpoint index onto its folder, refusing to escape that folder.
+
+    The shard names come from the checkpoint's own `*.index.json`, which is attacker-controlled for
+    an untrusted checkpoint. `os.path.join` follows `..` segments and drops the folder entirely when
+    given an absolute path, so the name has to be checked before it is joined.
+
+    A shard that names an existing path which is not a regular file is refused as well: opening a
+    FIFO blocks until a writer connects, which hangs the load indefinitely.
+
+    Args:
+        checkpoint_folder: The folder the index file was found in.
+        shard_file: A shard name taken from the index's `weight_map`.
+
+    Returns:
+        The path to the shard, guaranteed to sit inside `checkpoint_folder`.
+
+    Raises:
+        ValueError: If `shard_file` is absolute, points outside `checkpoint_folder`, or names an
+            existing path that is not a regular file.
+    """
+    if os.path.isabs(shard_file):
+        raise ValueError(
+            f"Checkpoint index contains an absolute shard path ({shard_file}). Shard paths must be relative to the "
+            "checkpoint folder."
+        )
+
+    folder = os.path.normpath(checkpoint_folder) if checkpoint_folder else "."
+    resolved = os.path.normpath(os.path.join(folder, shard_file))
+    # Compare the normalized strings rather than `realpath`, so that legitimately symlinked
+    # checkpoints (as laid out by the Hugging Face hub cache) keep working.
+    if resolved != folder and not resolved.startswith(folder.rstrip(os.sep) + os.sep):
+        raise ValueError(
+            f"Checkpoint index contains a shard path that points outside the checkpoint folder ({shard_file})."
+        )
+
+    # A missing shard is left to the loader below, which reports it in context. Something that
+    # exists but is not a regular file -- a FIFO above all, whose `open` blocks forever -- never
+    # names a usable checkpoint, so refuse it here.
+    if os.path.exists(resolved) and not os.path.isfile(resolved):
+        raise ValueError(f"Checkpoint index contains a shard path that is not a regular file ({shard_file}).")
+    return resolved
+
+
 def load_checkpoint_in_model(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
@@ -1938,7 +1982,7 @@ def load_checkpoint_in_model(
         if "weight_map" in index:
             index = index["weight_map"]
         checkpoint_files = sorted(list(set(index.values())))
-        checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
+        checkpoint_files = [_resolve_shard_file(checkpoint_folder, f) for f in checkpoint_files]
 
     # Logic for missing/unexpected keys goes here.
 
