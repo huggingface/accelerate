@@ -547,6 +547,12 @@ def get_cluster_input():
                 default=1,
                 error_message="Please enter an integer.",
             )
+            parallelism_config[prefix + "ep_size"] = _ask_field(
+                "What is the expert parallelism size? [1]: ",
+                int,
+                default=1,
+                error_message="Please enter an integer.",
+            )
             if parallelism_config[prefix + "cp_size"] > 1:
                 parallelism_config[prefix + "cp_comm_strategy"] = _ask_options(
                     "What is the compute parallelism communication strategy?",
