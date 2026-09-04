@@ -15,6 +15,7 @@
 import json
 import os
 import tempfile
+import threading
 import unittest
 import warnings
 from collections import OrderedDict
@@ -519,6 +520,34 @@ class ModelingUtilsTester(unittest.TestCase):
                 json.dump(index, f)
 
             load_checkpoint_in_model(model, snapshot_dir)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires os.mkfifo")
+    def test_load_checkpoint_in_model_rejects_shard_paths_that_are_not_regular_files(self):
+        # A shard pointing at a FIFO reaches `torch.load`, whose `open` blocks until a writer
+        # connects and so hangs the load forever. The shard is refused before it is opened.
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            os.mkfifo(os.path.join(tmp_dir, "checkpoint.bin"))
+            index = dict.fromkeys(model.state_dict(), "checkpoint.bin")
+            with open(os.path.join(tmp_dir, "weight_map.index.json"), "w") as f:
+                json.dump(index, f)
+
+            # Load off-thread so that a regression fails this test instead of hanging the suite.
+            raised = []
+
+            def load():
+                try:
+                    load_checkpoint_in_model(model, tmp_dir)
+                except BaseException as e:  # noqa: BLE001 - handed back to the calling thread
+                    raised.append(e)
+
+            thread = threading.Thread(target=load, daemon=True)
+            thread.start()
+            thread.join(timeout=60)
+
+            self.assertFalse(thread.is_alive(), "loading a FIFO shard blocked instead of raising")
+            self.assertEqual(len(raised), 1)
+            self.assertIsInstance(raised[0], ValueError)
 
     @require_non_cpu
     def test_load_checkpoint_in_model_one_gpu(self):
