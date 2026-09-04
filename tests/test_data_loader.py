@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, Sampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -79,6 +79,46 @@ class SimpleIterableDataset(IterableDataset):
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+
+
+class RankShardSampler(Sampler):
+    """Map-style sampler that already yields only this rank's indices (`i % num_processes == process_index`)."""
+
+    def __init__(self, num_samples, num_processes, process_index):
+        self.indices = [i for i in range(num_samples) if i % num_processes == process_index]
+
+    def __iter__(self):
+        return iter(self.indices)
+
+    def __len__(self):
+        return len(self.indices)
+
+
+class RankIterableDataset(IterableDataset):
+    """Iterable that already yields only this rank's local range."""
+
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+    def __iter__(self):
+        yield from range(self.start, self.end)
+
+
+def _samples_from_loader(loader):
+    samples = []
+    for batch in loader:
+        if isinstance(batch, dict):
+            values = batch["x"] if "x" in batch else next(iter(batch.values()))
+            if isinstance(values, torch.Tensor):
+                samples.extend(values.detach().cpu().reshape(-1).tolist())
+            else:
+                samples.extend(list(values))
+        elif isinstance(batch, torch.Tensor):
+            samples.extend(batch.detach().cpu().reshape(-1).tolist())
+        else:
+            samples.extend(list(batch))
+    return samples
 
 
 class SimpleBatchSampler(BatchSampler):
@@ -696,6 +736,165 @@ class DataLoaderTester(AccelerateTestCase):
 
         # n_shards (2) == num_processes (2): should use native sharding, not IterableDatasetShard
         assert not isinstance(result.dataset, IterableDatasetShard)
+
+    def test_already_sharded_map_style_skips_second_shard(self):
+        """A rank-local map-style sampler must not be cut again (issues #3520/#4062/#4075)."""
+        num_samples = 32
+        num_processes = 4
+        dataset = list(range(num_samples))
+
+        for process_index in (0, 1):
+            local_indices = [i for i in range(num_samples) if i % num_processes == process_index]
+            sampler = RankShardSampler(num_samples, num_processes, process_index)
+            dataloader = DataLoader(dataset, batch_size=1, sampler=sampler)
+
+            double_sharded = prepare_data_loader(dataloader, num_processes=num_processes, process_index=process_index)
+            double_sharded_samples = _samples_from_loader(double_sharded)
+            assert len(set(double_sharded_samples)) < len(local_indices)
+
+            kept = prepare_data_loader(
+                DataLoader(dataset, batch_size=1, sampler=RankShardSampler(num_samples, num_processes, process_index)),
+                num_processes=num_processes,
+                process_index=process_index,
+                already_sharded=True,
+            )
+            kept_samples = _samples_from_loader(kept)
+            assert set(kept_samples) == set(local_indices)
+            assert len(kept_samples) == len(local_indices)
+
+    def test_already_sharded_iterable_skips_second_shard(self):
+        """A rank-local iterable must not be wrapped in IterableDatasetShard again."""
+        num_processes = 4
+        shard_size = 8
+
+        for process_index in (0, 1):
+            start = process_index * shard_size
+            end = start + shard_size
+            local = list(range(start, end))
+
+            double_sharded = prepare_data_loader(
+                DataLoader(RankIterableDataset(start, end), batch_size=1),
+                num_processes=num_processes,
+                process_index=process_index,
+                dispatch_batches=False,
+            )
+            assert isinstance(double_sharded.dataset, IterableDatasetShard)
+            double_sharded_samples = _samples_from_loader(double_sharded)
+            assert len(set(double_sharded_samples)) < len(local)
+
+            kept = prepare_data_loader(
+                DataLoader(RankIterableDataset(start, end), batch_size=1),
+                num_processes=num_processes,
+                process_index=process_index,
+                dispatch_batches=False,
+                already_sharded=True,
+            )
+            assert not isinstance(kept.dataset, IterableDatasetShard)
+            kept_samples = _samples_from_loader(kept)
+            assert kept_samples == local
+
+    @require_datasets
+    def test_already_sharded_skips_hf_iterable_native_shard(self):
+        """A user-sharded HF IterableDataset must not be sharded again."""
+        from datasets import Dataset
+
+        num_processes = 4
+        values = list(range(32))
+
+        def make_user_sharded(index):
+            return (
+                Dataset.from_dict({"x": values})
+                .to_iterable_dataset(num_shards=num_processes)
+                .shard(num_shards=num_processes, index=index)
+            )
+
+        expected = _samples_from_loader(DataLoader(make_user_sharded(0), batch_size=2))
+        assert len(expected) > 0
+
+        # After the user already called `.shard()`, n_shards < num_processes, so the default path
+        # falls through to IterableDatasetShard and silently drops most of the local data.
+        double_sharded = prepare_data_loader(
+            DataLoader(make_user_sharded(0), batch_size=2),
+            num_processes=num_processes,
+            process_index=0,
+            dispatch_batches=False,
+        )
+        assert isinstance(double_sharded.dataset, IterableDatasetShard)
+        double_sharded_samples = _samples_from_loader(double_sharded)
+        assert len(set(double_sharded_samples)) < len(set(expected))
+
+        kept = prepare_data_loader(
+            DataLoader(make_user_sharded(0), batch_size=2),
+            num_processes=num_processes,
+            process_index=0,
+            dispatch_batches=False,
+            already_sharded=True,
+        )
+        assert not isinstance(kept.dataset, IterableDatasetShard)
+        kept_samples = _samples_from_loader(kept)
+        assert set(kept_samples) == set(expected)
+
+    def test_already_sharded_rejects_incompatible_flags(self):
+        dataset = list(range(16))
+        with pytest.raises(ValueError, match="dispatch_batches"):
+            prepare_data_loader(
+                DataLoader(dataset, batch_size=4), already_sharded=True, dispatch_batches=True, put_on_device=True
+            )
+        with pytest.raises(ValueError, match="split_batches"):
+            prepare_data_loader(DataLoader(dataset, batch_size=4), already_sharded=True, split_batches=True)
+
+    def test_already_sharded_still_wraps_with_dataloader_shard(self):
+        dataset = list(range(16))
+        sampler = RankShardSampler(len(dataset), num_processes=2, process_index=0)
+        result = prepare_data_loader(
+            DataLoader(dataset, batch_size=4, sampler=sampler),
+            num_processes=2,
+            process_index=0,
+            already_sharded=True,
+        )
+        assert isinstance(result, DataLoaderShard)
+        assert not isinstance(result, DataLoaderDispatcher)
+        # Wrapper features used by training loops must still be present.
+        assert hasattr(result, "set_epoch")
+        assert hasattr(result, "gradient_state")
+
+    def test_already_sharded_local_subset_does_not_invent_remainder(self):
+        """A per-rank subset must not report a remainder against the global batch size."""
+        loader = prepare_data_loader(
+            DataLoader(list(range(8)), batch_size=4),
+            num_processes=4,
+            process_index=0,
+            already_sharded=True,
+        )
+        loader.begin()
+        try:
+            assert loader.remainder == 0
+        finally:
+            loader.end()
+
+    def test_already_sharded_join_uneven_inputs_skips_missing_even_batches(self):
+        """`join_uneven_inputs(..., even_batches=False)` must not read a missing attribute."""
+        from unittest.mock import MagicMock, patch
+
+        accelerator = Accelerator()
+        loader = prepare_data_loader(
+            DataLoader(list(range(8)), batch_size=4),
+            num_processes=4,
+            process_index=0,
+            already_sharded=True,
+        )
+        accelerator._dataloaders = [loader]
+        assert not hasattr(loader.batch_sampler, "even_batches")
+
+        join_cm = MagicMock()
+        join_cm.__enter__.return_value = None
+        join_cm.__exit__.return_value = None
+        with (
+            patch.object(type(accelerator), "multi_device", new=True),
+            patch("accelerate.accelerator.Join", return_value=join_cm),
+        ):
+            with accelerator.join_uneven_inputs([object()], even_batches=False):
+                pass
 
     def test_ensure_dataloader_gets_cleaned_up(self):
         # Ensure that the dataloader gets cleaned up properly

@@ -718,6 +718,10 @@ class Accelerator:
         return False
 
     @property
+    def already_sharded(self):
+        return getattr(self.dataloader_config, "already_sharded", False)
+
+    @property
     def project_dir(self):
         return self.project_configuration.project_dir
 
@@ -1351,8 +1355,12 @@ class Accelerator:
                     if isinstance(dl, DataLoaderDispatcher):
                         iterable_dl_seen = True
                         continue
-                    dl_even_batches_values.append((dl_idx, dl.batch_sampler.even_batches))
-                    dl.batch_sampler.even_batches = even_batches
+                    batch_sampler = getattr(dl, "batch_sampler", None)
+                    if not hasattr(batch_sampler, "even_batches"):
+                        # Already-sharded (or otherwise unwrapped) samplers have no padding to toggle.
+                        continue
+                    dl_even_batches_values.append((dl_idx, batch_sampler.even_batches))
+                    batch_sampler.even_batches = even_batches
 
                 if iterable_dl_seen:
                     warnings.warn(
@@ -2733,6 +2741,7 @@ class Accelerator:
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
             torch_device_mesh=device_mesh,
+            already_sharded=self.already_sharded,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
