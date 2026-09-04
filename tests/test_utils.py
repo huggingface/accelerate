@@ -26,7 +26,13 @@ import torch
 from torch import nn
 
 from accelerate.big_modeling import cpu_offload_with_hook
-from accelerate.hooks import attach_align_device_hook, remove_hook_from_module
+from accelerate.hooks import (
+    AlignDevicesHook,
+    SequentialHook,
+    add_hook_to_module,
+    attach_align_device_hook,
+    remove_hook_from_module,
+)
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
     require_huggingface_suite,
@@ -441,6 +447,13 @@ class UtilsTester(unittest.TestCase):
 
         remove_hook_from_module(model)
         attach_align_device_hook(model, offload=True)
+        assert has_offloaded_params(model)
+
+        # the offloading hook is still found when chained with another hook into a SequentialHook
+        remove_hook_from_module(model)
+        attach_align_device_hook(model, offload=True)
+        add_hook_to_module(model, AlignDevicesHook(io_same_device=True), append=True)
+        assert isinstance(model._hf_hook, SequentialHook)
         assert has_offloaded_params(model)
 
     def test_concatenate(self):
