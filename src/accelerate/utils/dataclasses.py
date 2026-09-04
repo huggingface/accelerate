@@ -1618,6 +1618,24 @@ class FullyShardedDataParallelPlugin:
         ignored_modules (`Optional[Union[Iterable[torch.nn.Module], str]]`, defaults to `None`):
             A list of modules to ignore when wrapping with FSDP. When passing a string, will match the modules by name
             using regex fullmatch. If `fsdp_version` is set to 2, the modules are converted to parameters and used.
+        additional_modules_to_shard (`Optional[dict[Union[str, tuple[str, ...]], dict]]`, defaults to `None`):
+            Explicitly shard extra modules into their own FSDP2 units on top of the ones selected by `auto_wrap_policy`,
+            with optional per-module overrides of the sharding keyword arguments. This is useful for modules that need
+            different sharding behavior than the rest of the model.
+
+            The mapping is `selector -> overrides`:
+
+            - `selector` (the key): either a single module identifier or a `tuple` of them. Each identifier is either
+              an exact fully-qualified module name matched against `model.named_modules()` (e.g. `"model.norm"`), or a
+              `fnmatch`-style glob matched against every module name (e.g. `"model.layers.*.mlp"`). Note that `.` is a
+              literal separator here (not a regex wildcard), and names are canonicalized before matching so selectors
+              written against the original module names still match after `torch.compile` / activation checkpointing.
+              A `str` key shards every matched module as its **own** FSDP2 unit; a `tuple` key groups the referenced
+              modules into a **single** FSDP2 unit.
+            - `overrides` (the value): a `dict` overriding the sharding kwargs for the matched module(s). Supported
+              keys are `"reshard_after_forward"` (`bool`) and `"mp_policy"`
+              (`torch.distributed.fsdp.MixedPrecisionPolicy`); unset keys inherit the model-wide values. Pass an empty
+              `dict` (`{}`) to shard with the model-wide defaults. `offload_policy` overrides are not supported.
         state_dict_type (`Union[str, torch.distributed.fsdp.StateDictType]`, defaults to `'FULL_STATE_DICT'`):
             State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or
             `sharded_state_dict`.
@@ -1719,6 +1737,14 @@ class FullyShardedDataParallelPlugin:
     ignored_modules: Optional[Union[Iterable[torch.nn.Module], str]] = field(
         default=None,
         metadata={"help": "A list of modules to ignore when wrapping with FSDP."},
+    )
+
+    additional_modules_to_shard: Optional[dict] = field(
+        default=None,
+        metadata={
+            "help": "FSDP2 only. Explicitly shard extra modules into their own FSDP2 units with optional per-module "
+            "overrides of the sharding kwargs."
+        },
     )
 
     state_dict_type: Union[str, "torch.distributed.fsdp.StateDictType"] = field(
@@ -2023,6 +2049,16 @@ class FullyShardedDataParallelPlugin:
                 "Setting ignored_modules to None."
             )
             self.ignored_modules = None
+
+        if self.additional_modules_to_shard is not None:
+            if self.fsdp_version == 1:
+                _fsdp2_warnings.add(
+                    "additional_modules_to_shard is only supported in FSDP2. "
+                    "Setting additional_modules_to_shard to None."
+                )
+                self.additional_modules_to_shard = None
+            else:
+                self.validate_additional_modules_to_shard()
         #  Single warning for all deprecation warnings due to FSDP2 conversion
         if _fsdp2_warnings:
             logger.warning("Multiple deprecation warnings due to FSDP2 conversion:\n".join(_fsdp2_warnings))
@@ -2174,6 +2210,79 @@ class FullyShardedDataParallelPlugin:
                 else "`torch.distributed.fsdp.MixedPrecision`"
             )
             raise ValueError(f"mixed_precision_policy must be an instance of {required_type}.")
+
+    def set_additional_modules_to_shard(self, additional_modules_to_shard):
+        """
+        Set `additional_modules_to_shard` after initialization and validate it.
+
+        `additional_modules_to_shard` is Python-only (it cannot be expressed through the CLI/YAML config), so this
+        setter is useful to add it to a plugin that was otherwise created from the CLI/YAML config. Validates the value
+        exactly like `__post_init__`: it is FSDP2 only, so under FSDP1 it is reset to `None` with a warning.
+
+        Args:
+            additional_modules_to_shard (`Optional[dict]`):
+                The `selector -> overrides` mapping as documented on `FullyShardedDataParallelPlugin`. Passing `None`
+                clears it.
+        """
+        self.additional_modules_to_shard = additional_modules_to_shard
+        if self.additional_modules_to_shard is None:
+            return
+        if self.fsdp_version == 1:
+            warnings.warn(
+                "additional_modules_to_shard is only supported in FSDP2. Setting additional_modules_to_shard to None."
+            )
+            self.additional_modules_to_shard = None
+        else:
+            self.validate_additional_modules_to_shard()
+
+    # Only these `fully_shard` kwargs may be overridden per module. `offload_policy` is intentionally excluded:
+    # partial CPU offloading is not supported yet, as `fsdp2_load_full_state_dict` uses a single model-wide flag to
+    # decide the device of all sharded tensors, so mixing offloaded and non-offloaded units would place parameters on
+    # the wrong device.
+    _ALLOWED_MODULE_SHARD_OVERRIDES = ("reshard_after_forward", "mp_policy")
+
+    def validate_additional_modules_to_shard(self):
+        """
+        Validates the structure of `additional_modules_to_shard`: the container type, the `selector` keys and the
+        per-module `overrides` values.
+        """
+        from torch.distributed.fsdp import MixedPrecisionPolicy
+
+        if not isinstance(self.additional_modules_to_shard, dict):
+            raise ValueError(
+                "`additional_modules_to_shard` must be a `dict` mapping a module selector (an exact FQN / glob "
+                f"`str`, or a `tuple` of them) to an overrides `dict`, got {type(self.additional_modules_to_shard)}."
+            )
+
+        for selector, overrides in self.additional_modules_to_shard.items():
+            identifiers = selector if isinstance(selector, tuple) else (selector,)
+            if not identifiers or not all(isinstance(identifier, str) for identifier in identifiers):
+                raise ValueError(
+                    "Each `additional_modules_to_shard` key must be a non-empty module identifier `str` or a `tuple` "
+                    f"of identifier `str`s, got {selector!r}."
+                )
+            if not isinstance(overrides, dict):
+                raise ValueError(
+                    f"The `additional_modules_to_shard` overrides for {selector!r} must be a `dict`, got "
+                    f"{type(overrides)}."
+                )
+            invalid_keys = set(overrides) - set(self._ALLOWED_MODULE_SHARD_OVERRIDES)
+            if invalid_keys:
+                raise ValueError(
+                    f"Unsupported override(s) {sorted(invalid_keys)} for {selector!r} in "
+                    f"`additional_modules_to_shard`. Supported overrides are "
+                    f"{list(self._ALLOWED_MODULE_SHARD_OVERRIDES)}."
+                )
+            if "reshard_after_forward" in overrides and not isinstance(overrides["reshard_after_forward"], bool):
+                raise ValueError(
+                    f"`reshard_after_forward` override for {selector!r} must be a `bool`, got "
+                    f"{type(overrides['reshard_after_forward'])}."
+                )
+            if "mp_policy" in overrides and not isinstance(overrides["mp_policy"], MixedPrecisionPolicy):
+                raise ValueError(
+                    f"`mp_policy` override for {selector!r} must be an instance of "
+                    f"`torch.distributed.fsdp.MixedPrecisionPolicy`, got {type(overrides['mp_policy'])}."
+                )
 
     def set_cpu_offload(self):
         if self.fsdp_version == 2:

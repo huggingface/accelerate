@@ -114,6 +114,54 @@ fsdp_plugin = FullyShardedDataParallelPlugin(
 accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
 ```
 
+### Sharding additional modules (FSDP2)
+
+For FSDP2, on top of the modules selected by `auto_wrap_policy`, Accelerate automatically carves the input/output
+embeddings and the final norm into their own FSDP2 units. This relies on the standard 🤗 Transformers interface
+(`get_input_embeddings`/`get_output_embeddings` and a conventional final norm). Any large module that is neither
+matched by the `auto_wrap_policy` nor discovered by this heuristic ends up in the root FSDP2 unit, which is not
+resharded after the forward pass, so its full parameters stay resident and increase peak memory.
+
+`additional_modules_to_shard` lets you explicitly shard such modules — useful for non-standard/custom architectures,
+and for modules that need different sharding behavior than the rest of the model. It is **FSDP2 only** and **Python
+only** (it cannot be set through the CLI/YAML config, because its values may hold objects such as a
+`MixedPrecisionPolicy`).
+
+It is a mapping of `selector -> overrides`:
+
+- The **selector** (key) is either a single module identifier or a `tuple` of them. Each identifier is either an
+  exact fully-qualified module name matched against `model.named_modules()` (e.g. `"model.norm"`), or an `fnmatch`-style
+  glob matched against every module name (e.g. `"model.layers.*.mlp"`). `.` is a literal separator, not a regex
+  wildcard, and names are canonicalized before matching so selectors written against the original module names still
+  match after `torch.compile` / activation checkpointing. A `str` key shards every matched module as its **own** FSDP2
+  unit; a `tuple` key groups the referenced modules into a **single** FSDP2 unit (mirroring how the final norm and
+  output embedding are grouped for standard transformers). Grouped modules must all run in the same forward pass,
+  otherwise the group is never resharded.
+- The **overrides** (value) is a `dict` overriding the sharding kwargs for the matched module(s). Supported keys are
+  `"reshard_after_forward"` (`bool`) and `"mp_policy"` (`torch.distributed.fsdp.MixedPrecisionPolicy`); unset keys
+  inherit the model-wide values. Use an empty `dict` (`{}`) to shard with the model-wide defaults. Per-module CPU
+  offloading (`offload_policy`) is not supported.
+
+```py
+import torch
+from torch.distributed.fsdp import MixedPrecisionPolicy
+from accelerate import FullyShardedDataParallelPlugin
+
+fsdp_plugin = FullyShardedDataParallelPlugin(
+    fsdp_version=2,
+    additional_modules_to_shard={
+        # keep the tied final norm + lm_head in one unit and skip resharding after forward
+        ("model.norm", "lm_head"): {"reshard_after_forward": False},
+        # keep a precision-sensitive module in fp32
+        "vision_tower": {"mp_policy": MixedPrecisionPolicy(param_dtype=torch.float32)},
+        # shard every per-layer custom mlp with the model-wide defaults
+        "model.layers.*.custom_mlp": {},
+    },
+)
+
+accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
+```
+
 ## Saving and loading
 
 The new recommended way of checkpointing when using FSDP models is to use `SHARDED_STATE_DICT` as `StateDictType` when setting up the accelerate config.
