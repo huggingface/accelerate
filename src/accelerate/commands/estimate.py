@@ -52,8 +52,6 @@ def check_has_model(error):
     Checks what library spawned `error` when a model is not found
     """
     message = str(error)
-    # `timm.create_model("hf-hub:...")` reads `config.json` from the Hub without wrapping the errors: a missing file
-    # raises `EntryNotFoundError` and a `config.json` from another library has no `architecture` key (`KeyError`)
     if is_timm_available() and (
         (isinstance(error, RuntimeError) and "Unknown model" in message)
         or isinstance(error, EntryNotFoundError)
@@ -72,13 +70,8 @@ def check_has_model(error):
 
 def add_timm_hub_prefix(model_name: str) -> str:
     """
-    Adds the `hf-hub:` source prefix that `timm.create_model` needs to load `model_name` from the Hub. Bare
-    architecture names from the `timm` registry (such as `resnet50`) are returned unchanged. So are names that already
-    carry a source prefix (such as `hf-hub:timm/resnet50.a1_in1k`), which only direct callers can pass: `verify_on_hub`
-    in `create_empty_model` rejects them before this function runs.
-
-    `timm>=1.0.29` refuses a Hub repo id without the prefix. Earlier versions dropped the repo owner and resolved the
-    rest of the name through the registry.
+    Adds the `hf-hub:` prefix that `timm.create_model` needs for Hub repo ids. Bare architecture names and names that
+    already have a source prefix are returned unchanged.
     """
     if ":" in model_name or "/" not in model_name:
         return model_name

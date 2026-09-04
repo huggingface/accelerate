@@ -17,17 +17,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import torch
-from huggingface_hub.utils import EntryNotFoundError, GatedRepoError
+from huggingface_hub.utils import GatedRepoError
 
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
-from accelerate.commands.estimate import (
-    add_timm_hub_prefix,
-    check_has_model,
-    estimate_command,
-    estimate_command_parser,
-    gather_data,
-)
+from accelerate.commands.estimate import add_timm_hub_prefix, estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
 from accelerate.commands.to_fsdp2 import (
     convert_config_to_fsdp2,
@@ -574,15 +568,6 @@ class ModelEstimatorTester(unittest.TestCase):
         # Names that already carry a source prefix must stay unchanged
         assert add_timm_hub_prefix("hf-hub:timm/resnet50.a1_in1k") == "hf-hub:timm/resnet50.a1_in1k"
         assert add_timm_hub_prefix("local-dir:/path/to/model") == "local-dir:/path/to/model"
-
-    @require_timm
-    def test_check_has_model_timm(self):
-        # Unknown architecture in the `timm` registry
-        assert check_has_model(RuntimeError("Unknown model (dummy)")) == "timm"
-        # Hub repo without a `timm` `config.json`, raised by `timm.create_model("hf-hub:...")`
-        assert check_has_model(EntryNotFoundError("Entry Not Found for url: .../config.json.")) == "timm"
-        # Hub repo whose `config.json` belongs to another library, raised by `timm.create_model("hf-hub:...")`
-        assert check_has_model(KeyError("architecture")) == "timm"
 
 
 class ToFSDP2Tester(unittest.TestCase):
