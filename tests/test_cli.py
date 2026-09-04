@@ -21,7 +21,7 @@ from huggingface_hub.utils import GatedRepoError
 
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
-from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
+from accelerate.commands.estimate import add_timm_hub_prefix, estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
 from accelerate.commands.to_fsdp2 import (
     convert_config_to_fsdp2,
@@ -452,6 +452,15 @@ class ModelEstimatorTester(unittest.TestCase):
             args = self.parser.parse_args(["muellerzr/dummy", "--library_name", "timm"])
             estimate_command(args)
 
+    @require_timm
+    def test_wrong_library_timm(self):
+        # A Hub repo whose `config.json` belongs to another library has no `architecture` key for `timm`
+        with self.assertRaisesRegex(
+            RuntimeError, "Tried to load `hf-internal-testing/tiny-random-bert` with `timm` but"
+        ):
+            args = self.parser.parse_args(["hf-internal-testing/tiny-random-bert", "--library_name", "timm"])
+            estimate_command(args)
+
     @require_transformers
     def test_invalid_model_name_transformers(self):
         with self.assertRaises(RuntimeError, msg="Tried to load `muellerzr/dummy` with `transformers` but"):
@@ -549,6 +558,16 @@ class ModelEstimatorTester(unittest.TestCase):
         assert total_size == output[0][2], (
             f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
         )
+
+    def test_timm_hub_prefix(self):
+        # Bare architecture names come from the `timm` registry and must stay unchanged
+        assert add_timm_hub_prefix("resnet50") == "resnet50"
+        assert add_timm_hub_prefix("resnet50.a1_in1k") == "resnet50.a1_in1k"
+        # Hub repo ids need the `hf-hub:` source prefix that `timm>=1.0.29` requires
+        assert add_timm_hub_prefix("timm/resnet50.a1_in1k") == "hf-hub:timm/resnet50.a1_in1k"
+        # Names that already carry a source prefix must stay unchanged
+        assert add_timm_hub_prefix("hf-hub:timm/resnet50.a1_in1k") == "hf-hub:timm/resnet50.a1_in1k"
+        assert add_timm_hub_prefix("local-dir:/path/to/model") == "local-dir:/path/to/model"
 
 
 class ToFSDP2Tester(unittest.TestCase):
