@@ -20,6 +20,7 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -28,6 +29,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
+from accelerate.checkpointing import load_accelerator_state, save_accelerator_state
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
@@ -308,6 +310,61 @@ class CheckpointTest(AccelerateTestCase):
         assert "Item at index 1" in message
         assert "Item at index 2" not in message
         assert "Item at index 3" not in message
+
+    def test_rng_state_loads_without_accelerator_specific_backend(self):
+        # `load_accelerator_state` used to fall back to `torch.cuda.set_rng_state_all` whenever none of the
+        # XPU/MLU/SDAA/MUSA/HPU/Neuron backends were available, even if CUDA wasn't available either. That raised
+        # a `KeyError` (since `save_accelerator_state` never saved a CUDA seed to begin with), which got silently
+        # swallowed by the surrounding try/except and skipped the rest of the random state restoration.
+        no_backend = patch.multiple(
+            "accelerate.checkpointing",
+            is_xpu_available=lambda: False,
+            is_mlu_available=lambda: False,
+            is_sdaa_available=lambda: False,
+            is_musa_available=lambda: False,
+            is_hpu_available=lambda: False,
+            is_neuron_available=lambda: False,
+            is_cuda_available=lambda: False,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir, no_backend:
+            Accelerator()
+            with self.assertLogs("accelerate.checkpointing", level="INFO") as cm:
+                save_accelerator_state(tmpdir, [], [], [], [], process_index=0, step=0)
+                load_accelerator_state(tmpdir, [], [], [], [], process_index=0)
+            assert any("All random states loaded successfully" in message for message in cm.output)
+            assert not any("Could not load random states" in message for message in cm.output)
+
+    def test_rng_state_loads_for_every_saved_backend(self):
+        # Regression test for #3960: `save_accelerator_state` uses independent `if` statements and saves an
+        # RNG seed for every backend that reports as available, but `load_accelerator_state` used to chain
+        # HPU, Neuron and CUDA together with `elif`, so if more than one backend reported as available, only
+        # the first one in the chain actually got its RNG state restored, silently leaving the others stale.
+        hpu = MagicMock()
+        hpu.get_rng_state_all.return_value = "hpu-rng-state"
+        cuda_get = MagicMock(return_value="cuda-rng-state")
+        cuda_set = MagicMock()
+        two_backends = patch.multiple(
+            "accelerate.checkpointing",
+            is_xpu_available=lambda: False,
+            is_mlu_available=lambda: False,
+            is_sdaa_available=lambda: False,
+            is_musa_available=lambda: False,
+            is_hpu_available=lambda: True,
+            is_neuron_available=lambda: False,
+            is_cuda_available=lambda: True,
+        )
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            two_backends,
+            patch.object(torch, "hpu", hpu, create=True),
+            patch.object(torch.cuda, "get_rng_state_all", cuda_get),
+            patch.object(torch.cuda, "set_rng_state_all", cuda_set),
+        ):
+            Accelerator()
+            save_accelerator_state(tmpdir, [], [], [], [], process_index=0, step=0)
+            load_accelerator_state(tmpdir, [], [], [], [], process_index=0)
+        hpu.set_rng_state_all.assert_called_once_with("hpu-rng-state")
+        cuda_set.assert_called_once_with("cuda-rng-state")
 
     def test_with_scheduler(self):
         with tempfile.TemporaryDirectory() as tmpdir:
