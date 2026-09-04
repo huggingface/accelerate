@@ -80,6 +80,8 @@
 - sections:
   - local: concept_guides/internal_mechanism
     title: Accelerate's internal mechanism
+  - local: concept_guides/iterable_dataset_sharding
+    title: Sharding iterable datasets
   - local: concept_guides/big_model_inference
     title: Loading big models into memory
   - local: concept_guides/performance
