@@ -441,7 +441,10 @@ class DataLoaderAdapter:
             self.base_dataloader = DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
 
         if hasattr(self.base_dataloader, "state_dict"):
-            self.dl_state_dict = self.base_dataloader.state_dict()
+            # StatefulDataLoader.state_dict() may create an iterator in order to snapshot the sampler.  Defer that
+            # operation until iteration (after DataLoaderShard has synchronized its RNG) so constructing a prepared
+            # loader cannot consume a rank-local shuffle permutation.
+            self.dl_state_dict = None
 
     def __getattr__(self, name):
         # Avoid infinite recursion if we try to access a nonexistent base_dataloader attribute.
@@ -451,9 +454,13 @@ class DataLoaderAdapter:
         return getattr(self.base_dataloader, name)
 
     def state_dict(self):
+        if self.dl_state_dict is None:
+            self.dl_state_dict = self.base_dataloader.state_dict()
+            self.dl_state_dict["_iterator_finished"] = getattr(self, "end_of_dataloader", False)
         return self.dl_state_dict
 
     def load_state_dict(self, state_dict):
+        self.dl_state_dict = state_dict
         self.base_dataloader.load_state_dict(state_dict)
 
     @property
