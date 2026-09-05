@@ -34,7 +34,12 @@ import torch.utils.hooks as hooks
 
 from accelerate.utils.dataclasses import FP8BackendType
 
-from .big_modeling import _attach_context_parallel_hooks, _refuse_recurrent_layers_under_sequence_parallelism
+from .big_modeling import (
+    _attach_context_parallel_hooks,
+    _attach_sequence_parallel_hooks,
+    _refuse_recurrent_layers_under_sequence_parallelism,
+    _refuse_unsupported_attention_under_sequence_parallelism,
+)
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -130,6 +135,7 @@ from .utils.constants import (
 )
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import compile_regions, compile_regions_deepspeed, compile_regions_fsdp2, is_compiled_module
+from .utils.sequence_parallel import register_ulysses_attention, sequence_parallel
 
 
 if is_deepspeed_available():
@@ -472,8 +478,8 @@ class Accelerator:
         )
 
         if self.parallelism_config:
-            self.state.device_mesh = self.parallelism_config.get_device_mesh(self.device.type)
             self.parallelism_config._validate_accelerator(self)
+            self.state.device_mesh = self.parallelism_config.get_device_mesh(self.device.type)
 
         self.fp8_enabled = self.state.mixed_precision == "fp8" or mixed_precision == "fp8"
         # Check for automatic FP8 recipe creation
@@ -1539,6 +1545,12 @@ class Accelerator:
 
         if self.parallelism_config and self.parallelism_config.cp_enabled:
             args = self._prepare_cp(*args)
+        if (
+            self.parallelism_config
+            and self.parallelism_config.sp_enabled
+            and self.parallelism_config.sp_backend == "torch"
+        ):
+            args = self._prepare_sp(*args)
         # for megatron-lm, we don't need to prepare TE AO at this moment
         if self.distributed_type != DistributedType.MEGATRON_LM:
             if self.fp8_backend == FP8BackendType.TE:
@@ -1669,6 +1681,27 @@ class Accelerator:
                 _attach_context_parallel_hooks(arg)
 
         return args
+
+    def _prepare_sp(self, *args):
+        # Ulysses on FSDP2: `sp` is a mesh dimension folded into the FSDP sharding group (see
+        # `ParallelismConfig.dp_shard_cp_dim_names`), so FSDP's reduce-scatter sums the partial gradients of the
+        # sequence parallel ranks and nothing else has to be done outside of attention.
+        sp_mesh = self.torch_device_mesh["sp"]
+        self._sp_context = functools.partial(sequence_parallel, mesh=sp_mesh)
+
+        for arg in args:
+            if isinstance(arg, torch.nn.Module):
+                self._prepare_sp_model(arg)
+
+        return args
+
+    def _prepare_sp_model(self, model: torch.nn.Module):
+        """Check `model` can be sequence parallel, route its attention through Ulysses, and attach its hooks."""
+        sp_mesh = self.torch_device_mesh["sp"]
+        _refuse_recurrent_layers_under_sequence_parallelism(model)
+        _refuse_unsupported_attention_under_sequence_parallelism(model, sp_mesh.size())
+        ulysses_attention = register_ulysses_attention(model, sp_mesh.get_group())
+        _attach_sequence_parallel_hooks(model, ulysses_attention, sp_mesh)
 
     def _prepare_fsdp2(self, *args):
         # First pass: prepare everything except schedulers (and model, which is prepared separately below)
@@ -4122,7 +4155,8 @@ class Accelerator:
         no_restore_buffers: set[torch.Tensor] | None = None,
     ):
         """
-        A context manager that enables context parallel training.
+        A context manager that enables context parallel training, or Ulysses sequence parallel training with
+        `sp_backend="torch"`. Both shard the sequence of `buffers` across the ranks of the `cp` or `sp` mesh dimension.
 
         Args:
             buffers (`list[torch.Tensor]`, `optional`):
@@ -4138,9 +4172,9 @@ class Accelerator:
 
         <Tip warning={true}>
 
-        `context_parallel` is currently supported with FSDP2 and requires `parallelism_config.cp_size` >
-        1. If either of these conditions are not met, this context manager will have no effect, though to enable fewer
-        code changes it will not raise an Exception.
+        `context_parallel` is currently supported with FSDP2 and requires `parallelism_config.cp_size` > 1, or
+        `parallelism_config.sp_size` > 1 with `sp_backend="torch"`. If none of these conditions are met, this context
+        manager will have no effect, though to enable fewer code changes it will not raise an Exception.
 
         </Tip>
 
@@ -4174,10 +4208,21 @@ class Accelerator:
                 buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers
             ):
                 yield
+        # Invariant: in this branch self._sp_context is set, as it was set by `self._prepare_sp`
+        elif (
+            self.parallelism_config
+            and self.parallelism_config.sp_enabled
+            and self.parallelism_config.sp_backend == "torch"
+        ):
+            with self._sp_context(
+                buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers
+            ):
+                yield
         else:
             logger.warning_once(
                 "Context parallel training is not enabled. This context manager will have no effect. "
-                "To enable it, set `parallelism_config.cp_size` > 1 in the `Accelerator` constructor."
+                "To enable it, set `parallelism_config.cp_size` > 1, or `parallelism_config.sp_size` > 1 with "
+                "`sp_backend='torch'`, in the `Accelerator` constructor."
             )
             yield
 

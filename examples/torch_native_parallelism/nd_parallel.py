@@ -45,6 +45,7 @@ def parse_args():
     parser.add_argument("--dp-shard-size", type=int, default=1)
     parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--cp-size", type=int, default=1)
+    parser.add_argument("--sp-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=1024)
     parser.add_argument("--num-steps", type=int, default=1000)
     parser.add_argument("--save-dir", type=str, default="./outputs")
@@ -86,11 +87,13 @@ def train(args):
         dp_shard_size=args.dp_shard_size,
         tp_size=args.tp_size,
         cp_size=args.cp_size,
+        sp_size=args.sp_size,
+        sp_backend="torch",
     )
 
     # FSDP needs extra configuration, so we properly shard the model
     fsdp2_plugin = None
-    if parallelism_config.dp_shard_enabled or parallelism_config.cp_enabled:
+    if parallelism_config.dp_shard_enabled or parallelism_config.cp_enabled or parallelism_config.sp_enabled:
         fsdp2_plugin = FullyShardedDataParallelPlugin(
             fsdp_version=2,
             auto_wrap_policy="transformer_based_wrap",
