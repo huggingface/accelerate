@@ -93,8 +93,9 @@ class TorchUlyssesSPModelChecks(unittest.TestCase):
             _refuse_unsupported_attention_under_sequence_parallelism(model, 2)
 
     def test_refuses_non_attention_sequence_mixing_layers(self):
-        # LFM2-style short convolutions run on the local shard and never see the gathered sequence
-        model = self._model("kernels-community/flash-attn2", layer_types=["conv", "full_attention"])
+        # LFM2-style short convolutions run on the local shard and never see the gathered sequence. The layer type
+        # is refused before any check on the attention implementation, so the default `sdpa` model is enough.
+        model = self._model(layer_types=["conv", "full_attention"])
         with self.assertRaisesRegex(ValueError, "layers of type \\['conv'\\]"):
             _refuse_unsupported_attention_under_sequence_parallelism(model, 2)
 
