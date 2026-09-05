@@ -228,6 +228,21 @@ class LaunchArgTester(unittest.TestCase):
                 else:
                     assert bad_arg not in help_return, f"Found {bad_arg} in `accelerate launch -h`"
 
+    def test_megatron_lm_bool_flags(self):
+        # bool("False") is truthy, so these args need a real string->bool converter, not `type=bool`
+        for flag in ["megatron_lm_use_custom_fsdp", "megatron_lm_no_load_optim"]:
+            args = [f"--{flag}", "False", "test.py"]
+            result = self.parser.parse_args(args)
+            assert getattr(result, flag) is False
+
+            args = [f"--{flag}", "True", "test.py"]
+            result = self.parser.parse_args(args)
+            assert getattr(result, flag) is True
+
+            args = ["test.py"]
+            result = self.parser.parse_args(args)
+            assert getattr(result, flag) is False
+
 
 class ClusterConfigTester(unittest.TestCase):
     """
