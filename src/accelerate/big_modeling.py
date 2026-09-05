@@ -946,9 +946,8 @@ def _attach_sequence_parallel_hooks(model: nn.Module, ulysses_attention, sp_mesh
                 module_kwargs["position_ids"] = torch.arange(
                     sp_rank * local_seq_len, (sp_rank + 1) * local_seq_len, device=tokens.device
                 ).unsqueeze(0)
-        # Gather the positions of the whole sequence once here; every attention layer reads them from the wrapper
-        # instead of gathering its own shard again. Gathering along the last dim also covers `[3, batch, seq]` rotary
-        # positions.
+        # Gather the positions of the whole sequence once here; every attention layer reads them from the wrapper.
+        # Gathering along the last dim also covers `[3, batch, seq]` rotary positions.
         position_ids = module_kwargs.get("position_ids")
         if position_ids is not None:
             position_ids = _gather_along_dim(position_ids, position_ids.ndim - 1, group)

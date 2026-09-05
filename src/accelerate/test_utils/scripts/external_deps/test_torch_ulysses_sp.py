@@ -122,7 +122,7 @@ def main():
     ):
         assert input_ids.shape[1] == args.seq_len // args.sp_size, input_ids.shape
         # A padding-free collator computes the flash attention boundaries for the shard it sees, which is the local
-        # one. Attention must rebuild them for the gathered sequence rather than use these.
+        # one; attention has to rebuild them for the gathered sequence.
         flash_attn_kwargs = {}
         if args.stale_flash_attn_kwargs:
             from transformers.modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids

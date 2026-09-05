@@ -4211,8 +4211,8 @@ class Accelerator:
         # Invariant: in this branch self._sp_context is set, as it was set by `self._prepare_sp`
         elif (
             self.parallelism_config
-            and self.parallelism_config.sp_backend == "torch"
             and self.parallelism_config.sp_enabled
+            and self.parallelism_config.sp_backend == "torch"
         ):
             with self._sp_context(
                 buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers

@@ -132,8 +132,8 @@ class UlyssesAttention:
             return self.attention_function(module, query, key, value, attention_mask, **kwargs)
 
         # The model's forward pre-hook gathered the `position_ids` of the whole sequence once and recorded them; every
-        # attention layer reads them from there rather than gathering its own local ones again. Multimodal rotary
-        # positions are `[3, batch, seq]`, the text axis is what matters here.
+        # attention layer reads them from there. Multimodal rotary positions are `[3, batch, seq]`, the text axis is
+        # what matters here.
         position_ids = self._model_position_ids.get(self._owners[module])
         if position_ids is None:
             raise ValueError(
