@@ -428,12 +428,12 @@ class ParallelismConfig:
                 "Use `sp_backend='deepspeed'` with DeepSpeed."
             )
 
-        # FSDP shards across the joint `dp_shard_cp` mesh dimension, which only exists when `dp_shard` or `cp` is
-        # enabled; with neither, preparation fails later with an opaque `KeyError` from `device_mesh`.
-        if accelerator.is_fsdp2 and not self.dp_shard_enabled and not self.cp_enabled:
+        # FSDP shards across the joint `dp_shard_cp` mesh dimension, which only exists when `dp_shard`, `cp` or `sp`
+        # is enabled; with none of them, preparation fails later with an opaque `KeyError` from `device_mesh`.
+        if accelerator.is_fsdp2 and not self.dp_shard_cp_dim_names:
             raise ValueError(
-                "FSDP is enabled but the parallelism config has no dimension for FSDP to shard across (both "
-                "`dp_shard_size` and `cp_size` are 1). This usually means a model that is already parallelized "
+                "FSDP is enabled but the parallelism config has no dimension for FSDP to shard across "
+                "(`dp_shard_size`, `cp_size` and `sp_size` are all 1). This usually means a model that is already parallelized "
                 "another way -- e.g. loaded with `DistributedConfig(tp_size=N)` or `enable_expert_parallel=True`, "
                 "which makes the whole world size tensor/expert parallel -- was launched under an FSDP config. "
                 "Either launch it without the FSDP config, or leave ranks for FSDP to use by lowering `tp_size`."
