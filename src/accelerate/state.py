@@ -971,8 +971,6 @@ class AcceleratorState:
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true" and not cpu:
                 self.distributed_type = DistributedType.DEEPSPEED
-                if self.parallelism_config is not None:
-                    self.parallelism_config._resolve_sp_backend(self.distributed_type)
                 if not isinstance(deepspeed_plugin, dict):
                     deepspeed_plugin.set_mixed_precision(mixed_precision)
                     deepspeed_plugin.select(_from_accelerator_state=True)
@@ -993,8 +991,6 @@ class AcceleratorState:
                 DistributedType.MULTI_HPU,
                 DistributedType.MULTI_NEURON,
             ]:
-                if self.parallelism_config is not None:
-                    self.parallelism_config._resolve_sp_backend(self.distributed_type)
                 # TODO: Siro - remove when axolotl fixes their side
                 if not os.environ.get("ACCELERATE_ALLOW_CP_STANDALONE", "false").lower() == "true":
                     if self.parallelism_config and self.parallelism_config.cp_enabled and fsdp_plugin is None:
@@ -1008,19 +1004,6 @@ class AcceleratorState:
                     ):
                         raise ValueError(
                             "Using `cp_size>1` requires FSDP2, but the provided `fsdp_plugin` is using FSDP1. "
-                        )
-                if (
-                    self.parallelism_config is not None
-                    and self.parallelism_config.sp_enabled
-                    and self.parallelism_config.sp_backend == "torch"
-                ):
-                    if fsdp_plugin is None:
-                        raise ValueError(
-                            "`sp_size > 1` with `sp_backend='torch'` specified in the `parallelism_config`, but no `fsdp_plugin` was provided. We need a `fsdp_plugin` to use Ulysses sequence parallelism with `sp_backend=torch`, as we also shard the model across the device mesh to save more memory"
-                        )
-                    if fsdp_plugin.fsdp_version == 1:
-                        raise ValueError(
-                            "Using `sp_size>1` with `sp_backend='torch'` requires FSDP2, but the provided `fsdp_plugin` is using FSDP1. "
                         )
                 if (os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or fsdp_plugin is not None) or (
                     self.parallelism_config is not None and self.parallelism_config.cp_enabled

@@ -299,8 +299,13 @@ class ParallelismConfig:
         if self.sp_size is None:
             self.sp_size = int(os.environ.get("PARALLELISM_CONFIG_SP_SIZE", "1"))
         if self.sp_backend is None:
-            # May stay `None`: it is then resolved from the distributed type in `_resolve_sp_backend`
             self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND")
+        # An unset backend defaults to torch and is switched to DeepSpeed under that engine in `_resolve_backends`,
+        # once the distributed type is known. A handler the user passed is kept through that switch and checked.
+        self._sp_backend_explicit = self.sp_backend is not None
+        self._sp_handler_explicit = self.sp_handler is not None
+        if self.sp_backend is None:
+            self.sp_backend = "torch"
 
         if self.tp_size > 1:
             if self.tp_handler is None:
@@ -318,7 +323,7 @@ class ParallelismConfig:
                         f"ParallelismConfig's cp_backend={self.cp_backend} requires {cp_backends_config_map[self.cp_backend]}, but cp_handler was set to {type(self.cp_handler)}"
                     )
 
-        if self.sp_size > 1 and self.sp_backend is not None:
+        if self.sp_size > 1:
             self._init_sp_handler()
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
@@ -335,7 +340,7 @@ class ParallelismConfig:
         if self.sp_size < 1:
             raise ValueError(f"sp_size must be at least 1, but got {self.sp_size}")
         valid_sp_backends = ["deepspeed", "torch"]
-        if self.sp_backend is not None and self.sp_backend not in valid_sp_backends:
+        if self.sp_backend not in valid_sp_backends:
             raise ValueError(f"sp_backend must be one of {valid_sp_backends}, but got {self.sp_backend}")
 
         # CP and SP are mutually exclusive
@@ -375,13 +380,15 @@ class ParallelismConfig:
                 f"ParallelismConfig's sp_backend={self.sp_backend} requires {sp_backends_config_map[self.sp_backend]}, but sp_handler was set to {type(self.sp_handler)}"
             )
 
-    def _resolve_sp_backend(self, distributed_type: DistributedType):
+    def _resolve_backends(self, accelerator: "Accelerator"):
         """
-        Pick the sequence parallel backend when the user left it unset: ALST/Ulysses under DeepSpeed, Ulysses on
-        FSDP2 otherwise. Has to run before the device mesh is built, since the DeepSpeed backend builds none.
+        Switch an unset sequence parallel backend to ALST/Ulysses when the engine is DeepSpeed; it defaults to
+        Ulysses on FSDP2 otherwise. Runs before the device mesh is built, since the DeepSpeed backend builds none.
         """
-        if self.sp_size > 1 and self.sp_backend is None:
-            self.sp_backend = "deepspeed" if distributed_type == DistributedType.DEEPSPEED else "torch"
+        if self.sp_size > 1 and not self._sp_backend_explicit:
+            self.sp_backend = "deepspeed" if accelerator.distributed_type == DistributedType.DEEPSPEED else "torch"
+            if not self._sp_handler_explicit:
+                self.sp_handler = None
             self._init_sp_handler()
 
     def _set_size(self, parallelism: str, size: int):
@@ -390,6 +397,7 @@ class ParallelismConfig:
         setattr(self, f"{parallelism}_size", size)
 
     def _validate_accelerator(self, accelerator: "Accelerator"):
+        self._resolve_backends(accelerator)
         _warnings = set()
         if not accelerator.multi_device and self.total_size == 1:
             # No distributed setup, valid parallelism config
@@ -426,6 +434,11 @@ class ParallelismConfig:
             raise ValueError(
                 "`sp_backend='torch'` runs Ulysses sequence parallelism on FSDP2 and cannot be used with DeepSpeed. "
                 "Use `sp_backend='deepspeed'` with DeepSpeed."
+            )
+        if self.sp_backend == "torch" and self.sp_size > 1 and not accelerator.is_fsdp2:
+            raise ValueError(
+                "`sp_backend='torch'` runs Ulysses sequence parallelism on FSDP2, which also shards the model across "
+                "the device mesh: launch with an FSDP config using `fsdp_version: 2`."
             )
 
         # FSDP shards across the joint `dp_shard_cp` mesh dimension, which only exists when `dp_shard`, `cp` or `sp`
