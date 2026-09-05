@@ -27,7 +27,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForImageText
 
 from accelerate import Accelerator
 from accelerate.utils import FullyShardedDataParallelPlugin, ParallelismConfig, set_seed
-from accelerate.utils.ulysses import _all_to_all
+from accelerate.utils.sequence_parallel import _all_to_all
 
 
 def parse_args():

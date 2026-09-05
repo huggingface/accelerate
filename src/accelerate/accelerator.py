@@ -135,7 +135,7 @@ from .utils.constants import (
 )
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import compile_regions, compile_regions_deepspeed, compile_regions_fsdp2, is_compiled_module
-from .utils.ulysses import register_ulysses_attention, sequence_parallel
+from .utils.sequence_parallel import register_ulysses_attention, sequence_parallel
 
 
 if is_deepspeed_available():

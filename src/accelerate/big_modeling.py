@@ -53,7 +53,7 @@ from .utils import (
 )
 from .utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 from .utils.other import recursive_getattr
-from .utils.ulysses import _gather_along_dim
+from .utils.sequence_parallel import _gather_along_dim
 
 
 logger = logging.getLogger(__name__)
@@ -926,7 +926,7 @@ def _attach_sequence_parallel_hooks(model: nn.Module, ulysses_attention, sp_mesh
     Args:
         model (`nn.Module`):
             The model to attach the hook to.
-        ulysses_attention ([`~utils.ulysses.UlyssesAttention`]):
+        ulysses_attention ([`~utils.sequence_parallel.UlyssesAttention`]):
             The wrapper the model's attention calls were routed through.
         sp_mesh (`torch.distributed.device_mesh.DeviceMesh`):
             The `sp` sub-mesh of the accelerator's device mesh.

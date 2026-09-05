@@ -31,7 +31,7 @@ from accelerate.test_utils.testing import (
 )
 from accelerate.utils import patch_environment
 from accelerate.utils.imports import _is_package_available, is_transformers_available
-from accelerate.utils.ulysses import _packed_causal_mask
+from accelerate.utils.sequence_parallel import _packed_causal_mask
 
 
 if is_transformers_available():
