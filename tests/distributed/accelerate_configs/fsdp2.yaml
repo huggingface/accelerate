@@ -1,0 +1,6 @@
+compute_environment: LOCAL_MACHINE
+distributed_type: FSDP
+num_machines: 1
+num_processes: 2
+fsdp_config:
+  fsdp_version: 2
