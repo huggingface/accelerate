@@ -1701,7 +1701,7 @@ class Accelerator:
         _refuse_recurrent_layers_under_sequence_parallelism(model)
         _refuse_unsupported_attention_under_sequence_parallelism(model, sp_mesh.size())
         ulysses_attention = register_ulysses_attention(model, sp_mesh.get_group())
-        _attach_sequence_parallel_hooks(model, ulysses_attention, sp_mesh.get_local_rank())
+        _attach_sequence_parallel_hooks(model, ulysses_attention, sp_mesh)
 
     def _prepare_fsdp2(self, *args):
         # First pass: prepare everything except schedulers (and model, which is prepared separately below)

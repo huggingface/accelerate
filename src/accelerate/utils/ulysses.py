@@ -105,7 +105,7 @@ class UlyssesAttention:
         self._owners[module] = owner
 
     def set_position_ids(self, owner: torch.nn.Module, position_ids: torch.Tensor | None):
-        """Record the local `position_ids` of the forward `owner` is running, for attention modules that don't get them."""
+        """Record the `position_ids` of the whole sequence for the forward `owner` is running."""
         self._model_position_ids[owner] = position_ids
 
     def __call__(
@@ -121,18 +121,16 @@ class UlyssesAttention:
         if group is None:
             return self.attention_function(module, query, key, value, attention_mask, **kwargs)
 
-        # Some models only hand their attention layers the rotary embeddings (Qwen2.5-VL, for one); fall back to
-        # the `position_ids` seen at the model's forward. Multimodal rotary positions are `[3, batch, seq]`, the
-        # text axis is what matters here.
-        position_ids = kwargs.get("position_ids")
-        if position_ids is None:
-            position_ids = self._model_position_ids.get(self._owners[module])
+        # The model's forward pre-hook gathered the `position_ids` of the whole sequence once and recorded them; every
+        # attention layer reads them from there rather than gathering its own local ones again. Multimodal rotary
+        # positions are `[3, batch, seq]`, the text axis is what matters here.
+        position_ids = self._model_position_ids.get(self._owners[module])
         if position_ids is None:
             raise ValueError(
-                "Ulysses sequence parallelism needs `position_ids` in every attention call: after gathering the "
-                "sequence, they tell the attention kernel where each token sits and where packed documents start. "
-                f"{module.__class__.__name__} was called without them and none were seen at the model's forward. "
-                "Pass `position_ids` explicitly, or disable sequence parallelism for this model."
+                "Ulysses sequence parallelism needs `position_ids`: after gathering the sequence, they tell the "
+                "attention kernel where each token sits and where packed documents start. None were seen at the "
+                f"forward of the model owning {module.__class__.__name__}. Pass `position_ids` to the model, or "
+                "disable sequence parallelism for it."
             )
         if position_ids.ndim == 3:
             position_ids = position_ids[0]
@@ -141,7 +139,7 @@ class UlyssesAttention:
         query = _SeqAllToAll.apply(group, query, 1, 2)
         key = _SeqAllToAll.apply(group, key, 1, 2)
         value = _SeqAllToAll.apply(group, value, 1, 2)
-        kwargs["position_ids"] = _gather_along_dim(position_ids, 1, group)
+        kwargs["position_ids"] = position_ids
         # Flash attention takes precomputed sequence boundaries over `position_ids`; a collator computed them for
         # the local shard, so drop them and let the kernel rebuild them from the gathered positions.
         for name in ("cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k"):

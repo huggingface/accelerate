@@ -53,6 +53,7 @@ from .utils import (
 )
 from .utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 from .utils.other import recursive_getattr
+from .utils.ulysses import _gather_along_dim
 
 
 logger = logging.getLogger(__name__)
@@ -914,7 +915,7 @@ def _refuse_unsupported_attention_under_sequence_parallelism(model: nn.Module, s
         )
 
 
-def _attach_sequence_parallel_hooks(model: nn.Module, ulysses_attention, sp_rank: int):
+def _attach_sequence_parallel_hooks(model: nn.Module, ulysses_attention, sp_mesh):
     """
     Attach the forward pre-hook that gives a `transformers` model global `position_ids` under Ulysses.
 
@@ -927,9 +928,10 @@ def _attach_sequence_parallel_hooks(model: nn.Module, ulysses_attention, sp_rank
             The model to attach the hook to.
         ulysses_attention ([`~utils.ulysses.UlyssesAttention`]):
             The wrapper the model's attention calls were routed through.
-        sp_rank (`int`):
-            Rank of this process in the sequence parallel group.
+        sp_mesh (`torch.distributed.device_mesh.DeviceMesh`):
+            The `sp` sub-mesh of the accelerator's device mesh.
     """
+    sp_rank, group = sp_mesh.get_local_rank(), sp_mesh.get_group()
 
     def _position_ids_pre_forward_hook(_module, module_args, module_kwargs):
         # No `position_ids` given: number this shard's tokens by where the shard sits in the full sequence.
@@ -944,9 +946,13 @@ def _attach_sequence_parallel_hooks(model: nn.Module, ulysses_attention, sp_rank
                 module_kwargs["position_ids"] = torch.arange(
                     sp_rank * local_seq_len, (sp_rank + 1) * local_seq_len, device=tokens.device
                 ).unsqueeze(0)
-        # Some models hand their attention layers only the rotary embeddings, so the wrapper keeps the positions seen
-        # at the model's forward and falls back to them when an attention call comes without `position_ids`.
-        ulysses_attention.set_position_ids(model, module_kwargs.get("position_ids"))
+        # Gather the positions of the whole sequence once here; every attention layer reads them from the wrapper
+        # instead of gathering its own shard again. Gathering along the last dim also covers `[3, batch, seq]` rotary
+        # positions.
+        position_ids = module_kwargs.get("position_ids")
+        if position_ids is not None:
+            position_ids = _gather_along_dim(position_ids, position_ids.ndim - 1, group)
+        ulysses_attention.set_position_ids(model, position_ids)
         return module_args, module_kwargs
 
     model.register_forward_pre_hook(_position_ids_pre_forward_hook, with_kwargs=True)
