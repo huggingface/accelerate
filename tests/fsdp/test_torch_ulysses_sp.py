@@ -17,7 +17,7 @@ import unittest
 import torch
 from parameterized import parameterized
 
-from accelerate.big_modeling import _attach_sequence_parallel_hooks
+from accelerate.big_modeling import _refuse_unsupported_attention_under_sequence_parallelism
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     execute_subprocess_async,
@@ -36,20 +36,6 @@ from accelerate.utils.ulysses import _packed_causal_mask
 
 if is_transformers_available():
     from transformers import AutoConfig, AutoModelForCausalLM
-
-
-class _FakeMesh:
-    def __init__(self, size):
-        self._size = size
-
-    def size(self):
-        return self._size
-
-    def get_local_rank(self):
-        return 0
-
-    def get_group(self):
-        return None
 
 
 class TorchUlyssesSPUnitTest(unittest.TestCase):
@@ -89,28 +75,28 @@ class TorchUlyssesSPModelChecks(unittest.TestCase):
 
     def test_refuses_eager(self):
         with self.assertRaisesRegex(ValueError, "does not support the `eager` attention implementation"):
-            _attach_sequence_parallel_hooks(self._model("eager"), _FakeMesh(2))
+            _refuse_unsupported_attention_under_sequence_parallelism(self._model("eager"), 2)
 
     def test_refuses_indivisible_heads(self):
         # tiny-random-Llama has 4 attention heads and 4 kv heads
         with self.assertRaisesRegex(ValueError, "must divide both the number of attention heads"):
-            _attach_sequence_parallel_hooks(self._model(), _FakeMesh(8))
+            _refuse_unsupported_attention_under_sequence_parallelism(self._model(), 8)
 
     def test_refuses_sliding_window_with_sdpa(self):
         model = self._model(layer_types=["sliding_attention", "full_attention"], sliding_window=8)
         with self.assertRaisesRegex(ValueError, "with `sdpa` does not support attention layers of type"):
-            _attach_sequence_parallel_hooks(model, _FakeMesh(2))
+            _refuse_unsupported_attention_under_sequence_parallelism(model, 2)
 
     def test_refuses_chunked_attention(self):
         model = self._model(layer_types=["chunked_attention", "full_attention"])
         with self.assertRaisesRegex(ValueError, "layers of type \\['chunked_attention'\\]"):
-            _attach_sequence_parallel_hooks(model, _FakeMesh(2))
+            _refuse_unsupported_attention_under_sequence_parallelism(model, 2)
 
     def test_refuses_non_attention_sequence_mixing_layers(self):
         # LFM2-style short convolutions run on the local shard and never see the gathered sequence
         model = self._model("kernels-community/flash-attn2", layer_types=["conv", "full_attention"])
         with self.assertRaisesRegex(ValueError, "layers of type \\['conv'\\]"):
-            _attach_sequence_parallel_hooks(model, _FakeMesh(2))
+            _refuse_unsupported_attention_under_sequence_parallelism(model, 2)
 
 
 @require_fsdp2

@@ -53,7 +53,6 @@ from .utils import (
 )
 from .utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 from .utils.other import recursive_getattr
-from .utils.ulysses import register_ulysses_attention
 
 
 logger = logging.getLogger(__name__)
@@ -855,22 +854,18 @@ def _attach_context_parallel_hooks(
             module.register_forward_pre_hook(_self_attn_pre_forward_hook, with_kwargs=True, prepend=True)
 
 
-def _attach_sequence_parallel_hooks(model: nn.Module, sp_mesh):
-    """
-    Prepare a `transformers` model for Ulysses sequence parallelism (`sp_backend="torch"`) over the `sp` mesh.
+def _refuse_unsupported_attention_under_sequence_parallelism(model: nn.Module, sp_size: int):
+    """Refuse models whose attention cannot be computed over the gathered sequence, under Ulysses.
 
-    Routes the model's attention calls through [`~utils.ulysses.UlyssesAttention`], which wraps the model's own
-    attention implementation in the two all-to-alls, and attaches a forward pre-hook that fills in global
-    `position_ids` when the caller passes none: each rank only holds a shard of the sequence, and the model would
-    otherwise number its shard from zero (wrong rotary positions, and a gathered sequence that looks packed). Models
-    whose attention implementation or layer types cannot express attention over the gathered sequence are rejected up
-    front. This function modifies the model in place.
+    Ulysses wraps the model's attention implementation and splits its heads across the sequence parallel ranks, so
+    the implementation has to take `position_ids` rather than a materialized mask, every sequence-mixing layer has
+    to be an attention layer that goes through that interface, and the head counts have to divide by `sp_size`.
 
     Args:
         model (`nn.Module`):
-            The model to prepare.
-        sp_mesh (`torch.distributed.device_mesh.DeviceMesh`):
-            The `sp` sub-mesh of the accelerator's device mesh.
+            The model about to be prepared for sequence parallelism.
+        sp_size (`int`):
+            Number of sequence parallel ranks.
     """
     config = getattr(model, "config", None)
     attn_implementation = getattr(config, "_attn_implementation", None)
@@ -886,7 +881,6 @@ def _attach_sequence_parallel_hooks(model: nn.Module, sp_mesh):
             "the model with `sdpa`, `flash_attention_2`, `flash_attention_3` or a hub flash kernel instead."
         )
 
-    sp_size = sp_mesh.size()
     non_full = _non_full_attention_layer_types(model)
     # Only attention layers go through the attention interface Ulysses wraps. Anything else that mixes tokens along
     # the sequence (short convolutions, Mamba, linear attention, ...) runs inside the layer on the local shard and
@@ -919,11 +913,26 @@ def _attach_sequence_parallel_hooks(model: nn.Module, sp_mesh):
             f"heads ({num_kv_heads}) of {model.__class__.__name__}."
         )
 
-    ulysses_attention = register_ulysses_attention(model, sp_mesh.get_group())
 
-    sp_rank = sp_mesh.get_local_rank()
+def _attach_sequence_parallel_hooks(model: nn.Module, ulysses_attention, sp_rank: int):
+    """
+    Attach the forward pre-hook that gives a `transformers` model global `position_ids` under Ulysses.
+
+    Each rank only holds a shard of the sequence, so left to itself the model would number its shard from zero: wrong
+    rotary positions, and a gathered sequence that looks packed to the attention kernel. This function modifies the
+    model in place.
+
+    Args:
+        model (`nn.Module`):
+            The model to attach the hook to.
+        ulysses_attention ([`~utils.ulysses.UlyssesAttention`]):
+            The wrapper the model's attention calls were routed through.
+        sp_rank (`int`):
+            Rank of this process in the sequence parallel group.
+    """
 
     def _position_ids_pre_forward_hook(_module, module_args, module_kwargs):
+        # No `position_ids` given: number this shard's tokens by where the shard sits in the full sequence.
         if module_kwargs.get("position_ids") is None:
             tokens = module_kwargs.get("input_ids")
             if tokens is None:
@@ -935,6 +944,8 @@ def _attach_sequence_parallel_hooks(model: nn.Module, sp_mesh):
                 module_kwargs["position_ids"] = torch.arange(
                     sp_rank * local_seq_len, (sp_rank + 1) * local_seq_len, device=tokens.device
                 ).unsqueeze(0)
+        # Some models hand their attention layers only the rotary embeddings, so the wrapper keeps the positions seen
+        # at the model's forward and falls back to them when an attention call comes without `position_ids`.
         ulysses_attention.set_position_ids(model, module_kwargs.get("position_ids"))
         return module_args, module_kwargs
 

@@ -38,6 +38,7 @@ from .big_modeling import (
     _attach_context_parallel_hooks,
     _attach_sequence_parallel_hooks,
     _refuse_recurrent_layers_under_sequence_parallelism,
+    _refuse_unsupported_attention_under_sequence_parallelism,
 )
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
@@ -134,7 +135,7 @@ from .utils.constants import (
 )
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import compile_regions, compile_regions_deepspeed, compile_regions_fsdp2, is_compiled_module
-from .utils.ulysses import sequence_parallel
+from .utils.ulysses import register_ulysses_attention, sequence_parallel
 
 
 if is_deepspeed_available():
@@ -1690,10 +1691,17 @@ class Accelerator:
 
         for arg in args:
             if isinstance(arg, torch.nn.Module):
-                _refuse_recurrent_layers_under_sequence_parallelism(arg)
-                _attach_sequence_parallel_hooks(arg, sp_mesh)
+                self._prepare_sp_model(arg)
 
         return args
+
+    def _prepare_sp_model(self, model: torch.nn.Module):
+        """Check `model` can be sequence parallel, route its attention through Ulysses, and attach its hooks."""
+        sp_mesh = self.torch_device_mesh["sp"]
+        _refuse_recurrent_layers_under_sequence_parallelism(model)
+        _refuse_unsupported_attention_under_sequence_parallelism(model, sp_mesh.size())
+        ulysses_attention = register_ulysses_attention(model, sp_mesh.get_group())
+        _attach_sequence_parallel_hooks(model, ulysses_attention, sp_mesh.get_local_rank())
 
     def _prepare_fsdp2(self, *args):
         # First pass: prepare everything except schedulers (and model, which is prepared separately below)
