@@ -183,6 +183,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def _switch_parameters(self, parameters_map):
         for param_group in self.optimizer.param_groups:
             param_group["params"] = [parameters_map.get(p, p) for p in param_group["params"]]
+        for old_parameter, new_parameter in parameters_map.items():
+            if old_parameter is not new_parameter and old_parameter in self.optimizer.state:
+                self.optimizer.state[new_parameter] = self.optimizer.state.pop(old_parameter)
 
     @property
     def step_was_skipped(self):

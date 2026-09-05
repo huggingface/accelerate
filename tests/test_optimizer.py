@@ -33,6 +33,22 @@ class CPUOptimizerTester(AccelerateTestCase):
         except Exception as e:
             self.fail(f"Accelerated optimizer pickling failed with {e}")
 
+    def test_switch_parameters_updates_optimizer_state(self):
+        model = torch.nn.Linear(10, 10)
+        optimizer = torch.optim.Adagrad(model.parameters(), 0.1)
+        accelerator = Accelerator()
+        optimizer = accelerator.prepare(optimizer)
+
+        old_parameters = list(optimizer.param_groups[0]["params"])
+        old_states = [optimizer.state[parameter] for parameter in old_parameters]
+        new_parameters = [torch.nn.Parameter(torch.empty_like(parameter)) for parameter in old_parameters]
+        optimizer._switch_parameters(dict(zip(old_parameters, new_parameters)))
+
+        assert all(actual is expected for actual, expected in zip(optimizer.param_groups[0]["params"], new_parameters))
+        assert set(optimizer.state) == set(new_parameters)
+        assert all(optimizer.state[parameter] is state for parameter, state in zip(new_parameters, old_states))
+        optimizer.state_dict()
+
 
 @require_fp16
 @require_non_cpu

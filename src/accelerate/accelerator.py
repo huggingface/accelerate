@@ -1646,12 +1646,15 @@ class Accelerator:
 
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
-                for param_group in obj.param_groups:
-                    # Each param_group originally maps to model parameters (e.g., from model.parameters()).
-                    # After _prepare_tp(), parameter references are replaced with DTensor instances.
-                    # Therefore, we remap the parameter references to their new DTensor addresses
-                    # so that the optimizer can correctly update the model parameters.
-                    param_group["params"] = [mapping[_get_tensor_address(p)] for p in param_group["params"]]
+                # Each param_group originally maps to model parameters (e.g., from model.parameters()).
+                # After _prepare_tp(), parameter references are replaced with DTensor instances.
+                # Therefore, we remap the parameter references and their optimizer states to the new DTensors.
+                parameters_map = {
+                    p: mapping[_get_tensor_address(p)]
+                    for param_group in obj.param_groups
+                    for p in param_group["params"]
+                }
+                obj._switch_parameters(parameters_map)
 
         return result
 
