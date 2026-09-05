@@ -142,6 +142,10 @@ class UlyssesAttention:
         key = _SeqAllToAll.apply(group, key, 1, 2)
         value = _SeqAllToAll.apply(group, value, 1, 2)
         kwargs["position_ids"] = _gather_along_dim(position_ids, 1, group)
+        # Flash attention takes precomputed sequence boundaries over `position_ids`; a collator computed them for
+        # the local shard, so drop them and let the kernel rebuild them from the gathered positions.
+        for name in ("cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k"):
+            kwargs.pop(name, None)
         # Attention sinks (gpt-oss) are one learnable logit per head: keep the ones of the heads this rank now holds.
         s_aux = kwargs.get("s_aux")
         if isinstance(s_aux, torch.Tensor) and s_aux.ndim == 1:

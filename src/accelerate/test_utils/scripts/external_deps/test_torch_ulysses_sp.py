@@ -40,6 +40,11 @@ def parse_args():
     parser.add_argument("--packed", action="store_true", help="Pack two documents per sample (position_ids restart)")
     parser.add_argument("--seq_len", type=int, default=64)
     parser.add_argument("--sliding_window", type=int, default=None, help="Override the model's sliding window")
+    parser.add_argument(
+        "--stale_flash_attn_kwargs",
+        action="store_true",
+        help="Pass flash attention sequence boundaries computed for the local shard, as a padding-free collator would",
+    )
     return parser.parse_args()
 
 
@@ -116,8 +121,28 @@ def main():
         buffers=buffers, buffer_seq_dims=[1, 1, 1, 1], no_restore_buffers=set(buffers)
     ):
         assert input_ids.shape[1] == args.seq_len // args.sp_size, input_ids.shape
+        # A padding-free collator computes the flash attention boundaries for the shard it sees, which is the local
+        # one. Attention must rebuild them for the gathered sequence rather than use these.
+        flash_attn_kwargs = {}
+        if args.stale_flash_attn_kwargs:
+            from transformers.modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
+
+            (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(
+                position_ids
+            )
+            flash_attn_kwargs = {
+                "cu_seq_lens_q": cu_seq_lens_q,
+                "cu_seq_lens_k": cu_seq_lens_k,
+                "max_length_q": max_length_q,
+                "max_length_k": max_length_k,
+            }
         outputs = model(
-            input_ids=input_ids, position_ids=position_ids, labels=labels, shift_labels=shift_labels, use_cache=False
+            input_ids=input_ids,
+            position_ids=position_ids,
+            labels=labels,
+            shift_labels=shift_labels,
+            use_cache=False,
+            **flash_attn_kwargs,
         )
         # Every rank gets the mean loss of its own tokens. Weight the per-rank losses by their token counts through a
         # differentiable all_gather: FSDP then averages the gradients across `dp_shard_cp`, which gives the gradient

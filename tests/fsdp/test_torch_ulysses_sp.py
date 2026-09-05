@@ -147,6 +147,20 @@ class TorchUlyssesSPIntegrationTest(TempDirTestCase):
     @unittest.skipUnless(
         _is_package_available("kernels"), "test requires the kernels library for the hub flash-attn2 kernel"
     )
+    def test_flash_attention_ignores_stale_sequence_boundaries(self):
+        """Boundaries a padding-free collator computed for the local shard must not reach the gathered attention."""
+        self._launch(
+            2,
+            "--sp_size=2",
+            "--attn_implementation=kernels-community/flash-attn2",
+            "--dtype=bfloat16",
+            "--packed",
+            "--stale_flash_attn_kwargs",
+        )
+
+    @unittest.skipUnless(
+        _is_package_available("kernels"), "test requires the kernels library for the hub flash-attn2 kernel"
+    )
     def test_flash_attention_applies_sliding_window(self):
         """Flash attention applies the window over the gathered sequence: the local attention call is intact."""
         self._launch(
