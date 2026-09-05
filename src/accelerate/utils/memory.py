@@ -152,7 +152,11 @@ def find_executable_batch_size(
     ```
     """
     if function is None:
-        return functools.partial(find_executable_batch_size, starting_batch_size=starting_batch_size)
+        return functools.partial(
+            find_executable_batch_size,
+            starting_batch_size=starting_batch_size,
+            reduce_batch_size_fn=reduce_batch_size_fn,
+        )
 
     batch_size = starting_batch_size
     if reduce_batch_size_fn is None:
