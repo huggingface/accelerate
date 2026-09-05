@@ -1819,7 +1819,12 @@ class Accelerator:
         ```
         """
         if device_placement is None:
-            device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
+            # DTensor-sharded models manage their own placement; `.to()` on FSDP2-managed or CPU-offloaded params raises `_apply(): Couldn't swap ...`
+            device_placement = (
+                self.device_placement
+                and self.distributed_type != DistributedType.FSDP
+                and not model_has_dtensor(model)
+            )
 
         # Ensure we can't double wrap a model
         if getattr(model, "_is_accelerate_prepared", False):
