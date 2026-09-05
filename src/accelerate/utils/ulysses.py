@@ -62,6 +62,16 @@ class _SeqAllToAll(torch.autograd.Function):
         return None, _all_to_all(grad_output, ctx.gather_dim, ctx.scatter_dim, ctx.group), None, None
 
 
+def _gather_seq_scatter_heads(tensor: torch.Tensor, group) -> torch.Tensor:
+    """`[batch, heads, local_seq, head_dim]` -> `[batch, heads / sp_size, seq, head_dim]`."""
+    return _SeqAllToAll.apply(group, tensor, 1, 2)
+
+
+def _gather_heads_scatter_seq(tensor: torch.Tensor, group) -> torch.Tensor:
+    """`[batch, seq, heads / sp_size, head_dim]` -> `[batch, local_seq, heads, head_dim]`."""
+    return _SeqAllToAll.apply(group, tensor, 1, 2)
+
+
 def _gather_along_dim(tensor: torch.Tensor, dim: int, group) -> torch.Tensor:
     gathered = [torch.empty_like(tensor) for _ in range(dist.get_world_size(group))]
     dist.all_gather(gathered, tensor.contiguous(), group=group)
@@ -135,10 +145,9 @@ class UlyssesAttention:
         if position_ids.ndim == 3:
             position_ids = position_ids[0]
 
-        # [batch, heads, local_seq, head_dim] -> [batch, heads / sp_size, seq, head_dim]
-        query = _SeqAllToAll.apply(group, query, 1, 2)
-        key = _SeqAllToAll.apply(group, key, 1, 2)
-        value = _SeqAllToAll.apply(group, value, 1, 2)
+        query = _gather_seq_scatter_heads(query, group)
+        key = _gather_seq_scatter_heads(key, group)
+        value = _gather_seq_scatter_heads(value, group)
         kwargs["position_ids"] = position_ids
         # Flash attention takes precomputed sequence boundaries over `position_ids`; a collator computed them for
         # the local shard, so drop them and let the kernel rebuild them from the gathered positions.
@@ -158,8 +167,7 @@ class UlyssesAttention:
 
         attn_output, attn_weights = self.attention_function(module, query, key, value, attention_mask, **kwargs)
 
-        # [batch, seq, heads / sp_size, head_dim] -> [batch, local_seq, heads, head_dim]
-        attn_output = _SeqAllToAll.apply(group, attn_output, 1, 2)
+        attn_output = _gather_heads_scatter_seq(attn_output, group)
         return attn_output, attn_weights
 
 
