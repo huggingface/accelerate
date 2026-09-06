@@ -18,7 +18,7 @@ limitations under the License.
     <br>
     <img src="https://raw.githubusercontent.com/huggingface/accelerate/main/docs/source/imgs/accelerate_logo.png" width="400"/>
     <br>
-<p>
+</p>
 
 <p align="center">
     <a href="https://github.com/huggingface/accelerate/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/huggingface/accelerate.svg?color=blue"></a>
@@ -32,7 +32,7 @@ limitations under the License.
 </p>
 
 <h3 align="center">
-<p>在任意类型的计算设备上运行*原生* PyTorch 训练脚本</p>
+在任意类型的计算设备上运行*原生* PyTorch 训练脚本
 </h3>
 
 <h3 align="center">
