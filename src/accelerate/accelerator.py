@@ -34,7 +34,7 @@ import torch.utils.hooks as hooks
 
 from accelerate.utils.dataclasses import FP8BackendType
 
-from .big_modeling import _attach_context_parallel_hooks
+from .big_modeling import _attach_context_parallel_hooks, _refuse_recurrent_layers_under_sequence_parallelism
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -532,7 +532,7 @@ class Accelerator:
         if (
             (mixed_precision != "bf16")
             and getattr(self.state, "downcast_bfloat", False)
-            and (self.state.distributedType != DistributedType.XLA)
+            and (self.state.distributed_type != DistributedType.XLA)
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
@@ -1794,7 +1794,12 @@ class Accelerator:
         ```
         """
         if device_placement is None:
-            device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
+            # DTensor-sharded models manage their own placement; `.to()` on FSDP2-managed or CPU-offloaded params raises `_apply(): Couldn't swap ...`
+            device_placement = (
+                self.device_placement
+                and self.distributed_type != DistributedType.FSDP
+                and not model_has_dtensor(model)
+            )
 
         # Ensure we can't double wrap a model
         if getattr(model, "_is_accelerate_prepared", False):
@@ -2404,6 +2409,8 @@ class Accelerator:
                     raise ValueError(
                         "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
                     )
+
+                _refuse_recurrent_layers_under_sequence_parallelism(model)
 
                 kwagrs = {}
                 signature = inspect.signature(UlyssesSPAttentionHF.register_with_transformers)

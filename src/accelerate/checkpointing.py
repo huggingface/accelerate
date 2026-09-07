@@ -71,7 +71,7 @@ def save_accelerator_state(
     scaler: Optional[GradScaler] = None,
     save_on_each_node: bool = False,
     safe_serialization: bool = True,
-):
+) -> Path:
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
 
@@ -181,17 +181,17 @@ def save_accelerator_state(
 
 
 def load_accelerator_state(
-    input_dir,
-    models,
-    optimizers,
-    schedulers,
-    dataloaders,
-    process_index,
-    scaler=None,
+    input_dir: str,
+    models: list,
+    optimizers: list,
+    schedulers: list,
+    dataloaders: list,
+    process_index: int,
+    scaler: Optional[GradScaler] = None,
     map_location=None,
-    load_kwargs=None,
+    load_kwargs: Optional[dict] = None,
     **load_model_func_kwargs,
-):
+) -> dict:
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
 
@@ -320,7 +320,7 @@ def load_accelerator_state(
     return override_attributes
 
 
-def save_custom_state(obj, path, index: int = 0, save_on_each_node: bool = False):
+def save_custom_state(obj, path: str, index: int = 0, save_on_each_node: bool = False) -> None:
     """
     Saves the state of `obj` to `{path}/custom_checkpoint_{index}.pkl`
     """
@@ -330,7 +330,7 @@ def save_custom_state(obj, path, index: int = 0, save_on_each_node: bool = False
     save(obj.state_dict(), save_location, save_on_each_node=save_on_each_node)
 
 
-def load_custom_state(obj, path, index: int = 0):
+def load_custom_state(obj, path: str, index: int = 0) -> None:
     """
     Loads the state of `obj` at `{path}/custom_checkpoint_{index}.pkl`. Will always set `weights_only=False` when
     loading the state.

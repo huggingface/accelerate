@@ -104,7 +104,7 @@ def has_ao_layers(model: torch.nn.Module):
 def convert_model_to_fp8_ao(
     model: torch.nn.Module,
     config: Optional["Float8LinearConfig"] = None,
-    module_filter_func: Optional[Callable] = filter_first_and_last_linear_layers,
+    module_filter_func: Optional[Callable] = None,
 ):
     """
     Converts all `nn.Linear` layers in the model (except the first and last) to torchao's `Float8Linear` layer inplace.

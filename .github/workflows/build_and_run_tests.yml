@@ -16,7 +16,7 @@ jobs:
     outputs:
       changed: ${{ steps.was_changed.outputs.changed }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: 
           fetch-depth: "2"
       
@@ -26,8 +26,10 @@ jobs:
       
       - name: Was setup changed 
         id: was_changed
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+          for file in $ALL_CHANGED_FILES; do
             if [ `basename "${file}"` == "setup.py" ]; then
               echo "changed=1" >> $GITHUB_OUTPUT
             fi

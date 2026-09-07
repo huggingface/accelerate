@@ -165,30 +165,34 @@ If you need one or two aggregate numbers for experiment tracking instead of a fu
 
 ```python
 import torch
-from accelerate import Accelerator, ProfileKwargs
+from accelerate import Accelerator, PartialState, ProfileKwargs
+
+# Resolve the device type/module (cuda, xpu, ...) instead of hardcoding CUDA
+device_type = PartialState().device.type
+device_module = getattr(torch, device_type)
 
 
 def summarize_memory_stats():
     return {
-        "peak_allocated_mb": torch.cuda.max_memory_allocated() / 1024**2,
-        "peak_reserved_mb": torch.cuda.max_memory_reserved() / 1024**2,
+        "peak_allocated_mb": device_module.max_memory_allocated() / 1024**2,
+        "peak_reserved_mb": device_module.max_memory_reserved() / 1024**2,
     }
 
 
 profile_kwargs = ProfileKwargs(
-    activities=["cpu", "cuda"],
+    activities=["cpu", device_type],
     profile_memory=True,
     record_shapes=True,
 )
 
 accelerator = Accelerator(kwargs_handlers=[profile_kwargs])
 
-torch.cuda.reset_peak_memory_stats()
+device_module.reset_peak_memory_stats()
 
 with accelerator.profile() as prof:
     model(inputs)
 
-print(prof.key_averages().table(sort_by="self_cuda_memory_usage", row_limit=10))
+print(prof.key_averages().table(sort_by=f"self_{device_type}_memory_usage", row_limit=10))
 print(summarize_memory_stats())
 ```
 
@@ -205,10 +209,14 @@ You can examine the sequence of profiled operators and CUDA kernels in Chrome tr
 <hfoption id="PyTorch">
 
 ```python
-model = models.resnet18().cuda()
-inputs = torch.randn(5, 3, 224, 224).cuda()
+# Pick the available accelerator (cuda, xpu, ...) instead of hardcoding CUDA
+device = torch.accelerator.current_accelerator()
+device_activity = getattr(ProfilerActivity, device.type.upper())
 
-with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+model = models.resnet18().to(device)
+inputs = torch.randn(5, 3, 224, 224).to(device)
+
+with profile(activities=[ProfilerActivity.CPU, device_activity]) as prof:
     model(inputs)
 
 prof.export_chrome_trace("trace.json")
@@ -219,21 +227,20 @@ prof.export_chrome_trace("trace.json")
 
 ```python
 model = models.resnet18()
-inputs = torch.randn(5, 3, 224, 224).cuda()
 profile_kwargs = ProfileKwargs(
-    activities=["cpu", "cuda"],
+    activities=["cpu", PartialState().device.type],
     output_trace_dir="trace"
 )
 
 accelerator = Accelerator(kwargs_handlers=[profile_kwargs])
 model = accelerator.prepare(model)
+inputs = torch.randn(5, 3, 224, 224).to(accelerator.device)
 
 with accelerator.profile() as prof:
     model(inputs)
 
 # The trace will be saved to the specified directory
 ```
-For other hardware accelerators, e.g. XPU, you can change `cuda` to `xpu` in the above example code.
 
 </hfoption>
 </hfoptions>
@@ -262,12 +269,12 @@ my_schedule = schedule(
 )
 
 def trace_handler(p):
-    output = p.key_averages().table(sort_by="self_cuda_time_total", row_limit=10)
+    output = p.key_averages().table(sort_by=f"self_{device.type}_time_total", row_limit=10)
     print(output)
     p.export_chrome_trace("/tmp/trace_" + str(p.step_num) + ".json")
 
 with profile(
-    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+    activities=[ProfilerActivity.CPU, device_activity],
     schedule=my_schedule,
     on_trace_ready=trace_handler
 ) as p:
@@ -280,13 +287,15 @@ with profile(
 <hfoption id="Accelerate">
 
 ```python
+device_type = PartialState().device.type
+
 def trace_handler(p):
-    output = p.key_averages().table(sort_by="self_cuda_time_total", row_limit=10)
+    output = p.key_averages().table(sort_by=f"self_{device_type}_time_total", row_limit=10)
     print(output)
     p.export_chrome_trace("/tmp/trace_" + str(p.step_num) + ".json")
 
 profile_kwargs = ProfileKwargs(
-    activities=["cpu", "cuda"],
+    activities=["cpu", device_type],
     schedule_option={"wait": 5, "warmup": 1, "active": 3, "repeat": 2, "skip_first": 1},
     on_trace_ready=trace_handler
 )
@@ -314,7 +323,7 @@ To measure floating-point operations (FLOPS):
 
 ```python
 with profile(
-    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+    activities=[ProfilerActivity.CPU, device_activity],
     with_flops=True
 ) as prof:
     model(inputs)
