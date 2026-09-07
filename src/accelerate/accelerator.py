@@ -3013,6 +3013,10 @@ class Accelerator:
         self.unscale_gradients()
         parameters = list(parameters)
 
+        is_dtensor_available = torch.distributed.is_available() and is_torch_version(">=", DTENSOR_PYTORCH_VERSION)
+        if not is_dtensor_available:
+            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+
         from torch.distributed.tensor import DTensor
 
         if not any(isinstance(p.grad, DTensor) for p in parameters if p.grad is not None):
@@ -3021,19 +3025,17 @@ class Accelerator:
         dtensor_params = [p for p in parameters if p.grad is not None and isinstance(p.grad, DTensor)]
         plain_params = [p for p in parameters if p.grad is not None and not isinstance(p.grad, DTensor)]
         group_norms = [
-            torch.nn.utils.get_total_norm(group, norm_type) for group in (dtensor_params, plain_params) if group
+            torch.nn.utils.get_total_norm([p.grad for p in group], norm_type)
+            for group in (dtensor_params, plain_params)
+            if group
         ]
+        group_norms = [norm.full_tensor() if isinstance(norm, DTensor) else norm for norm in group_norms]
         total_norm = torch.linalg.vector_norm(torch.stack(group_norms), norm_type)
         if dtensor_params:
-            if not isinstance(total_norm, DTensor):
-                d_total_norm = DTensor.from_local(total_norm, dtensor_params[0].grad.mesh)
-            else:
-                d_total_norm = total_norm
+            d_total_norm = DTensor.from_local(total_norm, dtensor_params[0].grad.device_mesh)
             torch.nn.utils.clip_grads_with_norm_(dtensor_params, max_norm, d_total_norm)
         if plain_params:
-            if not isinstance(total_norm, torch.Tensor):
-                total_norm = total_norm.to_local()
-            torch.nn.utils.clip_grad_norm_(plain_params, max_norm, total_norm)
+            torch.nn.utils.clip_grads_with_norm_(plain_params, max_norm, total_norm)
         return total_norm
 
     def clip_grad_value_(self, parameters, clip_value):
