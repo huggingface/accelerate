@@ -237,6 +237,18 @@ class MLflowTrackingTest(unittest.TestCase):
         fig = plt.figure(figsize=(6, 4))
         return fig
 
+    def test_nested_run_env_var_is_read_as_a_bool(self):
+        """MLFLOW_NESTED_RUN takes priority over the argument, so it has to be able to turn nesting off too."""
+        for value in ("False", "false", "0", "no", "off"):
+            with mock.patch.dict(os.environ, {"MLFLOW_NESTED_RUN": value}):
+                tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+            self.assertIs(tracker.nested_run, False, f"MLFLOW_NESTED_RUN={value} should disable nesting")
+
+        for value in ("True", "true", "1", "yes", "on"):
+            with mock.patch.dict(os.environ, {"MLFLOW_NESTED_RUN": value}):
+                tracker = MLflowTracker(experiment_name="test_exp", logging_dir=self.tmpdir.name)
+            self.assertIs(tracker.nested_run, True, f"MLFLOW_NESTED_RUN={value} should enable nesting")
+
     def test_log(self):
         import mlflow
 
