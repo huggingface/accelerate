@@ -17,7 +17,6 @@ import pickle
 import torch
 
 from accelerate import Accelerator
-from accelerate.optimizer import AcceleratedOptimizer
 from accelerate.test_utils import require_cpu, require_fp16, require_non_cpu
 from accelerate.test_utils.testing import AccelerateTestCase
 
