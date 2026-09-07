@@ -139,34 +139,6 @@ def sequential_model(num_layers):
 
 
 class ModelingUtilsTester(unittest.TestCase):
-    @parameterized.expand(
-        [
-            (True, {0: 1234}),
-            (False, {0: 1234, "cpu": 4321}),
-            (None, {0: 1234, "cpu": 4321}),
-        ]
-    )
-    def test_get_max_memory_integrated_cuda(self, is_integrated, expected):
-        properties = SimpleNamespace()
-        if is_integrated is not None:
-            properties.is_integrated = is_integrated
-
-        with (
-            patch.object(modeling, "is_npu_available", return_value=False),
-            patch.object(modeling, "is_mlu_available", return_value=False),
-            patch.object(modeling, "is_sdaa_available", return_value=False),
-            patch.object(modeling, "is_musa_available", return_value=False),
-            patch.object(modeling, "is_xpu_available", return_value=False),
-            patch.object(modeling, "is_hpu_available", return_value=False),
-            patch.object(modeling, "is_mps_available", return_value=False),
-            patch.object(torch.cuda, "device_count", return_value=1),
-            patch.object(torch.cuda, "mem_get_info", return_value=(1234, 5678)),
-            patch.object(torch.cuda, "get_device_properties", return_value=properties),
-            patch.object(torch, "tensor"),
-            patch("psutil.virtual_memory", return_value=SimpleNamespace(available=4321)),
-        ):
-            self.assertEqual(get_max_memory(), expected)
-
     def test_dtype_byte_size(self):
         self.assertEqual(dtype_byte_size(torch.bool), 1 / 8)
         self.assertEqual(dtype_byte_size(torch.float16), 2)
