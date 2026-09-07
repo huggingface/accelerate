@@ -27,14 +27,14 @@ from ...utils import (
     is_sdaa_available,
     is_xpu_available,
 )
-from .config_args import ClusterConfig, default_json_config_file
+from .config_args import ClusterConfig, default_yaml_config_file
 from .config_utils import SubcommandHelpFormatter
 
 
 description = "Create a default config file for Accelerate with only a few flags set."
 
 
-def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file):
+def write_basic_config(mixed_precision="no", save_location: str = default_yaml_config_file):
     """
     Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs. Will also
     set CPU if it is a CPU-only machine.
@@ -42,7 +42,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
     Args:
         mixed_precision (`str`, *optional*, defaults to "no"):
             Mixed Precision to use. Should be one of "no", "fp16", or "bf16"
-        save_location (`str`, *optional*, defaults to `default_json_config_file`):
+        save_location (`str`, *optional*, defaults to `default_yaml_config_file`):
             Optional custom save location. Should be passed to `--config_file` when using `accelerate launch`. Default
             location is inside the huggingface cache folder (`~/.cache/huggingface`) but can be overridden by setting
             the `HF_HOME` environmental variable, followed by `accelerate/default_config.yaml`.
@@ -143,7 +143,7 @@ def default_command_parser(parser, parents):
     parser = parser.add_parser("default", parents=parents, help=description, formatter_class=SubcommandHelpFormatter)
     parser.add_argument(
         "--config_file",
-        default=default_json_config_file,
+        default=default_yaml_config_file,
         help=(
             "The path to use to store the config file. Will default to a file named default_config.yaml in the cache "
             "location, which is the content of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have "

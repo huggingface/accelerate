@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import torch
@@ -235,6 +238,32 @@ class ClusterConfigTester(unittest.TestCase):
     """
 
     test_config_path = Path("tests/test_configs")
+
+    def test_default_config_file_selection(self):
+        # Resolve the cache in a fresh process without changing imported config defaults in this test process.
+        command = [
+            sys.executable,
+            "-c",
+            "from accelerate.commands.config.config_args import load_config_from_file; "
+            "print(load_config_from_file(None).mixed_precision)",
+        ]
+        for filenames, expected in [
+            (["default_config.json"], "no"),
+            (["default_config.yaml"], "bf16"),
+            (["default_config.json", "default_config.yaml"], "bf16"),
+        ]:
+            with self.subTest(filenames=filenames), TemporaryDirectory() as tmpdir:
+                config_dir = Path(tmpdir) / "accelerate"
+                config_dir.mkdir()
+                for filename in filenames:
+                    if filename.endswith(".json"):
+                        contents = json.dumps({"distributed_type": "NO", "mixed_precision": "no", "use_cpu": True})
+                    else:
+                        contents = "distributed_type: 'NO'\nmixed_precision: bf16\nuse_cpu: true\n"
+                    (config_dir / filename).write_text(contents, encoding="utf-8")
+                with patch_environment(hf_home=tmpdir):
+                    result = run_command(command, return_stdout=True)
+                self.assertEqual(result.strip(), expected)
 
     def test_base_config(self):
         # Tests that all the dataclasses can be initialized
