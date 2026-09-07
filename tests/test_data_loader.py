@@ -757,6 +757,25 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
 
+    @require_torchdata_stateful_dataloader
+    def test_dataloader_shuffle_seeded_after_init(self):
+        # With `num_workers > 0`, capturing the state dict at init builds the iterator and draws the shuffle
+        # permutation right away, before `synchronize_rng_states` gets to run at the start of `__iter__`.
+        def epoch(init_seed):
+            generator = torch.Generator().manual_seed(init_seed)
+            dataloader = DataLoaderShard(
+                list(range(16)),
+                batch_size=4,
+                shuffle=True,
+                generator=generator,
+                use_stateful_dataloader=True,
+                num_workers=2,
+            )
+            generator.manual_seed(0)
+            return torch.cat(list(dataloader))
+
+        assert torch.equal(epoch(1), epoch(2))
+
     @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
     @require_torchdata_stateful_dataloader
     def test_dataloader_state_dict(self, num_workers):
