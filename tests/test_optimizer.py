@@ -22,36 +22,6 @@ from accelerate.test_utils import require_cpu, require_fp16, require_non_cpu
 from accelerate.test_utils.testing import AccelerateTestCase
 
 
-class ScheduleFreeLikeOptimizer(torch.optim.SGD):
-    """Stands in for a `schedule_free` optimizer, which tracks a train/eval mode."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.mode = None
-
-    def train(self):
-        self.mode = "train"
-
-    def eval(self):
-        self.mode = "eval"
-
-
-class DeepSpeedLikeOptimizerWrapper:
-    """
-    Stands in for a DeepSpeed optimizer, which wraps the user optimizer one level deeper. It deliberately does not
-    expose `train`/`eval` itself, which is why `AcceleratedOptimizer` has to reach through to the wrapped optimizer.
-    """
-
-    def __init__(self, optimizer):
-        self.optimizer = optimizer
-
-    def state_dict(self):
-        return self.optimizer.state_dict()
-
-    def load_state_dict(self, state_dict):
-        self.optimizer.load_state_dict(state_dict)
-
-
 @require_cpu
 class CPUOptimizerTester(AccelerateTestCase):
     def test_accelerated_optimizer_pickling(self):
