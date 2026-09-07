@@ -17,6 +17,7 @@
 import argparse
 import os
 import platform
+import subprocess
 from shutil import which
 
 import numpy as np
