@@ -18,6 +18,7 @@ import argparse
 import os
 import platform
 import subprocess
+from shutil import which
 
 import numpy as np
 import psutil
@@ -28,6 +29,7 @@ from accelerate.commands.config import default_config_file, load_config_from_fil
 
 from ..utils import (
     is_mlu_available,
+    is_mps_available,
     is_musa_available,
     is_neuron_available,
     is_npu_available,
@@ -60,6 +62,7 @@ def env_command(args):
     pt_musa_available = is_musa_available()
     pt_npu_available = is_npu_available()
     pt_neuron_available = is_neuron_available()
+    pt_mps_available = is_mps_available()
 
     accelerator = "N/A"
     if pt_cuda_available:
@@ -76,21 +79,15 @@ def env_command(args):
         accelerator = "NPU"
     elif pt_neuron_available:
         accelerator = "NEURON"
+    elif pt_mps_available:
+        accelerator = "MPS"
 
     accelerate_config = "Not found"
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file):
         accelerate_config = load_config_from_file(args.config_file).to_dict()
 
-    # if we can run which, get it
-    command = None
-    bash_location = "Not found"
-    if os.name == "nt":
-        command = ["where", "accelerate"]
-    elif os.name == "posix":
-        command = ["which", "accelerate"]
-    if command is not None:
-        bash_location = subprocess.check_output(command, text=True, stderr=subprocess.STDOUT).strip()
+    bash_location = which("accelerate") or "Not found"
     info = {
         "`Accelerate` version": version,
         "Platform": platform.platform(),
@@ -113,6 +110,12 @@ def env_command(args):
         info["MUSA type"] = torch.musa.get_device_name()
     elif pt_neuron_available:
         info["NEURON type"] = torch.neuron.get_device_name()
+    elif pt_mps_available:
+        try:
+            mps_type = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
+        except Exception:
+            mps_type = platform.processor() or "Apple Silicon"
+        info["MPS type"] = mps_type
     elif pt_npu_available:
         info["CANN version"] = torch.version.cann
 

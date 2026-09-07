@@ -89,20 +89,20 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     Args:
         func (`callable`):
             The function to recursively apply.
-        data (nested list/tuple/dictionary of `main_type`):
+        data (nested list/tuple/dictionary of objects accepted by `test_type`):
             The data on which to apply `func`
         *args:
             Positional arguments that will be passed to `func` when applied on the unpacked data.
-        main_type (`type`, *optional*, defaults to `torch.Tensor`):
-            The base type of the objects to which apply `func`.
+        test_type (`Callable[[Any], bool]`, *optional*, defaults to `is_torch_tensor`):
+            The predicate deciding whether `func` should be applied to a given leaf object.
         error_on_other_type (`bool`, *optional*, defaults to `False`):
-            Whether to return an error or not if after unpacking `data`, we get on an object that is not of type
-            `main_type`. If `False`, the function will leave objects of types different than `main_type` unchanged.
+            Whether to return an error or not if after unpacking `data`, we get on an object for which `test_type`
+            returns `False`. If `False`, the function will leave such objects unchanged.
         **kwargs (additional keyword arguments, *optional*):
             Keyword arguments that will be passed to `func` when applied on the unpacked data.
 
     Returns:
-        The same data structure as `data` with `func` applied to every object of type `main_type`.
+        The same data structure as `data` with `func` applied to every object for which `test_type` returns `True`.
     """
     if isinstance(data, (tuple, list)):
         return honor_type(
