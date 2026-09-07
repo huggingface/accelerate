@@ -18,9 +18,7 @@ import tempfile
 import unittest
 import warnings
 from collections import OrderedDict
-from types import SimpleNamespace
 from typing import Optional
-from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -36,7 +34,6 @@ from accelerate.test_utils import (
     require_non_hpu,
     torch_device,
 )
-from accelerate.utils import modeling
 from accelerate.utils.modeling import (
     align_module_device,
     check_device_map,
@@ -47,7 +44,6 @@ from accelerate.utils.modeling import (
     dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
-    get_max_memory,
     get_module_size_with_ties,
     get_non_persistent_buffers,
     get_state_dict_offloaded_model,
