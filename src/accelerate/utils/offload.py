@@ -29,6 +29,10 @@ def offload_weight(weight, weight_name, offload_folder, index=None):
         # Need to reinterpret the underlined data as int16 since NumPy does not handle bfloat16s.
         weight = weight.view(torch.int16)
         dtype = "bfloat16"
+    elif str(weight.dtype).startswith("torch.float8_"):
+        # NumPy does not handle any FP8 dtype either, so reinterpret the 1-byte data as int8.
+        dtype = str(weight.dtype).split(".")[1]
+        weight = weight.view(torch.int8)
     array = weight.cpu().numpy()
     tensor_file = os.path.join(offload_folder, f"{weight_name}.dat")
     if index is not None:
@@ -53,6 +57,9 @@ def load_offloaded_weight(weight_file, weight_info):
     if dtype == "bfloat16":
         # NumPy does not support bfloat16 so this was saved as a int16
         dtype = "int16"
+    elif dtype.startswith("float8_"):
+        # NumPy does not support any FP8 dtype either, so this was saved as an int8
+        dtype = "int8"
 
     weight = np.memmap(weight_file, dtype=dtype, shape=shape, mode="r")
 
@@ -61,6 +68,8 @@ def load_offloaded_weight(weight_file, weight_info):
     weight = torch.tensor(weight)
     if weight_info["dtype"] == "bfloat16":
         weight = weight.view(torch.bfloat16)
+    elif weight_info["dtype"].startswith("float8_"):
+        weight = weight.view(getattr(torch, weight_info["dtype"]))
 
     return weight
 
