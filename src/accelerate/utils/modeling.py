@@ -762,6 +762,7 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
 
     if max_memory is None:
         max_memory = {}
+        is_integrated_cuda = False
         # Make sure device is initialized on each device to have the right memory info.
         if is_npu_available():
             for i in range(torch.npu.device_count()):
@@ -816,13 +817,15 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
                 try:
                     _ = torch.tensor([0], device=i)
                     max_memory[i] = torch.cuda.mem_get_info(i)[0]
+                    device_properties = torch.cuda.get_device_properties(i)
+                    is_integrated_cuda = is_integrated_cuda or getattr(device_properties, "is_integrated", False)
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
-        # allocate everything in the mps device as the RAM is shared
+        # MPS and integrated CUDA devices share host RAM, so exposing a separate CPU budget would double-count it.
         if is_mps_available():
             max_memory["mps"] = psutil.virtual_memory().available
-        else:
+        elif not is_integrated_cuda:
             max_memory["cpu"] = psutil.virtual_memory().available
         return max_memory
 
