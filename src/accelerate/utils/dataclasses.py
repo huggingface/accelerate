@@ -1792,6 +1792,14 @@ class FullyShardedDataParallelPlugin:
             "for reduced memory usage. Defaults to `False`"
         },
     )
+    activation_checkpointing_offload: bool = field(
+        default=None,
+        metadata={
+            "help": "Whether to offload each checkpointed layer's input activation to pinned CPU memory during the "
+            "forward pass and restore it on demand during the backward pass. Bounds activation memory at long "
+            "sequence lengths. Requires `activation_checkpointing=True` and `fsdp_version=2`. Defaults to `False`"
+        },
+    )
     cpu_ram_efficient_loading: bool = field(
         default=None,
         metadata={
@@ -1951,6 +1959,15 @@ class FullyShardedDataParallelPlugin:
             self.activation_checkpointing = (
                 str_to_bool(os.environ.get(env_prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
             )
+
+        if self.activation_checkpointing_offload is None:
+            self.activation_checkpointing_offload = (
+                str_to_bool(os.environ.get(env_prefix + "ACTIVATION_CHECKPOINTING_OFFLOAD", "False")) == 1
+            )
+        if self.activation_checkpointing_offload and not self.activation_checkpointing:
+            raise ValueError("`activation_checkpointing_offload=True` requires `activation_checkpointing=True`.")
+        if self.activation_checkpointing_offload and self.fsdp_version != 2:
+            raise ValueError("`activation_checkpointing_offload=True` requires `fsdp_version=2`.")
 
         if self.ignored_modules is None:
             self.ignored_modules = os.environ.get(env_prefix + "IGNORED_MODULES", None)

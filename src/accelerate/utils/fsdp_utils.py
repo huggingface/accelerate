@@ -701,13 +701,20 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
 
     from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
         checkpoint_wrapper,
+        offload_wrapper,
     )
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(accelerator.state.fsdp_plugin, model)
 
     for layer_name, layer in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
         if auto_wrap_policy_func(layer):
-            model.set_submodule(layer_name, checkpoint_wrapper(layer, preserve_rng_state=False))
+            wrapped = checkpoint_wrapper(layer, preserve_rng_state=False)
+            if accelerator.state.fsdp_plugin.activation_checkpointing_offload:
+                # `offload_wrapper` puts `save_on_cpu` around the checkpoint, so what moves to host
+                # is the input the checkpoint saved for its recompute: `layers x seq x hidden` bytes,
+                # the activation that dominates at long sequence lengths.
+                wrapped = offload_wrapper(wrapped)
+            model.set_submodule(layer_name, wrapped)
 
     return model
 
@@ -940,10 +947,7 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
                 return False
             # Activation checkpointing (applied before sharding) wraps matched layers in
             # `CheckpointWrapper`; look through it so such layers still get their own FSDP group.
-            from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointWrapper
-
-            if isinstance(module, CheckpointWrapper):
-                module = module._checkpoint_wrapped_module
+            module = getattr(module, "_checkpoint_wrapped_module", module)
             return isinstance(module, tuple(transformer_cls_to_wrap))
 
     elif fn is size_based_auto_wrap_policy:
