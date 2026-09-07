@@ -37,7 +37,7 @@ from .imports import (
 )
 
 
-def clear_device_cache(garbage_collection=False):
+def clear_device_cache(garbage_collection: bool = False) -> None:
     """
     Clears the device cache by calling `torch.{backend}.empty_cache`. Can also run `gc.collect()`, but do note that
     this is a *considerable* slowdown and should be used sparingly.
@@ -67,7 +67,7 @@ def clear_device_cache(garbage_collection=False):
         torch.neuron.empty_cache()
 
 
-def release_memory(*objects):
+def release_memory(*objects) -> list:
     """
     Releases memory from `objects` by setting them to `None` and calls `gc.collect()` and `torch.cuda.empty_cache()`.
     Returned objects should be reassigned to the same variables.
