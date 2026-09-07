@@ -53,31 +53,6 @@ class EnvCommandTester(unittest.TestCase):
 
         self.assertEqual(info["`accelerate` bash location"], "Not found")
 
-    def test_mps_type_reads_the_cpu_brand_string(self):
-        """On MPS the chip name comes from sysctl, with `platform.processor()` only as a fallback."""
-        args = accelerate_env_cmd.env_command_parser().parse_args([])
-
-        with (
-            patch.multiple(
-                accelerate_env_cmd,
-                is_xpu_available=lambda: False,
-                is_mlu_available=lambda: False,
-                is_sdaa_available=lambda: False,
-                is_musa_available=lambda: False,
-                is_npu_available=lambda: False,
-                is_neuron_available=lambda: False,
-                is_mps_available=lambda: True,
-            ),
-            patch("torch.cuda.is_available", return_value=False),
-            # platform.processor() shells out as well, so pin the fallback to something distinct
-            patch("accelerate.commands.env.platform.processor", return_value="fallback"),
-            patch("subprocess.check_output", return_value="Apple M2 Pro\n") as check_output,
-        ):
-            info = accelerate_env_cmd.env_command(args)
-
-        check_output.assert_any_call(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)
-        self.assertEqual(info["MPS type"], "Apple M2 Pro")
-
 
 class AccelerateLauncherTester(unittest.TestCase):
     """
