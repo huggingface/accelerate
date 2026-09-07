@@ -3011,7 +3011,30 @@ class Accelerator:
                     if parameters == [p for p in model.parameters()]:
                         return model.clip_grad_norm_(max_norm, norm_type)
         self.unscale_gradients()
-        return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+        parameters = list(parameters)
+
+        from torch.distributed.tensor import DTensor
+
+        if not any(isinstance(p.grad, DTensor) for p in parameters if p.grad is not None):
+            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+
+        dtensor_params = [p for p in parameters if p.grad is not None and isinstance(p.grad, DTensor)]
+        plain_params = [p for p in parameters if p.grad is not None and not isinstance(p.grad, DTensor)]
+        group_norms = [
+            torch.nn.utils.get_total_norm(group, norm_type) for group in (dtensor_params, plain_params) if group
+        ]
+        total_norm = torch.linalg.vector_norm(torch.stack(group_norms), norm_type)
+        if dtensor_params:
+            if not isinstance(total_norm, DTensor):
+                d_total_norm = DTensor.from_local(total_norm, dtensor_params[0].grad.mesh)
+            else:
+                d_total_norm = total_norm
+            torch.nn.utils.clip_grads_with_norm_(dtensor_params, max_norm, d_total_norm)
+        if plain_params:
+            if not isinstance(total_norm, torch.Tensor):
+                total_norm = total_norm.to_local()
+            torch.nn.utils.clip_grad_norm_(plain_params, max_norm, total_norm)
+        return total_norm
 
     def clip_grad_value_(self, parameters, clip_value):
         """
