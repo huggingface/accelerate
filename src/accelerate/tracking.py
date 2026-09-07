@@ -842,13 +842,13 @@ class MLflowTracker(GeneralTracker):
         Logs an figure to the current run.
 
         Args:
-            figure (Any):
-            The figure to be logged.
+            figure (`Any`):
+                The figure to be logged.
             artifact_file (`str`, *optional*):
-            The run-relative artifact file path in posixpath format to which the image is saved.
-            If not provided, the image is saved to a default location.
-            **kwargs:
-            Additional keyword arguments passed to the underlying mlflow.log_image function.
+                The run-relative artifact file path in posixpath format to which the image is saved. If not
+                provided, the image is saved to a default location.
+            **save_kwargs:
+                Additional keyword arguments passed to the underlying `mlflow.log_figure` function.
         """
         import mlflow
 
@@ -1201,15 +1201,15 @@ class SwanLabTracker(GeneralTracker):
         Logs `values` to the current run.
 
         Args:
-        data : Dict[str, DataType]
-            Data must be a dict. The key must be a string with 0-9, a-z, A-Z, " ", "_", "-", "/". The value must be a
-            `float`, `float convertible object`, `int` or `swanlab.data.BaseType`.
-        step : int, optional
-            The step number of the current data, if not provided, it will be automatically incremented.
-        If step is duplicated, the data will be ignored.
+            values (`Dict[str, DataType]`):
+                Values to be logged as key-value pairs. The key must be a string with 0-9, a-z, A-Z, " ", "_", "-",
+                "/". The value must be a `float`, `float convertible object`, `int` or `swanlab.data.BaseType`.
+            step (`int`, *optional*):
+                The step number of the current data, if not provided, it will be automatically incremented. If step
+                is duplicated, the data will be ignored.
             kwargs:
                 Additional key word arguments passed along to the `swanlab.log` method. Likes:
-                    print_to_console : bool, optional
+                    print_to_console (`bool`, *optional*):
                         Whether to print the data to the console, the default is False.
         """
         self.run.log(values, step=step, **kwargs)
