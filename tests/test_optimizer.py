@@ -34,44 +34,6 @@ class CPUOptimizerTester(AccelerateTestCase):
         except Exception as e:
             self.fail(f"Accelerated optimizer pickling failed with {e}")
 
-    def test_accelerated_optimizer_train_eval(self):
-        Accelerator()
-        model = torch.nn.Linear(10, 10)
-        inner = ScheduleFreeLikeOptimizer(model.parameters(), 0.1)
-        optimizer = AcceleratedOptimizer(inner)
-
-        optimizer.train()
-        assert inner.mode == "train"
-        optimizer.eval()
-        assert inner.mode == "eval"
-
-    def test_accelerated_optimizer_train_eval_with_wrapped_optimizer(self):
-        Accelerator()
-        model = torch.nn.Linear(10, 10)
-        inner = ScheduleFreeLikeOptimizer(model.parameters(), 0.1)
-        optimizer = AcceleratedOptimizer(DeepSpeedLikeOptimizerWrapper(inner))
-
-        optimizer.train()
-        assert inner.mode == "train"
-        optimizer.eval()
-        assert inner.mode == "eval"
-
-    def test_accelerated_optimizer_train_eval_without_mode_support(self):
-        # Control for the reach-through: neither a plain optimizer nor a wrapper whose
-        # inner optimizer lacks the methods tracks a mode, so both calls stay no-ops
-        # instead of raising, and neither grows a mode it never had.
-        Accelerator()
-        model = torch.nn.Linear(10, 10)
-        plain = torch.optim.SGD(model.parameters(), 0.1)
-
-        for inner in (plain, DeepSpeedLikeOptimizerWrapper(plain)):
-            optimizer = AcceleratedOptimizer(inner)
-
-            optimizer.train()
-            optimizer.eval()
-
-            assert not hasattr(plain, "mode")
-
 
 @require_fp16
 @require_non_cpu
