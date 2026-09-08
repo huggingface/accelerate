@@ -3024,16 +3024,19 @@ class Accelerator:
 
         dtensor_params = [p for p in parameters if p.grad is not None and isinstance(p.grad, DTensor)]
         plain_params = [p for p in parameters if p.grad is not None and not isinstance(p.grad, DTensor)]
-        group_norms = [
-            torch.nn.utils.get_total_norm([p.grad for p in group], norm_type)
-            for group in (dtensor_params, plain_params)
-            if group
-        ]
+
+        # DTensor params may not all share the same device mesh (e.g. expert parallelism), so group them by mesh.
+        mesh_groups = {}
+        for p in dtensor_params:
+            mesh_groups.setdefault(p.grad.device_mesh, []).append(p)
+
+        norm_groups = list(mesh_groups.values()) + ([plain_params] if plain_params else [])
+        group_norms = [torch.nn.utils.get_total_norm([p.grad for p in group], norm_type) for group in norm_groups]
         group_norms = [norm.full_tensor() if isinstance(norm, DTensor) else norm for norm in group_norms]
         total_norm = torch.linalg.vector_norm(torch.stack(group_norms), norm_type)
-        if dtensor_params:
-            d_total_norm = DTensor.from_local(total_norm, dtensor_params[0].grad.device_mesh)
-            torch.nn.utils.clip_grads_with_norm_(dtensor_params, max_norm, d_total_norm)
+        for mesh, group in mesh_groups.items():
+            d_total_norm = DTensor.from_local(total_norm, mesh)
+            torch.nn.utils.clip_grads_with_norm_(group, max_norm, d_total_norm)
         if plain_params:
             torch.nn.utils.clip_grads_with_norm_(plain_params, max_norm, total_norm)
         return total_norm
