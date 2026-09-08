@@ -2950,7 +2950,7 @@ class Accelerator:
                     opt = opt.optimizer
                 self.scaler.unscale_(opt)
 
-    def _clip_grad_norm_dtensor_aware_(self, parameters, max_norm, norm_type=2):
+    def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2):
         is_dtensor_available = torch.distributed.is_available() and is_torch_version(">=", DTENSOR_PYTORCH_VERSION)
         if not is_dtensor_available:
             return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
@@ -2979,8 +2979,7 @@ class Accelerator:
         for mesh, group in mesh_groups.items():
             d_total_norm = DTensor.from_local(total_norm, mesh)
             torch.nn.utils.clip_grads_with_norm_(group, max_norm, d_total_norm)
-        if plain_params:
-            torch.nn.utils.clip_grads_with_norm_(plain_params, max_norm, total_norm)
+        torch.nn.utils.clip_grads_with_norm_(plain_params, max_norm, total_norm)
         return total_norm
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
@@ -3042,8 +3041,7 @@ class Accelerator:
                     if parameters == [p for p in model.parameters()]:
                         return model.clip_grad_norm_(max_norm, norm_type)
         self.unscale_gradients()
-        parameters = list(parameters)
-        return self._clip_grad_norm_dtensor_aware_(parameters, max_norm, norm_type=norm_type)
+        return self._clip_grad_norm_dtensor_aware_(list(parameters), max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
         """
