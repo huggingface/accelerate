@@ -160,7 +160,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     if (num_processes is not None and num_processes > 1) or num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
         current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
-    if args.cpu or args.use_cpu:
+    if str_to_bool(current_env["ACCELERATE_USE_CPU"]):
         current_env["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
         current_env["KMP_BLOCKTIME"] = str(1)
 
