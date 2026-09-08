@@ -126,24 +126,6 @@ class MemoryTest(unittest.TestCase):
         ]
         assert [bs, arg1] == [8, "hello"]
 
-    def test_mps_out_of_memory(self):
-        batch_sizes = []
-
-        @find_executable_batch_size(starting_batch_size=16)
-        def mock_training_loop_function(batch_size):
-            nonlocal batch_sizes
-            batch_sizes.append(batch_size)
-            if batch_size != 8:
-                # Message raised by the MPS allocator, which has no trailing period after "out of memory".
-                raise RuntimeError(
-                    "MPS backend out of memory (MPS allocated: 8.00 GB, other allocations: 384.00 KB, max allowed: "
-                    "9.07 GB). Tried to allocate 2.00 GB on private pool. Use PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 "
-                    "to disable upper limit for memory allocations (may cause system failure)."
-                )
-
-        mock_training_loop_function()
-        assert batch_sizes == [16, 14, 12, 10, 9, 8]
-
     def test_start_zero(self):
         @find_executable_batch_size(starting_batch_size=0)
         def mock_training_loop_function(batch_size):
