@@ -59,8 +59,6 @@ def _get_model_state_dict(model, adapter_only=False, sd_options=None):
         if sd_options is not None and sd_options.full_state_dict:
             from torch.distributed.checkpoint.state_dict import get_model_state_dict
 
-            # NOTE: Under FSDP2 `get_peft_model_state_dict` returns sharded `DTensor`s
-            #  that it has no handling for.
             return get_model_state_dict(model, options=replace(sd_options, ignore_frozen_params=True))
 
         from peft import get_peft_model_state_dict
