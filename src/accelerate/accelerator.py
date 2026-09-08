@@ -92,6 +92,7 @@ from .utils import (
     get_fsdp2_grad_scaler,
     get_grad_scaler,
     get_mixed_precision_context_manager,
+    get_model_tp_size,
     get_pretty_name,
     has_offloaded_params,
     is_bf16_available,
@@ -1900,14 +1901,15 @@ class Accelerator:
                     if self.ddp_handler is not None:
                         self.ddp_handler.register_comm_hook(model)
             elif self.parallelism_config and self.parallelism_config.tp_enabled:
-                if not hasattr(model, "tp_size"):
+                model_tp_size = get_model_tp_size(model)
+                if model_tp_size is None:
                     raise NotImplementedError(
                         "Model should undergo tensor parallel before passing it to accelerate."
                         "You can use .from_pretrained(..., tp_plan='auto') if the model supports"
                     )
-                if model.tp_size != self.parallelism_config.tp_size:
+                if model_tp_size != self.parallelism_config.tp_size:
                     raise ValueError(
-                        f"tp_size in the plugin {self.parallelism_config.tp_size} should be same as model's tp size {model.tp_size}"
+                        f"tp_size in the plugin {self.parallelism_config.tp_size} should be same as model's tp size {model_tp_size}"
                     )
             elif self.is_fsdp2:
                 raise ValueError(
@@ -2338,7 +2340,9 @@ class Accelerator:
                     {
                         "scheduler.params.warmup_min_lr": 0,
                         "scheduler.params.warmup_max_lr": max_lr,
-                        "scheduler.params.warmup_num_steps": scheduler.warmup_num_steps,
+                        # `DummyScheduler` defaults to 0, which `deepspeed>=0.19.6` rejects outright.
+                        # Older versions silently clamped it to 2, so keep the value positive.
+                        "scheduler.params.warmup_num_steps": max(1, scheduler.warmup_num_steps),
                     }
                 )
                 if scheduler.total_num_steps is not None:
