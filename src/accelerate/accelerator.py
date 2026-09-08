@@ -3015,7 +3015,7 @@ class Accelerator:
                     if not self.is_fsdp2:
                         return model.clip_grad_norm_(max_norm, norm_type)
                     else:
-                        return self._clip_grad_norm_dtensor_aware_(parameters, max_norm, norm_type=norm_type)
+                        return self._clip_grad_norm_dtensor_aware(parameters, max_norm, norm_type=norm_type)
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # DeepSpeed handles gradient clipping internally, but we can retrieve the gradient norm
             if self.deepspeed_engine_wrapped is not None:
