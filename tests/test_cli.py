@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -159,6 +160,26 @@ class AccelerateLauncherTester(unittest.TestCase):
         self.assertEqual(len(python_script_cmd), 3)
         self.assertEqual(python_script_cmd[1], str(self.test_file_path))
         self.assertEqual(python_script_cmd[2], test_file_arg)
+
+    def test_cpu_launch_sets_kmp_env(self):
+        """
+        `accelerate launch --cpu` sets the Intel OpenMP variables, and a launch without it leaves them alone.
+        """
+        with patch.dict(os.environ):
+            os.environ.pop("KMP_AFFINITY", None)
+            os.environ.pop("KMP_BLOCKTIME", None)
+
+            args = self.parser.parse_args(["--cpu", str(self.test_file_path)])
+            args, _, _ = _validate_launch_command(args)
+            _, current_env = prepare_simple_launcher_cmd_env(args)
+            assert current_env["KMP_AFFINITY"] == "granularity=fine,compact,1,0"
+            assert current_env["KMP_BLOCKTIME"] == "1"
+
+            args = self.parser.parse_args([str(self.test_file_path)])
+            args, _, _ = _validate_launch_command(args)
+            _, current_env = prepare_simple_launcher_cmd_env(args)
+            assert "KMP_AFFINITY" not in current_env
+            assert "KMP_BLOCKTIME" not in current_env
 
     def test_validate_launch_command(self):
         """Test that the validation function combines args and defaults."""
