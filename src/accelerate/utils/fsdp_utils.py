@@ -76,7 +76,6 @@ def _get_model_state_dict(model, adapter_only=False, sd_options=None):
 
 def _set_model_state_dict(model, state_dict, adapter_only=False, sd_options=None):
     if adapter_only and is_peft_model(model):
-        # Invariant: `sd_options` is not None only for FSDP2
         if sd_options is not None and sd_options.full_state_dict:
             from torch.distributed.checkpoint.state_dict import set_model_state_dict
 
