@@ -679,10 +679,13 @@ def test_split_between_processes_list():
 
     even_data = list(range(0, (2 * state.num_processes)))
     odd_data = list(range(0, (2 * state.num_processes) - 1))
-    for data in [odd_data, even_data]:
-        expected_output = data
+    for data in [odd_data, even_data, tuple(odd_data), tuple(even_data)]:
+        expected_output = list(data)
 
         with state.split_between_processes(data, apply_padding=True) as results:
+            assert type(results) is type(data), (
+                f"Padding changed the input type. Process index: {state.process_index}; Expected: {type(data)}; Got: {type(results)}"
+            )
             num_samples_per_device = math.ceil(len(data) / state.num_processes)
             # Test all processes gets the correct number of item(s)
             assert len(results) == num_samples_per_device, (

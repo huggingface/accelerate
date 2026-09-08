@@ -487,7 +487,10 @@ class PartialState:
                             tensorized_result, pad_index=send_to_device(inputs[-1], self.device)
                         )
                     else:
-                        result += [inputs[-1]] * (num_samples_per_process + (1 if num_extras > 0 else 0) - len(result))
+                        num_padding = num_samples_per_process + (1 if num_extras > 0 else 0) - len(result)
+                        # `result` is a slice of `inputs`, so it keeps the input's own sequence type.
+                        # Build the padding to match it: `tuple + list` raises, even when it is empty.
+                        result = result + type(result)([inputs[-1]] * num_padding)
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
