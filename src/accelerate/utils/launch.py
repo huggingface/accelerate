@@ -40,6 +40,7 @@ from ..utils import (
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from ..utils.other import get_free_port, is_port_in_use, merge_dicts
 from ..utils.versions import compare_versions
+from . import str_to_bool
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
