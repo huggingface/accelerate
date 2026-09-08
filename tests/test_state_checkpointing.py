@@ -20,7 +20,6 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
-from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
