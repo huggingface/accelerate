@@ -40,6 +40,7 @@ from .utils import (
     is_trackio_available,
     is_wandb_available,
     listify,
+    str_to_bool,
 )
 
 
@@ -738,6 +739,8 @@ class MLflowTracker(GeneralTracker):
             tags = json.loads(tags)
 
         nested_run = os.environ.get("MLFLOW_NESTED_RUN", nested_run)
+        if isinstance(nested_run, str):
+            nested_run = str_to_bool(nested_run) == 1
 
         self.experiment_name = experiment_name
         self.logging_dir = logging_dir
