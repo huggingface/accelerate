@@ -784,6 +784,27 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         for d1, d2 in zip(data1, data2):
             assert torch.allclose(d1, d2)
 
+    @require_torchdata_stateful_dataloader
+    def test_stateful_dataloader_does_not_capture_state_during_initialization(self):
+        """Constructing a stateful adapter must not consume sampler RNG before iteration synchronizes it."""
+        generator = torch.Generator().manual_seed(1234)
+        rng_before = generator.get_state()
+        dataloader = DataLoaderShard(
+            list(range(32)),
+            batch_size=4,
+            shuffle=True,
+            generator=generator,
+            use_stateful_dataloader=True,
+            num_workers=2,
+        )
+
+        assert dataloader.dl_state_dict is None
+        assert torch.equal(generator.get_state(), rng_before)
+
+        # An explicit checkpoint before the first batch still captures the initial state on demand.
+        assert dataloader.state_dict() is not None
+        assert len(list(dataloader)) == 8
+
     @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
     @require_torchdata_stateful_dataloader
     def test_dataloader_dispatcher_state_dict(self, num_workers):
