@@ -3041,7 +3041,7 @@ class Accelerator:
                     if parameters == [p for p in model.parameters()]:
                         return model.clip_grad_norm_(max_norm, norm_type)
         self.unscale_gradients()
-        return self._clip_grad_norm_dtensor_aware_(list(parameters), max_norm, norm_type=norm_type)
+        return self._clip_grad_norm_dtensor_aware(list(parameters), max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
         """
