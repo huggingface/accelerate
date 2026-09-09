@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import pickle
 import tempfile
 import warnings
+from contextlib import nullcontext
 from unittest.mock import Mock
 
 import torch
@@ -31,6 +33,7 @@ from torch.utils.data import (
 )
 
 from accelerate.accelerator import Accelerator, DataLoaderConfiguration
+from accelerate.utils import broadcast_object_list
 from accelerate.utils.dataclasses import DistributedType
 
 
@@ -68,6 +71,24 @@ class DummyIterableDataset(IterableDataset):
 
     def __iter__(self):
         yield from self.data
+
+
+class RankStatefulDataset(Dataset):
+    def __init__(self, rank, size=32):
+        self.rank = rank
+        self.size = size
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, index):
+        return torch.tensor(self.rank * 10_000 + index)
+
+    def state_dict(self):
+        return {"rank": self.rank}
+
+    def load_state_dict(self, state_dict):
+        self.rank = state_dict["rank"]
 
 
 def create_accelerator(even_batches=True):
@@ -369,7 +390,48 @@ def test_stateful_dataloader_save_state(accelerator):
     _test_stateful_dataloader_save_state_resume(accelerator, iterable=False)
 
 
+def test_stateful_dataloader_save_state_per_process():
+    """Tests that distributed processes save and restore their own stateful dataloader state."""
+    accelerator = Accelerator(
+        dataloader_config=DataLoaderConfiguration(use_stateful_dataloader=True, dispatch_batches=False)
+    )
+    checkpoint_context = tempfile.TemporaryDirectory() if accelerator.is_main_process else nullcontext()
+
+    with checkpoint_context as checkpoint_dir:
+        checkpoint_dir = [checkpoint_dir]
+        broadcast_object_list(checkpoint_dir)
+        checkpoint_dir = checkpoint_dir[0]
+
+        dataset = RankStatefulDataset(accelerator.process_index)
+        dataloader = accelerator.prepare(DataLoader(dataset, batch_size=1, num_workers=0))
+        dataloader_iterator = iter(dataloader)
+        for _ in range(3):
+            next(dataloader_iterator)
+
+        accelerator.save_state(checkpoint_dir)
+        expected_batches = [next(dataloader_iterator) for _ in range(3)]
+        accelerator.load_state(checkpoint_dir)
+        resumed_iterator = iter(dataloader)
+        resumed_batches = [next(resumed_iterator) for _ in range(3)]
+
+        accelerator.wait_for_everyone()
+        checkpoint_files = set(os.listdir(checkpoint_dir))
+        expected_state_files = {f"dl_state_dict_rank{rank}.bin" for rank in range(accelerator.num_processes)}
+        files_are_per_process = (
+            expected_state_files.issubset(checkpoint_files) and "dl_state_dict.bin" not in checkpoint_files
+        )
+        accelerator.wait_for_everyone()
+
+    for expected, resumed in zip(expected_batches, resumed_batches):
+        assert torch.equal(expected, resumed), f"Expected batch {expected}, got {resumed}"
+    assert files_are_per_process, f"Expected {expected_state_files}, got {checkpoint_files}"
+
+
 def main():
+    if os.environ.get("ACCELERATE_TEST_STATEFUL_DATALOADER_CHECKPOINT_ONLY") == "1":
+        test_stateful_dataloader_save_state_per_process()
+        return
+
     accelerator = create_accelerator()
     torch.manual_seed(accelerator.process_index)
 
@@ -421,6 +483,7 @@ def main():
     test_data_loader(loader, accelerator)
     test_stateful_dataloader(accelerator)
     test_stateful_dataloader_save_state(accelerator)
+    test_stateful_dataloader_save_state_per_process()
 
     accelerator.end_training()
 

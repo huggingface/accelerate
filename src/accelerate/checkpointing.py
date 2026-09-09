@@ -60,6 +60,12 @@ from .state import PartialState
 logger = get_logger(__name__)
 
 
+def _get_dataloader_state_dict_filename(index: int, process_index: Optional[int] = None) -> str:
+    dataloader_suffix = "" if index == 0 else f"_{index}"
+    process_suffix = "" if process_index is None else f"_rank{process_index}"
+    return f"dl_state_dict{dataloader_suffix}{process_suffix}.bin"
+
+
 def save_accelerator_state(
     output_dir: str,
     model_states: list[dict],
@@ -139,7 +145,9 @@ def save_accelerator_state(
             if isinstance(sampler, SeedableRandomSampler):
                 save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
         if getattr(dataloader, "use_stateful_dataloader", False):
-            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            # Stateful dataloader state is process-specific during distributed training.
+            dataloader_process_index = process_index if PartialState().num_processes > 1 else None
+            dataloader_state_dict_name = _get_dataloader_state_dict_filename(i, dataloader_process_index)
             output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
             state_dict = dataloader.state_dict()
             torch.save(state_dict, output_dataloader_state_dict_file)
@@ -275,8 +283,14 @@ def load_accelerator_state(
             if isinstance(sampler, SeedableRandomSampler):
                 sampler = dataloader.set_sampler(load(input_sampler_file))
         if getattr(dataloader, "use_stateful_dataloader", False):
-            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            dataloader_state_dict_name = _get_dataloader_state_dict_filename(i)
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
+            if PartialState().num_processes > 1:
+                # Prefer process-specific state while supporting checkpoints created with the legacy shared filename.
+                dataloader_state_dict_name = _get_dataloader_state_dict_filename(i, process_index)
+                process_input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)
+                if process_input_dataloader_state_dict_file.exists():
+                    input_dataloader_state_dict_file = process_input_dataloader_state_dict_file
             if input_dataloader_state_dict_file.exists():
                 state_dict = load(input_dataloader_state_dict_file, **load_kwargs)
                 dataloader.load_state_dict(state_dict)
