@@ -802,27 +802,15 @@ def _attach_context_parallel_hooks(
 
     """
 
-    # The hook below discards the attention mask and forces `is_causal=True`. That is only
-    # equivalent to the model's own masking for plain causal attention. Models whose layers use
-    # a *stricter* mask (sliding-window or chunked attention) would otherwise be trained with
-    # full causal attention silently, so refuse them up front. Without this hook torch raises a
-    # shape error for such models, so nothing that works today starts failing here.
-    config = getattr(model, "config", None)
-    config = config.get_text_config() if hasattr(config, "get_text_config") else config
-    layer_types = getattr(config, "layer_types", None)
-    if layer_types is not None:
-        non_full = {layer_type for layer_type in layer_types if layer_type != "full_attention"}
-    else:
-        # Models that predate `layer_types` (Mistral, for one) apply a sliding window to every layer
-        # whenever `sliding_window` is set.
-        non_full = {"sliding_attention"} if getattr(config, "sliding_window", None) else set()
-    if non_full:
+    # The hook below drops the attention mask and forces `is_causal=True`; transformers says whether
+    # that substitution is safe. Defaults to allowed, so an older transformers behaves as before.
+    if not getattr(model, "supports_context_parallel", True):
         raise ValueError(
-            f"Context parallelism does not support attention layers of type {sorted(non_full)} "
-            f"(model {model.__class__.__name__}). Context parallelism can only express full causal "
-            "attention: the per-layer mask has to be dropped, so those layers would silently be "
-            "trained with full causal attention instead. Use a full-attention model, or disable "
-            "context parallelism."
+            f"{model.__class__.__name__} does not support context parallelism. Context parallelism can "
+            "only express full causal attention: the per-layer mask has to be dropped, so a layer using "
+            "a stricter mask (sliding-window or chunked) would silently be trained with full causal "
+            "attention instead, and a layer carrying a recurrent state along the sequence never has that "
+            "state exchanged between ranks. Use a full-attention model, or disable context parallelism."
         )
 
     def _self_attn_pre_forward_hook(_module, module_args, module_kwargs):
