@@ -454,6 +454,14 @@ class DataLoaderAdapter:
         return self.dl_state_dict
 
     def load_state_dict(self, state_dict):
+        # `_iteration` holds the epoch counter that seeds the (seedable) sampler's shuffle. Restore it
+        # before the base dataloader rebuilds its sampler iterator, so a mid-training checkpoint resumes
+        # on the current epoch's permutation instead of epoch 0's. See #4195.
+        if "_iteration" in state_dict:
+            state_dict = dict(state_dict)
+            iteration = state_dict.pop("_iteration")
+            if hasattr(self, "set_epoch"):
+                self.set_epoch(iteration)
         self.base_dataloader.load_state_dict(state_dict)
 
     @property
@@ -505,6 +513,9 @@ class DataLoaderAdapter:
             self.adjust_state_dict_for_prefetch()
             # Then tag if we are at the end of the dataloader
             self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
+            # Persist the epoch counter so a shuffled sampler resumes on the correct permutation (see #4195).
+            if hasattr(self, "iteration"):
+                self.dl_state_dict["_iteration"] = self.iteration
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
@@ -1250,6 +1261,13 @@ def prepare_data_loader(
                     seed = int(torch.empty((), dtype=torch.int64).random_().item())
                     sampler.generator.manual_seed(seed)
                 synchronized_generator = sampler.generator
+                if use_stateful_dataloader and num_processes > 1:
+                    logger.warning_once(
+                        "Checkpointing a shuffled stateful dataloader across multiple processes only restores the "
+                        "batch cursor, not the sampler's shuffle order: resuming replays the first epoch's "
+                        "permutation from that position. Pass `use_seedable_sampler=True` for an exactly resumable "
+                        "shuffle order."
+                    )
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
                 batch_sampler,
