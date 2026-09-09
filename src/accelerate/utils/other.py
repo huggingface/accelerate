@@ -248,6 +248,29 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
     return any(isinstance(p, DTensor) for p in model.parameters())
 
 
+def get_model_tp_size(model: torch.nn.Module) -> Optional[int]:
+    """
+    Get the tensor parallel degree a `transformers` model was sharded with, or `None` if it was not sharded.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to inspect.
+
+    Returns:
+        `Optional[int]`: The model's tensor parallel size.
+    """
+    # `transformers<5` records it on the model itself, while `transformers>=5` moved it to the
+    # `DistributedConfig` held by the model config and left `model.tp_size` behind as a `None` stub.
+    tp_size = getattr(model, "tp_size", None)
+    if tp_size is not None:
+        return tp_size
+
+    distributed_config = getattr(getattr(model, "config", None), "distributed_config", None)
+    if isinstance(distributed_config, dict):
+        return distributed_config.get("tp_size")
+    return getattr(distributed_config, "tp_size", None)
+
+
 def extract_model_from_parallel(
     model, keep_fp32_wrapper: bool = True, keep_torch_compile: bool = True, recursive: bool = False
 ):

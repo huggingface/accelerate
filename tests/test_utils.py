@@ -17,6 +17,7 @@ import tempfile
 import unittest
 import warnings
 from collections import UserDict, namedtuple
+from types import SimpleNamespace
 from typing import NamedTuple, Optional
 from unittest.mock import Mock, patch
 
@@ -48,6 +49,7 @@ from accelerate.utils import (
     convert_to_fp32,
     extract_model_from_parallel,
     find_device,
+    get_model_tp_size,
     has_offloaded_params,
     is_torch_xla_available,
     listify,
@@ -442,6 +444,23 @@ class UtilsTester(unittest.TestCase):
         remove_hook_from_module(model)
         attach_align_device_hook(model, offload=True)
         assert has_offloaded_params(model)
+
+    def test_get_model_tp_size(self):
+        model = RegressionModel()
+        assert get_model_tp_size(model) is None
+
+        # `transformers<5` records the degree on the model itself
+        model.tp_size = 2
+        assert get_model_tp_size(model) == 2
+
+        # `transformers>=5` leaves `model.tp_size` behind as a `None` stub and moves the degree to the config
+        model.tp_size = None
+        model.config = SimpleNamespace(distributed_config=SimpleNamespace(tp_size=4))
+        assert get_model_tp_size(model) == 4
+
+        # a config that round-tripped through JSON holds a plain dict
+        model.config = SimpleNamespace(distributed_config={"tp_size": 8})
+        assert get_model_tp_size(model) == 8
 
     def test_concatenate(self):
         tensor1 = torch.randn(2, 3)
