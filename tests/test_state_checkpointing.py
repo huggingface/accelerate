@@ -40,6 +40,7 @@ from accelerate.utils import (
     DataLoaderConfiguration,
     DistributedType,
     ProjectConfiguration,
+    is_torchdata_stateful_dataloader_available,
     patch_environment,
     set_seed,
 )
@@ -130,12 +131,75 @@ class CheckpointTest(AccelerateTestCase):
             accelerator.save_state(safe_serialization=self.use_safetensors)
             assert len(os.listdir(accelerator.project_dir)) == 1
 
-    @parameterized.expand([(True,), (False,)], name_func=lambda f, n, p: f"{f.__name__}_seedable_{p.args[0]}")
+    # No default-sampler case beyond the epoch boundary: in a single process it draws from the global RNG (or, with
+    # `use_stateful_dataloader`, from torchdata's own generator), which `load_state` restores as of the checkpoint, so
+    # the interrupted epoch is redrawn. `test_script.py` covers the multi-process default sampler, where `prepare`
+    # attaches a private generator.
+    @parameterized.expand(
+        [(True, False, False), (True, True, False), (False, False, False), (True, True, True)],
+        name_func=lambda f, n, p: f"{f.__name__}_seedable_{p.args[0]}_mid_epoch_{p.args[1]}_stateful_{p.args[2]}",
+    )
     @require_non_torch_xla
-    def test_resume_restores_dataloader_shuffle_order(self, use_seedable_sampler):
+    def test_resume_restores_dataloader_shuffle_order(self, use_seedable_sampler, mid_epoch, use_stateful_dataloader):
         """
         After `load_state`, a shuffled dataloader must continue with the order it would have produced had training not
-        been interrupted, not replay epoch 0 (https://github.com/huggingface/accelerate/issues/3996).
+        been interrupted, not replay epoch 0 (https://github.com/huggingface/accelerate/issues/3996). A checkpoint
+        taken inside an epoch is resumed with `skip_first_batches` (a stateful dataloader is positioned by `load_state`
+        itself), and the epoch after that one must follow too.
+        """
+        if use_stateful_dataloader and not is_torchdata_stateful_dataloader_available():
+            self.skipTest("torchdata.stateful_dataloader is not available")
+        skip_batches, batch_size = 3, 4
+
+        def make_dataloader(accelerator):
+            dataloader = DataLoader(TensorDataset(torch.arange(32)), batch_size=batch_size, shuffle=True)
+            return accelerator.prepare(dataloader)
+
+        def epoch_order(dataloader):
+            return [sample for batch in dataloader for sample in batch[0].tolist()]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            dataloader_config = DataLoaderConfiguration(
+                use_seedable_sampler=use_seedable_sampler, use_stateful_dataloader=use_stateful_dataloader
+            )
+            accelerator = Accelerator(dataloader_config=dataloader_config)
+            train_dataloader = make_dataloader(accelerator)
+            orders = [epoch_order(train_dataloader) for _ in range(2)]
+            if mid_epoch:
+                iterator = iter(train_dataloader)
+                for _ in range(skip_batches):
+                    next(iterator)
+                accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+                expected = [[sample for batch in iterator for sample in batch[0].tolist()]]
+            else:
+                accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+                expected = [epoch_order(train_dataloader)]
+            expected.append(epoch_order(train_dataloader))
+            assert expected[-1] != orders[0], "The dataset is too small to tell epochs apart"
+
+            # Resume from scratch, as a new script run would
+            set_seed(42)
+            accelerator = Accelerator(dataloader_config=dataloader_config)
+            train_dataloader = make_dataloader(accelerator)
+            accelerator.load_state(tmpdir)
+            if mid_epoch and not use_stateful_dataloader:
+                resumed = [epoch_order(accelerator.skip_first_batches(train_dataloader, skip_batches))]
+            else:
+                resumed = [epoch_order(train_dataloader)]
+            resumed.append(epoch_order(train_dataloader))
+
+            assert resumed[0] != orders[0][skip_batches * batch_size if mid_epoch else 0 :], (
+                "Resumed dataloader replayed the epoch-0 shuffle order"
+            )
+            assert resumed == expected
+
+    @parameterized.expand([(True,), (False,)], name_func=lambda f, n, p: f"{f.__name__}_seedable_{p.args[0]}")
+    @require_non_torch_xla
+    def test_resume_after_checkpoint_on_last_batch(self, use_seedable_sampler):
+        """
+        A checkpoint taken while processing the last batch of an epoch (what `checkpointing_steps` produces whenever it
+        divides the number of batches) must resume with the next epoch, not replay the one that just finished.
         """
 
         def make_dataloader(accelerator):
@@ -150,20 +214,23 @@ class CheckpointTest(AccelerateTestCase):
             dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
             accelerator = Accelerator(dataloader_config=dataloader_config)
             train_dataloader = make_dataloader(accelerator)
-            orders = [epoch_order(train_dataloader) for _ in range(2)]
-            accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
-            expected_continuation = epoch_order(train_dataloader)
-            assert expected_continuation != orders[0], "The dataset is too small to tell epochs apart"
+            epoch_order(train_dataloader)
+            just_finished = []
+            for step, batch in enumerate(train_dataloader):
+                just_finished += batch[0].tolist()
+                if step == len(train_dataloader) - 1:
+                    accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+            expected_next_epoch = epoch_order(train_dataloader)
 
-            # Resume from scratch, as a new script run would
             set_seed(42)
             accelerator = Accelerator(dataloader_config=dataloader_config)
             train_dataloader = make_dataloader(accelerator)
             accelerator.load_state(tmpdir)
-            resumed = epoch_order(train_dataloader)
+            # The example computes a resume step of 0 for this checkpoint and still goes through `skip_first_batches`
+            resumed = epoch_order(accelerator.skip_first_batches(train_dataloader, 0))
 
-            assert resumed != orders[0], "Resumed dataloader replayed the epoch-0 shuffle order"
-            assert resumed == expected_continuation
+            assert resumed != just_finished, "Resumed dataloader replayed the epoch the checkpoint closed"
+            assert resumed == expected_next_epoch
 
     @require_non_torch_xla
     def test_resume_restores_user_generator(self):

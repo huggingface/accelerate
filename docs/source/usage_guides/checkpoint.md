@@ -72,6 +72,13 @@ accelerator.load_state("my/save/path/checkpointing/checkpoint_0")
 After resuming from a checkpoint, it may also be desirable to resume from a particular point in the active `DataLoader` if 
 the state was saved during the middle of an epoch. You can use [`~Accelerator.skip_first_batches`] to do so. 
 
+`save_state` records where each prepared dataloader is in its shuffle sequence. A checkpoint taken inside an epoch resumes on the
+same permutation when the shuffle comes from a `torch.Generator`: `use_seedable_sampler=True`, a `generator` passed to the
+`DataLoader`, or the default sampler in a multi-process run with `dispatch_batches=False`, with or without
+`use_stateful_dataloader`. When the permutation comes from the global RNG (the default sampler with no generator in a single
+process, or with `dispatch_batches=True`) the interrupted epoch is redrawn on resume, and only checkpoints taken at an epoch
+boundary line up.
+
 ```python
 from accelerate import Accelerator
 

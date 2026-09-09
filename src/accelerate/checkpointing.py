@@ -74,16 +74,26 @@ def _get_dataloader_sampler_state(dataloader) -> Optional[dict]:
     if iteration is None:
         return None
     generator = get_shuffle_generator(dataloader)
-    return {
-        "iteration": iteration,
-        "generator_state": generator.get_state() if generator is not None else None,
-    }
+    epoch_start = getattr(dataloader, "_generator_state_at_epoch_start", None)
+    inside_epoch = epoch_start is not None and epoch_start[0] == iteration
+    if inside_epoch and getattr(dataloader, "end_of_dataloader", False):
+        # The last batch was already handed out: from the sampler's point of view the epoch is complete, only the
+        # bookkeeping after the final `yield` has not run yet
+        iteration += 1
+        inside_epoch = False
+    generator_state = None
+    if generator is not None:
+        # Inside an epoch the permutation was already drawn, resume must draw it again: use the state it was drawn from
+        generator_state = epoch_start[1] if inside_epoch else generator.get_state()
+    return {"iteration": iteration, "generator_state": generator_state}
 
 
 def _set_dataloader_sampler_state(dataloader, sampler_state: dict) -> None:
     from .data_loader import get_shuffle_generator
 
     dataloader = getattr(dataloader, "_loader", dataloader)
+    # Whatever this process iterated before loading is not where the checkpoint was taken
+    dataloader._generator_state_at_epoch_start = None
     if sampler_state.get("iteration") is not None and hasattr(dataloader, "iteration"):
         # `set_epoch` also forwards the epoch to the sampler and the dataset
         dataloader.set_epoch(sampler_state["iteration"])

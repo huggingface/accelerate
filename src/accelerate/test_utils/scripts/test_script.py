@@ -44,6 +44,7 @@ from accelerate.utils import (
     is_hpu_available,
     is_mps_available,
     is_pytest_available,
+    is_torchdata_stateful_dataloader_available,
     set_seed,
     synchronize_rng_states,
 )
@@ -384,7 +385,7 @@ def check_seedable_sampler():
     assert torch.allclose(original_items, new_items), "Did not obtain the same items with the same seed and epoch."
 
 
-def check_dataloader_resume_order(use_seedable_sampler=False):
+def check_dataloader_resume_order(use_seedable_sampler=False, use_stateful_dataloader=False):
     """
     `load_state` must restore the shuffle position of a prepared dataloader on every process, so a resumed run
     continues with the order it would have produced instead of replaying epoch 0 (accelerate#3996).
@@ -398,22 +399,66 @@ def check_dataloader_resume_order(use_seedable_sampler=False):
         train_set = RegressionDataset(length=32, seed=42)
         return accelerator.prepare(DataLoader(train_set, batch_size=4, shuffle=True))
 
-    config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
+    config = DataLoaderConfiguration(
+        use_seedable_sampler=use_seedable_sampler, use_stateful_dataloader=use_stateful_dataloader
+    )
     accelerator = Accelerator(dataloader_config=config)
+    skip_batches = 3
     tmpdir = [tempfile.mkdtemp() if accelerator.is_main_process else None]
     tmpdir = broadcast_object_list(tmpdir)[0]
     try:
         train_dl = make_dataloader(accelerator)
+        # The default sampler draws from the global RNG when `prepare` attached no private generator (single process,
+        # `dispatch_batches`). Only the epoch-boundary resume is exact there, the interrupted epoch is redrawn.
+        mid_epoch_exact = use_seedable_sampler or getattr(train_dl, "synchronized_generator", None) is not None
         first_epoch = epoch_order(train_dl)
         epoch_order(train_dl)
         accelerator.save_state(tmpdir)
         expected_continuation = epoch_order(train_dl)
         assert expected_continuation != first_epoch, "The dataset is too small to tell epochs apart"
+        if mid_epoch_exact:
+            # Checkpoint inside an epoch; a stateful dataloader is positioned by `load_state`, a plain one by
+            # `skip_first_batches`
+            train_dl_iter = iter(train_dl)
+            for _ in range(skip_batches):
+                next(train_dl_iter)
+            accelerator.save_state(f"{tmpdir}/mid_epoch")
+            expected_mid_epoch_continuation = [sample for batch in train_dl_iter for sample in batch["x"].tolist()]
+            expected_following_epoch = epoch_order(train_dl)
+
+        continued_after_last_batch = True
+        if not use_stateful_dataloader:
+            # Checkpoint while handling the last batch of an epoch: the next run must start the following epoch
+            for step, batch in enumerate(train_dl):
+                if step == len(train_dl) - 1:
+                    accelerator.save_state(f"{tmpdir}/last_batch")
+            expected_after_last_batch = epoch_order(train_dl)
 
         accelerator = Accelerator(dataloader_config=config)
         train_dl = make_dataloader(accelerator)
         accelerator.load_state(tmpdir)
         resumed = epoch_order(train_dl)
+
+        if not use_stateful_dataloader:
+            accelerator = Accelerator(dataloader_config=config)
+            train_dl = make_dataloader(accelerator)
+            accelerator.load_state(f"{tmpdir}/last_batch")
+            continued_after_last_batch = epoch_order(train_dl) == expected_after_last_batch
+
+        continued_mid_epoch = True
+        if mid_epoch_exact:
+            accelerator = Accelerator(dataloader_config=config)
+            train_dl = make_dataloader(accelerator)
+            accelerator.load_state(f"{tmpdir}/mid_epoch")
+            if use_stateful_dataloader:
+                resumed_mid_epoch = epoch_order(train_dl)
+            else:
+                resumed_mid_epoch = epoch_order(accelerator.skip_first_batches(train_dl, skip_batches))
+            resumed_following_epoch = epoch_order(train_dl)
+            continued_mid_epoch = (
+                resumed_mid_epoch == expected_mid_epoch_continuation
+                and resumed_following_epoch == expected_following_epoch
+            )
     finally:
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
@@ -421,10 +466,19 @@ def check_dataloader_resume_order(use_seedable_sampler=False):
 
     replayed_epoch_0 = gather_object([resumed == first_epoch])
     continued = gather_object([resumed == expected_continuation])
+    continued_mid_epoch = gather_object([continued_mid_epoch])
+    continued_after_last_batch = gather_object([continued_after_last_batch])
     assert not any(replayed_epoch_0), (
         f"Resumed dataloader replayed the epoch-0 shuffle order on processes {replayed_epoch_0}"
     )
     assert all(continued), f"Resumed dataloader did not continue with the expected order on processes {continued}"
+    assert all(continued_mid_epoch), (
+        "Dataloader resumed from a mid-epoch checkpoint did not continue with the expected order (rest of the epoch, then "
+        f"the next one) on processes {continued_mid_epoch}"
+    )
+    assert all(continued_after_last_batch), (
+        f"Dataloader resumed from a checkpoint taken on the last batch replayed that epoch on processes {continued_after_last_batch}"
+    )
 
 
 def check_seedable_sampler_in_batch_sampler_shard():
@@ -931,6 +985,9 @@ def main():
 
     if state.num_processes > 1:
         check_seedable_sampler_in_batch_sampler_shard()
+        if state.distributed_type != DistributedType.XLA and is_torchdata_stateful_dataloader_available():
+            # The default sampler only resumes mid-epoch when `prepare` attached a private generator (multi-process)
+            check_dataloader_resume_order(use_seedable_sampler=False, use_stateful_dataloader=True)
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:
