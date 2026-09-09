@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Logging
 
-Refer to the [Troubleshooting guide](../usage_guides/troubleshooting#logging) or to the example below to learn 
+Refer to the [Troubleshooting guide](../basic_tutorials/troubleshooting#logging) or to the example below to learn 
 how to use Accelerate's logger. 
 
 [[autodoc]] logging.get_logger
