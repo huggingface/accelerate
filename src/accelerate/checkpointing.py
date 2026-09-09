@@ -60,6 +60,38 @@ from .state import PartialState
 logger = get_logger(__name__)
 
 
+def _get_dataloader_sampler_state(dataloader) -> Optional[dict]:
+    """
+    Collects what a prepared dataloader needs to resume its shuffle order: the number of epochs it has iterated
+    (`SeedableRandomSampler` derives its seed from it) and the state of the generator the sampler draws from, when it
+    has one. Returns `None` for dataloaders that were not prepared by Accelerate.
+    """
+    from .data_loader import get_shuffle_generator
+
+    # Under XLA the prepared dataloader is wrapped in an `MpDeviceLoaderWrapper`
+    dataloader = getattr(dataloader, "_loader", dataloader)
+    iteration = getattr(dataloader, "iteration", None)
+    if iteration is None:
+        return None
+    generator = get_shuffle_generator(dataloader)
+    return {
+        "iteration": iteration,
+        "generator_state": generator.get_state() if generator is not None else None,
+    }
+
+
+def _set_dataloader_sampler_state(dataloader, sampler_state: dict) -> None:
+    from .data_loader import get_shuffle_generator
+
+    dataloader = getattr(dataloader, "_loader", dataloader)
+    if sampler_state.get("iteration") is not None and hasattr(dataloader, "iteration"):
+        # `set_epoch` also forwards the epoch to the sampler and the dataset
+        dataloader.set_epoch(sampler_state["iteration"])
+    generator = get_shuffle_generator(dataloader)
+    if generator is not None and sampler_state.get("generator_state") is not None:
+        generator.set_state(sampler_state["generator_state"])
+
+
 def save_accelerator_state(
     output_dir: str,
     model_states: list[dict],
@@ -131,19 +163,15 @@ def save_accelerator_state(
     for i, dataloader in enumerate(dataloaders):
         sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
         output_sampler_file = output_dir.joinpath(sampler_name)
-        # Only save if we have our custom sampler
-        from .data_loader import IterableDatasetShard, SeedableRandomSampler
-
-        if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = dataloader.get_sampler()
-            if isinstance(sampler, SeedableRandomSampler):
-                save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
+        sampler_state = _get_dataloader_sampler_state(dataloader)
+        if sampler_state is not None:
+            save(sampler_state, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
+            logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
         if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
             state_dict = dataloader.state_dict()
             torch.save(state_dict, output_dataloader_state_dict_file)
-        logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
 
     # GradScaler state
     if scaler is not None:
@@ -267,13 +295,9 @@ def load_accelerator_state(
     for i, dataloader in enumerate(dataloaders):
         sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
         input_sampler_file = input_dir.joinpath(sampler_name)
-        # Only load if we have our custom sampler
-        from .data_loader import IterableDatasetShard, SeedableRandomSampler
-
-        if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = dataloader.get_sampler()
-            if isinstance(sampler, SeedableRandomSampler):
-                sampler = dataloader.set_sampler(load(input_sampler_file))
+        # Checkpoints written before the sampler state was tracked do not have this file
+        if input_sampler_file.exists():
+            _set_dataloader_sampler_state(dataloader, load(input_sampler_file, **load_kwargs))
         if getattr(dataloader, "use_stateful_dataloader", False):
             dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
             input_dataloader_state_dict_file = input_dir.joinpath(dataloader_state_dict_name)

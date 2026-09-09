@@ -17,6 +17,8 @@
 import contextlib
 import io
 import math
+import shutil
+import tempfile
 import time
 from copy import deepcopy
 from pathlib import Path
@@ -32,6 +34,7 @@ from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_sa
 from accelerate.utils import (
     DataLoaderConfiguration,
     DistributedType,
+    broadcast_object_list,
     gather,
     gather_object,
     is_bf16_available,
@@ -379,6 +382,49 @@ def check_seedable_sampler():
             new_items.append(batch["x"])
     new_items = torch.cat(new_items)
     assert torch.allclose(original_items, new_items), "Did not obtain the same items with the same seed and epoch."
+
+
+def check_dataloader_resume_order(use_seedable_sampler=False):
+    """
+    `load_state` must restore the shuffle position of a prepared dataloader on every process, so a resumed run
+    continues with the order it would have produced instead of replaying epoch 0 (accelerate#3996).
+    """
+
+    def epoch_order(dataloader):
+        return [sample for batch in dataloader for sample in batch["x"].tolist()]
+
+    def make_dataloader(accelerator):
+        set_seed(42)
+        train_set = RegressionDataset(length=32, seed=42)
+        return accelerator.prepare(DataLoader(train_set, batch_size=4, shuffle=True))
+
+    config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
+    accelerator = Accelerator(dataloader_config=config)
+    tmpdir = [tempfile.mkdtemp() if accelerator.is_main_process else None]
+    tmpdir = broadcast_object_list(tmpdir)[0]
+    try:
+        train_dl = make_dataloader(accelerator)
+        first_epoch = epoch_order(train_dl)
+        epoch_order(train_dl)
+        accelerator.save_state(tmpdir)
+        expected_continuation = epoch_order(train_dl)
+        assert expected_continuation != first_epoch, "The dataset is too small to tell epochs apart"
+
+        accelerator = Accelerator(dataloader_config=config)
+        train_dl = make_dataloader(accelerator)
+        accelerator.load_state(tmpdir)
+        resumed = epoch_order(train_dl)
+    finally:
+        accelerator.wait_for_everyone()
+        if accelerator.is_main_process:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    replayed_epoch_0 = gather_object([resumed == first_epoch])
+    continued = gather_object([resumed == expected_continuation])
+    assert not any(replayed_epoch_0), (
+        f"Resumed dataloader replayed the epoch-0 shuffle order on processes {replayed_epoch_0}"
+    )
+    assert all(continued), f"Resumed dataloader did not continue with the expected order on processes {continued}"
 
 
 def check_seedable_sampler_in_batch_sampler_shard():
@@ -880,6 +926,8 @@ def main():
         custom_sampler_check()
         check_seedable_sampler()
         check_seedable_sampler_with_data_seed()
+        check_dataloader_resume_order(use_seedable_sampler=False)
+        check_dataloader_resume_order(use_seedable_sampler=True)
 
     if state.num_processes > 1:
         check_seedable_sampler_in_batch_sampler_shard()

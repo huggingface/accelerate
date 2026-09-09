@@ -23,7 +23,7 @@ from contextlib import contextmanager
 
 import pytest
 import torch
-from parameterized import parameterized_class
+from parameterized import parameterized, parameterized_class
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -36,7 +36,13 @@ from accelerate.test_utils import (
     run_first,
 )
 from accelerate.test_utils.testing import AccelerateTestCase
-from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
+from accelerate.utils import (
+    DataLoaderConfiguration,
+    DistributedType,
+    ProjectConfiguration,
+    patch_environment,
+    set_seed,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -123,6 +129,69 @@ class CheckpointTest(AccelerateTestCase):
             # Save second state
             accelerator.save_state(safe_serialization=self.use_safetensors)
             assert len(os.listdir(accelerator.project_dir)) == 1
+
+    @parameterized.expand([(True,), (False,)], name_func=lambda f, n, p: f"{f.__name__}_seedable_{p.args[0]}")
+    @require_non_torch_xla
+    def test_resume_restores_dataloader_shuffle_order(self, use_seedable_sampler):
+        """
+        After `load_state`, a shuffled dataloader must continue with the order it would have produced had training not
+        been interrupted, not replay epoch 0 (https://github.com/huggingface/accelerate/issues/3996).
+        """
+
+        def make_dataloader(accelerator):
+            dataloader = DataLoader(TensorDataset(torch.arange(32)), batch_size=4, shuffle=True)
+            return accelerator.prepare(dataloader)
+
+        def epoch_order(dataloader):
+            return [sample for batch in dataloader for sample in batch[0].tolist()]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            dataloader_config = DataLoaderConfiguration(use_seedable_sampler=use_seedable_sampler)
+            accelerator = Accelerator(dataloader_config=dataloader_config)
+            train_dataloader = make_dataloader(accelerator)
+            orders = [epoch_order(train_dataloader) for _ in range(2)]
+            accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+            expected_continuation = epoch_order(train_dataloader)
+            assert expected_continuation != orders[0], "The dataset is too small to tell epochs apart"
+
+            # Resume from scratch, as a new script run would
+            set_seed(42)
+            accelerator = Accelerator(dataloader_config=dataloader_config)
+            train_dataloader = make_dataloader(accelerator)
+            accelerator.load_state(tmpdir)
+            resumed = epoch_order(train_dataloader)
+
+            assert resumed != orders[0], "Resumed dataloader replayed the epoch-0 shuffle order"
+            assert resumed == expected_continuation
+
+    @require_non_torch_xla
+    def test_resume_restores_user_generator(self):
+        "A `generator` passed to the `DataLoader` is restored by `load_state`, so a resumed run keeps its shuffle order."
+
+        def make_dataloader(accelerator):
+            generator = torch.Generator().manual_seed(0)
+            dataloader = DataLoader(TensorDataset(torch.arange(32)), batch_size=4, shuffle=True, generator=generator)
+            return accelerator.prepare(dataloader)
+
+        def epoch_order(dataloader):
+            return [sample for batch in dataloader for sample in batch[0].tolist()]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            accelerator = Accelerator()
+            train_dataloader = make_dataloader(accelerator)
+            first_epoch = epoch_order(train_dataloader)
+            epoch_order(train_dataloader)
+            accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+            expected_continuation = epoch_order(train_dataloader)
+
+            accelerator = Accelerator()
+            train_dataloader = make_dataloader(accelerator)
+            accelerator.load_state(tmpdir)
+            resumed = epoch_order(train_dataloader)
+
+            assert resumed != first_epoch, "Resumed dataloader replayed the epoch-0 shuffle order"
+            assert resumed == expected_continuation
 
     def test_can_resume_training_with_folder(self):
         with tempfile.TemporaryDirectory() as tmpdir:
