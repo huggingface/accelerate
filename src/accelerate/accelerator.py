@@ -2950,6 +2950,38 @@ class Accelerator:
                     opt = opt.optimizer
                 self.scaler.unscale_(opt)
 
+    def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2):
+        is_dtensor_available = torch.distributed.is_available() and is_torch_version(">=", DTENSOR_PYTORCH_VERSION)
+        if not is_dtensor_available:
+            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+
+        from torch.distributed.tensor import DTensor
+
+        # `DTensor` is a subclass of `torch.Tensor`, so a plain gradient is anything that is not a `DTensor`.
+        mesh_groups = {}
+        plain_params = []
+        for p in parameters:
+            if p.grad is None:
+                continue
+            if isinstance(p.grad, DTensor):
+                mesh_groups.setdefault(p.grad.device_mesh, []).append(p)
+            else:
+                plain_params.append(p)
+
+        if len(mesh_groups) + bool(plain_params) <= 1:
+            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+
+        norm_groups = list(mesh_groups.values()) + ([plain_params] if plain_params else [])
+        group_norms = [torch.nn.utils.get_total_norm([p.grad for p in group], norm_type) for group in norm_groups]
+        # `full_tensor()` gathers each group norm on its own mesh, so the group norms can be combined as plain tensors.
+        group_norms = [norm.full_tensor() if isinstance(norm, DTensor) else norm for norm in group_norms]
+        total_norm = torch.linalg.vector_norm(torch.stack(group_norms), norm_type)
+        for mesh, group in mesh_groups.items():
+            d_total_norm = DTensor.from_local(total_norm, mesh)
+            torch.nn.utils.clip_grads_with_norm_(group, max_norm, d_total_norm)
+        torch.nn.utils.clip_grads_with_norm_(plain_params, max_norm, total_norm)
+        return total_norm
+
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
         """
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
@@ -2983,9 +3015,7 @@ class Accelerator:
                     if not self.is_fsdp2:
                         return model.clip_grad_norm_(max_norm, norm_type)
                     else:
-                        return torch.nn.utils.clip_grad_norm_(
-                            parameters, max_norm, norm_type=norm_type
-                        )  # viz: https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md
+                        return self._clip_grad_norm_dtensor_aware(parameters, max_norm, norm_type=norm_type)
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # DeepSpeed handles gradient clipping internally, but we can retrieve the gradient norm
             if self.deepspeed_engine_wrapped is not None:
@@ -3011,7 +3041,7 @@ class Accelerator:
                     if parameters == [p for p in model.parameters()]:
                         return model.clip_grad_norm_(max_norm, norm_type)
         self.unscale_gradients()
-        return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+        return self._clip_grad_norm_dtensor_aware(list(parameters), max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
         """

@@ -33,6 +33,7 @@ from accelerate.test_utils.testing import (
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
+    require_peft,
     run_first,
     slow,
 )
@@ -45,7 +46,12 @@ from accelerate.utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
-from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enable_fsdp_ram_efficient_loading
+from accelerate.utils.fsdp_utils import (
+    _get_model_state_dict,
+    _set_model_state_dict,
+    disable_fsdp_ram_efficient_loading,
+    enable_fsdp_ram_efficient_loading,
+)
 
 
 set_seed(42)
@@ -61,6 +67,65 @@ if is_fp16_available():
     dtypes.append(FP16)
 if is_bf16_available():
     dtypes.append(BF16)
+
+
+@require_fsdp2
+@require_peft
+class FSDP2PeftStateDictTest(AccelerateTestCase):
+    """
+    The FSDP2 adapter-only path must go *through* `sd_options`, not around it.
+
+    Runs single-process on CPU, so it cannot check that each rank's shard survives -- that needs two
+    devices and lives in `peft_checkpointing.py`. What it does lock down is the regression itself: the PEFT
+    branch used to return before the `sd_options` gather, which under FSDP2 meant rank 0's shard was written
+    as if it were the whole tensor.
+    """
+
+    def _peft_model(self):
+        from peft import LoraConfig, get_peft_model
+
+        class Tiny(torch.nn.Module):
+            def __init__(self, dim=32):
+                super().__init__()
+                self.lin1 = torch.nn.Linear(dim, dim)
+                self.lin2 = torch.nn.Linear(dim, dim)
+
+        return get_peft_model(Tiny(), LoraConfig(r=4, target_modules=["lin1", "lin2"]))
+
+    @staticmethod
+    def _fill_adapter(model, value):
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if "lora_" in name:
+                    param.fill_(value)
+
+    def test_adapter_state_dict_is_keyed_by_model_fqns(self):
+        """If the PEFT branch returns early, the adapter name is stripped and these no longer match."""
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+        model = self._peft_model()
+        state_dict = _get_model_state_dict(model, adapter_only=True, sd_options=StateDictOptions(full_state_dict=True))
+        trainable = {name for name, param in model.named_parameters() if param.requires_grad}
+        assert state_dict.keys() == trainable
+
+    def test_adapter_state_dict_round_trip(self):
+        """An adapter-only state dict doesn't cover the frozen base weights, so loading it can't be strict."""
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+        sd_options = StateDictOptions(full_state_dict=True)
+        model = self._peft_model()
+        self._fill_adapter(model, 0.5)
+
+        # a real checkpoint goes through disk; clone to break the aliasing with the live parameters
+        state_dict = {
+            key: value.detach().clone()
+            for key, value in _get_model_state_dict(model, adapter_only=True, sd_options=sd_options).items()
+        }
+        self._fill_adapter(model, 0.0)
+        _set_model_state_dict(model, state_dict, adapter_only=True, sd_options=sd_options)
+
+        restored = {float(param.detach().flatten()[0]) for name, param in model.named_parameters() if "lora_" in name}
+        assert restored == {0.5}
 
 
 @require_non_cpu
@@ -925,3 +990,32 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
+
+    @require_fsdp2
+    @require_peft
+    def test_peft_checkpointing(self):
+        """Every rank's shard of the adapter must survive a `save_fsdp_model`/`load_fsdp_model` round-trip."""
+        test_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "peft_checkpointing.py")
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+            fsdp_auto_wrap_policy="TRANSFORMER_BASED_WRAP",
+            fsdp_transformer_layer_cls_to_wrap="Block",
+        )
+        cmd.append("--fsdp_reshard_after_forward=true")
+
+        for state_dict_type in FSDP2_STATE_DICT_TYPE:
+            # `transformers.Trainer` always passes `adapter_only=True`, but the flag is optional for other callers
+            for adapter_only in (True, False):
+                cmd_config = cmd + [
+                    f"--fsdp_state_dict_type={state_dict_type}",
+                    test_file_path,
+                    f"--output_dir={os.path.join(self.tmpdir, state_dict_type, str(adapter_only))}",
+                ]
+                if adapter_only:
+                    cmd_config.append("--adapter_only")
+                with patch_environment(omp_num_threads=1):
+                    execute_subprocess_async(cmd_config)

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -22,7 +23,7 @@ from huggingface_hub.utils import GatedRepoError
 import accelerate.commands.env as accelerate_env_cmd
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
-from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
+from accelerate.commands.estimate import add_timm_hub_prefix, estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
 from accelerate.commands.to_fsdp2 import (
     convert_config_to_fsdp2,
@@ -159,6 +160,26 @@ class AccelerateLauncherTester(unittest.TestCase):
         self.assertEqual(len(python_script_cmd), 3)
         self.assertEqual(python_script_cmd[1], str(self.test_file_path))
         self.assertEqual(python_script_cmd[2], test_file_arg)
+
+    def test_cpu_launch_sets_kmp_env(self):
+        """
+        `accelerate launch --cpu` sets the Intel OpenMP variables, and a launch without it leaves them alone.
+        """
+        with patch.dict(os.environ):
+            os.environ.pop("KMP_AFFINITY", None)
+            os.environ.pop("KMP_BLOCKTIME", None)
+
+            args = self.parser.parse_args(["--cpu", str(self.test_file_path)])
+            args, _, _ = _validate_launch_command(args)
+            _, current_env = prepare_simple_launcher_cmd_env(args)
+            assert current_env["KMP_AFFINITY"] == "granularity=fine,compact,1,0"
+            assert current_env["KMP_BLOCKTIME"] == "1"
+
+            args = self.parser.parse_args([str(self.test_file_path)])
+            args, _, _ = _validate_launch_command(args)
+            _, current_env = prepare_simple_launcher_cmd_env(args)
+            assert "KMP_AFFINITY" not in current_env
+            assert "KMP_BLOCKTIME" not in current_env
 
     def test_validate_launch_command(self):
         """Test that the validation function combines args and defaults."""
@@ -463,6 +484,15 @@ class ModelEstimatorTester(unittest.TestCase):
             args = self.parser.parse_args(["muellerzr/dummy", "--library_name", "timm"])
             estimate_command(args)
 
+    @require_timm
+    def test_wrong_library_timm(self):
+        # A Hub repo whose `config.json` belongs to another library has no `architecture` key for `timm`
+        with self.assertRaisesRegex(
+            RuntimeError, "Tried to load `hf-internal-testing/tiny-random-bert` with `timm` but"
+        ):
+            args = self.parser.parse_args(["hf-internal-testing/tiny-random-bert", "--library_name", "timm"])
+            estimate_command(args)
+
     @require_transformers
     def test_invalid_model_name_transformers(self):
         with self.assertRaises(RuntimeError, msg="Tried to load `muellerzr/dummy` with `transformers` but"):
@@ -560,6 +590,16 @@ class ModelEstimatorTester(unittest.TestCase):
         assert total_size == output[0][2], (
             f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
         )
+
+    def test_timm_hub_prefix(self):
+        # Bare architecture names come from the `timm` registry and must stay unchanged
+        assert add_timm_hub_prefix("resnet50") == "resnet50"
+        assert add_timm_hub_prefix("resnet50.a1_in1k") == "resnet50.a1_in1k"
+        # Hub repo ids need the `hf-hub:` source prefix that `timm>=1.0.29` requires
+        assert add_timm_hub_prefix("timm/resnet50.a1_in1k") == "hf-hub:timm/resnet50.a1_in1k"
+        # Names that already carry a source prefix must stay unchanged
+        assert add_timm_hub_prefix("hf-hub:timm/resnet50.a1_in1k") == "hf-hub:timm/resnet50.a1_in1k"
+        assert add_timm_hub_prefix("local-dir:/path/to/model") == "local-dir:/path/to/model"
 
 
 class ToFSDP2Tester(unittest.TestCase):
