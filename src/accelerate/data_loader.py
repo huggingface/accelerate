@@ -995,6 +995,22 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
                 self.batch_sampler.batch_sampler.sampler = sampler
 
 
+def get_shuffle_generator(dataloader) -> Optional[torch.Generator]:
+    """
+    Returns the `torch.Generator` the shuffling of a prepared dataloader draws from, or `None` when it draws from the
+    global RNG. This is the generator `prepare_data_loader` synchronizes across processes when it created one, else the
+    one the user gave the sampler.
+    """
+    generator = getattr(dataloader, "synchronized_generator", None)
+    if generator is None:
+        # Walk `SkipBatchSampler` -> `BatchSamplerShard` -> `BatchSampler` down to the sampler
+        sampler = dataloader.sampler if isinstance(dataloader.sampler, BatchSampler) else dataloader.batch_sampler
+        while sampler is not None and not hasattr(sampler, "generator"):
+            sampler = getattr(sampler, "sampler", None) or getattr(sampler, "batch_sampler", None)
+        generator = getattr(sampler, "generator", None)
+    return generator if isinstance(generator, torch.Generator) else None
+
+
 def get_sampler(dataloader):
     """
     Get the sampler associated to the dataloader
