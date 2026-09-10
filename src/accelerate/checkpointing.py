@@ -13,8 +13,9 @@
 # limitations under the License.
 
 import random
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -58,6 +59,198 @@ from .state import PartialState
 
 
 logger = get_logger(__name__)
+
+
+def _stage_state_dict_for_async_save(obj):
+    """
+    Recursively detach and copy tensors to CPU memory so a background thread can serialize a checkpoint to disk
+    while training continues. Tensors already on the CPU are cloned (they would otherwise alias live parameters,
+    which the training loop keeps mutating); tensors on an accelerator are copied to host memory once here, so the
+    writer thread never needs to synchronize with the device.
+    """
+    if isinstance(obj, torch.Tensor):
+        obj = obj.detach()
+        if obj.device.type == "cpu":
+            return obj.clone()
+        return obj.to("cpu")
+    if isinstance(obj, dict):
+        return type(obj)((k, _stage_state_dict_for_async_save(v)) for k, v in obj.items())
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(_stage_state_dict_for_async_save(v) for v in obj)
+    return obj
+
+
+def capture_accelerator_state(
+    output_dir: str,
+    model_states: list[dict],
+    optimizers: list,
+    schedulers: list,
+    dataloaders: list,
+    process_index: int,
+    step: int,
+    scaler: Optional[GradScaler] = None,
+    safe_serialization: bool = True,
+    stage_to_cpu: bool = False,
+) -> list[tuple]:
+    """
+    Snapshots everything [`save_accelerator_state`] persists into in-memory objects, without touching the disk.
+
+    This splits the (potentially slow) staging of a checkpoint from the actual disk writes, so the writes can run in
+    a background thread. Pass `stage_to_cpu=True` to recursively copy all tensors to CPU memory first; this is what
+    makes an asynchronous save safe, as the writer thread then only reads host memory while training keeps running.
+
+    Args:
+        output_dir (`str` or `os.PathLike`):
+            The folder the pending writes will target.
+        model_states (`List[torch.nn.Module]`):
+            A list of model states
+        optimizers (`List[torch.optim.Optimizer]`):
+            A list of optimizer instances
+        schedulers (`List[torch.optim.lr_scheduler._LRScheduler]`):
+            A list of learning rate schedulers
+        dataloaders (`List[torch.utils.data.DataLoader]`):
+            A list of dataloader instances to save their sampler states
+        process_index (`int`):
+            The current process index in the Accelerator state
+        step (`int`):
+            The current step in the internal step tracker
+        scaler (`torch.amp.GradScaler`, *optional*):
+            An optional gradient scaler instance to save;
+        safe_serialization (`bool`, *optional*, defaults to `True`):
+            Whether the model should be saved using `safetensors` or the traditional PyTorch way (that uses `pickle`).
+        stage_to_cpu (`bool`, *optional*, defaults to `False`):
+            Whether to recursively copy all tensors to CPU memory before returning.
+
+    Returns:
+        `list[tuple]`: pending writes as `(path, obj, safe_serialization, gated)` tuples, to be passed to
+        [`write_accelerator_state`]. Entries with `gated=True` are only written by the main process (or by each
+        local main process when `save_on_each_node` is set), mirroring `accelerate.utils.save`.
+    """
+    output_dir = Path(output_dir)
+    pending = []
+
+    def add(state, output_file, entry_safe_serialization=False, gated=True):
+        if stage_to_cpu:
+            state = _stage_state_dict_for_async_save(state)
+        pending.append((output_file, state, entry_safe_serialization, gated))
+
+    # Model states
+    for i, state in enumerate(model_states):
+        weights_name = WEIGHTS_NAME if not safe_serialization else SAFE_WEIGHTS_NAME
+        if i > 0:
+            weights_name = weights_name.replace(".", f"_{i}.")
+        add(state, output_dir.joinpath(weights_name), entry_safe_serialization=safe_serialization)
+    # Optimizer states
+    for i, opt in enumerate(optimizers):
+        optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
+        add(opt.state_dict(), output_dir.joinpath(optimizer_name))
+    # Scheduler states
+    for i, scheduler in enumerate(schedulers):
+        scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
+        add(scheduler.state_dict(), output_dir.joinpath(scheduler_name))
+    # DataLoader states
+    from .data_loader import IterableDatasetShard, SeedableRandomSampler
+
+    for i, dataloader in enumerate(dataloaders):
+        sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
+        output_sampler_file = output_dir.joinpath(sampler_name)
+        # Only save if we have our custom sampler
+        if isinstance(dataloader.dataset, IterableDatasetShard):
+            sampler = dataloader.get_sampler()
+            if isinstance(sampler, SeedableRandomSampler):
+                add(sampler, output_sampler_file)
+        if getattr(dataloader, "use_stateful_dataloader", False):
+            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
+            output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
+            add(dataloader.state_dict(), output_dataloader_state_dict_file, gated=False)
+
+    # GradScaler state
+    if scaler is not None:
+        add(scaler.state_dict(), output_dir.joinpath(SCALER_NAME), gated=False)
+    # Random number generator states
+    states = {}
+    states_name = f"{RNG_STATE_NAME}_{process_index}.pkl"
+    states["step"] = step
+    states["random_state"] = random.getstate()
+    states["numpy_random_seed"] = np.random.get_state()
+    states["torch_manual_seed"] = torch.get_rng_state()
+    if is_xpu_available():
+        states["torch_xpu_manual_seed"] = torch.xpu.get_rng_state_all()
+    if is_mlu_available():
+        states["torch_mlu_manual_seed"] = torch.mlu.get_rng_state_all()
+    elif is_sdaa_available():
+        states["torch_sdaa_manual_seed"] = torch.sdaa.get_rng_state_all()
+    elif is_musa_available():
+        states["torch_musa_manual_seed"] = torch.musa.get_rng_state_all()
+    if is_hpu_available():
+        states["torch_hpu_manual_seed"] = torch.hpu.get_rng_state_all()
+    if is_neuron_available():
+        states["torch_neuron_manual_seed"] = torch.neuron.get_rng_state_all()
+    if is_cuda_available():
+        states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
+    if is_torch_xla_available():
+        states["xm_seed"] = xm.get_rng_state()
+    add(states, output_dir.joinpath(states_name), gated=False)
+    return pending
+
+
+def write_accelerator_state(pending: list[tuple], save_on_each_node: bool = False) -> None:
+    """
+    Writes the pending entries produced by [`capture_accelerator_state`] to disk.
+
+    Args:
+        pending (`List[tuple]`):
+            The `(path, obj, safe_serialization, gated)` tuples returned by [`capture_accelerator_state`].
+        save_on_each_node (`bool`, *optional*, defaults to `False`):
+            Whether gated entries should be written by every node's main process, or only the global main process.
+    """
+    for output_file, state, entry_safe_serialization, gated in pending:
+        if gated:
+            save(state, output_file, save_on_each_node=save_on_each_node, safe_serialization=entry_safe_serialization)
+        else:
+            torch.save(state, output_file)
+        logger.info(f"State saved in {output_file}")
+
+
+class AsyncCheckpointManager:
+    """
+    Internal helper that runs checkpoint writes in a single background thread so training can continue while the
+    previous checkpoint is still being written to disk.
+
+    A checkpoint save is composed of two parts: *capturing* the state (detaching/copying tensors, cheap enough to do
+    inline) and *writing* it to disk (potentially very slow for large models). The manager only ever offloads the
+    writing. At most one write is in flight at a time: submitting a new checkpoint first waits for the previous one,
+    so a crash mid-training always leaves a complete checkpoint on disk.
+    """
+
+    def __init__(self):
+        self._executor: Optional[ThreadPoolExecutor] = None
+        self._future: Optional[Future] = None
+
+    def submit(self, save_fn: Callable[[], None]) -> None:
+        """Waits for any in-flight checkpoint write, then runs `save_fn` in the background thread."""
+        self.wait()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="accelerate-async-checkpoint")
+        self._future = self._executor.submit(save_fn)
+
+    @property
+    def is_active(self) -> bool:
+        """Whether a checkpoint write is currently in flight."""
+        return self._future is not None and not self._future.done()
+
+    def wait(self) -> None:
+        """Blocks until the in-flight checkpoint write (if any) completes, re-raising any error it hit."""
+        if self._future is None:
+            return
+        future, self._future = self._future, None
+        try:
+            future.result()
+        except Exception as e:
+            raise RuntimeError(f"The asynchronous checkpoint save failed with the error:\n{e}") from e
+
+
+async_checkpoint_manager = AsyncCheckpointManager()
 
 
 def save_accelerator_state(
@@ -105,78 +298,18 @@ def save_accelerator_state(
             Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
     output_dir = Path(output_dir)
-    # Model states
-    for i, state in enumerate(model_states):
-        weights_name = WEIGHTS_NAME if not safe_serialization else SAFE_WEIGHTS_NAME
-        if i > 0:
-            weights_name = weights_name.replace(".", f"_{i}.")
-        output_model_file = output_dir.joinpath(weights_name)
-        save(state, output_model_file, save_on_each_node=save_on_each_node, safe_serialization=safe_serialization)
-        logger.info(f"Model weights saved in {output_model_file}")
-    # Optimizer states
-    for i, opt in enumerate(optimizers):
-        state = opt.state_dict()
-        optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
-        output_optimizer_file = output_dir.joinpath(optimizer_name)
-        save(state, output_optimizer_file, save_on_each_node=save_on_each_node, safe_serialization=False)
-        logger.info(f"Optimizer state saved in {output_optimizer_file}")
-    # Scheduler states
-    for i, scheduler in enumerate(schedulers):
-        state = scheduler.state_dict()
-        scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
-        output_scheduler_file = output_dir.joinpath(scheduler_name)
-        save(state, output_scheduler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
-        logger.info(f"Scheduler state saved in {output_scheduler_file}")
-    # DataLoader states
-    for i, dataloader in enumerate(dataloaders):
-        sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
-        output_sampler_file = output_dir.joinpath(sampler_name)
-        # Only save if we have our custom sampler
-        from .data_loader import IterableDatasetShard, SeedableRandomSampler
-
-        if isinstance(dataloader.dataset, IterableDatasetShard):
-            sampler = dataloader.get_sampler()
-            if isinstance(sampler, SeedableRandomSampler):
-                save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
-        if getattr(dataloader, "use_stateful_dataloader", False):
-            dataloader_state_dict_name = "dl_state_dict.bin" if i == 0 else f"dl_state_dict_{i}.bin"
-            output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
-            state_dict = dataloader.state_dict()
-            torch.save(state_dict, output_dataloader_state_dict_file)
-        logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
-
-    # GradScaler state
-    if scaler is not None:
-        state = scaler.state_dict()
-        output_scaler_file = output_dir.joinpath(SCALER_NAME)
-        torch.save(state, output_scaler_file)
-        logger.info(f"Gradient scaler state saved in {output_scaler_file}")
-    # Random number generator states
-    states = {}
-    states_name = f"{RNG_STATE_NAME}_{process_index}.pkl"
-    states["step"] = step
-    states["random_state"] = random.getstate()
-    states["numpy_random_seed"] = np.random.get_state()
-    states["torch_manual_seed"] = torch.get_rng_state()
-    if is_xpu_available():
-        states["torch_xpu_manual_seed"] = torch.xpu.get_rng_state_all()
-    if is_mlu_available():
-        states["torch_mlu_manual_seed"] = torch.mlu.get_rng_state_all()
-    elif is_sdaa_available():
-        states["torch_sdaa_manual_seed"] = torch.sdaa.get_rng_state_all()
-    elif is_musa_available():
-        states["torch_musa_manual_seed"] = torch.musa.get_rng_state_all()
-    if is_hpu_available():
-        states["torch_hpu_manual_seed"] = torch.hpu.get_rng_state_all()
-    if is_neuron_available():
-        states["torch_neuron_manual_seed"] = torch.neuron.get_rng_state_all()
-    if is_cuda_available():
-        states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
-    if is_torch_xla_available():
-        states["xm_seed"] = xm.get_rng_state()
-    output_states_file = output_dir.joinpath(states_name)
-    torch.save(states, output_states_file)
-    logger.info(f"Random states saved in {output_states_file}")
+    pending = capture_accelerator_state(
+        output_dir,
+        model_states,
+        optimizers,
+        schedulers,
+        dataloaders,
+        process_index,
+        step,
+        scaler=scaler,
+        safe_serialization=safe_serialization,
+    )
+    write_accelerator_state(pending, save_on_each_node=save_on_each_node)
     return output_dir
 
 
@@ -253,7 +386,7 @@ def load_accelerator_state(
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = input_dir.joinpath(optimizer_name)
         optimizer_state = load(input_optimizer_file, map_location=map_location, **load_kwargs)
-        optimizers[i].load_state_dict(optimizer_state)
+        opt.load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
     # Scheduler states

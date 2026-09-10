@@ -53,6 +53,9 @@ class ParallelismConfig:
             for downstream libraries.
         cp_backend (`str`, defaults to `torch`):
             Which CP backend to use: `torch` (FSDP2)
+        pp_size (`int`, defaults to `1`):
+            The size of the pipeline parallel group. If `pp_size` is set to `1`, the pipeline parallel group will not
+            be used. See [`accelerate.pipeline_parallel`] for the training-loop utilities.
         sp_size (`int`, defaults to `1`):
             The size of the sequence parallel group.
         sp_backend (`str`, defaults to `deepspeed`):
@@ -72,6 +75,7 @@ class ParallelismConfig:
     tp_size: Optional[int] = None
     cp_size: Optional[int] = None
     cp_backend: Literal["torch"] = None
+    pp_size: Optional[int] = None
     sp_size: Optional[int] = None
     sp_backend: Literal["deepspeed"] = None
 
@@ -90,6 +94,7 @@ class ParallelismConfig:
             f"\ttp_size={self.tp_size},\n"
             f"\tcp_size={self.cp_size},\n"
             f"\tcp_backend={self.cp_backend},\n"
+            f"\tpp_size={self.pp_size},\n"
             f"\tsp_size={self.sp_size},\n"
             f"\tsp_backend={self.sp_backend},\n"
             f"\ttotal_size={self.total_size}\n"
@@ -128,6 +133,8 @@ class ParallelismConfig:
             dims += ["tp"]
         if self.cp_enabled:
             dims += ["cp"]
+        if self.pp_enabled:
+            dims += ["pp"]
         if self.sp_enabled:
             dims += ["sp"]
         return dims
@@ -166,12 +173,14 @@ class ParallelismConfig:
     @property
     def total_size(self):
         """The total size of the parallelism configuration, which is the product of all sizes."""
-        return self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size * self.sp_size
+        return (
+            self.dp_replicate_size * self.dp_shard_size * self.tp_size * self.cp_size * self.pp_size * self.sp_size
+        )
 
     @property
     def non_data_parallel_size(self):
-        """The size of the non-data parallel dimensions, which is the product of tensor and context parallel sizes."""
-        return self.tp_size * self.cp_size * self.sp_size
+        """The size of the non-data parallel dimensions: tensor, context, pipeline and sequence parallel sizes."""
+        return self.tp_size * self.cp_size * self.pp_size * self.sp_size
 
     @property
     def data_parallel_size(self):
@@ -199,8 +208,13 @@ class ParallelismConfig:
         return self.cp_size > 1
 
     @property
+    def pp_enabled(self):
+        """True if pipeline parallelism is enabled, i.e. `pp_size > 1`."""
+        return self.pp_size > 1
+
+    @property
     def sp_enabled(self):
-        """True if context parallelism is enabled, i.e. `sp_size > 1`."""
+        """True if sequence parallelism is enabled, i.e. `sp_size > 1`."""
         return self.sp_size > 1
 
     @property
@@ -264,7 +278,7 @@ class ParallelismConfig:
         mesh_dims = {parallelism: self._sizes[parallelism] for parallelism in self.active_mesh_dims}
 
         # Apply canonical ordering
-        mesh_order = ["dp_replicate", "dp_shard", "cp", "sp", "tp"]
+        mesh_order = ["dp_replicate", "dp_shard", "pp", "cp", "sp", "tp"]
         sorted_items = sorted(
             mesh_dims.items(),
             key=lambda x: (mesh_order.index(x[0])),
@@ -283,14 +297,15 @@ class ParallelismConfig:
             self.cp_size = int(os.environ.get("PARALLELISM_CONFIG_CP_SIZE", "1"))
         if self.cp_backend is None:
             self.cp_backend = os.environ.get("PARALLELISM_CONFIG_CP_BACKEND", "torch")
+        if self.pp_size is None:
+            self.pp_size = int(os.environ.get("PARALLELISM_CONFIG_PP_SIZE", "1"))
         if self.sp_size is None:
             self.sp_size = int(os.environ.get("PARALLELISM_CONFIG_SP_SIZE", "1"))
         if self.sp_backend is None:
             self.sp_backend = os.environ.get("PARALLELISM_CONFIG_SP_BACKEND", "deepspeed")
 
-        if self.tp_size > 1:
-            if self.tp_handler is None:
-                self.tp_handler = TorchTensorParallelConfig()
+        if self.tp_size > 1 and self.tp_handler is None:
+            self.tp_handler = TorchTensorParallelConfig()
 
         if self.cp_size > 1:
             if self.cp_handler is None:
@@ -304,9 +319,8 @@ class ParallelismConfig:
                         f"ParallelismConfig's cp_backend={self.cp_backend} requires {cp_backends_config_map[self.cp_backend]}, but cp_handler was set to {type(self.cp_handler)}"
                     )
 
-        if self.sp_size > 1:
-            if self.sp_handler is None:
-                self.sp_handler = DeepSpeedSequenceParallelConfig()
+        if self.sp_size > 1 and self.sp_handler is None:
+            self.sp_handler = DeepSpeedSequenceParallelConfig()
         if self.dp_replicate_size < 1:
             raise ValueError(f"dp_replicate_size must be at least 1, but got {self.dp_replicate_size}")
         if self.dp_shard_size < 1:
@@ -315,6 +329,8 @@ class ParallelismConfig:
             raise ValueError(f"tp_size must be at least 1, but got {self.tp_size}")
         if self.cp_size < 1:
             raise ValueError(f"cp_size must be at least 1, but got {self.cp_size}")
+        if self.pp_size < 1:
+            raise ValueError(f"pp_size must be at least 1, but got {self.pp_size}")
         valid_cp_backends = ["torch"]
         if self.cp_backend not in valid_cp_backends:
             raise ValueError(f"cp_backend must be one of {valid_cp_backends}, but got {self.cp_backend}")
@@ -344,6 +360,7 @@ class ParallelismConfig:
             "dp_shard": self.dp_shard_size,
             "tp": self.tp_size,
             "cp": self.cp_size,
+            "pp": self.pp_size,
             "sp": self.sp_size,
         }
 
