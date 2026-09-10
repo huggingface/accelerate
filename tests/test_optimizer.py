@@ -17,12 +17,46 @@ import pickle
 import torch
 
 from accelerate import Accelerator
+from accelerate.optimizer import AcceleratedOptimizer
+from accelerate.scheduler import AcceleratedScheduler
 from accelerate.test_utils import require_cpu, require_fp16, require_non_cpu
 from accelerate.test_utils.testing import AccelerateTestCase
 
 
 @require_cpu
 class CPUOptimizerTester(AccelerateTestCase):
+    def test_amp_overflow_keeps_optimizer_and_scheduler_in_sync(self):
+        Accelerator(cpu=True)
+        for fused in (False, True):
+            with self.subTest(fused=fused):
+                parameter = torch.nn.Parameter(torch.ones(4))
+                raw_optimizer = torch.optim.AdamW([parameter], lr=0.1, fused=fused)
+                scaler = torch.amp.GradScaler("cpu", growth_interval=2)
+                optimizer = AcceleratedOptimizer(raw_optimizer, scaler=scaler)
+                scheduler = AcceleratedScheduler(
+                    torch.optim.lr_scheduler.LambdaLR(raw_optimizer, lambda _: 1.0),
+                    optimizer,
+                    split_batches=True,
+                )
+
+                # Include consecutive overflows, recovery, and a successful scale-growth step.
+                for overflow in (False, True, True, False, False):
+                    optimizer.zero_grad()
+                    scaler.scale(parameter.sum()).backward()
+                    if overflow:
+                        parameter.grad[0] = torch.inf
+                    before = parameter.detach().clone()
+                    step_before = float(raw_optimizer.state.get(parameter, {}).get("step", 0))
+                    scheduler_before = scheduler.scheduler.last_epoch
+
+                    optimizer.step()
+                    scheduler.step()
+
+                    self.assertEqual(optimizer.step_was_skipped, overflow)
+                    self.assertEqual(torch.equal(parameter, before), overflow)
+                    self.assertEqual(float(raw_optimizer.state[parameter]["step"]), step_before + (not overflow))
+                    self.assertEqual(scheduler.scheduler.last_epoch, scheduler_before + (not overflow))
+
     def test_accelerated_optimizer_pickling(self):
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.SGD(model.parameters(), 0.1)
