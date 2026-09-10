@@ -3624,7 +3624,8 @@ class Accelerator:
 
     def save_state(self, output_dir: str | None = None, safe_serialization: bool = True, **save_model_func_kwargs):
         """
-        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
+        Saves the current states of the model, optimizer, scaler, RNG generators, the epoch counter and shuffle
+        generator of each prepared dataloader, and registered objects to a folder.
 
         If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled
         then checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater

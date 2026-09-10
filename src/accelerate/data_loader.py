@@ -399,6 +399,40 @@ class DataLoaderStateMixin:
         self.end_of_dataloader = False
         self.remainder = -1
 
+    def _record_epoch_start(self):
+        """
+        Marks the start of an epoch and keeps the generator state its permutation is drawn from (if any), so a
+        checkpoint taken inside the epoch is attributed to it and the resumed run draws the same permutation. Shared
+        with the dataloader `skip_first_batches` was built from, since `save_state` only sees that one.
+        """
+        generator = get_shuffle_generator(self)
+        self._generator_state_at_epoch_start = (
+            self.iteration,
+            generator.get_state() if generator is not None else None,
+        )
+        source_dataloader = getattr(self, "_source_dataloader", None)
+        if source_dataloader is not None:
+            source_dataloader._generator_state_at_epoch_start = self._generator_state_at_epoch_start
+
+    def _mark_end_of_dataloader(self):
+        "Flags the last batch, also on the dataloader `skip_first_batches` was built from"
+        self.end_of_dataloader = True
+        source_dataloader = getattr(self, "_source_dataloader", None)
+        if source_dataloader is not None:
+            source_dataloader.end_of_dataloader = True
+
+    def _finish_epoch(self):
+        """
+        Counts the completed epoch, also on the dataloader `skip_first_batches` was built from. That one is assumed
+        not to be iterated or `set_epoch`-ed while the skipping dataloader is in use: it holds the epoch being resumed.
+        """
+        self.iteration += 1
+        self._generator_state_at_epoch_start = None
+        source_dataloader = getattr(self, "_source_dataloader", None)
+        if source_dataloader is not None and source_dataloader.iteration == self.iteration - 1:
+            source_dataloader.iteration = self.iteration
+            source_dataloader._generator_state_at_epoch_start = None
+
     def begin(self):
         "Prepares the gradient state for the current dataloader"
         self.reset()
@@ -580,6 +614,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.begin()
 
         self.set_epoch(self.iteration)
+        self._record_epoch_start()
         dataloader_iter = self.base_dataloader.__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -601,13 +636,13 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                 batch_index += 1
                 current_batch = next_batch
             except StopIteration:
-                self.end_of_dataloader = True
+                self._mark_end_of_dataloader()
                 self._update_state_dict()
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
 
-        self.iteration += 1
+        self._finish_epoch()
         self.end()
 
     def __reduce__(self):
@@ -936,13 +971,13 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             )
 
             if stop_iteration:
-                self.end_of_dataloader = True
+                self._mark_end_of_dataloader()
                 self._update_state_dict()
                 self.remainder = observed_batch_size
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1
-        self.iteration += 1
+        self._finish_epoch()
         self.end()
 
     def set_epoch(self, epoch: int):
@@ -993,6 +1028,22 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             self.batch_sampler.sampler = sampler
             if hasattr(self.batch_sampler, "batch_sampler"):
                 self.batch_sampler.batch_sampler.sampler = sampler
+
+
+def get_shuffle_generator(dataloader) -> Optional[torch.Generator]:
+    """
+    Returns the `torch.Generator` the shuffling of a prepared dataloader draws from, or `None` when it draws from the
+    global RNG. This is the generator `prepare_data_loader` synchronizes across processes when it created one, else the
+    one the user gave the sampler.
+    """
+    generator = getattr(dataloader, "synchronized_generator", None)
+    if generator is None:
+        # Walk `SkipBatchSampler` -> `BatchSamplerShard` -> `BatchSampler` down to the sampler
+        sampler = dataloader.sampler if isinstance(dataloader.sampler, BatchSampler) else dataloader.batch_sampler
+        while sampler is not None and not hasattr(sampler, "generator"):
+            sampler = getattr(sampler, "sampler", None) or getattr(sampler, "batch_sampler", None)
+        generator = getattr(sampler, "generator", None)
+    return generator if isinstance(generator, torch.Generator) else None
 
 
 def get_sampler(dataloader):
@@ -1402,6 +1453,8 @@ def skip_first_batches(dataloader, num_batches=0):
         device = dataloader.device
         dataloader = dataloader.dataloader
 
+    # Chain through an already-skipping dataloader so that nested calls all report to the original one
+    source_dataloader = getattr(dataloader, "_source_dataloader", dataloader)
     dataset = dataloader.dataset
     sampler_is_batch_sampler = False
     if isinstance(dataset, IterableDataset):
@@ -1466,6 +1519,11 @@ def skip_first_batches(dataloader, num_batches=0):
             dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+
+    if isinstance(dataloader, (DataLoaderShard, DataLoaderDispatcher)):
+        # Epochs completed through the skipping dataloader count for the original one too, which is the one
+        # `save_state` checkpoints and the training loop goes back to after the resumed epoch.
+        dataloader._source_dataloader = source_dataloader
 
     if state.distributed_type == DistributedType.XLA:
         dataloader = MpDeviceLoaderWrapper(dataloader, device)

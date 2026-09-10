@@ -16,7 +16,8 @@ rendered properly in your Markdown viewer.
 # Checkpointing
 
 When training a PyTorch model with Accelerate, you may often want to save and continue a state of training. Doing so requires
-saving and loading the model, optimizer, RNG generators, and the GradScaler. Inside Accelerate are two convenience functions to achieve this quickly:
+saving and loading the model, optimizer, RNG generators, the GradScaler, and the epoch counter and shuffle generator of each
+prepared dataloader, so that a resumed run continues the shuffle sequence instead of replaying an earlier epoch. Inside Accelerate are two convenience functions to achieve this quickly:
 - Use [`~Accelerator.save_state`] for saving everything mentioned above to a folder location
 - Use [`~Accelerator.load_state`] for loading everything stored from an earlier `save_state`
 
@@ -70,6 +71,13 @@ accelerator.load_state("my/save/path/checkpointing/checkpoint_0")
 
 After resuming from a checkpoint, it may also be desirable to resume from a particular point in the active `DataLoader` if 
 the state was saved during the middle of an epoch. You can use [`~Accelerator.skip_first_batches`] to do so. 
+
+`save_state` records where each prepared dataloader is in its shuffle sequence. A checkpoint taken inside an epoch resumes on the
+same permutation when the shuffle comes from a `torch.Generator`: `use_seedable_sampler=True`, a `generator` passed to the
+`DataLoader`, or the default sampler in a multi-process run with `dispatch_batches=False`, with or without
+`use_stateful_dataloader`. When the permutation comes from the global RNG (the default sampler with no generator in a single
+process, or with `dispatch_batches=True`) the interrupted epoch is redrawn on resume, and only checkpoints taken at an epoch
+boundary line up.
 
 ```python
 from accelerate import Accelerator
