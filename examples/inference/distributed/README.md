@@ -16,12 +16,12 @@ pip install accelerate torch
 |--------|-------|-------------|
 | `phi2.py` | Microsoft Phi-2 | Basic distributed inference with Phi-2 |
 | `gemma_distributed.py` | Google Gemma 2B | Distributed inference with Gemma 2B-IT |
+| `image_captioning.py` | BLIP-2 | Distributed image captioning |
 | `stable_diffusion.py` | Stable Diffusion | Distributed image generation |
 | `distributed_image_generation.py` | Various | Image generation examples |
 | `distributed_speech_generation.py` | Various | Speech generation examples |
 | `florence2.py` | Florence-2 | Vision-language model inference |
 | `llava_next_video.py` | LLaVA-NeXT-Video | Video understanding |
-| `phi2.py` | Phi-2 | Original Phi-2 example |
 
 ## Running code
 
@@ -41,4 +41,10 @@ For the Gemma example:
 
 ```bash
 accelerate launch --num_processes {NUM_GPUS} gemma_distributed.py
+```
+
+For the image captioning example:
+
+```bash
+accelerate launch --num_processes {NUM_GPUS} image_captioning.py --data_path /path/to/images --output_path /path/to/output
 ```
