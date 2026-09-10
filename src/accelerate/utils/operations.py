@@ -559,25 +559,18 @@ def gather_tensor_shape(tensor):
     """
     Grabs the shape of `tensor` only available on one process and returns a tensor of its shape
     """
-    # Allocate 80 bytes to store the shape
+    # Store the rank and dtype before the dimensions so zero-sized axes are preserved.
     max_tensor_dimension = 2**20
     state = PartialState()
-    base_tensor = torch.empty(max_tensor_dimension, dtype=torch.int, device=state.device)
+    base_tensor = torch.zeros(max_tensor_dimension, dtype=torch.int, device=state.device)
 
-    # Since PyTorch can't just send a tensor to another GPU without
-    # knowing its size, we store the size of the tensor with data
-    # in an allocation
     if tensor is not None:
-        shape = tensor.shape
-        tensor_dtype = TENSOR_TYPE_TO_INT[tensor.dtype]
-        base_tensor[: len(shape) + 1] = torch.tensor(list(shape) + [tensor_dtype], dtype=int)
-    # Perform a reduction to copy the size data onto all GPUs
+        metadata = [tensor.ndim, TENSOR_TYPE_TO_INT[tensor.dtype], *tensor.shape]
+        base_tensor[: len(metadata)] = torch.tensor(metadata, dtype=torch.int, device=state.device)
+    # Only the source contributes metadata to the sum.
     base_tensor = reduce(base_tensor, reduction="sum")
-    base_tensor = base_tensor[base_tensor.nonzero()]
-    # The last non-zero data contains the coded dtype the source tensor is
-    dtype = int(base_tensor[-1:][0])
-    base_tensor = base_tensor[:-1]
-    return base_tensor, dtype
+    ndim, dtype = base_tensor[:2].tolist()
+    return base_tensor[2 : ndim + 2], dtype
 
 
 def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
@@ -593,7 +586,7 @@ def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
     state = PartialState()
     shape, dtype = gather_tensor_shape(tensor)
     if tensor is None:
-        tensor = torch.zeros(shape, dtype=TENSOR_INT_TO_DTYPE[dtype]).to(state.device)
+        tensor = torch.zeros(tuple(shape.tolist()), dtype=TENSOR_INT_TO_DTYPE[dtype], device=state.device)
     return reduce(tensor, reduction="sum")
 
 

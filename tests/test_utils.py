@@ -61,7 +61,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
-from accelerate.utils.operations import is_namedtuple
+from accelerate.utils.operations import TENSOR_INT_TO_DTYPE, gather_tensor_shape, is_namedtuple
 
 
 if is_torch_xla_available():
@@ -76,6 +76,26 @@ class UtilsTester(unittest.TestCase):
     def setUp(self):
         # logging requires initialized state
         PartialState()
+
+    @unittest.skipUnless(hasattr(torch.utils, "deterministic"), "requires deterministic memory filling")
+    def test_gather_tensor_shape_preserves_metadata(self):
+        enabled = torch.are_deterministic_algorithms_enabled()
+        warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+        fill = torch.utils.deterministic.fill_uninitialized_memory
+        try:
+            torch.use_deterministic_algorithms(True)
+            torch.utils.deterministic.fill_uninitialized_memory = True
+            for shape in [(2, 3), (), (0, 3), (2, 0, 3)]:
+                for dtype in [torch.float32, torch.bfloat16, torch.int64]:
+                    with self.subTest(shape=shape, dtype=dtype):
+                        tensor = torch.ones(shape, dtype=dtype, device=PartialState().device)
+                        actual_shape, actual_dtype = gather_tensor_shape(tensor)
+                        self.assertEqual(actual_shape.numel(), len(shape))
+                        self.assertEqual(actual_shape.flatten().tolist(), list(shape))
+                        self.assertEqual(TENSOR_INT_TO_DTYPE[actual_dtype], dtype)
+        finally:
+            torch.utils.deterministic.fill_uninitialized_memory = fill
+            torch.use_deterministic_algorithms(enabled, warn_only=warn_only)
 
     def test_send_to_device(self):
         tensor = torch.randn(5, 2)
