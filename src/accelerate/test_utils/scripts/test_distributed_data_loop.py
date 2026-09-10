@@ -369,9 +369,37 @@ def test_stateful_dataloader_save_state(accelerator):
     _test_stateful_dataloader_save_state_resume(accelerator, iterable=False)
 
 
+def test_skip_first_batches_preserves_metric_samples():
+    for split_batches in (False, True):
+        accelerator = Accelerator(
+            dataloader_config=DataLoaderConfiguration(split_batches=split_batches, dispatch_batches=False)
+        )
+        for batch_size in (2 * accelerator.num_processes, 4 * accelerator.num_processes):
+            total_batch_size = batch_size if split_batches else batch_size * accelerator.num_processes
+            for num_items in (3 * total_batch_size, 3 * total_batch_size + 1):
+                for drop_last in (False, True):
+                    for skips in ((0,), (1,), (1, 1)):
+                        dataloader = accelerator.prepare(
+                            DataLoader(range(num_items), batch_size=batch_size, drop_last=drop_last)
+                        )
+                        for skip in skips:
+                            dataloader = accelerator.skip_first_batches(dataloader, skip)
+                        gathered = []
+                        for batch in dataloader:
+                            gathered.extend(accelerator.gather_for_metrics(batch).tolist())
+                        stop = num_items - num_items % total_batch_size if drop_last else num_items
+                        expected = list(range(sum(skips) * total_batch_size, stop))
+                        assert gathered == expected, (
+                            f"split_batches={split_batches}, drop_last={drop_last}, skips={skips}: "
+                            f"expected {expected}, got {gathered}"
+                        )
+
+
 def main():
     accelerator = create_accelerator()
     torch.manual_seed(accelerator.process_index)
+
+    test_skip_first_batches_preserves_metric_samples()
 
     accelerator.print("Test that even_batches variable ensures uniform batches across processes")
     test_default_ensures_even_batch_sizes()
