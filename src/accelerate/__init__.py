@@ -23,10 +23,12 @@ from .big_modeling import (
     init_on_device,
     load_checkpoint_and_dispatch,
 )
+from .callbacks import Callback
 from .data_loader import skip_first_batches
 from .inference import prepare_pippy
 from .launchers import debug_launcher, notebook_launcher
 from .parallelism_config import ParallelismConfig
+from .pipeline_parallel import pipeline_forward, prepare_pipeline
 from .state import PartialState
 from .utils import (
     AutocastKwargs,
