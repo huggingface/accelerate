@@ -20,7 +20,7 @@ import torch
 from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
-from accelerate import Accelerator, PartialState
+from accelerate import Accelerator, DataLoaderConfiguration, PartialState
 from accelerate.data_loader import (
     BatchSamplerShard,
     DataLoaderDispatcher,
@@ -631,6 +631,98 @@ class DataLoaderTester(AccelerateTestCase):
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
+
+    @parameterized.expand(
+        [
+            (dispatch, exit_mode)
+            for dispatch in (False, True)
+            for exit_mode in ("complete", "first", "last", "close", "error")
+        ]
+    )
+    def test_interrupted_validation_preserves_accumulation(self, dispatch, exit_mode):
+        accelerator = Accelerator(
+            cpu=True,
+            gradient_accumulation_steps=2,
+            dataloader_config=DataLoaderConfiguration(dispatch_batches=dispatch),
+        )
+        model = torch.nn.Linear(1, 1, bias=False)
+        with torch.no_grad():
+            model.weight.fill_(1.0)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        training = DataLoader(torch.ones(5, 1), batch_size=1)
+        validation = DataLoader(torch.ones(2, 1), batch_size=1)
+        model, optimizer, training, validation = accelerator.prepare(model, optimizer, training, validation)
+        sync_steps = []
+        updates = 0
+        validation_error = RuntimeError("validation failed")
+
+        for index, batch in enumerate(training):
+            with accelerator.accumulate(model):
+                accelerator.backward(model(batch).square().mean())
+                before = model.weight.detach().clone()
+                optimizer.step()
+                optimizer.zero_grad()
+                sync_steps.append(accelerator.sync_gradients)
+                updates += not torch.equal(before, model.weight)
+
+            if index == 0:
+                with torch.no_grad():
+                    if exit_mode == "close":
+                        iterator = iter(validation)
+                        model(next(iterator))
+                        model(next(iterator))
+                        iterator.close()
+                    else:
+                        try:
+                            for val_index, val_batch in enumerate(validation):
+                                model(val_batch)
+                                if exit_mode == "first" or (exit_mode == "last" and val_index == 1):
+                                    break
+                                if exit_mode == "error":
+                                    raise validation_error
+                        except RuntimeError as error:
+                            assert error is validation_error
+
+        assert sync_steps == [False, True, False, True, True]
+        assert updates == 3
+        torch.testing.assert_close(model.weight, torch.tensor([[0.576]]))
+        assert not accelerator.gradient_state.in_dataloader
+        completed_epochs = int(exit_mode == "complete")
+        assert validation.iteration == completed_epochs
+        assert len(list(validation)) == 2
+        assert validation.iteration == completed_epochs + 1
+
+    @parameterized.expand([(False,), (True,)])
+    def test_dataloader_iterator_cleanup(self, dispatch):
+        accelerator = Accelerator(cpu=True, dataloader_config=DataLoaderConfiguration(dispatch_batches=dispatch))
+        dataloader = accelerator.prepare(DataLoader(range(4), batch_size=1))
+        iterator = iter(dataloader)
+        next(iterator)
+        assert accelerator.gradient_state.active_dataloader is dataloader
+        assert dataloader.iteration == 0
+        iterator.close()
+        assert not accelerator.gradient_state.in_dataloader
+        assert dataloader.iteration == 0
+        assert len(list(dataloader)) == 4
+        assert dataloader.iteration == 1
+
+        error = RuntimeError("dataset failed")
+
+        class FailingDataset(torch.utils.data.Dataset):
+            def __len__(self):
+                return 2
+
+            def __getitem__(self, index):
+                if index == 1:
+                    raise error
+                return index
+
+        dataloader = accelerator.prepare(DataLoader(FailingDataset(), batch_size=1))
+        with pytest.raises(RuntimeError) as caught:
+            next(iter(dataloader))
+        assert caught.value is error
+        assert not accelerator.gradient_state.in_dataloader
+        assert dataloader.iteration == 0
 
     def test_set_epoch_in_batch_sampler(self):
         # Ensure that set_epoch gets propagated to custom batch samplers that accept it
