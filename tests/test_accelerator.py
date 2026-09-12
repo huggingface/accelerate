@@ -132,6 +132,18 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    def test_split_batches_only_comes_from_the_dataloader_config(self):
+        # `split_batches` moved to `DataLoaderConfiguration` along with `dispatch_batches`,
+        # `even_batches` and `use_seedable_sampler`. Those three were dropped from `Accelerator`,
+        # so passing one now raises; `split_batches` stayed in the signature and was never read,
+        # which made `Accelerator(split_batches=True)` configure nothing and say nothing.
+        for removed in ("split_batches", "dispatch_batches", "even_batches", "use_seedable_sampler"):
+            with self.assertRaises(TypeError):
+                Accelerator(**{removed: True})
+
+        accelerator = Accelerator(dataloader_config=DataLoaderConfiguration(split_batches=True))
+        assert accelerator.split_batches is True
+
     def test_partial_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to
