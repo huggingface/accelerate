@@ -897,6 +897,14 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         dl_shard_state_dict = dl_shard.state_dict()
         dl_dispatcher_state_dict = dl_dispatcher.state_dict()
 
+        # DataLoaderShard / DataLoaderDispatcher additionally persist the sampler epoch counter
+        # (`_iteration`) so a shuffled sampler resumes on the correct permutation (see #4195). torchdata's
+        # StatefulDataLoader has no such field, so drop it before comparing the shared state.
+        assert "_iteration" in dl_shard_state_dict
+        assert "_iteration" in dl_dispatcher_state_dict
+        dl_shard_state_dict.pop("_iteration")
+        dl_dispatcher_state_dict.pop("_iteration")
+
         assert expected_state_dict == skip_dl_state_dict
         assert expected_state_dict == dl_shard_state_dict
         assert expected_state_dict == dl_dispatcher_state_dict
@@ -1007,6 +1015,14 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         skip_dl_state_dict = skip_dl.state_dict()
         dl_shard_state_dict = dl_shard.state_dict()
         dl_dispatcher_state_dict = dl_dispatcher.state_dict()
+
+        # DataLoaderShard / DataLoaderDispatcher additionally persist the sampler epoch counter
+        # (`_iteration`) so a shuffled sampler resumes on the correct permutation (see #4195). torchdata's
+        # StatefulDataLoader has no such field, so drop it before comparing the shared state.
+        assert "_iteration" in dl_shard_state_dict
+        assert "_iteration" in dl_dispatcher_state_dict
+        dl_shard_state_dict.pop("_iteration")
+        dl_dispatcher_state_dict.pop("_iteration")
 
         assert expected_state_dict == skip_dl_state_dict
         assert expected_state_dict == dl_shard_state_dict
