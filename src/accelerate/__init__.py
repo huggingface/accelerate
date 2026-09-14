@@ -22,6 +22,7 @@ from .big_modeling import (
     init_empty_weights,
     init_on_device,
     load_checkpoint_and_dispatch,
+    materialize_meta_tensors,
 )
 from .data_loader import skip_first_batches
 from .inference import prepare_pippy
