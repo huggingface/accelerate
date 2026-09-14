@@ -854,6 +854,12 @@ class DataLoaderConfiguration:
             If set to `True`, the dataloader prepared by the Accelerator will be backed by
             [torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed.
+        already_sharded (`bool`, defaults to `False`):
+            If set to `True`, Accelerate assumes each process's `DataLoader` is already sharded (for example with a
+            rank-aware `DistributedSampler` or a pre-sliced iterable) and skips `BatchSamplerShard`,
+            `IterableDatasetShard`, and a second Hugging Face `shard()` call. The `DataLoaderShard` wrapper is still
+            applied for device placement, `set_epoch` forwarding, and state tracking. Incompatible with
+            `dispatch_batches` and `split_batches`. The user is responsible for equal step counts across ranks.
     """
 
     split_batches: bool = field(
@@ -910,6 +916,14 @@ class DataLoaderConfiguration:
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
+        },
+    )
+    already_sharded: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, Accelerate assumes each process's `DataLoader` is already sharded and skips "
+            "`BatchSamplerShard`, `IterableDatasetShard`, and a second Hugging Face `shard()` call, while still "
+            "wrapping with `DataLoaderShard`. Incompatible with `dispatch_batches` and `split_batches`."
         },
     )
 
