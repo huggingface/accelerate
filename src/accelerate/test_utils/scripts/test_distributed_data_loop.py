@@ -312,6 +312,21 @@ def _test_stateful_dataloader_resume(accelerator, iterable):
         accelerator.dataloader_config = old_dataloader_config
 
 
+def test_stateful_dataloader_with_workers(accelerator):
+    """
+    With `num_workers > 0`, capturing the state dict at prepare time used to build the iterator and draw the epoch-0
+    permutation before the RNG was synchronized across processes, so each rank sharded a different permutation.
+    """
+    old_dataloader_config = accelerator.dataloader_config
+    try:
+        accelerator.dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=True)
+        torch.manual_seed(accelerator.process_index)
+        loader = DataLoader(DummyDataset(), shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+        test_data_loader(loader, accelerator)
+    finally:
+        accelerator.dataloader_config = old_dataloader_config
+
+
 def test_stateful_dataloader(accelerator):
     """
     Tests that a stateful dataloader can be iterated over, saved after a few batches using `load_state_dict`, and then
@@ -419,6 +434,8 @@ def main():
     sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
     loader = DataLoader(dataset, sampler=sampler, batch_size=None, collate_fn=default_collate, num_workers=NUM_WORKERS)
     test_data_loader(loader, accelerator)
+    accelerator.print("Test stateful DataLoader with num_workers > 0")
+    test_stateful_dataloader_with_workers(accelerator)
     test_stateful_dataloader(accelerator)
     test_stateful_dataloader_save_state(accelerator)
 

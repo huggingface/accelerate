@@ -441,7 +441,9 @@ class DataLoaderAdapter:
             self.base_dataloader = DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
 
         if hasattr(self.base_dataloader, "state_dict"):
-            self.dl_state_dict = self.base_dataloader.state_dict()
+            # Captured lazily in `_update_state_dict`: with `num_workers > 0`, calling `state_dict()` here would
+            # build the iterator and draw the sampler permutation before the RNG is synchronized across processes.
+            self.dl_state_dict = None
 
     def __getattr__(self, name):
         # Avoid infinite recursion if we try to access a nonexistent base_dataloader attribute.
@@ -451,6 +453,8 @@ class DataLoaderAdapter:
         return getattr(self.base_dataloader, name)
 
     def state_dict(self):
+        if self.dl_state_dict is None:
+            return self.base_dataloader.state_dict()
         return self.dl_state_dict
 
     def load_state_dict(self, state_dict):
