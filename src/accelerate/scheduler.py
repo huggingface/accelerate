@@ -59,7 +59,7 @@ class AcceleratedScheduler:
 
         # Otherwise, first make sure the optimizer was stepped.
         if not self.gradient_state.sync_gradients:
-            if self.gradient_state.adjust_scheduler:
+            if self.gradient_state.adjust_scheduler and hasattr(self.scheduler, "_step_count"):
                 self.scheduler._step_count += 1
             return
 
@@ -76,7 +76,7 @@ class AcceleratedScheduler:
             for _ in range(num_processes):
                 # Special case when using OneCycle and `drop_last` was not used
                 if hasattr(self.scheduler, "total_steps"):
-                    if self.scheduler._step_count <= self.scheduler.total_steps:
+                    if self.scheduler.last_epoch < self.scheduler.total_steps:
                         self.scheduler.step(*args, **kwargs)
                 else:
                     self.scheduler.step(*args, **kwargs)

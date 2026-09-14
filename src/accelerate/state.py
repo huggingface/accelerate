@@ -1277,7 +1277,7 @@ class GradientState:
     @property
     def adjust_scheduler(self) -> bool:
         "Returns whether the scheduler should be adjusted"
-        return self.plugin_kwargs.get("adjust_scheduler", False)
+        return self.plugin_kwargs.get("adjust_scheduler", True)
 
     @property
     def sync_with_dataloader(self) -> bool:
