@@ -24,6 +24,7 @@ import re
 import shutil
 import warnings
 from collections import OrderedDict
+from pathlib import Path
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
@@ -35,7 +36,16 @@ import torch.utils.hooks as hooks
 from accelerate.utils.dataclasses import FP8BackendType
 
 from .big_modeling import _attach_context_parallel_hooks, _refuse_recurrent_layers_under_sequence_parallelism
-from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
+from .callbacks import Callback, CallbackHandler
+from .checkpointing import (
+    async_checkpoint_manager,
+    capture_accelerator_state,
+    load_accelerator_state,
+    load_custom_state,
+    save_accelerator_state,
+    save_custom_state,
+    write_accelerator_state,
+)
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
@@ -260,6 +270,16 @@ class Accelerator:
         gradient_accumulation_plugin ([`~utils.GradientAccumulationPlugin`], *optional*):
             A configuration for how gradient accumulation should be handled, if more tweaking than just the
             `gradient_accumulation_steps` is needed.
+        parallelism_config ([`~utils.ParallelismConfig`], *optional*):
+            A configuration for model, pipeline and context parallelism.
+        callbacks ([`~accelerate.callbacks.Callback`] or list of them, *optional*):
+            One or more [`~accelerate.callbacks.Callback`] to register at init. More can be added/removed later with
+            `add_callback` / `remove_callback`.
+        async_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to write `save_state` checkpoints in a background thread so training can continue while large
+            checkpoints are being written to disk. Only the disk writes are offloaded; capturing the state is still
+            done inline. Additional saves wait for the previous write to finish, so a crash mid-training always
+            leaves a complete checkpoint on disk. Not supported with DeepSpeed, Megatron-LM, or XLA.
 
     **Available attributes:**
 
@@ -300,6 +320,8 @@ class Accelerator:
         dynamo_plugin: TorchDynamoPlugin | None = None,
         deepspeed_plugins: DeepSpeedPlugin | dict[str, DeepSpeedPlugin] | None = None,
         parallelism_config: ParallelismConfig | None = None,
+        callbacks: Callback | list[Callback] | None = None,
+        async_checkpoint: bool = False,
     ):
         self.trackers = []
         if project_config is not None:
@@ -626,6 +648,9 @@ class Accelerator:
         self._load_model_state_pre_hook = OrderedDict()
         self._save_model_state_pre_hook = OrderedDict()
 
+        # Callbacks
+        self.callback_handler = CallbackHandler(callbacks)
+
         # RNG Types
         self.rng_types = rng_types
         if self.rng_types is None:
@@ -634,7 +659,99 @@ class Accelerator:
         # Set a flag tensor for early stopping and other breakpoints
         self.flag_tensor = None
 
+        # Async checkpointing
+        self.use_async_checkpoint = False
+        if async_checkpoint:
+            if self.distributed_type in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM, DistributedType.XLA):
+                raise ValueError(
+                    f"`async_checkpoint=True` is not supported with {self.distributed_type.value} training. "
+                    "Their checkpointing goes through their own runtime APIs, which cannot be offloaded to a thread."
+                )
+            self.use_async_checkpoint = True
+
         check_os_kernel()
+
+        self.trigger_callbacks("on_init_end")
+
+    # Callbacks
+
+    def add_callback(self, callback: Callback):
+        """
+        Register a [`~accelerate.callbacks.Callback`]. Passing a callback class (instead of an instance) is
+        supported and will be instantiated automatically.
+
+        Args:
+            callback ([`~accelerate.callbacks.Callback`] or `type`):
+                The callback (or callback class) to register.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator, Callback
+
+        >>> class MyCallback(Callback):
+        ...     def on_step_end(self, accelerator, loss=None, **kwargs):
+        ...         accelerator.print(f"loss: {loss}")
+
+        >>> accelerator = Accelerator()
+        >>> accelerator.add_callback(MyCallback)  # class or instance both work
+        ```
+        """
+        self.callback_handler.add_callback(callback)
+
+    def remove_callback(self, callback: Callback):
+        """
+        Remove a previously registered [`~accelerate.callbacks.Callback`], either by instance or by class.
+
+        Args:
+            callback ([`~accelerate.callbacks.Callback`] or `type`):
+                The callback (or callback class) to remove.
+        """
+        self.callback_handler.remove_callback(callback)
+
+    def trigger_callbacks(self, event_name: str, **kwargs):
+        """
+        Fire the `event_name` event on all registered callbacks. Called internally by `Accelerator` at the relevant
+        points of the training loop, and can also be called directly from a training script for the events
+        `Accelerator` cannot know about (begin/end of training, begin/end of each epoch, ...).
+
+        Args:
+            event_name (`str`):
+                The event to fire, e.g. `"on_epoch_begin"`. Must be one of the `Callback` methods.
+            **kwargs:
+                Event-specific keyword arguments forwarded to the callbacks (e.g. `epoch=`, `loss=`, `values=`).
+
+        Example:
+
+        ```python
+        >>> accelerator.trigger_callbacks("on_train_begin")
+        >>> for epoch in range(num_epochs):
+        ...     accelerator.trigger_callbacks("on_epoch_begin", epoch=epoch)
+        ```
+        """
+        self.callback_handler.call_event(event_name, self, **kwargs)
+
+    def callback_step_begin(self, batch=None, **kwargs):
+        """
+        Convenience helper that fires `on_step_begin` on all registered callbacks. Call it right before processing a
+        batch (typically inside the dataloader loop).
+
+        Args:
+            batch (*optional*):
+                The batch that is about to be processed, forwarded to the callbacks as-is.
+        """
+        self.callback_handler.call_event("on_step_begin", self, batch=batch, **kwargs)
+
+    def callback_step_end(self, loss=None, **kwargs):
+        """
+        Convenience helper that fires `on_step_end` on all registered callbacks. Call it right after processing a
+        batch; pass `loss=...` to hand the current loss to the callbacks.
+
+        Args:
+            loss (*optional*):
+                The loss computed for this batch (any type; callbacks receive it as-is).
+        """
+        self.callback_handler.call_event("on_step_end", self, loss=loss, **kwargs)
 
     @property
     def deepspeed_plugin(self):
@@ -795,9 +912,14 @@ class Accelerator:
     @property
     def pipeline_parallel_rank(self) -> int:
         """
-        Pipeline parallelism is not supported yet.
+        Returns the rank of this process within the pipeline parallel group when pipeline parallelism is configured
+        via `ParallelismConfig(pp_size=...)`. Defaults to 0 when PP is disabled.
         """
-        raise NotImplementedError("Pipeline parallelism is currently not supported in Accelerate.")
+        if self.parallelism_config:
+            if self.parallelism_config.pp_enabled:
+                return self.torch_device_mesh.get_local_rank("pp")
+            return 0
+        raise RuntimeError("Pipeline parallelism is not configured. Set `parallelism_config` with `pp_size` first.")
 
     @property
     def context_parallel_rank(self) -> int:
@@ -2782,6 +2904,9 @@ class Accelerator:
         # Their optimizer handles it for us.
         scaler = None if self.fp8_backend == FP8BackendType.MSAMP else self.scaler
         optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=scaler)
+        # Connect the optimizer step to the callback system (fired only on real steps, not accumulation sub-steps)
+        optimizer._callback_handler = self.callback_handler
+        optimizer._accelerator_ref = self
         self._optimizers.append(optimizer)
         return optimizer
 
@@ -2859,6 +2984,7 @@ class Accelerator:
             self.lomo_backward(loss, learning_rate)
         else:
             loss.backward(**kwargs)
+        self.callback_handler.call_event("on_backward_end", self)
 
     def set_trigger(self):
         """
@@ -3425,6 +3551,7 @@ class Accelerator:
             log_kwargs = {}
         for tracker in self.trackers:
             tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
+        self.callback_handler.call_event("on_log", self, values=values, step=step)
 
     def end_training(self):
         """
@@ -3445,7 +3572,23 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.finish()
 
+        self.trigger_callbacks("on_train_end")
+        if self.use_async_checkpoint:
+            self.wait_for_async_checkpoint()
         self.state.destroy_process_group()
+
+    def wait_for_async_checkpoint(self):
+        """
+        Blocks until any in-flight asynchronous checkpoint write (see `async_checkpoint=True`) has finished. Calling
+        this is only needed if the checkpoint must be complete on disk before continuing, e.g. right before a job
+        preemption handler or when an external process reads the checkpoint directory; `end_training` already does it
+        for you.
+
+        Raises:
+            `RuntimeError`: if the background write failed, re-raising the original error.
+        """
+        if self.use_async_checkpoint:
+            async_checkpoint_manager.wait()
 
     def save(self, obj, f, safe_serialization=False):
         """
@@ -3662,6 +3805,10 @@ class Accelerator:
         """
         if self.project_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
+            # Old checkpoints may be pruned below, so make sure no previous async write is still running
+            if self.use_async_checkpoint:
+                async_checkpoint_manager.wait()
+        self.trigger_callbacks("on_save", output_dir=output_dir)
         os.makedirs(output_dir, exist_ok=True)
         if self.project_configuration.automatic_checkpoint_naming:
             folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
@@ -3740,21 +3887,44 @@ class Accelerator:
         for hook in self._save_model_state_pre_hook.values():
             hook(self._models, weights, output_dir)
 
-        save_location = save_accelerator_state(
-            output_dir,
-            weights,
-            optimizers,
-            schedulers,
-            dataloaders,
-            self.state.process_index,
-            self.step,
-            self.scaler,
-            save_on_each_node=self.project_configuration.save_on_each_node,
-            safe_serialization=safe_serialization,
-        )
+        if self.use_async_checkpoint:
+            # Capture the state inline (cheap, needs the live training objects) and offload only the disk writes to
+            # the background thread. This blocks until any previous checkpoint write finished, so at most one write
+            # is in flight and a crash mid-training always leaves a complete checkpoint on disk.
+            pending = capture_accelerator_state(
+                output_dir,
+                weights,
+                optimizers,
+                schedulers,
+                dataloaders,
+                self.state.process_index,
+                self.step,
+                scaler=self.scaler,
+                safe_serialization=safe_serialization,
+                stage_to_cpu=True,
+            )
+            save_on_each_node = self.project_configuration.save_on_each_node
+            async_checkpoint_manager.submit(
+                lambda: write_accelerator_state(pending, save_on_each_node=save_on_each_node)
+            )
+            save_location = Path(output_dir)
+        else:
+            save_location = save_accelerator_state(
+                output_dir,
+                weights,
+                optimizers,
+                schedulers,
+                dataloaders,
+                self.state.process_index,
+                self.step,
+                self.scaler,
+                save_on_each_node=self.project_configuration.save_on_each_node,
+                safe_serialization=safe_serialization,
+            )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
         self.project_configuration.iteration += 1
+        self.trigger_callbacks("on_save_end", output_dir=save_location)
         return save_location
 
     def register_load_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:

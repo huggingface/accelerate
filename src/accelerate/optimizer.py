@@ -16,13 +16,99 @@ import inspect
 
 import torch
 
+from .logging import get_logger
 from .state import AcceleratorState, GradientState
 from .utils import DistributedType, honor_type, is_lomo_available, is_torch_xla_available
+
+
+logger = get_logger(__name__)
 
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.runtime as xr
+
+
+def _get_fused_foreach_supported_devices():
+    """
+    Returns the device types supporting fused / foreach optimizer kernels, using torch's own tables when available.
+    """
+    try:
+        from torch.utils._foreach_utils import (
+            _get_foreach_kernels_supported_devices,
+            _get_fused_kernels_supported_devices,
+        )
+
+        return _get_fused_kernels_supported_devices(), _get_foreach_kernels_supported_devices()
+    except ImportError:
+        return ["cuda", "xpu", "hpu", "cpu"], ["cuda", "xpu", "hpu", "mps", "cpu"]
+
+
+def _apply_fused_optimizer_defaults(optimizer):
+    """
+    Enable `fused` (or `foreach` as a fallback) multi-tensor optimizer kernels on vanilla `torch.optim` optimizers
+    when the parameters can take advantage of them.
+
+    Fused/foreach implementations apply the update across all parameters at once and can speed up optimizer steps
+    substantially (~10-30%) compared to the default per-parameter loop, at no accuracy cost. This is most useful
+    for the very common pattern of creating the optimizer *before* the model is moved to the accelerator device
+    (e.g. `optimizer = torch.optim.AdamW(model.parameters())` followed by `accelerator.prepare(model, optimizer)`):
+    torch's own auto-defaults evaluate the parameter devices at construction time, see the CPU-resident parameters
+    and conservatively fall back to the slow single-tensor path. By the time `AcceleratedOptimizer` wraps the
+    optimizer, parameters have been placed on the right device, so we can safely enable the fast path.
+
+    We only touch optimizers known to support the flags (Adam, AdamW, SGD, Adamax, NAdam, RAdam, RMSprop) and only
+    when the user didn't already configure `fused`/`foreach` themselves. Mirrors the safety checks of
+    `torch.utils._foreach_utils._default_to_fused_or_foreach`.
+    """
+    if torch.jit.is_scripting():
+        return
+    if not isinstance(
+        optimizer,
+        (torch.optim.Adam, torch.optim.AdamW, torch.optim.SGD, torch.optim.Adamax, torch.optim.NAdam, torch.optim.RAdam, torch.optim.RMSprop),
+    ):
+        # Third-party optimizers (bitsandbytes, schedulefree, apex, ...) are left untouched
+        return
+
+    params = [p for group in optimizer.param_groups for p in group["params"]]
+    if not params:
+        return
+    # Fused/foreach kernels require every parameter to live on the same supported device
+    device_types = {p.device.type for p in params}
+    if len(device_types) != 1:
+        return
+    device_type = next(iter(device_types))
+    if any(p.is_sparse for p in params):
+        return
+    if optimizer.defaults.get("differentiable", False):
+        return
+    if any(group.get("fused") is not None or group.get("foreach") is not None for group in optimizer.param_groups):
+        # User (or torch itself) explicitly configured it; torch copies `defaults` keys into every
+        # param group with value None, so we must check the *values* and not key presence.
+        return
+
+    fused_devices, foreach_devices = _get_fused_foreach_supported_devices()
+    # Mirrors `torch.utils._foreach_utils._default_to_fused_or_foreach`: fused requires all params to be non-sparse
+    # tensors (floating point for most optimizers), foreach only requires them to be plain tensors. Note the device
+    # capability lists are independent (e.g. mps/cpu support fused but not foreach kernels).
+    differentiable = optimizer.defaults.get("differentiable", False)
+    fused_capable = device_type in fused_devices and not differentiable and all(
+        type(p) in (torch.Tensor, torch.nn.Parameter) and torch.is_floating_point(p) for p in params
+    )
+    foreach_capable = device_type in foreach_devices and all(type(p) in (torch.Tensor, torch.nn.Parameter) for p in params)
+
+    key = "fused" if fused_capable else "foreach" if foreach_capable else None
+    if key is None:
+        return
+    try:
+        optimizer.defaults = {**optimizer.defaults, key: True}
+        for group in optimizer.param_groups:
+            # torch copies the `defaults` (including `key: None`) into every param group at construction time, so
+            # an existing `None` entry means "not configured" and must be overwritten, not skipped.
+            group[key] = True
+    except Exception:
+        # Never break a working training run over an optimization
+        logger.warning(f"Could not enable `{key}` optimizer kernels, falling back to the default implementation.")
 
 
 def move_to_device(state, device):
@@ -73,6 +159,11 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             else:
                 state_dict = move_to_device(state_dict, self.accelerator_state.device)
             self.optimizer.load_state_dict(state_dict)
+
+        self._callback_handler = None
+        self._accelerator_ref = None
+        if device_placement:
+            _apply_fused_optimizer_defaults(self.optimizer)
 
     @property
     def state(self):
@@ -150,6 +241,17 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             self.optimizer.optimizer.eval()
 
     def step(self, closure=None):
+        """
+        Performs the optimizer step when gradients should be synchronized, firing `on_optimizer_step` callbacks
+        exactly once per real step (i.e. skipped during gradient accumulation sub-steps).
+        """
+        if self.gradient_state.sync_gradients and self._callback_handler is not None:
+            self._step(closure)
+            self._callback_handler.call_event("on_optimizer_step", self._accelerator_ref)
+        else:
+            self._step(closure)
+
+    def _step(self, closure=None):
         if is_lomo_available():
             from lomo_optim import AdaLomo, Lomo
 
@@ -201,11 +303,15 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             "_accelerate_step_called",
             "_optimizer_original_step_method",
             "_optimizer_patched_step_method",
+            "_callback_handler",
+            "_accelerator_ref",
         ]
         return {k: v for k, v in self.__dict__.items() if k not in _ignored_keys}
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        self._callback_handler = None
+        self._accelerator_ref = None
         if self.scaler is not None:
             self._accelerate_step_called = False
             self._optimizer_original_step_method = self.optimizer.step
