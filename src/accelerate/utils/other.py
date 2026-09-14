@@ -344,7 +344,9 @@ def extract_model_from_parallel(
                 forward = forward.__wrapped__
                 if forward == original_forward:
                     break
-            model.forward = MethodType(forward, model)
+            # `_original_forward` is already bound to the model (for example the `functools.partial` that an
+            # accelerate hook installs), so binding it again would pass the model twice.
+            model.forward = original_forward if forward == original_forward else MethodType(forward, model)
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
