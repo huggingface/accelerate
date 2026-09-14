@@ -34,6 +34,7 @@ from accelerate.big_modeling import (
     init_empty_weights,
     init_on_device,
     load_checkpoint_and_dispatch,
+    materialize_meta_tensors,
 )
 from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import (
@@ -274,6 +275,50 @@ class BigModelingTester(unittest.TestCase):
             disk_offload(model, tmp_dir, execution_device=device, offload_buffers=True)
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
+    def test_materialize_meta_tensors(self):
+        model = ModelForTest()
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            disk_offload(model, tmp_dir, execution_device="cpu", offload_buffers=True)
+            assert any(tensor.device == torch.device("meta") for tensor in model.state_dict().values())
+
+            materialized_model = materialize_meta_tensors(model)
+
+            assert materialized_model is model
+            assert all(tensor.device == torch.device("cpu") for tensor in model.state_dict().values())
+            assert all(not hasattr(module, "_hf_hook") for module in model.modules())
+
+            output = model(x)
+            torch.testing.assert_close(expected, output, atol=ATOL, rtol=RTOL)
+            model.to("cpu")
+
+    def test_materialize_meta_tensors_after_load_checkpoint_and_dispatch(self):
+        source_model = ModelForTest()
+        x = torch.randn(2, 3)
+        expected = source_model(x)
+
+        with TemporaryDirectory() as checkpoint_dir, TemporaryDirectory() as offload_dir:
+            checkpoint = os.path.join(checkpoint_dir, "pytorch_model.bin")
+            torch.save(source_model.state_dict(), checkpoint)
+
+            model = ModelForTest()
+            load_checkpoint_and_dispatch(
+                model,
+                checkpoint,
+                device_map={"linear1": "disk", "batchnorm": "cpu", "linear2": "cpu"},
+                offload_folder=offload_dir,
+            )
+            assert model.linear1.weight.device == torch.device("meta")
+
+            materialize_meta_tensors(model)
+
+            assert all(tensor.device == torch.device("cpu") for tensor in model.state_dict().values())
+            output = model(x)
+            torch.testing.assert_close(expected, output, atol=ATOL, rtol=RTOL)
+            model.to("cpu")
 
     def test_disk_offload_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()

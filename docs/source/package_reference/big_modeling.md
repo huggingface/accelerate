@@ -33,6 +33,10 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] big_modeling.disk_offload
 
+### materialize_meta_tensors
+
+[[autodoc]] big_modeling.materialize_meta_tensors
+
 ### dispatch_model
 
 [[autodoc]] big_modeling.dispatch_model

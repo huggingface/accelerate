@@ -30,6 +30,7 @@ from .hooks import (
     add_hook_to_module,
     attach_align_device_hook,
     attach_align_device_hook_on_blocks,
+    remove_hook_from_module,
 )
 from .utils import (
     OffloadedWeightsLoader,
@@ -47,9 +48,11 @@ from .utils import (
     is_sdaa_available,
     is_xpu_available,
     load_checkpoint_in_model,
+    named_module_tensors,
     offload_state_dict,
     parse_flag_from_env,
     retie_parameters,
+    set_module_tensor_to_device,
 )
 from .utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 from .utils.other import recursive_getattr
@@ -308,6 +311,109 @@ def disk_offload(
         weights_map=weights_map,
         preload_module_classes=preload_module_classes,
     )
+
+    return model
+
+
+def materialize_meta_tensors(model: nn.Module, target_device: Union[int, str, torch.device] = "cpu"):
+    """
+    Materializes meta tensors backed by Accelerate offload hooks and removes those hooks from the model.
+
+    This is useful for moving a model that was loaded with CPU or disk offloading into regular device-managed
+    memory.
+    The offloaded tensors are loaded from the hook's state dictionary or lazy weights map, so disk-offloaded weights are
+    materialized without requiring the original checkpoint to be loaded again.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model containing meta tensors created by an Accelerate offload helper.
+        target_device (`int`, `str` or `torch.device`, *optional*, defaults to `"cpu"`):
+            The device on which to materialize the offloaded tensors.
+
+    Returns:
+        `torch.nn.Module`: The same model, with offloaded meta tensors materialized and Accelerate device hooks
+            removed.
+
+    Raises:
+        `ValueError`: If a meta tensor is not backed by an Accelerate offload hook or its backing value is
+            unavailable.
+
+    <Tip warning={true}>
+
+    Materializing a model requires enough memory for all tensors placed on `target_device`.
+
+    </Tip>
+    """
+    tied_params = find_tied_parameters(model)
+    tensors_to_materialize = []
+    materialized_tensor_ids = set()
+    has_offload_hook = False
+
+    for module in model.modules():
+        hook = getattr(module, "_hf_hook", None)
+        if not isinstance(hook, AlignDevicesHook) or not hook.offload:
+            continue
+
+        has_offload_hook = True
+        if hook.weights_map is None:
+            raise ValueError("Cannot materialize meta tensors because the offload hook has no weights map.")
+
+        for name, tensor in named_module_tensors(
+            module,
+            include_buffers=True,
+            recurse=hook.place_submodules,
+            remove_non_persistent=True,
+        ):
+            if tensor.device != torch.device("meta"):
+                continue
+
+            try:
+                value = hook.weights_map[name]
+            except KeyError as error:
+                raise ValueError(
+                    f"Cannot materialize meta tensor {name!r} because its offloaded value is unavailable."
+                ) from error
+
+            if value is None or value.device == torch.device("meta"):
+                raise ValueError(
+                    f"Cannot materialize meta tensor {name!r} because its offloaded value is unavailable."
+                )
+
+            tensors_to_materialize.append((module, name, value, hook))
+            materialized_tensor_ids.add(id(tensor))
+
+    remaining_meta_tensors = [
+        name
+        for name, tensor in list(model.named_parameters()) + list(model.named_buffers())
+        if tensor.device == torch.device("meta") and id(tensor) not in materialized_tensor_ids
+    ]
+    if remaining_meta_tensors:
+        names = ", ".join(remaining_meta_tensors[:5])
+        if len(remaining_meta_tensors) > 5:
+            names += ", ..."
+        raise ValueError(
+            "Cannot materialize meta tensors that are not backed by an Accelerate offload hook: " + names
+        )
+
+    for module, name, value, hook in tensors_to_materialize:
+        set_module_tensor_to_device(
+            module,
+            name,
+            target_device,
+            value=value,
+            fp16_statistics=hook._maybe_get_fp16_statistics(name, value),
+        )
+
+    if has_offload_hook:
+        # Disable offloading before detaching hooks so detach_hook does not restore the original device, which may be
+        # the meta device for disk-offloaded tensors or a GPU when materializing into CPU memory.
+        for module in model.modules():
+            hook = getattr(module, "_hf_hook", None)
+            if isinstance(hook, AlignDevicesHook):
+                hook.offload = False
+                remove_hook_from_module(module)
+
+        retie_parameters(model, tied_params)
 
     return model
 
