@@ -175,12 +175,6 @@ except ImportError:
 
 logger = get_logger(__name__)
 
-# Sentinel values for defaults
-_split_batches = object()
-_dispatch_batches = object()
-_even_batches = object()
-_use_seedable_sampler = object()
-
 
 class Accelerator:
     """
@@ -280,7 +274,6 @@ class Accelerator:
     def __init__(
         self,
         device_placement: bool = True,
-        split_batches: bool = _split_batches,
         mixed_precision: PrecisionType | str | None = None,
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
