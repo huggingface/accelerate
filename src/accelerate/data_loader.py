@@ -455,6 +455,7 @@ class DataLoaderAdapter:
 
     def load_state_dict(self, state_dict):
         self.base_dataloader.load_state_dict(state_dict)
+        self.dl_state_dict = state_dict
 
     @property
     def __class__(self):
