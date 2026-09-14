@@ -552,7 +552,6 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         use_stateful_dataloader=False,
         _drop_last: bool = False,
         _non_blocking: bool = False,
-        torch_device_mesh=None,
         iteration=0,
         **kwargs,
     ):

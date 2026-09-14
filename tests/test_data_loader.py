@@ -97,6 +97,17 @@ class SimpleBatchSampler(BatchSampler):
 
 
 class DataLoaderTester(AccelerateTestCase):
+    def test_dataloader_shard_does_not_take_a_device_mesh(self):
+        # DataLoaderDispatcher stores torch_device_mesh and builds tp/dp/fsdp submeshes from it.
+        # DataLoaderShard took the same argument, documented none of it, and never read it, so
+        # handing it a mesh silently did nothing while the sibling class honoured one.
+        mesh = object()
+        with self.assertRaises(TypeError):
+            DataLoaderShard(range(16), batch_size=4, torch_device_mesh=mesh)
+
+        dispatcher = DataLoaderDispatcher(range(16), batch_size=4, torch_device_mesh=None)
+        assert dispatcher.torch_device_mesh is None
+
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False, even_batches=True):
         batch_sampler_shards = [
             BatchSamplerShard(batch_sampler, 2, i, split_batches=split_batches, even_batches=even_batches)
