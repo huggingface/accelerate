@@ -34,6 +34,7 @@ from accelerate.test_utils import (
     require_non_hpu,
     torch_device,
 )
+from accelerate.utils.dataclasses import CustomDtype
 from accelerate.utils.modeling import (
     align_module_device,
     check_device_map,
@@ -136,11 +137,14 @@ def sequential_model(num_layers):
 
 class ModelingUtilsTester(unittest.TestCase):
     def test_dtype_byte_size(self):
-        self.assertEqual(dtype_byte_size(torch.bool), 1 / 8)
+        self.assertEqual(dtype_byte_size(torch.bool), torch.empty((), dtype=torch.bool).element_size())
         self.assertEqual(dtype_byte_size(torch.float16), 2)
         self.assertEqual(dtype_byte_size(torch.bfloat16), 2)
         self.assertEqual(dtype_byte_size(torch.float32), 4)
         self.assertEqual(dtype_byte_size(torch.float64), 8)
+        self.assertEqual(dtype_byte_size(CustomDtype.INT2), 1 / 4)
+        self.assertEqual(dtype_byte_size(CustomDtype.INT4), 1 / 2)
+        self.assertEqual(dtype_byte_size(CustomDtype.FP8), 1)
         # All 1-byte FP8 dtypes available in this torch should report 1 byte.
         # Previously only e4m3fn/e5m2 were handled; the *fnuz and e8m0fnu
         # variants fell through to a regex with no trailing digit and raised.
@@ -409,6 +413,38 @@ class ModelingUtilsTester(unittest.TestCase):
         model.half()
         buffer_size = compute_module_total_buffer_size(model)
         assert buffer_size == 624
+
+    @parameterized.expand(
+        [
+            (size, persistent, dtype)
+            for size in (0, 1, 9)
+            for persistent in (False, True)
+            for dtype in (None, torch.float16, torch.bfloat16)
+        ]
+    )
+    def test_compute_module_sizes_bool_buffer(self, size, persistent, dtype):
+        model = nn.Module()
+        model.attention = nn.Linear(2, 2, bias=False)
+        model.attention.register_buffer("mask", torch.ones(size, dtype=torch.bool), persistent=persistent)
+        mask_bytes = model.attention.mask.numel() * model.attention.mask.element_size()
+        weight = model.attention.weight
+        weight_bytes = weight.numel() * torch.empty((), dtype=dtype or weight.dtype).element_size()
+        sizes = compute_module_sizes(model, dtype=dtype)
+        self.assertEqual(sizes["attention.mask"], mask_bytes)
+        self.assertEqual(sizes["attention"], weight_bytes + mask_bytes)
+        self.assertEqual(sizes[""], weight_bytes + mask_bytes)
+        self.assertEqual(compute_module_total_buffer_size(model, dtype=dtype), mask_bytes)
+        self.assertEqual(
+            compute_module_sizes(model, special_dtypes={"attention.mask": torch.bool})["attention.mask"],
+            mask_bytes,
+        )
+
+    @parameterized.expand([(8, "disk"), (63, "disk"), (64, "cpu"), (65, "cpu")])
+    def test_infer_auto_device_map_bool_buffer(self, budget, expected_device):
+        model = nn.Module()
+        model.register_buffer("mask", torch.ones(8, 8, dtype=torch.bool), persistent=False)
+        device_map = infer_auto_device_map(model, max_memory={"cpu": budget}, offload_buffers=True)
+        self.assertEqual(device_map, {"mask": expected_device})
 
     def test_check_device_map(self):
         model = ModelForTest()

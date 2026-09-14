@@ -162,7 +162,7 @@ def dtype_byte_size(dtype: torch.dtype):
     ```
     """
     if dtype == torch.bool:
-        return 1 / 8
+        return 1
     elif dtype == CustomDtype.INT2:
         return 1 / 4
     elif dtype == CustomDtype.INT4:
