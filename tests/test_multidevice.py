@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import inspect
+import sys
 import unittest
 from unittest import skip
 
@@ -35,6 +36,7 @@ from accelerate.test_utils import (
     run_first,
     torch_device,
 )
+from accelerate.test_utils.testing import require_torchdata_stateful_dataloader
 from accelerate.utils import is_hpu_available, patch_environment
 
 
@@ -103,6 +105,25 @@ class MultiDeviceTester(unittest.TestCase):
             env_kwargs.update(cuda_visible_devices="0,1")
 
         with patch_environment(**env_kwargs):
+            execute_subprocess_async(cmd)
+
+    @run_first
+    @require_torchdata_stateful_dataloader
+    def test_stateful_dataloader_checkpoint_cpu(self):
+        cmd = [
+            sys.executable,
+            "-m",
+            "torch.distributed.run",
+            "--standalone",
+            "--nproc_per_node=2",
+            self.data_loop_file_path,
+        ]
+        with patch_environment(
+            accelerate_test_stateful_dataloader_checkpoint_only=1,
+            accelerate_use_cpu=True,
+            cuda_visible_devices="",
+            omp_num_threads=1,
+        ):
             execute_subprocess_async(cmd)
 
     @run_first
