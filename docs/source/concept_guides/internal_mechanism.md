@@ -35,6 +35,12 @@ because PyTorch does not let the user change the `batch_sampler` of a dataloader
 library handles the sharding of your data between processes by changing that `batch_sampler` to yield every other
 `num_processes` batches (if enabled).
 
+If you already shard the dataloader yourself (for example with a rank-aware `DistributedSampler` or a pre-sliced
+iterable), set `already_sharded=True` on [`~utils.DataLoaderConfiguration`]. Accelerate still wraps the loader in
+[`~data_loader.DataLoaderShard`] for device placement, `set_epoch`, and state tracking, but does not apply
+`BatchSamplerShard`, `IterableDatasetShard`, or a second Hugging Face `shard()`. This is incompatible with
+`dispatch_batches` and `split_batches`.
+
 The [`~data_loader.DataLoaderShard`] subclasses `DataLoader` to add the following functionality:
 
 - it synchronizes the appropriate random number generator of all processes at each new iteration, to ensure any

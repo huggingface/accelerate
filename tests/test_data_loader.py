@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, Sampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -35,7 +35,7 @@ from accelerate.data_loader import (
 )
 from accelerate.state import GradientState
 from accelerate.test_utils.testing import AccelerateTestCase, require_datasets, require_torchdata_stateful_dataloader
-from accelerate.utils import is_torchdata_stateful_dataloader_available, set_seed
+from accelerate.utils import DataLoaderConfiguration, is_torchdata_stateful_dataloader_available, set_seed
 
 
 if is_torchdata_stateful_dataloader_available():
@@ -79,6 +79,42 @@ class SimpleIterableDataset(IterableDataset):
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+
+
+class RankShardSampler(Sampler):
+    """Map-style sampler that already yields only this rank's indices."""
+
+    def __init__(self, num_samples, num_processes, process_index):
+        self.indices = [i for i in range(num_samples) if i % num_processes == process_index]
+
+    def __iter__(self):
+        return iter(self.indices)
+
+    def __len__(self):
+        return len(self.indices)
+
+
+class RankIterableDataset(IterableDataset):
+    """Iterable that already yields only this rank's local range."""
+
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+    def __iter__(self):
+        yield from range(self.start, self.end)
+
+
+def _collect_samples(loader):
+    samples = []
+    for batch in loader:
+        if isinstance(batch, dict):
+            batch = batch["x"] if "x" in batch else next(iter(batch.values()))
+        if isinstance(batch, torch.Tensor):
+            samples.extend(batch.reshape(-1).tolist())
+        else:
+            samples.extend(list(batch))
+    return samples
 
 
 class SimpleBatchSampler(BatchSampler):
@@ -696,6 +732,121 @@ class DataLoaderTester(AccelerateTestCase):
 
         # n_shards (2) == num_processes (2): should use native sharding, not IterableDatasetShard
         assert not isinstance(result.dataset, IterableDatasetShard)
+
+    def test_already_sharded_map_style_keeps_local_shard(self):
+        num_samples = 32
+        num_processes = 4
+        dataset = list(range(num_samples))
+
+        for process_index in (0, 1):
+            local_indices = [i for i in range(num_samples) if i % num_processes == process_index]
+            dataloader = DataLoader(
+                dataset, batch_size=1, sampler=RankShardSampler(num_samples, num_processes, process_index)
+            )
+
+            default = prepare_data_loader(dataloader, num_processes=num_processes, process_index=process_index)
+            assert isinstance(default.batch_sampler, BatchSamplerShard)
+            assert len(set(_collect_samples(default))) < len(local_indices)
+
+            kept = prepare_data_loader(
+                DataLoader(dataset, batch_size=1, sampler=RankShardSampler(num_samples, num_processes, process_index)),
+                num_processes=num_processes,
+                process_index=process_index,
+                already_sharded=True,
+            )
+            kept_samples = _collect_samples(kept)
+            assert not isinstance(kept.batch_sampler, BatchSamplerShard)
+            assert set(kept_samples) == set(local_indices)
+            assert len(kept_samples) == len(local_indices)
+
+    def test_already_sharded_iterable_skips_iterable_dataset_shard(self):
+        num_processes = 4
+        shard_size = 8
+
+        for process_index in (0, 1):
+            start = process_index * shard_size
+            end = start + shard_size
+            local = list(range(start, end))
+
+            default = prepare_data_loader(
+                DataLoader(RankIterableDataset(start, end), batch_size=1),
+                num_processes=num_processes,
+                process_index=process_index,
+                dispatch_batches=False,
+            )
+            assert isinstance(default.dataset, IterableDatasetShard)
+            assert len(set(_collect_samples(default))) < len(local)
+
+            kept = prepare_data_loader(
+                DataLoader(RankIterableDataset(start, end), batch_size=1),
+                num_processes=num_processes,
+                process_index=process_index,
+                dispatch_batches=False,
+                already_sharded=True,
+            )
+            assert not isinstance(kept.dataset, IterableDatasetShard)
+            assert _collect_samples(kept) == local
+
+    @require_datasets
+    def test_already_sharded_skips_hf_iterable_shard(self):
+        from datasets import Dataset
+
+        num_processes = 4
+        values = list(range(32))
+
+        def make_user_sharded(index):
+            return (
+                Dataset.from_dict({"x": values})
+                .to_iterable_dataset(num_shards=num_processes)
+                .shard(num_shards=num_processes, index=index)
+            )
+
+        expected = _collect_samples(DataLoader(make_user_sharded(0), batch_size=2))
+        assert len(expected) > 0
+
+        default = prepare_data_loader(
+            DataLoader(make_user_sharded(0), batch_size=2),
+            num_processes=num_processes,
+            process_index=0,
+            dispatch_batches=False,
+        )
+        assert isinstance(default.dataset, IterableDatasetShard)
+        assert len(set(_collect_samples(default))) < len(set(expected))
+
+        kept = prepare_data_loader(
+            DataLoader(make_user_sharded(0), batch_size=2),
+            num_processes=num_processes,
+            process_index=0,
+            dispatch_batches=False,
+            already_sharded=True,
+        )
+        assert not isinstance(kept.dataset, IterableDatasetShard)
+        assert set(_collect_samples(kept)) == set(expected)
+
+    def test_already_sharded_rejects_incompatible_flags(self):
+        dataset = list(range(16))
+        with pytest.raises(ValueError, match="dispatch_batches"):
+            prepare_data_loader(
+                DataLoader(dataset, batch_size=4), already_sharded=True, dispatch_batches=True, put_on_device=True
+            )
+        with pytest.raises(ValueError, match="split_batches"):
+            prepare_data_loader(DataLoader(dataset, batch_size=4), already_sharded=True, split_batches=True)
+
+    def test_already_sharded_still_wraps_with_dataloader_shard(self):
+        dataset = list(range(16))
+        result = prepare_data_loader(
+            DataLoader(dataset, batch_size=4, sampler=RankShardSampler(len(dataset), 2, 0)),
+            num_processes=2,
+            process_index=0,
+            already_sharded=True,
+        )
+        assert isinstance(result, DataLoaderShard)
+        assert not isinstance(result, DataLoaderDispatcher)
+        assert hasattr(result, "set_epoch")
+        assert hasattr(result, "gradient_state")
+
+        accelerator = Accelerator(dataloader_config=DataLoaderConfiguration(already_sharded=True))
+        assert accelerator.already_sharded is True
 
     def test_ensure_dataloader_gets_cleaned_up(self):
         # Ensure that the dataloader gets cleaned up properly
