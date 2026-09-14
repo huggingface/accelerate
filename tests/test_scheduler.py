@@ -20,7 +20,42 @@ import torch
 from accelerate import Accelerator, debug_launcher
 from accelerate.state import AcceleratorState, GradientState
 from accelerate.test_utils import require_cpu, require_huggingface_suite
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import GradientAccumulationPlugin
+
+
+class SchedulerAdjustmentTester(AccelerateTestCase):
+    def test_adjust_scheduler_respects_the_plugin_setting(self):
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled):
+                plugin = GradientAccumulationPlugin(num_steps=2, adjust_scheduler=enabled)
+                accelerator = Accelerator(cpu=True, gradient_accumulation_plugin=plugin)
+                self.assertEqual(accelerator.gradient_state.adjust_scheduler, enabled)
+                GradientState._reset_state()
+                AcceleratorState._reset_state(True)
+
+    def test_accumulation_preserves_scheduler_progress(self):
+        for kind in ("one_cycle", "plateau"):
+            with self.subTest(scheduler=kind):
+                accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2)
+                model = torch.nn.Linear(2, 1)
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+                if kind == "one_cycle":
+                    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.1, total_steps=4)
+                else:
+                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=0, factor=0.5)
+                model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+                for _ in range(8):
+                    with accelerator.accumulate(model):
+                        accelerator.backward(model(torch.ones(1, 2)).sum())
+                        optimizer.step()
+                        scheduler.step(*([1.0] if kind == "plateau" else []))
+                        optimizer.zero_grad()
+                self.assertEqual(scheduler.scheduler.last_epoch, 4)
+                if kind == "plateau":
+                    self.assertAlmostEqual(scheduler.get_last_lr()[0], 0.0125)
+                GradientState._reset_state()
+                AcceleratorState._reset_state(True)
 
 
 def one_cycle_test(num_processes=2, step_scheduler_with_optimizer=True, split_batches=False):
