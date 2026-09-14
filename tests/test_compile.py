@@ -19,7 +19,14 @@ import torch
 from torch.utils.benchmark import Timer
 
 from accelerate.test_utils import require_huggingface_suite, require_non_cpu, require_non_hpu, slow, torch_device
-from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
+from accelerate.utils import (
+    compile_regions,
+    compile_regions_deepspeed,
+    compile_regions_fsdp2,
+    extract_model_from_parallel,
+    is_compiled_module,
+    release_memory,
+)
 
 
 MODEL_ID = "gpt2"
@@ -207,3 +214,46 @@ class RegionalCompilationRebindTester(unittest.TestCase):
 
         assert not hasattr(model, "trace")
         assert compiled_model.trace == ("twin", "OptimizedModule")
+
+
+class RegionalCompilationContainerModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.embedders = torch.nn.ModuleDict({"2-1": torch.nn.Linear(4, 4, bias=False)})
+        self.heads = torch.nn.ModuleList([torch.nn.Linear(4, 4, bias=False), torch.nn.Identity()])
+        self.scales = torch.nn.ParameterList([torch.nn.Parameter(torch.ones(4))])
+        self.blocks = torch.nn.ModuleList([RegionalCompilationBlock(), RegionalCompilationBlock()])
+
+    def forward(self, x, patch="2-1"):
+        x = self.embedders[patch](x) * self.scales[0]
+        for block in self.blocks:
+            x = block(x)
+        return self.heads[0](x) + self.heads[1](x)
+
+
+class RegionalCompilationContainerTester(unittest.TestCase):
+    def test_containers_are_traversed_not_compiled(self):
+        model = RegionalCompilationContainerModel()
+        compiled_model = compile_regions(model, backend="eager")
+
+        compiled_model(torch.ones(1, 4))
+
+        assert isinstance(compiled_model.embedders, torch.nn.ModuleDict)
+        assert isinstance(compiled_model.heads, torch.nn.ModuleList)
+        assert isinstance(compiled_model.scales, torch.nn.ParameterList)
+        assert compiled_model.scales[0] is model.scales[0]
+        assert is_compiled_module(compiled_model.embedders["2-1"])
+        assert is_compiled_module(compiled_model.heads[0])
+        assert is_compiled_module(compiled_model.blocks[0])
+
+    def test_in_place_variants_compile_container_children(self):
+        for compile_fn in (compile_regions_fsdp2, compile_regions_deepspeed):
+            model = RegionalCompilationContainerModel()
+            compile_fn(model, backend="eager")
+
+            model(torch.ones(1, 4))
+
+            assert model.embedders._compiled_call_impl is None
+            assert model.embedders["2-1"]._compiled_call_impl is not None
+            assert model.heads[0]._compiled_call_impl is not None
+            assert model.blocks[0]._compiled_call_impl is not None
