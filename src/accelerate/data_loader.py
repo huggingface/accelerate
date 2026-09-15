@@ -1349,7 +1349,7 @@ class SkipBatchSampler(BatchSampler):
         return len(self.batch_sampler)
 
     def __len__(self):
-        return len(self.batch_sampler) - self.skip_batches
+        return max(0, len(self.batch_sampler) - self.skip_batches)
 
 
 class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
@@ -1380,7 +1380,7 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
         self.end()
 
     def __len__(self):
-        return len(self.base_dataloader) - self.skip_batches
+        return max(0, len(self.base_dataloader) - self.skip_batches)
 
     def __reduce__(self):
         """

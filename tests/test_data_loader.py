@@ -609,6 +609,18 @@ class DataLoaderTester(AccelerateTestCase):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2)
         assert [t.tolist() for t in dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
+    def test_skip_batches_past_end_has_zero_length(self):
+        for skip_batches in (4, 5, 10):
+            with self.subTest(skip_batches=skip_batches):
+                dataloader = DataLoader(range(16), batch_size=4)
+                skipped = skip_first_batches(dataloader, num_batches=skip_batches)
+                self.assertEqual(len(skipped), 0)
+                self.assertEqual(list(skipped), [])
+
+                skipped = SkipDataLoader(range(16), batch_size=4, skip_batches=skip_batches)
+                self.assertEqual(len(skipped), 0)
+                self.assertEqual(list(skipped), [])
+
     def test_skip_first_batches(self):
         dataloader = DataLoader(list(range(16)), batch_size=4)
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
