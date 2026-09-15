@@ -310,6 +310,26 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model._non_persistent_buffers_set == set()
         assert model.sub._non_persistent_buffers_set == {"np_buf"}
 
+    def test_cached_buffer_keeps_its_registration(self):
+        for persistent in (False, True):
+            for supplied_value in (False, True):
+                with self.subTest(persistent=persistent, supplied_value=supplied_value):
+                    model = nn.Module()
+                    original = torch.tensor([1.0, 2.0])
+                    model.register_buffer("buffer", original, persistent=persistent)
+                    value = original.clone() if supplied_value else None
+                    source = value if supplied_value else original
+                    cached = torch.tensor([3.0, 4.0])
+                    set_module_tensor_to_device(
+                        model, "buffer", "cpu", value=value, tied_params_map={source.data_ptr(): {"cpu": cached}}
+                    )
+                    self.assertIs(dict(model.named_buffers())["buffer"], cached)
+                    self.assertEqual(list(model.named_parameters()), [])
+                    if persistent:
+                        torch.testing.assert_close(model.state_dict()["buffer"], cached)
+                    else:
+                        self.assertEqual(list(model.state_dict()), [])
+
     def test_named_module_tensors_does_not_corrupt_state_dict(self):
         model = RootWithCollidingBufferName()
         assert "mask" in model.state_dict()
