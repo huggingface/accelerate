@@ -276,6 +276,7 @@ def set_module_tensor_to_device(
         raise ValueError(f"{module} does not have a parameter or a buffer named {tensor_name}.")
     is_buffer = tensor_name in module._buffers
     old_value = getattr(module, tensor_name)
+    module_tensor_dict = module._buffers if is_buffer else module._parameters
 
     # Treat the case where old_value (or a custom `value`, typically offloaded to RAM/disk) belongs to a tied group, and one of the weight
     # in the tied group has already been dispatched to the device, by avoiding reallocating memory on the device and just copying the pointer.
@@ -285,14 +286,14 @@ def set_module_tensor_to_device(
         and value.data_ptr() in tied_params_map
         and device in tied_params_map[value.data_ptr()]
     ):
-        module._parameters[tensor_name] = tied_params_map[value.data_ptr()][device]
+        module_tensor_dict[tensor_name] = tied_params_map[value.data_ptr()][device]
         return
     elif (
         tied_params_map is not None
         and old_value.data_ptr() in tied_params_map
         and device in tied_params_map[old_value.data_ptr()]
     ):
-        module._parameters[tensor_name] = tied_params_map[old_value.data_ptr()][device]
+        module_tensor_dict[tensor_name] = tied_params_map[old_value.data_ptr()][device]
         return
 
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
