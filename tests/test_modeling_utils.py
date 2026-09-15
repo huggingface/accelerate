@@ -297,6 +297,20 @@ class ModelingUtilsTester(unittest.TestCase):
         named_tensors = named_module_tensors(model, include_buffers=True, remove_non_persistent=True)
         assert [name for name, _ in named_tensors] == ["weight"]
 
+    def test_recursive_non_persistent_buffer_names(self):
+        model = nn.Module()
+        model.register_buffer("cache", torch.ones(2))
+        model.register_buffer("scratch", torch.zeros(1), persistent=False)
+        model.child = nn.Module()
+        model.child.register_buffer("cache", torch.zeros(3), persistent=False)
+        model.child.register_buffer("scratch", torch.ones(4))
+
+        assert get_non_persistent_buffers(model, recurse=True, fqns=True) == {"scratch", "child.cache"}
+        tensors = dict(named_module_tensors(model, recurse=True, remove_non_persistent=True))
+        assert set(tensors) == set(model.state_dict()) == {"cache", "child.scratch"}
+        assert tensors["cache"] is model.cache
+        assert tensors["child.scratch"] is model.child.scratch
+
     def test_get_non_persistent_buffers_does_not_mutate_module(self):
         model = RootWithNonPersistentSubmodule()
         # The root module itself has no non-persistent buffer, so its private set starts empty.
