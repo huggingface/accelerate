@@ -321,7 +321,10 @@ def _tpu_gather(tensor):
 
 def _gpu_gather(tensor):
     state = PartialState()
-    gather_op = torch.distributed.all_gather_into_tensor
+    use_all_gather_single = hasattr(torch.distributed, "all_gather_single")
+    gather_op = (
+        torch.distributed.all_gather_single if use_all_gather_single else torch.distributed.all_gather_into_tensor
+    )
 
     # NOTE: need manually synchronize to workaourd a INT64 collectives bug in oneCCL before torch 2.9.0
     if state.device.type == "xpu" and is_torch_version("<=", "2.8"):
@@ -340,11 +343,16 @@ def _gpu_gather(tensor):
             # differs from `all_gather` for better efficiency,
             # and we rely on the number of items in the tensor
             # rather than its direct shape
-            output_tensors = torch.empty(
-                state.num_processes * tensor.numel(),
-                dtype=tensor.dtype,
-                device=state.device,
-            )
+            if use_all_gather_single:
+                output_tensors = torch.empty(
+                    (state.num_processes, *tensor.size()), dtype=tensor.dtype, device=state.device
+                )
+            else:
+                output_tensors = torch.empty(
+                    state.num_processes * tensor.numel(),
+                    dtype=tensor.dtype,
+                    device=state.device,
+                )
             gather_op(output_tensors, tensor)
             return output_tensors.view(-1, *tensor.size()[1:])
         else:
