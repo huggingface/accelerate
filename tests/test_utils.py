@@ -311,6 +311,63 @@ class UtilsTester(unittest.TestCase):
                 assert len(log.records) == 1
                 assert "Removed shared tensor" in log.output[0]
 
+    def _run_gpu_gather_with_stub_state(self):
+        # Drives _gpu_gather's non-gloo collectives path without a real process
+        # group: PartialState is stubbed to a fake NCCL state and the gather op
+        # under torch.distributed is replaced by a recorder.
+        from accelerate.utils.operations import _gpu_gather
+
+        state = Mock()
+        state.device = torch.device("cpu")
+        state.backend = "nccl"
+        state.num_processes = 2
+
+        with patch("accelerate.utils.operations.PartialState", return_value=state):
+            return _gpu_gather(torch.tensor([1.0, 2.0]))
+
+    def test_gpu_gather_prefers_all_gather_single(self):
+        # torch >= 2.13 deprecates all_gather_into_tensor in favor of the
+        # identical all_gather_single (#4269); the new name must be used.
+        calls = []
+
+        def fake_single(output, input_):
+            calls.append("single")
+            output[: input_.numel()].copy_(input_)
+
+        with (
+            patch.object(torch.distributed, "all_gather_single", fake_single, create=True),
+            patch.object(
+                torch.distributed, "all_gather_into_tensor", Mock(side_effect=AssertionError("deprecated op used"))
+            ),
+        ):
+            out = self._run_gpu_gather_with_stub_state()
+
+        assert calls == ["single"]
+        assert out.tolist()[:2] == [1.0, 2.0]
+
+    def test_gpu_gather_falls_back_to_all_gather_into_tensor(self):
+        # On torch builds without all_gather_single the old name must still
+        # be used.
+        if not hasattr(torch.distributed, "all_gather_single"):
+            self.skipTest("this torch has no all_gather_single; the fallback is the only path")
+
+        calls = []
+
+        def fake_into(output, input_):
+            calls.append("into")
+            output[: input_.numel()].copy_(input_)
+
+        orig = torch.distributed.all_gather_single
+        del torch.distributed.all_gather_single
+        try:
+            with patch.object(torch.distributed, "all_gather_into_tensor", fake_into):
+                out = self._run_gpu_gather_with_stub_state()
+        finally:
+            torch.distributed.all_gather_single = orig
+
+        assert calls == ["into"]
+        assert out.tolist()[:2] == [1.0, 2.0]
+
     @require_torch_min_version(version="1.12")
     def test_pad_across_processes(self):
         from torch.nested import nested_tensor
