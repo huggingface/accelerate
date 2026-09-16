@@ -80,3 +80,21 @@ class OptimizerTester(AccelerateTestCase):
 
         optimizer.step()
         assert optimizer.step_was_skipped is False
+
+
+class OptimizerReturnTester(AccelerateTestCase):
+    def test_accelerated_optimizer_returns_closure_loss(self):
+        accelerator = Accelerator(cpu=True)
+        parameter = torch.nn.Parameter(torch.tensor([2.0]))
+        optimizer = accelerator.prepare(torch.optim.LBFGS([parameter], max_iter=3))
+        initial_loss = parameter.square().sum().detach()
+
+        def closure():
+            optimizer.zero_grad()
+            loss = parameter.square().sum()
+            accelerator.backward(loss)
+            return loss
+
+        loss = optimizer.step(closure)
+        torch.testing.assert_close(loss, initial_loss)
+        assert parameter.square().sum() < initial_loss

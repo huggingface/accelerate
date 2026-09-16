@@ -166,11 +166,12 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             if isinstance(self.optimizer, (Lomo, AdaLomo)):
                 return
 
+        loss = None
         if self.gradient_state.sync_gradients:
             if self.scaler is not None:
                 self.optimizer.step = self._optimizer_patched_step_method
 
-                self.scaler.step(self.optimizer, closure)
+                loss = self.scaler.step(self.optimizer, closure)
                 self.scaler.update()
 
                 if not self._accelerate_step_called:
@@ -183,9 +184,10 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 # Reset the indicator
                 self._accelerate_step_called = False
             else:
-                self.optimizer.step(closure)
+                loss = self.optimizer.step(closure)
         if self.accelerator_state.distributed_type == DistributedType.XLA:
             self.gradient_state.is_xla_gradients_synced = False
+        return loss
 
     def _switch_parameters(self, parameters_map):
         for param_group in self.optimizer.param_groups:
