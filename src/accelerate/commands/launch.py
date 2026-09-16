@@ -955,9 +955,9 @@ def launch_command_parser(subparsers=None):
     parallelism_config_args.add_argument(
         "--parallelism_config_sp_backend",
         type=str,
-        choices=["deepspeed"],
-        default="deepspeed",
-        help="Sequence Parallelism backend: deepspeed (ALST/Ulysses)",
+        choices=["deepspeed", "torch"],
+        default=None,
+        help="Sequence Parallelism backend: deepspeed (ALST/Ulysses) or torch (Ulysses on FSDP2). Defaults to deepspeed when launching with DeepSpeed and to torch otherwise.",
     )
 
     parallelism_config_args.add_argument(
