@@ -21,6 +21,7 @@ import torch.nn as nn
 
 from accelerate.utils import (
     OffloadedWeightsLoader,
+    PrefixedDataset,
     extract_submodules_state_dict,
     load_offloaded_weight,
     offload_state_dict,
@@ -41,6 +42,19 @@ class ModelForTest(nn.Module):
 
 
 class OffloadTester(unittest.TestCase):
+    def test_prefixed_dataset_mapping_contract(self):
+        # Iteration must yield keys that `__getitem__` accepts (prefix stripped), and
+        # `__len__` must count only the entries under the prefix.
+        dataset = {"block1.weight": 0, "block1.bias": 1, "block2.weight": 2}
+        prefixed = PrefixedDataset(dataset, "block1.")
+
+        assert len(prefixed) == 2
+        assert sorted(prefixed) == ["bias", "weight"]
+        assert dict(prefixed) == {"weight": 0, "bias": 1}
+        assert prefixed["weight"] == 0
+        assert "bias" in prefixed
+        assert "block1.weight" not in prefixed
+
     def test_offload_state_dict(self):
         model = ModelForTest()
         with TemporaryDirectory() as tmp_dir:
