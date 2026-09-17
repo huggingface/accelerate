@@ -15,11 +15,11 @@
 import json
 import sys
 
+import pytest
 import torch
 
 from accelerate.commands.config.config_args import ClusterConfig
 from accelerate.test_utils.testing import (
-    TempDirTestCase,
     execute_subprocess_async,
     get_launch_command,
     get_torch_dist_unique_port,
@@ -34,40 +34,84 @@ from accelerate.utils import ComputeEnvironment, DistributedType, patch_environm
 @require_cuda
 @require_multi_device
 @require_transformers
-class CausalLMTrainingTester(TempDirTestCase):
-    def test_single_process_matches_ddp(self):
-        """A real causal-LM loop preserves losses and updates at equal effective batch size."""
-        script = path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_causal_lm.py")
-        single_path, ddp_path = self.tmpdir / "single.json", self.tmpdir / "ddp.json"
-        config_path = self.tmpdir / "ddp_config.json"
-        # Do not inherit a developer's default launcher configuration.
-        ClusterConfig(
-            compute_environment=ComputeEnvironment.LOCAL_MACHINE,
-            distributed_type=DistributedType.MULTI_GPU,
-            mixed_precision="no",
-            debug=False,
-            use_cpu=False,
-            num_processes=2,
-        ).to_json_file(config_path)
-        ddp_command = get_launch_command(config_file=str(config_path), main_process_port=get_torch_dist_unique_port())
+@pytest.mark.parametrize(
+    "precision, accumulation_steps, loss_atol, parameter_atol",
+    [
+        pytest.param("no", 1, 1e-4, 1e-5, id="fp32_ddp"),
+        pytest.param("no", 2, 1e-4, 1e-5, id="fp32_accumulation"),
+        pytest.param("bf16", 2, 1e-2, 1e-3, id="bf16_accumulation"),
+        pytest.param("fp16", 2, 1e-3, 1e-4, id="fp16_accumulation"),
+    ],
+)
+def test_causal_lm_updates_match_torch(tmp_path, precision, accumulation_steps, loss_atol, parameter_atol):
+    """Prepared DDP preserves effective updates, precision and accumulation boundaries."""
+    pytest.importorskip("transformers.models.gemma4", reason="Requires Transformers with Gemma 4 support")
+    if precision == "bf16":
+        for device in range(2):
+            with torch.cuda.device(device):
+                if not torch.cuda.is_bf16_supported():
+                    pytest.skip("Both CUDA devices must support BF16")
 
-        with patch_environment(omp_num_threads=1, cublas_workspace_config=":4096:8", hf_hub_offline="1"):
-            execute_subprocess_async([sys.executable, script, "--output", str(single_path)], timeout=90)
-            execute_subprocess_async(ddp_command + [script, "--output", str(ddp_path)], timeout=90)
+    script = path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_causal_lm.py")
+    reference_path, ddp_path = tmp_path / "reference.json", tmp_path / "ddp.json"
+    config_path = tmp_path / "ddp_config.json"
+    # Do not inherit a developer's default launcher configuration.
+    ClusterConfig(
+        compute_environment=ComputeEnvironment.LOCAL_MACHINE,
+        distributed_type=DistributedType.MULTI_GPU,
+        mixed_precision=precision,
+        debug=False,
+        use_cpu=False,
+        num_processes=2,
+    ).to_json_file(config_path)
+    launch = get_launch_command(config_file=str(config_path), main_process_port=get_torch_dist_unique_port())
+    training_args = ["--mixed-precision", precision, "--gradient-accumulation-steps", str(accumulation_steps)]
+    # Seed Python hashing before launch too: older Gemma 4 implementations register
+    # RoPE buffers from a set, while DDP broadcasts buffers in registration order.
+    with patch_environment(
+        omp_num_threads=1, cublas_workspace_config=":4096:8", hf_hub_offline="1", pythonhashseed="0"
+    ):
+        execute_subprocess_async(
+            [sys.executable, script, "--reference", "--output", str(reference_path)] + training_args, timeout=90
+        )
+        execute_subprocess_async(launch + [script, "--output", str(ddp_path)] + training_args, timeout=90)
 
-        single, ddp = json.loads(single_path.read_text()), json.loads(ddp_path.read_text())
-        self.assertEqual(single["world_size"], 1)
-        self.assertEqual(ddp["world_size"], 2)
-        self.assertEqual(len(single["losses"]), 10)
-        self.assertEqual(len(ddp["losses"]), 10)
-        self.assertTrue(single["parameters"])
-        # Reduction order can differ between one process and DDP. Compare the
-        # complete trajectory and final updates, not just successful execution.
-        for field, atol in (("losses", 1e-4), ("parameters", 1e-5)):
-            with self.subTest(field=field):
-                torch.testing.assert_close(
-                    torch.tensor(single[field], dtype=torch.float64),
-                    torch.tensor(ddp[field], dtype=torch.float64),
-                    rtol=0,
-                    atol=atol,
-                )
+    reference, ddp = json.loads(reference_path.read_text()), json.loads(ddp_path.read_text())
+    assert reference["world_size"] == 1
+    assert ddp["world_size"] == 2
+    expected_dtype = {"no": "torch.float32", "bf16": "torch.bfloat16", "fp16": "torch.float16"}[precision]
+    expected_skips = [False] * 10
+    if precision == "fp16":
+        expected_skips[1] = True
+    for result in (reference, ddp):
+        assert len(result["losses"]) == 10
+        assert result["parameters"]
+        assert len(result["ranks"]) == result["world_size"]
+        for rank in result["ranks"]:
+            assert rank["parameter_dtypes"] == ["torch.float32"]
+            assert rank["compute_dtypes"] == [expected_dtype]
+            assert rank["skipped"] == expected_skips
+            assert all(rank["weights_changed"][i] for i in range(10) if not expected_skips[i])
+            if precision == "fp16":
+                assert rank["scales"] == [128.0] + [64.0] * 9
+                assert not rank["weights_changed"][1]
+    for rank in ddp["ranks"]:
+        assert len(rank["interior_unchanged"]) == 10 * (accumulation_steps - 1)
+        assert all(rank["interior_unchanged"])
+    reference_parameters = torch.tensor(reference["parameters"], dtype=torch.float64)
+    ddp_parameters = torch.tensor(ddp["parameters"], dtype=torch.float64)
+    # Absolute bounds alone can hide an incorrectly scaled small update. Also
+    # bound the aggregate error relative to how far the reference actually moved.
+    assert reference["update_norm"] > 0
+    relative_update_error = (reference_parameters - ddp_parameters).norm().item() / reference["update_norm"]
+    assert relative_update_error < 0.15, f"Relative update error: {relative_update_error:.3%}"
+    # Different batch/reduction orders introduce rounding, especially under AMP.
+    # These bounds are measured per precision and must reject a wrong update.
+    for field, atol in (("losses", loss_atol), ("parameters", parameter_atol)):
+        torch.testing.assert_close(
+            torch.tensor(reference[field], dtype=torch.float64),
+            torch.tensor(ddp[field], dtype=torch.float64),
+            rtol=0,
+            atol=atol,
+            msg=lambda message, field=field: f"{precision}, accumulation={accumulation_steps}, {field}: {message}",
+        )
