@@ -555,6 +555,7 @@ class UtilsTester(unittest.TestCase):
         tensor = torch.tensor([[1, 2]])
 
         def gather_single(output_tensor, input_tensor):
+            assert output_tensor.shape == (2, 1, 2)
             output_tensor.copy_(torch.stack([input_tensor, input_tensor]))
 
         with (
@@ -565,6 +566,7 @@ class UtilsTester(unittest.TestCase):
             gathered = _gpu_gather(tensor)
 
         assert gathered.shape == (2, 2)
+        assert torch.equal(gathered, torch.tensor([[1, 2], [1, 2]]))
         gather_single_mock.assert_called_once()
         deprecated_gather_mock.assert_not_called()
 
