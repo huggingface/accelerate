@@ -575,6 +575,21 @@ class DataLoaderTester(AccelerateTestCase):
         new_batch_sampler = SkipBatchSampler(batch_sampler, 2)
         assert list(new_batch_sampler) == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
+    def test_skip_more_batches_than_available(self):
+        # skipping past the end must report length 0, not a negative length that len() rejects
+        batch_sampler = BatchSampler(range(16), batch_size=4, drop_last=False)
+        skip_batch_sampler = SkipBatchSampler(batch_sampler, skip_batches=10)
+        assert len(skip_batch_sampler) == 0
+        assert list(skip_batch_sampler) == []
+
+        skip_dl = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=10)
+        assert len(skip_dl) == 0
+        assert [t.tolist() for t in skip_dl] == []
+
+        new_dataloader = skip_first_batches(DataLoader(list(range(16)), batch_size=4), num_batches=10)
+        assert len(new_dataloader) == 0
+        assert [t.tolist() for t in new_dataloader] == []
+
     def test_dataloader_inheritance(self):
         """
         `DataLoaderAdapter`'s parent classes are dynamically constructed, assert that subclasses of DataLoaderAdapter
