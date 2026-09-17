@@ -61,7 +61,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
-from accelerate.utils.operations import is_namedtuple
+from accelerate.utils.operations import _gpu_gather, is_namedtuple
 
 
 if is_torch_xla_available():
@@ -549,6 +549,26 @@ class UtilsTester(unittest.TestCase):
         assert result["inputs"][0].shape == torch.Size([6, 3])
         assert result["inputs"][1].shape == torch.Size([6, 4])
         assert result["labels"].shape == torch.Size([6, 1])
+
+    def test_gpu_gather_uses_all_gather_single(self):
+        state = SimpleNamespace(device=torch.device("cpu"), backend="nccl", num_processes=2)
+        tensor = torch.tensor([[1, 2]])
+
+        def gather_single(output_tensor, input_tensor):
+            assert output_tensor.shape == (2, 1, 2)
+            output_tensor.copy_(torch.stack([input_tensor, input_tensor]))
+
+        with (
+            patch("accelerate.utils.operations.PartialState", return_value=state),
+            patch.object(torch.distributed, "all_gather_single", side_effect=gather_single) as gather_single_mock,
+            patch.object(torch.distributed, "all_gather_into_tensor") as deprecated_gather_mock,
+        ):
+            gathered = _gpu_gather(tensor)
+
+        assert gathered.shape == (2, 2)
+        assert torch.equal(gathered, torch.tensor([[1, 2], [1, 2]]))
+        gather_single_mock.assert_called_once()
+        deprecated_gather_mock.assert_not_called()
 
 
 def set_dummy_accelerate_env_var():
