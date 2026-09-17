@@ -39,9 +39,6 @@ def main():
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
     args = parser.parse_args()
 
-    torch.set_num_threads(1)
-    torch.set_float32_matmul_precision("highest")
-    torch.use_deterministic_algorithms(True)
     accelerator = None
     if not args.reference:
         accelerator = Accelerator(
@@ -50,9 +47,14 @@ def main():
             kwargs_handlers=[GradScalerKwargs(init_scale=128.0)],
         )
     device = torch.device("cuda:0") if args.reference else accelerator.device
-    set_seed(1234)
+
+    # Limit numerical variation when comparing different batch layouts and process counts.
+    torch.set_float32_matmul_precision("highest")
+    set_seed(1234, deterministic=True)
+
     steps, global_batch = 10, 8
-    tokens = torch.randint(3, 32, (steps * global_batch, 12), generator=torch.Generator().manual_seed(1234))
+    tokens = torch.randint(3, 32, (steps * global_batch, 12), generator=torch.Generator().manual_seed(1337))
+
     # Adapt the small text configuration used by Transformers' Gemma 4 model tests.
     # Explicit layer types exercise both attention paths without a vision tower or download.
     model = Gemma4ForCausalLM(
