@@ -44,7 +44,7 @@ from accelerate.utils import ComputeEnvironment, DistributedType, patch_environm
     ],
 )
 def test_causal_lm_updates_match_torch(tmp_path, precision, accumulation_steps, loss_atol, parameter_atol):
-    """Prepared DDP preserves effective updates, precision and accumulation boundaries."""
+    """DDP, accumulation and AMP preserve effective updates against a same-precision reference."""
     pytest.importorskip("transformers.models.gemma4", reason="Requires Transformers with Gemma 4 support")
     if precision == "bf16":
         for device in range(2):
@@ -105,8 +105,7 @@ def test_causal_lm_updates_match_torch(tmp_path, precision, accumulation_steps, 
     assert reference["update_norm"] > 0
     relative_update_error = (reference_parameters - ddp_parameters).norm().item() / reference["update_norm"]
     assert relative_update_error < 0.15, f"Relative update error: {relative_update_error:.3%}"
-    # Different batch/reduction orders introduce rounding, especially under AMP.
-    # These bounds are measured per precision and must reject a wrong update.
+    # Different batch and reduction orders introduce rounding, especially under AMP.
     for field, atol in (("losses", loss_atol), ("parameters", parameter_atol)):
         torch.testing.assert_close(
             torch.tensor(reference[field], dtype=torch.float64),

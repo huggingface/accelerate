@@ -72,10 +72,9 @@ def parse_args():
 
 
 def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_precision, device):
+    """Train full effective batches with ordinary PyTorch as the reference."""
     losses, skipped, scales, interior_unchanged, weights_changed = [], [], [], [], []
 
-    # Independent ordinary-PyTorch loop: one full effective batch per update,
-    # with no Accelerator preparation, backward or optimizer wrapper.
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(mixed_precision)
     scaler = torch.amp.GradScaler("cuda", init_scale=128.0, enabled=mixed_precision == "fp16")
     for update_idx, batch in enumerate(input_ids.split(effective_batch_size)):
@@ -84,7 +83,7 @@ def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_pre
             loss = model(input_ids=batch.to(device), labels=batch.to(device)).loss
         scaler.scale(loss).backward()
 
-        # One controlled overflow checks skip and recovery through the integration.
+        # Inject nonfinite gradients to check skipped-step handling and recovery.
         if mixed_precision == "fp16" and update_idx == 1:
             next(model.parameters()).grad.fill_(float("inf"))
         parameters_before_step = flatten_parameters(model).clone()
@@ -215,8 +214,7 @@ def main():
     observations["parameter_dtypes"] = sorted({str(p.dtype) for p in model.parameters()})
     observations = [observations]
     if accelerator:
-        # Observe every rank, not just the writer. DDP replicas should be identical
-        # even when different reduction/batch orders differ from the reference.
+        # DDP replicas must agree exactly, independently of reference tolerances.
         replicas = accelerator.gather(flatten_parameters(model).unsqueeze(0))
         for replica in replicas[1:]:
             torch.testing.assert_close(replicas[0], replica, rtol=0, atol=0)
