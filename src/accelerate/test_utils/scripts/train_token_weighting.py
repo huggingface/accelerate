@@ -62,9 +62,6 @@ def main():
         input_ids[row, length:] = 0
         labels[row, length:] = -100
         attention_mask[row, length:] = 0
-    # The first position has no preceding prediction. Mask it explicitly so the
-    # example's count covers exactly the targets the causal loss will consume.
-    labels[:, 0] = -100
     labels[2, 3] = -100  # Also ignore one non-padding target.
     initial_parameters = flatten_parameters(model).clone()
 
@@ -75,6 +72,7 @@ def main():
     logits = reference(input_ids=input_ids, attention_mask=attention_mask).logits
     reference_loss = F.cross_entropy(logits[:, :-1].reshape(-1, 11), labels[:, 1:].reshape(-1), ignore_index=-100)
     reference_loss.backward()
+    reference_gradients = torch.cat([parameter.grad.detach().flatten() for parameter in reference.parameters()])
     reference_optimizer.step()
     reference_parameters = flatten_parameters(reference)
 
@@ -101,15 +99,27 @@ def main():
     spec = importlib.util.spec_from_file_location("autoregressive_example", args.example)
     example = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(example)
+    gradients = []
+    adamw = example.AdamW
+
+    def observe_gradients(optimizer, args, kwargs):
+        gradients.append(torch.cat([parameter.grad.detach().flatten() for parameter in model.parameters()]))
+
+    def make_optimizer(*args, **kwargs):
+        optimizer = adamw(*args, **kwargs)
+        optimizer.register_step_pre_hook(observe_gradients)
+        return optimizer
+
     config = {"lr": 0.01, "num_epochs": 1, "seed": 42, "batch_size": 2, "max_grad_norm": float("inf")}
     training_args = SimpleNamespace(
         cpu=True, mixed_precision="no", gradient_accumulation_steps=2, with_wandb_tracking=False
     )
     # Keep the actual example's prepare/gather/no_sync/backward/optimizer loop.
-    # Replace only external loading with a tiny real model and deterministic data.
+    # Use local model/data loading and observe the real optimizer before it steps.
     with (
         patch.object(example, "get_dataloaders", get_dataloaders),
         patch.object(example.AutoModelForCausalLM, "from_pretrained", return_value=model),
+        patch.object(example, "AdamW", make_optimizer),
     ):
         example.training_function(config, training_args)
     hook.remove()
@@ -118,6 +128,8 @@ def main():
         json.dumps(
             {
                 "batches": records,
+                "gradients": [gradient.tolist() for gradient in gradients],
+                "reference_gradients": reference_gradients.tolist(),
                 "parameters": flatten_parameters(model).tolist(),
                 "reference_parameters": reference_parameters.tolist(),
                 "reference_update_norm": (reference_parameters - initial_parameters).norm().item(),

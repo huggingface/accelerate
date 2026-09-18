@@ -129,17 +129,13 @@ def mocked_dataloaders_for_autoregressive_models(accelerator, batch_size: int = 
         batch = tokenizer.pad(
             examples,
             padding="max_length",
-            max_length=max_length + 1,
+            max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors="pt",
         )
 
-        batch["labels"] = batch["input_ids"][:, 1:]
-        batch["input_ids"] = batch["input_ids"][:, :-1]
-        if "attention_mask" in batch:
-            batch["attention_mask"] = batch["attention_mask"][:, :-1]
-
-        batch["labels"] = torch.where(batch["labels"] == tokenizer.pad_token_id, -100, batch["labels"])
+        # Match the example: the causal language model shifts labels internally.
+        batch["labels"] = torch.where(batch["input_ids"] == tokenizer.pad_token_id, -100, batch["input_ids"])
 
         return batch
 
