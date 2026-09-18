@@ -510,8 +510,9 @@ def dispatch_model(
             device = f"musa:{device}"
         elif is_neuron_available() and isinstance(device, int):
             device = f"neuron:{device}"
-        else:
-            model.to(device)
+        elif isinstance(device, int) and hasattr(torch, "accelerator") and torch.accelerator.is_available():
+            device = f"{torch.accelerator.current_accelerator().type}:{device}"
+        model.to(device)
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
     return model
