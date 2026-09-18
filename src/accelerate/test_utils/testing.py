@@ -818,6 +818,7 @@ def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet
     disables it. Timeout, cancellation and reader errors kill and reap the child.
     On POSIX, a new session also allows cleanup of workers in its process group.
     Workers that detach from that group, and non-POSIX descendants, are not covered.
+    Such workers can also delay cleanup if they retain the output pipes.
     Process creation and cleanup can add time beyond the execution timeout.
     """
     # Cast every path in `cmd` to a string

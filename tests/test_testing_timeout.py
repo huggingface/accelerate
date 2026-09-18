@@ -29,7 +29,7 @@ from accelerate.test_utils.testing import _stream_subprocess, execute_subprocess
 
 
 @pytest.fixture
-def child_processes(tmp_path):
+def child_pid_file(tmp_path):
     pid_file = tmp_path / "pids.json"
     yield pid_file
 
@@ -59,9 +59,11 @@ def test_subprocess_drains_both_output_streams(timeout):
         [
             sys.executable,
             "-c",
-            "import sys; "
-            "[print('out' * 100) for _ in range(1000)]; "
-            "[print('err' * 100, file=sys.stderr) for _ in range(1000)]",
+            "import sys\n"
+            "for _ in range(1000):\n"
+            "    print('out' * 100)\n"
+            "for _ in range(1000):\n"
+            "    print('err' * 100, file=sys.stderr)\n",
         ],
         timeout=timeout,
         quiet=True,
@@ -75,10 +77,10 @@ def test_subprocess_drains_both_output_streams(timeout):
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process-group cleanup")
 @pytest.mark.parametrize("close_output", [False, True])
-def test_subprocess_timeout_stops_child(child_processes, close_output):
+def test_subprocess_timeout_stops_child(child_pid_file, close_output):
     code = (
         "import json, os, sys, time; from pathlib import Path; "
-        f"Path({str(child_processes)!r}).write_text(json.dumps([os.getpid()])); "
+        f"Path({str(child_pid_file)!r}).write_text(json.dumps([os.getpid()])); "
         "print('partial output', flush=True); "
         "print('partial diagnostic', file=sys.stderr, flush=True); "
     )
@@ -93,17 +95,17 @@ def test_subprocess_timeout_stops_child(child_processes, close_output):
     assert time.monotonic() - started < 4
     assert "partial output" in str(error.value)
     assert "partial diagnostic" in str(error.value)
-    assert_processes_stopped(child_processes)
+    assert_processes_stopped(child_pid_file)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process-group cleanup")
 @pytest.mark.parametrize("parent_exits", [False, True])
-def test_subprocess_timeout_stops_descendants(child_processes, parent_exits):
+def test_subprocess_timeout_stops_descendants(child_pid_file, parent_exits):
     worker = "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(5)"
     code = (
         "import json, os, subprocess, sys, time; from pathlib import Path; "
         f"worker = subprocess.Popen([sys.executable, '-c', {worker!r}]); "
-        f"Path({str(child_processes)!r}).write_text(json.dumps([os.getpid(), worker.pid])); "
+        f"Path({str(child_pid_file)!r}).write_text(json.dumps([os.getpid(), worker.pid])); "
     )
     if not parent_exits:
         code += "time.sleep(5)"
@@ -111,29 +113,29 @@ def test_subprocess_timeout_stops_descendants(child_processes, parent_exits):
     with pytest.raises(TimeoutError, match="timed out"):
         execute_subprocess_async([sys.executable, "-c", code], timeout=1, quiet=True, echo=False)
 
-    assert_processes_stopped(child_processes)
+    assert_processes_stopped(child_pid_file)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process-group cleanup")
-def test_subprocess_cancellation_stops_child(child_processes):
+def test_subprocess_cancellation_stops_child(child_pid_file):
     code = (
         "import json, os, time; from pathlib import Path; "
-        f"Path({str(child_processes)!r}).write_text(json.dumps([os.getpid()])); time.sleep(5)"
+        f"Path({str(child_pid_file)!r}).write_text(json.dumps([os.getpid()])); time.sleep(5)"
     )
 
     async def cancel_after_start():
         task = asyncio.create_task(_stream_subprocess([sys.executable, "-c", code], quiet=True))
         try:
             for _ in range(300):
-                if child_processes.exists():
+                if child_pid_file.exists():
                     break
                 await asyncio.sleep(0.01)
-            assert child_processes.exists(), "Child did not start"
+            assert child_pid_file.exists(), "Child did not start"
         finally:
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
-        assert_processes_stopped(child_processes)
+        assert_processes_stopped(child_pid_file)
 
     asyncio.run(cancel_after_start())
 
@@ -187,25 +189,25 @@ def test_subprocess_missing_command_preserves_error(tmp_path):
         execute_subprocess_async([tmp_path / "missing-command"], timeout=1, quiet=True, echo=False)
 
 
-def test_subprocess_timeout_without_process_groups(child_processes, monkeypatch):
+def test_subprocess_timeout_without_process_groups(child_pid_file, monkeypatch):
     # Exercise the direct-child fallback with a real process, without pretending
     # this is native Windows event-loop or descendant-cleanup coverage.
     monkeypatch.setattr(testing, "os", SimpleNamespace(name="nt"))
     code = (
         "import json, os, time; from pathlib import Path; "
-        f"Path({str(child_processes)!r}).write_text(json.dumps([os.getpid()])); time.sleep(5)"
+        f"Path({str(child_pid_file)!r}).write_text(json.dumps([os.getpid()])); time.sleep(5)"
     )
     with pytest.raises(TimeoutError, match="timed out"):
         execute_subprocess_async([sys.executable, "-c", code], timeout=1, quiet=True, echo=False)
 
-    assert_processes_stopped(child_processes)
+    assert_processes_stopped(child_pid_file)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX SIGINT behavior")
-def test_subprocess_keyboard_interrupt_stops_child(child_processes):
+def test_subprocess_keyboard_interrupt_stops_child(child_pid_file):
     child = (
         "import json, os, time; from pathlib import Path; "
-        f"Path({str(child_processes)!r}).write_text(json.dumps([os.getpid()])); time.sleep(5)"
+        f"Path({str(child_pid_file)!r}).write_text(json.dumps([os.getpid()])); time.sleep(5)"
     )
     supervisor_code = (
         "import sys\n"
@@ -223,15 +225,15 @@ def test_subprocess_keyboard_interrupt_stops_child(child_processes):
     )
     try:
         for _ in range(500):
-            if child_processes.exists():
+            if child_pid_file.exists():
                 break
             time.sleep(0.01)
-        assert child_processes.exists(), "Supervised child did not start"
+        assert child_pid_file.exists(), "Supervised child did not start"
         supervisor.send_signal(signal.SIGINT)
         stdout, stderr = supervisor.communicate(timeout=5)
         assert supervisor.returncode == 0, stderr.decode()
         assert b"interrupted" in stdout
-        assert_processes_stopped(child_processes)
+        assert_processes_stopped(child_pid_file)
     finally:
         if supervisor.poll() is None:
             supervisor.kill()
@@ -239,14 +241,14 @@ def test_subprocess_keyboard_interrupt_stops_child(child_processes):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX child cleanup")
-def test_subprocess_reader_failure_stops_child(child_processes):
+def test_subprocess_reader_failure_stops_child(child_pid_file):
     code = (
         "import json, os, time; from pathlib import Path; "
-        f"Path({str(child_processes)!r}).write_text(json.dumps([os.getpid()])); "
+        f"Path({str(child_pid_file)!r}).write_text(json.dumps([os.getpid()])); "
         "os.write(1, bytes([255, 10])); time.sleep(5)"
     )
 
     with pytest.raises(UnicodeDecodeError):
         execute_subprocess_async([sys.executable, "-c", code], timeout=2, quiet=True, echo=False)
 
-    assert_processes_stopped(child_processes)
+    assert_processes_stopped(child_pid_file)
