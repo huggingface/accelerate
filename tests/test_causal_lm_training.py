@@ -73,6 +73,7 @@ def test_ddp_training_matches_reference(
         "--gradient-accumulation-steps",
         str(gradient_accumulation_steps),
     ]
+
     # Seed Python hashing before launch too: older Gemma 4 implementations register
     # RoPE buffers from a set, while DDP broadcasts buffers in registration order.
     with patch_environment(
@@ -92,10 +93,12 @@ def test_ddp_training_matches_reference(
     )
     assert reference_results["world_size"] == 1
     assert ddp_results["world_size"] == 2
+
     expected_dtype = {"no": "torch.float32", "bf16": "torch.bfloat16", "fp16": "torch.float16"}[mixed_precision]
     expected_skips = [False] * 10
     if mixed_precision == "fp16":
         expected_skips[1] = True
+
     for result in (reference_results, ddp_results):
         assert len(result["losses"]) == 10
         assert result["parameters"]
@@ -108,9 +111,11 @@ def test_ddp_training_matches_reference(
             if mixed_precision == "fp16":
                 assert rank_results["loss_scales"] == [128.0] + [64.0] * 9
                 assert not rank_results["parameters_changed"][1]
+
     for rank_results in ddp_results["ranks"]:
         assert len(rank_results["parameters_unchanged_during_accumulation"]) == 10 * (gradient_accumulation_steps - 1)
         assert all(rank_results["parameters_unchanged_during_accumulation"])
+
     reference_parameters = torch.tensor(reference_results["parameters"], dtype=torch.float64)
     ddp_parameters = torch.tensor(ddp_results["parameters"], dtype=torch.float64)
     # Absolute bounds can hide incorrectly scaled small updates. Normalize the
@@ -120,6 +125,7 @@ def test_ddp_training_matches_reference(
         "parameter_delta_norm"
     ]
     assert relative_update_error < 0.15, f"Relative update error: {relative_update_error:.3%}"
+
     # Different batch and reduction orders introduce rounding, especially under AMP.
     for field, atol in (("losses", loss_atol), ("parameters", parameter_atol)):
         torch.testing.assert_close(

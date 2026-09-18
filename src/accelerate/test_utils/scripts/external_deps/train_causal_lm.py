@@ -83,6 +83,7 @@ def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_pre
 
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(mixed_precision)
     scaler = torch.amp.GradScaler("cuda", init_scale=128.0, enabled=mixed_precision == "fp16")
+
     for update_idx, batch in enumerate(input_ids.split(effective_batch_size)):
         optimizer.zero_grad(set_to_none=True)
         with torch.autocast("cuda", dtype=dtype) if dtype else nullcontext():
@@ -96,6 +97,7 @@ def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_pre
         previous_scale = scaler.get_scale()
         scaler.step(optimizer)
         scaler.update()
+
         did_skip = scaler.get_scale() < previous_scale
         if did_skip:
             assert torch.equal(parameters_before_step, flatten_parameters(model))
@@ -131,6 +133,7 @@ def train_with_accelerate(
     dataloader = DataLoader(TensorDataset(input_ids), batch_size=microbatch_size, shuffle=False)
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
     window_loss = torch.zeros((), device=accelerator.device)
+
     for (batch,) in dataloader:
         with accelerator.accumulate(model):
             parameters_before_step = flatten_parameters(model).clone()
@@ -158,6 +161,7 @@ def train_with_accelerate(
                 parameters_unchanged_during_accumulation.append(
                     torch.equal(parameters_before_step, flatten_parameters(model))
                 )
+
     accelerator.wait_for_everyone()
 
     return (
@@ -233,6 +237,7 @@ def main():
         for replica in replicas[1:]:
             torch.testing.assert_close(replicas[0], replica, rtol=0, atol=0)
         observations = gather_object(observations)
+
     if args.reference or accelerator.is_main_process:
         args.output.write_text(
             json.dumps(
@@ -246,6 +251,7 @@ def main():
                 allow_nan=False,
             )
         )
+
     if accelerator:
         accelerator.end_training()
 
