@@ -798,7 +798,7 @@ def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet
     result = asyncio.run(_stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo))
 
     cmd_str = " ".join(cmd)
-    if result.returncode > 0:
+    if result.returncode != 0:
         stderr = "\n".join(result.stderr)
         raise RuntimeError(
             f"'{cmd_str}' failed with returncode {result.returncode}\n\n"
