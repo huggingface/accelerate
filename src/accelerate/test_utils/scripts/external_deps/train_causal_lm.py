@@ -119,7 +119,13 @@ def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_pre
 
 
 def train_with_accelerate(
-    model, optimizer, input_ids, effective_batch_size, accelerator, mixed_precision, gradient_accumulation_steps
+    model,
+    optimizer,
+    input_ids,
+    effective_batch_size,
+    accelerator,
+    mixed_precision,
+    gradient_accumulation_steps,
 ):
     losses, step_was_skipped, loss_scales, parameters_unchanged_during_accumulation, parameters_changed = (
         [],

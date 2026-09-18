@@ -44,7 +44,11 @@ from accelerate.utils import ComputeEnvironment, DistributedType, patch_environm
     ],
 )
 def test_ddp_training_matches_reference(
-    tmp_path, mixed_precision, gradient_accumulation_steps, loss_atol, parameter_atol
+    tmp_path,
+    mixed_precision,
+    gradient_accumulation_steps,
+    loss_atol,
+    parameter_atol,
 ):
     """DDP, accumulation and AMP match a same-precision plain-PyTorch reference."""
     pytest.importorskip("transformers.models.gemma4", reason="Requires Transformers with Gemma 4 support")
@@ -77,14 +81,18 @@ def test_ddp_training_matches_reference(
     # Seed Python hashing before launch too: older Gemma 4 implementations register
     # RoPE buffers from a set, while DDP broadcasts buffers in registration order.
     with patch_environment(
-        omp_num_threads=1, cublas_workspace_config=":4096:8", hf_hub_offline="1", pythonhashseed="0"
+        omp_num_threads=1,
+        cublas_workspace_config=":4096:8",
+        hf_hub_offline="1",
+        pythonhashseed="0",
     ):
         execute_subprocess_async(
             [sys.executable, script_path, "--reference", "--output", str(reference_results_path)] + training_args,
             timeout=90,
         )
         execute_subprocess_async(
-            launch_command + [script_path, "--output", str(ddp_results_path)] + training_args, timeout=90
+            launch_command + [script_path, "--output", str(ddp_results_path)] + training_args,
+            timeout=90,
         )
 
     reference_results, ddp_results = (
