@@ -719,6 +719,12 @@ class Accelerator:
         return False
 
     @property
+    def shard_iterable_dataset(self):
+        if hasattr(self.dataloader_config, "shard_iterable_dataset"):
+            return self.dataloader_config.shard_iterable_dataset
+        return True
+
+    @property
     def project_dir(self):
         return self.project_configuration.project_dir
 
@@ -2736,6 +2742,7 @@ class Accelerator:
             data_seed=self.dataloader_config.data_seed,
             non_blocking=self.non_blocking,
             use_stateful_dataloader=self.use_stateful_dataloader,
+            shard_iterable_dataset=self.shard_iterable_dataset,
             torch_device_mesh=device_mesh,
         )
         self._dataloaders.append(prepared_data_loader)

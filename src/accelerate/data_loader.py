@@ -1028,6 +1028,7 @@ def prepare_data_loader(
     data_seed: Optional[int] = None,
     non_blocking: bool = False,
     use_stateful_dataloader: bool = False,
+    shard_iterable_dataset: bool = True,
     torch_device_mesh=None,
 ) -> DataLoader:
     """
@@ -1096,6 +1097,15 @@ def prepare_data_loader(
             "If set to true, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
+        shard_iterable_dataset (`bool`, *optional*, defaults to `True`):
+            Whether or not Accelerate should shard the underlying `IterableDataset` across processes. When `True` (the
+            default), Accelerate splits the stream across processes, either via `datasets.IterableDataset.shard` when
+            possible or by wrapping it in an [`~data_loader.IterableDatasetShard`]. Set this to `False` when the dataset
+            is already sharded across processes (for example when each process reads its own files, or when using
+            `datasets.distributed.split_dataset_by_node`) to avoid sharding the stream a second time, which would make
+            each process skip samples. When set to `False`, keeping the shards balanced across processes becomes your
+            responsibility, since Accelerate will no longer equalize the number of batches seen by each process. This
+            has no effect on map-style datasets.
         torch_device_mesh (`torch.distributed.DeviceMesh`, *optional*, defaults to `None`):
             PyTorch device mesh.
 
@@ -1226,11 +1236,12 @@ def prepare_data_loader(
         if (
             is_datasets_available()
             and isinstance(new_dataset, DatasetsIterableDataset)
+            and shard_iterable_dataset
             and not split_batches
             and new_dataset.n_shards >= num_processes
         ):
             new_dataset = new_dataset.shard(num_shards=num_processes, index=process_index)
-        elif isinstance(new_dataset, IterableDataset):
+        elif isinstance(new_dataset, IterableDataset) and shard_iterable_dataset:
             if getattr(dataloader.dataset, "generator", None) is not None:
                 synchronized_generator = dataloader.dataset.generator
             new_dataset = IterableDatasetShard(
@@ -1241,6 +1252,10 @@ def prepare_data_loader(
                 process_index=process_index,
                 split_batches=split_batches,
             )
+        elif isinstance(new_dataset, IterableDataset):
+            # `shard_iterable_dataset=False`: the dataset is already sharded across processes, so we leave the
+            # stream untouched instead of sharding it a second time (see issue #3547).
+            pass
         else:
             if not use_seedable_sampler and hasattr(sampler, "generator"):
                 if sampler.generator is None:

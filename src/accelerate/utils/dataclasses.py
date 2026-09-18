@@ -854,6 +854,12 @@ class DataLoaderConfiguration:
             If set to `True`, the dataloader prepared by the Accelerator will be backed by
             [torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
             This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed.
+        shard_iterable_dataset (`bool`, defaults to `True`):
+            Whether or not the Accelerator should shard the underlying `IterableDataset` across processes. Set this to
+            `False` when the dataset is already sharded across processes (for example when each process reads its own
+            files, or when using `datasets.distributed.split_dataset_by_node`) to avoid sharding the stream a second
+            time, which would make each process skip samples. When set to `False`, keeping the shards balanced across
+            processes becomes your responsibility. This has no effect on map-style datasets.
     """
 
     split_batches: bool = field(
@@ -910,6 +916,16 @@ class DataLoaderConfiguration:
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
             "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). This requires `torchdata` version 0.8.0 or higher that supports StatefulDataLoader to be installed."
+        },
+    )
+    shard_iterable_dataset: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether or not the Accelerator should shard the underlying `IterableDataset` across processes. Set this"
+            " to `False` when the dataset is already sharded across processes (for example when each process reads its own"
+            " files, or when using `datasets.distributed.split_dataset_by_node`) to avoid sharding the stream a second time,"
+            " which would make each process skip samples. When set to `False`, keeping the shards balanced across processes"
+            " becomes your responsibility. This has no effect on map-style datasets."
         },
     )
 
