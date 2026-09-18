@@ -73,7 +73,13 @@ def parse_args():
 
 def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_precision, device):
     """Train full effective batches with ordinary PyTorch as the reference."""
-    losses, skipped, scales, interior_unchanged, weights_changed = [], [], [], [], []
+    losses, step_was_skipped, loss_scales, parameters_unchanged_during_accumulation, parameters_changed = (
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
 
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(mixed_precision)
     scaler = torch.amp.GradScaler("cuda", init_scale=128.0, enabled=mixed_precision == "fp16")
@@ -93,29 +99,35 @@ def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_pre
         did_skip = scaler.get_scale() < previous_scale
         if did_skip:
             assert torch.equal(parameters_before_step, flatten_parameters(model))
-        weights_changed.append(not torch.equal(parameters_before_step, flatten_parameters(model)))
+        parameters_changed.append(not torch.equal(parameters_before_step, flatten_parameters(model)))
         losses.append(loss.detach().item())
-        skipped.append(did_skip)
-        scales.append(scaler.get_scale())
+        step_was_skipped.append(did_skip)
+        loss_scales.append(scaler.get_scale())
 
     return (
         model,
         losses,
         {
-            "weights_changed": weights_changed,
-            "skipped": skipped,
-            "scales": scales,
-            "interior_unchanged": interior_unchanged,
+            "parameters_changed": parameters_changed,
+            "step_was_skipped": step_was_skipped,
+            "loss_scales": loss_scales,
+            "parameters_unchanged_during_accumulation": parameters_unchanged_during_accumulation,
         },
     )
 
 
-def train_accelerated(
-    model, optimizer, input_ids, effective_batch_size, accelerator, mixed_precision, accumulation_steps
+def train_with_accelerate(
+    model, optimizer, input_ids, effective_batch_size, accelerator, mixed_precision, gradient_accumulation_steps
 ):
-    losses, skipped, scales, interior_unchanged, weights_changed = [], [], [], [], []
+    losses, step_was_skipped, loss_scales, parameters_unchanged_during_accumulation, parameters_changed = (
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
 
-    microbatch_size = effective_batch_size // (accelerator.num_processes * accumulation_steps)
+    microbatch_size = effective_batch_size // (accelerator.num_processes * gradient_accumulation_steps)
     dataloader = DataLoader(TensorDataset(input_ids), batch_size=microbatch_size, shuffle=False)
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
     window_loss = torch.zeros((), device=accelerator.device)
@@ -130,7 +142,7 @@ def train_accelerated(
             optimizer.step()
             optimizer.zero_grad()
 
-            window_loss += loss.detach() / accumulation_steps
+            window_loss += loss.detach() / gradient_accumulation_steps
             if accelerator.sync_gradients:
                 did_skip = accelerator.optimizer_step_was_skipped
                 if did_skip:
@@ -138,22 +150,24 @@ def train_accelerated(
                 # Every microbatch has equal valid-target counts, so this mean
                 # reports the same effective-batch objective as the reference.
                 losses.append(accelerator.reduce(window_loss, reduction="mean").item())
-                weights_changed.append(not torch.equal(parameters_before_step, flatten_parameters(model)))
-                skipped.append(did_skip)
-                scales.append(accelerator.scaler.get_scale() if accelerator.scaler else 1.0)
+                parameters_changed.append(not torch.equal(parameters_before_step, flatten_parameters(model)))
+                step_was_skipped.append(did_skip)
+                loss_scales.append(accelerator.scaler.get_scale() if accelerator.scaler else 1.0)
                 window_loss.zero_()
             else:
-                interior_unchanged.append(torch.equal(parameters_before_step, flatten_parameters(model)))
+                parameters_unchanged_during_accumulation.append(
+                    torch.equal(parameters_before_step, flatten_parameters(model))
+                )
     accelerator.wait_for_everyone()
 
     return (
         model,
         losses,
         {
-            "weights_changed": weights_changed,
-            "skipped": skipped,
-            "scales": scales,
-            "interior_unchanged": interior_unchanged,
+            "parameters_changed": parameters_changed,
+            "step_was_skipped": step_was_skipped,
+            "loss_scales": loss_scales,
+            "parameters_unchanged_during_accumulation": parameters_unchanged_during_accumulation,
         },
     )
 
@@ -186,11 +200,11 @@ def main():
         model.to(device)
     model.train()
 
-    compute_dtypes = set()
+    linear_output_dtypes = set()
     # Observe a real operation inside forward: numerical tolerance alone could miss
     # a wrapper that silently failed to enable autocast.
     linear = next(module for module in model.modules() if isinstance(module, torch.nn.Linear))
-    hook = linear.register_forward_hook(lambda module, inputs, output: compute_dtypes.add(str(output.dtype)))
+    hook = linear.register_forward_hook(lambda module, inputs, output: linear_output_dtypes.add(str(output.dtype)))
 
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
 
@@ -199,18 +213,18 @@ def main():
             model, optimizer, input_ids, effective_batch_size, args.mixed_precision, device
         )
     else:
-        model, losses, observations = train_accelerated(
+        model, losses, observations = train_with_accelerate(
             model,
             optimizer,
             input_ids,
             effective_batch_size,
             accelerator=accelerator,
             mixed_precision=args.mixed_precision,
-            accumulation_steps=args.gradient_accumulation_steps,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
         )
 
     hook.remove()
-    observations["compute_dtypes"] = sorted(compute_dtypes)
+    observations["linear_output_dtypes"] = sorted(linear_output_dtypes)
     observations["parameter_dtypes"] = sorted({str(p.dtype) for p in model.parameters()})
     observations = [observations]
     if accelerator:
@@ -225,7 +239,7 @@ def main():
                 {
                     "losses": losses,
                     "parameters": flatten_parameters(model).cpu().tolist(),
-                    "update_norm": (flatten_parameters(model).cpu() - initial_parameters).norm().item(),
+                    "parameter_delta_norm": (flatten_parameters(model).cpu() - initial_parameters).norm().item(),
                     "world_size": 1 if args.reference else accelerator.num_processes,
                     "ranks": observations,
                 },
