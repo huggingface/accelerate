@@ -697,6 +697,33 @@ class DataLoaderTester(AccelerateTestCase):
         # n_shards (2) == num_processes (2): should use native sharding, not IterableDatasetShard
         assert not isinstance(result.dataset, IterableDatasetShard)
 
+    def test_iterable_dataset_shard_can_be_disabled(self):
+        """`shard_iterable_dataset=False` leaves an already-sharded stream untouched (issue #3547)."""
+        from datasets import Dataset
+        from datasets.distributed import split_dataset_by_node
+
+        num_processes = 2
+        ds = Dataset.from_dict({"x": list(range(20))}).to_iterable_dataset(num_shards=4)
+
+        seen = []
+        for process_index in range(num_processes):
+            # Simulate a dataset that is already sharded across processes.
+            sharded = split_dataset_by_node(ds, rank=process_index, world_size=num_processes)
+            result = prepare_data_loader(
+                DataLoader(sharded, batch_size=2),
+                num_processes=num_processes,
+                process_index=process_index,
+                dispatch_batches=False,
+                shard_iterable_dataset=False,
+            )
+            # The stream is not sharded a second time.
+            assert not isinstance(result.dataset, IterableDatasetShard)
+            for batch in result:
+                seen.extend(batch["x"].tolist())
+
+        # Every sample is seen exactly once; nothing is skipped by double-sharding.
+        assert sorted(seen) == list(range(20))
+
     def test_ensure_dataloader_gets_cleaned_up(self):
         # Ensure that the dataloader gets cleaned up properly
         class Dummy:
