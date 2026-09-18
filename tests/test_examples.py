@@ -13,9 +13,11 @@
 # limitations under the License.
 
 import ast
+import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,9 +29,11 @@ import torch
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
     TempDirTestCase,
+    execute_subprocess_async,
     get_launch_command,
     is_hpu_available,
     is_xpu_available,
+    path_in_accelerate_package,
     require_fp16,
     require_huggingface_suite,
     require_multi_device,
@@ -261,13 +265,47 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
         run_command(self.launch_args + testargs)
 
+    @unittest.skipUnless(torch.distributed.is_available() and torch.distributed.is_gloo_available(), "Requires Gloo")
     def test_gradient_accumulation_for_autoregressive_models(self):
-        testargs = [
-            "examples/by_feature/gradient_accumulation_for_autoregressive_models.py",
-            "--gradient_accumulation_steps",
-            "2",
+        output = Path(self.tmpdir) / "token_weighting.json"
+        script = path_in_accelerate_package("test_utils", "scripts", "train_token_weighting.py")
+        command = [
+            sys.executable,
+            "-m",
+            "torch.distributed.run",
+            "--standalone",
+            "--nnodes=1",
+            "--nproc-per-node=2",
+            script,
+            "--example",
+            str(Path("examples/by_feature/gradient_accumulation_for_autoregressive_models.py").resolve()),
+            "--output",
+            str(output),
         ]
-        run_command(self.launch_args + testargs)
+        # Always exercise two ranks, including on CPU-only CI, without downloads
+        # or the host's default launcher configuration.
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OMP_NUM_THREADS": "1",
+                "CUDA_VISIBLE_DEVICES": "",
+                "HF_HUB_OFFLINE": "1",
+                "TESTING_MOCKED_DATALOADERS": "0",
+            },
+        ):
+            process = execute_subprocess_async(command, timeout=60)
+        assert process.returncode == 0, f"DDP launcher failed: {process.stderr}"
+        results = [json.loads(output.with_suffix(f".rank{rank}.json").read_text()) for rank in range(2)]
+        # Unequal microbatches AND ranks, counting actual shifted targets only.
+        assert [[batch["tokens"] for batch in result["batches"]] for result in results] == [[3, 7], [12, 6]]
+        parameters = [torch.tensor(result["parameters"], dtype=torch.float64) for result in results]
+        torch.testing.assert_close(parameters[0], parameters[1], rtol=0, atol=0)
+        for result, actual in zip(results, parameters):
+            reference = torch.tensor(result["reference_parameters"], dtype=torch.float64)
+            assert result["reference_update_norm"] > 0
+            relative_update_error = (actual - reference).norm().item() / result["reference_update_norm"]
+            assert relative_update_error < 1e-4, f"Token-weighted relative update error: {relative_update_error:.6%}"
+            torch.testing.assert_close(actual, reference, rtol=0, atol=1e-6)
 
     def test_local_sgd(self):
         testargs = ["examples/by_feature/local_sgd.py"]
