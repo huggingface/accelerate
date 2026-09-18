@@ -265,8 +265,16 @@ class FeatureExamplesTests(TempDirTestCase):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
         run_command(self.launch_args + testargs)
 
-    @unittest.skipUnless(torch.distributed.is_available() and torch.distributed.is_gloo_available(), "Requires Gloo")
     def test_gradient_accumulation_for_autoregressive_models(self):
+        testargs = [
+            "examples/by_feature/gradient_accumulation_for_autoregressive_models.py",
+            "--gradient_accumulation_steps",
+            "2",
+        ]
+        run_command(self.launch_args + testargs)
+
+    @unittest.skipUnless(torch.distributed.is_available() and torch.distributed.is_gloo_available(), "Requires Gloo")
+    def test_gradient_accumulation_for_autoregressive_models_token_weighting(self):
         output = Path(self.tmpdir) / "token_weighting.json"
         script = path_in_accelerate_package("test_utils", "scripts", "train_token_weighting.py")
         command = [
