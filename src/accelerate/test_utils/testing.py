@@ -18,6 +18,7 @@ import io
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -759,15 +760,8 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env=env,
+        start_new_session=os.name == "posix",
     )
-
-    # note: there is a warning for a possible deadlock when using `wait` with huge amounts of data in the pipe
-    # https://docs.python.org/3/library/asyncio-subprocess.html#asyncio.asyncio.subprocess.Process.wait
-    #
-    # If it starts hanging, will need to switch to the following code. The problem is that no data
-    # will be seen until it's done and if it hangs for example there will be no debug info.
-    # out, err = await p.communicate()
-    # return _RunOutput(p.returncode, out, err)
 
     out = []
     err = []
@@ -778,18 +772,54 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
         if not quiet:
             print(label, line, file=pipe)
 
-    # XXX: the timeout doesn't seem to make any difference here
-    await asyncio.wait(
-        [
-            asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
-            asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
-        ],
-        timeout=timeout,
-    )
-    return _RunOutput(await p.wait(), out, err)
+    tasks = [
+        asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
+        asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
+        asyncio.create_task(p.wait()),
+    ]
+    try:
+        # Drain both pipes while waiting for exit, including when a child closes
+        # its pipes early or a worker inherits them after its launcher exits.
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=timeout)
+    except BaseException as error:
+        try:
+            if os.name == "posix":
+                # The group belongs to this launch. Its workers may still be alive
+                # even when the launcher has already exited.
+                os.killpg(p.pid, signal.SIGKILL)
+            elif p.returncode is None:
+                p.kill()
+        except ProcessLookupError:
+            pass
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            # Continue draining after cancellation: waiting for exit alone can
+            # deadlock when a pipe's reader transport is paused on buffered data.
+            stdout, stderr = await p.communicate()
+            out.extend(stdout.decode("utf-8", errors="replace").splitlines())
+            err.extend(stderr.decode("utf-8", errors="replace").splitlines())
+
+        if isinstance(error, asyncio.TimeoutError):
+            stdout, stderr = "\n".join(out), "\n".join(err)
+            raise TimeoutError(
+                f"'{' '.join(map(str, cmd))}' timed out after {timeout} seconds\n\n"
+                f"Captured stdout:\n{stdout}\n\nCaptured stderr:\n{stderr}"
+            ) from error
+        raise
+    return _RunOutput(p.returncode, out, err)
 
 
 def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
+    """Run a command, streaming output and raising on timeout.
+
+    The timeout covers output reading and process exit after creation; ``None``
+    disables it. Timeout, cancellation and reader errors kill and reap the child.
+    On POSIX, a new session also allows cleanup of workers in its process group.
+    Workers that detach from that group, and non-POSIX descendants, are not covered.
+    Process creation and cleanup can add time beyond the execution timeout.
+    """
     # Cast every path in `cmd` to a string
     for i, c in enumerate(cmd):
         if isinstance(c, Path):
