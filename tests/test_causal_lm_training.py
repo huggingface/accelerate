@@ -25,14 +25,14 @@ from accelerate.test_utils.testing import (
     get_torch_dist_unique_port,
     path_in_accelerate_package,
     require_cuda,
-    require_multi_device,
+    require_multi_gpu,
     require_transformers,
 )
 from accelerate.utils import ComputeEnvironment, DistributedType, patch_environment
 
 
 @require_cuda
-@require_multi_device
+@require_multi_gpu
 @require_transformers
 @pytest.mark.parametrize(
     "mixed_precision, gradient_accumulation_steps, loss_atol, parameter_atol",
@@ -86,14 +86,17 @@ def test_ddp_training_matches_reference(
         hf_hub_offline="1",
         pythonhashseed="0",
     ):
-        execute_subprocess_async(
+        reference_process = execute_subprocess_async(
             [sys.executable, script_path, "--reference", "--output", str(reference_results_path)] + training_args,
             timeout=90,
         )
-        execute_subprocess_async(
+        assert reference_process.returncode == 0, f"Reference process failed: {reference_process.stderr}"
+
+        ddp_process = execute_subprocess_async(
             launch_command + [script_path, "--output", str(ddp_results_path)] + training_args,
             timeout=90,
         )
+        assert ddp_process.returncode == 0, f"DDP launcher failed: {ddp_process.stderr}"
 
     reference_results, ddp_results = (
         json.loads(reference_results_path.read_text()),
