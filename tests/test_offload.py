@@ -119,6 +119,24 @@ class OffloadTester(unittest.TestCase):
             for key, param in state_dict.items():
                 assert torch.allclose(param, weight_map[key])
 
+    def test_offload_weights_loader_key_order_and_priority(self):
+        cpu_part = {"shared": torch.tensor([1.0]), "cpu_only": torch.tensor([2.0])}
+        disk_part = {
+            "disk_first": torch.tensor([3.0]),
+            "shared": torch.tensor([4.0]),
+            "disk_last": torch.tensor([5.0]),
+        }
+
+        with TemporaryDirectory() as tmp_dir:
+            offload_state_dict(tmp_dir, disk_part)
+            weight_map = OffloadedWeightsLoader(state_dict=cpu_part, save_folder=tmp_dir)
+
+            assert list(weight_map) == ["shared", "cpu_only", "disk_first", "disk_last"]
+            assert len(weight_map) == 4
+            assert weight_map["shared"] is cpu_part["shared"]
+            for key in ["disk_first", "disk_last"]:
+                assert torch.equal(weight_map[key], disk_part[key])
+
     def test_extract_submodules_state_dict(self):
         state_dict = {"a.1": 0, "a.10": 1, "a.2": 2}
         extracted = extract_submodules_state_dict(state_dict, ["a.1", "a.2"])
