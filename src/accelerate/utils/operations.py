@@ -865,6 +865,10 @@ def reduce(tensor, reduction="mean", scale=1.0):
         cloned_tensor = tensor.clone()
         if state.distributed_type == DistributedType.NO:
             return cloned_tensor
+        # "none" is documented as performing no operation. Without this the fall-through below
+        # picks ReduceOp.SUM for every reduction that is not "max", so it silently sums instead.
+        if reduction == "none":
+            return cloned_tensor
         if state.distributed_type == DistributedType.XLA:
             # Some processes may have different HLO graphs than other
             # processes, for example in the breakpoint API
