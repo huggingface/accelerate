@@ -112,6 +112,16 @@ def test_reduce_max(state):
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
 
+def test_reduce_none(state):
+    # For now runs on only two processes
+    if state.num_processes != 2:
+        return
+    tensor = create_tensor(state)
+    reduced_tensor = reduce(tensor, "none")
+    # "none" is documented as performing no operation, so each process keeps its own values.
+    assert torch.allclose(reduced_tensor, tensor), f"{reduced_tensor} != {tensor}"
+
+
 def test_op_checker(state):
     # Must be in a distributed state, and gathering is currently not supported in TorchXLA.
     if state.distributed_type in [DistributedType.NO, DistributedType.XLA]:
@@ -182,6 +192,8 @@ def main():
     test_reduce_mean(state)
     state.print("testing reduce_max")
     test_reduce_max(state)
+    state.print("testing reduce_none")
+    test_reduce_none(state)
     state.print("testing op_checker")
     test_op_checker(state)
     state.print("testing sending tensors across devices")
