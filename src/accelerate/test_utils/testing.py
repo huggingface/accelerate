@@ -849,7 +849,9 @@ def run_command(command: list[str], return_stdout=False, env=None):
         output = subprocess.check_output(command, stderr=subprocess.STDOUT, env=env)
         if return_stdout:
             if hasattr(output, "decode"):
-                output = output.decode("utf-8")
+                # On Windows with a non-UTF-8 locale the child may write in the locale's encoding
+                # (e.g. GBK on cp936), so tolerate undecodable bytes rather than crash.
+                output = output.decode("utf-8", errors="replace")
             return output
     except subprocess.CalledProcessError as e:
         raise SubprocessCallException(
