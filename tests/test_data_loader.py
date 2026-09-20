@@ -14,6 +14,7 @@
 
 import random
 import weakref
+from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -682,6 +683,46 @@ class DataLoaderTester(AccelerateTestCase):
 
         test_sampler_epoch(DataLoaderShard)
         test_sampler_epoch(DataLoaderDispatcher)
+
+    def test_skip_first_batches_preserves_configuration(self):
+        # Regression test: skip_first_batches must preserve _drop_last, _non_blocking,
+        # slice_fn, and torch_device_mesh across checkpoint resumption.
+        dataset = list(range(16))
+        generator = torch.Generator()
+        batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=True, generator=generator, seed=42)
+
+        # Test DataLoaderShard preserves _drop_last, _non_blocking, and torch_device_mesh
+        dummy_mesh = MagicMock()
+        dummy_mesh.mesh_dim_names = ["tp"]
+        shard_loader = DataLoaderShard(
+            dataset,
+            batch_sampler=batch_sampler,
+            _drop_last=True,
+            _non_blocking=True,
+            torch_device_mesh=dummy_mesh,
+        )
+        new_shard_loader = skip_first_batches(shard_loader, num_batches=1)
+        assert new_shard_loader._drop_last is True
+        assert new_shard_loader._non_blocking is True
+        assert new_shard_loader.torch_device_mesh is dummy_mesh
+
+        # Test DataLoaderDispatcher preserves _drop_last, _non_blocking, slice_fn, and torch_device_mesh
+        def custom_slice_fn(tensor, num_processes, process_index):
+            return tensor
+
+        disp_loader = DataLoaderDispatcher(
+            dataset,
+            batch_sampler=batch_sampler,
+            _drop_last=True,
+            _non_blocking=True,
+            slice_fn=custom_slice_fn,
+            torch_device_mesh=dummy_mesh,
+        )
+        new_disp_loader = skip_first_batches(disp_loader, num_batches=1)
+        assert new_disp_loader._drop_last is True
+        assert new_disp_loader._non_blocking is True
+        assert new_disp_loader.slice_fn is custom_slice_fn
+        assert new_disp_loader.torch_device_mesh is dummy_mesh
 
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
