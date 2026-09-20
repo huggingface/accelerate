@@ -153,7 +153,9 @@ def to_fsdp2_command_parser(subparsers=None):
 
 
 def load_config(config_file: str) -> dict:
-    with open(config_file) as f:
+    # Config files are YAML (UTF-8); pin the encoding so this read does not depend on the
+    # locale's preferred encoding (e.g. cp936 on Windows), which crashes on non-ASCII content.
+    with open(config_file, encoding="utf-8") as f:
         config = yaml.safe_load(f)
     if not config:
         raise ValueError("Config file is empty")
@@ -170,5 +172,6 @@ def to_fsdp2_command(args):
 
     new_config = convert_config_to_fsdp2(config)
 
-    with open(args.output_file, "w") as f:
+    # Keep the write UTF-8 as well so non-ASCII values round-trip on any locale.
+    with open(args.output_file, "w", encoding="utf-8") as f:
         yaml.dump(new_config, f)
