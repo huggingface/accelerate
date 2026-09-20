@@ -480,10 +480,9 @@ def purge_accelerate_environment(func_or_cls):
         finally:
             # Restore original env vars or remove new ones
             for key in [k for k in os.environ if k.startswith(prefix)]:
-                if key in existing_vars:
-                    os.environ[key] = existing_vars[key]
-                else:
+                if key not in existing_vars:
                     os.environ.pop(key, None)
+            os.environ.update(existing_vars)
 
     def wrap_function(func):
         @wraps(func)
