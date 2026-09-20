@@ -210,7 +210,8 @@ def notebook_launcher(
                 device_type, distributed_type = get_current_device_type()
                 # XPU and ROCm require spawn instead of fork (HIP/XPU runtime is initialized in the parent,
                 # which breaks fork-based subprocesses).
-                start_method = "spawn" if device_type == "xpu" or is_rocm_available() else "fork"
+                # Windows has no fork(2); XPU and ROCm require spawn as well.
+                start_method = "spawn" if device_type == "xpu" or is_rocm_available() or os.name == "nt" else "fork"
                 if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
                     launcher = PrepareForLaunch(test_launch, distributed_type=distributed_type)
                     try:
@@ -305,18 +306,38 @@ def debug_launcher(function, args=(), num_processes=2):
     """
     from torch.multiprocessing import start_processes
 
-    with tempfile.NamedTemporaryFile() as tmp_file:
+    # On Windows, a spawned child cannot open the rendezvous file while the parent still holds it
+    # open (sharing violation), so use a closed temporary path removed after the launch instead.
+    if os.name == "nt":
+        rdv_fd, rdv_file = tempfile.mkstemp()
+        os.close(rdv_fd)
+        tmp_file = None
+    else:
+        tmp_file = tempfile.NamedTemporaryFile()
+        rdv_file = tmp_file.name
+
+    try:
         # torch.distributed will expect a few environment variable to be here. We set the ones common to each
         # process here (the other ones will be set be the launcher).
-        # gloo's default interface selection (hostname-based) is flaky on CI runners, pin it to loopback
-        with patch_environment(
+        patched_env = dict(
             world_size=num_processes,
             master_addr="127.0.0.1",
             master_port="29500",
             accelerate_mixed_precision="no",
-            accelerate_debug_rdv_file=tmp_file.name,
+            accelerate_debug_rdv_file=rdv_file,
             accelerate_use_cpu="yes",
-            gloo_socket_ifname="lo",
-        ):
+        )
+        if os.name != "nt":
+            # gloo's default interface selection (hostname-based) is flaky on CI runners, pin it to
+            # loopback. Windows has no "lo" interface, so leave the default selection there.
+            patched_env["gloo_socket_ifname"] = "lo"
+        with patch_environment(**patched_env):
             launcher = PrepareForLaunch(function, debug=True)
-            start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
+            # Windows has no fork(2), use spawn there.
+            start_method = "spawn" if os.name == "nt" else "fork"
+            start_processes(launcher, args=args, nprocs=num_processes, start_method=start_method)
+    finally:
+        if tmp_file is not None:
+            tmp_file.close()
+        elif os.path.exists(rdv_file):
+            os.remove(rdv_file)
