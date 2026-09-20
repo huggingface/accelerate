@@ -36,7 +36,7 @@ from accelerate.big_modeling import (
     load_checkpoint_and_dispatch,
     materialize_meta_tensors,
 )
-from accelerate.hooks import remove_hook_from_submodules
+from accelerate.hooks import ModelHook, add_hook_to_module, remove_hook_from_submodules
 from accelerate.test_utils import (
     require_bnb,
     require_cuda_or_xpu,
@@ -319,6 +319,29 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             torch.testing.assert_close(expected, output, atol=ATOL, rtol=RTOL)
             model.to("cpu")
+
+    def test_materialize_meta_tensors_with_sequential_offload_hook(self):
+        model = ModelForTest()
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            disk_offload(model, tmp_dir, execution_device="cpu", offload_buffers=True)
+            add_hook_to_module(model.linear1, ModelHook(), append=True)
+
+            materialize_meta_tensors(model)
+
+            assert all(tensor.device == torch.device("cpu") for tensor in model.state_dict().values())
+            assert all(not hasattr(module, "_hf_hook") for module in model.modules())
+            output = model(x)
+            torch.testing.assert_close(expected, output, atol=ATOL, rtol=RTOL)
+
+    def test_materialize_meta_tensors_rejects_unbacked_meta_tensors(self):
+        with init_empty_weights():
+            model = nn.Linear(3, 4)
+
+        with self.assertRaisesRegex(ValueError, "not backed by an Accelerate offload hook"):
+            materialize_meta_tensors(model)
 
     def test_disk_offload_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()

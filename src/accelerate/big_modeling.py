@@ -26,6 +26,7 @@ from .hooks import (
     AlignDevicesHook,
     CpuOffload,
     LayerwiseCastingHook,
+    SequentialHook,
     UserCpuOffloadHook,
     add_hook_to_module,
     attach_align_device_hook,
@@ -344,43 +345,51 @@ def materialize_meta_tensors(model: nn.Module, target_device: Union[int, str, to
 
     </Tip>
     """
+
+    def iter_align_device_hooks(hook):
+        if isinstance(hook, AlignDevicesHook):
+            yield hook
+        elif isinstance(hook, SequentialHook):
+            for nested_hook in hook.hooks:
+                yield from iter_align_device_hooks(nested_hook)
+
     tied_params = find_tied_parameters(model)
     tensors_to_materialize = []
     materialized_tensor_ids = set()
     has_offload_hook = False
 
     for module in model.modules():
-        hook = getattr(module, "_hf_hook", None)
-        if not isinstance(hook, AlignDevicesHook) or not hook.offload:
-            continue
-
-        has_offload_hook = True
-        if hook.weights_map is None:
-            raise ValueError("Cannot materialize meta tensors because the offload hook has no weights map.")
-
-        for name, tensor in named_module_tensors(
-            module,
-            include_buffers=True,
-            recurse=hook.place_submodules,
-            remove_non_persistent=True,
-        ):
-            if tensor.device != torch.device("meta"):
+        for hook in iter_align_device_hooks(getattr(module, "_hf_hook", None)):
+            if not hook.offload:
                 continue
 
-            try:
-                value = hook.weights_map[name]
-            except KeyError as error:
-                raise ValueError(
-                    f"Cannot materialize meta tensor {name!r} because its offloaded value is unavailable."
-                ) from error
+            has_offload_hook = True
+            if hook.weights_map is None:
+                raise ValueError("Cannot materialize meta tensors because the offload hook has no weights map.")
 
-            if value is None or value.device == torch.device("meta"):
-                raise ValueError(
-                    f"Cannot materialize meta tensor {name!r} because its offloaded value is unavailable."
-                )
+            for name, tensor in named_module_tensors(
+                module,
+                include_buffers=True,
+                recurse=hook.place_submodules,
+                remove_non_persistent=True,
+            ):
+                if tensor.device != torch.device("meta") or id(tensor) in materialized_tensor_ids:
+                    continue
 
-            tensors_to_materialize.append((module, name, value, hook))
-            materialized_tensor_ids.add(id(tensor))
+                try:
+                    value = hook.weights_map[name]
+                except KeyError as error:
+                    raise ValueError(
+                        f"Cannot materialize meta tensor {name!r} because its offloaded value is unavailable."
+                    ) from error
+
+                if value is None or value.device == torch.device("meta"):
+                    raise ValueError(
+                        f"Cannot materialize meta tensor {name!r} because its offloaded value is unavailable."
+                    )
+
+                tensors_to_materialize.append((module, name, value, hook))
+                materialized_tensor_ids.add(id(tensor))
 
     remaining_meta_tensors = [
         name
@@ -408,9 +417,10 @@ def materialize_meta_tensors(model: nn.Module, target_device: Union[int, str, to
         # Disable offloading before detaching hooks so detach_hook does not restore the original device, which may be
         # the meta device for disk-offloaded tensors or a GPU when materializing into CPU memory.
         for module in model.modules():
-            hook = getattr(module, "_hf_hook", None)
-            if isinstance(hook, AlignDevicesHook):
-                hook.offload = False
+            hooks = list(iter_align_device_hooks(getattr(module, "_hf_hook", None)))
+            if hooks:
+                for hook in hooks:
+                    hook.offload = False
                 remove_hook_from_module(module)
 
         retie_parameters(model, tied_params)
