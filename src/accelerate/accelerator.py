@@ -3860,17 +3860,18 @@ class Accelerator:
             else:
                 models.append(model)
 
-        # We need to load the scaler state before the optimizer for FSDP2
-        # (`torch.distributed.checkpoint.set_optimizer_state_dict`) which we use to set the state of the optimizer calls `optimizer.step` on
-        # a dummy tensor, but since the scaler is not initialized, it will raise an error (the scaler exists but its `_scale` is None)
+        # Load the scaler state before the optimizer for FSDP2. `load_fsdp_optimizer` hands
+        # torch's DCP APIs the unwrapped optimizer, so their dummy `optimizer.step()` (used to
+        # materialize empty optimizer state) no longer routes through the `GradScaler` and the
+        # restored scaler state is left untouched. The scaler's `_scale`/`_growth_tracker`
+        # tensors are lazily (re-)created by torch on the first `scale()` call, so no eager
+        # initialization is needed here (and calling `_lazy_init_scale_growth_tracker`
+        # unconditionally breaks resuming in a process whose scaler is already initialized).
         scaler = None
         if self.scaler is not None and self.is_fsdp2:
             input_scaler_file = os.path.join(input_dir, SCALER_NAME)
             scaler_state = torch.load(input_scaler_file)
             self.scaler.load_state_dict(scaler_state)
-            # We also need to call the `_lazy_init_scale_growth_tracker` to initialize the scaler, as it would else be called
-            # on the first call to scale
-            self.scaler._lazy_init_scale_growth_tracker(self.scaler._device)
             logger.info("GradScaler state loaded successfully")
         else:
             scaler = self.scaler
