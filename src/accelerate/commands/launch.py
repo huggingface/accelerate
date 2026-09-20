@@ -992,11 +992,13 @@ def launch_command_parser(subparsers=None):
 def simple_launcher(args):
     cmd, current_env = prepare_simple_launcher_cmd_env(args)
 
-    process = subprocess.Popen(cmd, env=current_env)
-    process.wait()
+    process = subprocess.Popen(cmd, env=current_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = process.communicate()
     if process.returncode != 0:
         if not args.quiet:
-            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+            raise subprocess.CalledProcessError(
+                returncode=process.returncode, cmd=cmd, output=stdout, stderr=stderr
+            )
         else:
             sys.exit(1)
 
