@@ -575,17 +575,22 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.linear2.weight.device == torch.device(torch_device.replace("0", "1"))
 
     def test_load_checkpoint_in_model_dtype(self):
-        with tempfile.NamedTemporaryFile(suffix=".pt") as tmpfile:
-            model = ModelSeveralDtypes()
-            torch.save(model.state_dict(), tmpfile.name)
+        # On Windows a checkpoint cannot be reopened by name while `NamedTemporaryFile` still
+        # holds it open (sharing violation), so close the handle first and clean up manually.
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as tmpfile:
+            checkpoint = tmpfile.name
+        self.addCleanup(os.remove, checkpoint)
 
-            new_model = ModelSeveralDtypes()
-            load_checkpoint_in_model(
-                new_model, tmpfile.name, offload_state_dict=True, dtype=torch.float16, device_map={"": "cpu"}
-            )
+        model = ModelSeveralDtypes()
+        torch.save(model.state_dict(), checkpoint)
 
-            assert new_model.int_param.dtype == torch.int64
-            assert new_model.float_param.dtype == torch.float16
+        new_model = ModelSeveralDtypes()
+        load_checkpoint_in_model(
+            new_model, checkpoint, offload_state_dict=True, dtype=torch.float16, device_map={"": "cpu"}
+        )
+
+        assert new_model.int_param.dtype == torch.int64
+        assert new_model.float_param.dtype == torch.float16
 
     @parameterized.expand([(None,), ({"": "cpu"},)])
     def test_load_checkpoint_in_model_unexpected_keys(self, device_map: Optional[dict]):
@@ -593,15 +598,20 @@ class ModelingUtilsTester(unittest.TestCase):
 
         state_dict = model.state_dict()
         state_dict["foo"] = torch.rand(4, 5)
-        with tempfile.NamedTemporaryFile(suffix=".pt") as tmpfile:
-            torch.save(state_dict, tmpfile)
+        # On Windows a checkpoint cannot be reopened by name while `NamedTemporaryFile` still
+        # holds it open (sharing violation), so close the handle first and clean up manually.
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as tmpfile:
+            checkpoint = tmpfile.name
+        self.addCleanup(os.remove, checkpoint)
 
-            model = ModelForTest()
+        torch.save(state_dict, checkpoint)
 
-            with self.assertLogs() as cm:
-                load_checkpoint_in_model(model, tmpfile.name, device_map=device_map)
+        model = ModelForTest()
 
-                self.assertTrue(any("were not used when" in out for out in cm.output))
+        with self.assertLogs() as cm:
+            load_checkpoint_in_model(model, checkpoint, device_map=device_map)
+
+            self.assertTrue(any("were not used when" in out for out in cm.output))
 
             with self.assertRaises((ValueError, RuntimeError)):
                 load_checkpoint_in_model(model, tmpfile.name, device_map=device_map, strict=True)
