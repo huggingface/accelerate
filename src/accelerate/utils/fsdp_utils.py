@@ -288,6 +288,17 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
     return load_result
 
 
+def _unwrap_accelerated_optimizer(optimizer):
+    """Return the plain `torch.optim.Optimizer` underneath accelerate's wrapper."""
+    # Imported here rather than at module scope: `accelerate.optimizer` imports `accelerate.utils`,
+    # so a top-level import would be circular.
+    from ..optimizer import AcceleratedOptimizer
+
+    while isinstance(optimizer, AcceleratedOptimizer):
+        optimizer = optimizer.optimizer
+    return optimizer
+
+
 def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0, use_dcp=True):
     """
     Save an FSDP optimizer state checkpoint.
@@ -323,7 +334,7 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
         if fsdp_plugin.fsdp_version == 2:
             from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
 
-            optim_state = get_optimizer_state_dict(model, optimizer, options=sd_options)
+            optim_state = get_optimizer_state_dict(model, _unwrap_accelerated_optimizer(optimizer), options=sd_options)
         else:
             optim_state = FSDP.optim_state_dict(model, optimizer)
 
@@ -413,7 +424,9 @@ def load_fsdp_optimizer(
                 if fsdp_plugin.fsdp_version == 2:
                     from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
 
-                    optim_state = get_optimizer_state_dict(model, optimizer, options=sd_options)
+                    optim_state = get_optimizer_state_dict(
+                        model, _unwrap_accelerated_optimizer(optimizer), options=sd_options
+                    )
                 else:
                     optim_state = FSDP.optim_state_dict(model, optimizer)
                 optim_state = {"optimizer": optim_state}
@@ -437,7 +450,7 @@ def load_fsdp_optimizer(
         else:
             from torch.distributed.checkpoint.state_dict import set_optimizer_state_dict
 
-            set_optimizer_state_dict(model, optimizer, optim_state, options=sd_options)
+            set_optimizer_state_dict(model, _unwrap_accelerated_optimizer(optimizer), optim_state, options=sd_options)
 
     accelerator.wait_for_everyone()
 
