@@ -698,3 +698,22 @@ def test_purge_env_vars_restores_previous_values():
 
     del os.environ["ACCELERATE_SOME_ENV_VAR"]
     del os.environ["ACCELERATE_ANOTHER_ENV_VAR"]
+
+
+@pytest.mark.parametrize("raise_error", [False, True])
+def test_purge_env_vars_restores_deleted_values(monkeypatch, raise_error):
+    monkeypatch.setenv("ACCELERATE_MIXED_PRECISION", "fp16")
+
+    @purge_accelerate_environment
+    def dummy_func():
+        del os.environ["ACCELERATE_MIXED_PRECISION"]
+        if raise_error:
+            raise RuntimeError("Training failed")
+
+    if raise_error:
+        with pytest.raises(RuntimeError, match="Training failed"):
+            dummy_func()
+    else:
+        dummy_func()
+
+    assert os.environ["ACCELERATE_MIXED_PRECISION"] == "fp16"
