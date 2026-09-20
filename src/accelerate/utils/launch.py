@@ -721,7 +721,7 @@ def prepare_sagemager_args_inputs(
     if sagemaker_config.sagemaker_inputs_file is not None:
         print(f"Loading SageMaker Inputs from {sagemaker_config.sagemaker_inputs_file} file")
         sagemaker_inputs = {}
-        with open(sagemaker_config.sagemaker_inputs_file) as file:
+        with open(sagemaker_config.sagemaker_inputs_file, encoding="utf-8") as file:
             for i, line in enumerate(file):
                 if i == 0:
                     continue
