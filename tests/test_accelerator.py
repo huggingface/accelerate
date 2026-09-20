@@ -907,3 +907,41 @@ class AcceleratorTester(AccelerateTestCase):
         ):
             with assert_exception(ValueError, "CPU or disk offload"):
                 accelerator.prepare_model(model)
+
+    def test_clip_grad_norm_unscales_once_for_a_partial_parameter_list(self):
+        """FSDP clipping used to unscale, miss the model, then fall through and unscale again.
+
+        `GradScaler.unscale_` raises on the second call for the same optimizer, and a partial
+        list is the normal case: a frozen backbone or an adapter clips its trainable parameters.
+        """
+        accelerator = Accelerator(cpu=True)
+        model, optimizer, *_ = create_components()
+        model, optimizer = accelerator.prepare(model, optimizer)
+        model(torch.randn(2, 2)).sum().backward()
+
+        calls = []
+        unscale_gradients = Accelerator.unscale_gradients
+
+        def counting_unscale(self, optimizer=None):
+            calls.append(optimizer)
+            return unscale_gradients(self, optimizer)
+
+        trainable = [p for name, p in model.named_parameters() if name.endswith("weight")]
+        assert len(trainable) < len(list(model.parameters()))
+
+        accelerator.state.distributed_type = DistributedType.FSDP
+        with patch.object(Accelerator, "unscale_gradients", counting_unscale):
+            accelerator.clip_grad_norm_(trainable, 1.0)
+        assert len(calls) == 1
+
+    def test_clip_grad_norm_compares_two_prepared_models_without_raising(self):
+        """The model lookup compared two lists of tensors with `==`, which is a tensor compare
+        as soon as the lengths match, so a second model of the same shape crashed the lookup."""
+        accelerator = Accelerator(cpu=True)
+        first, second = torch.nn.Linear(2, 4), torch.nn.Linear(2, 4)
+        first, second = accelerator.prepare(first, second)
+        second(torch.randn(2, 2)).sum().backward()
+
+        accelerator.state.distributed_type = DistributedType.FSDP
+        with patch.object(Accelerator, "is_fsdp2", property(lambda self: True)):
+            accelerator.clip_grad_norm_(list(second.parameters()), 1.0)

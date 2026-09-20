@@ -182,6 +182,17 @@ _even_batches = object()
 _use_seedable_sampler = object()
 
 
+def _is_exactly(parameters, model_parameters):
+    """Whether `parameters` is this model's own parameter list, object for object.
+
+    `list == list` compares elementwise once the lengths match, and `Tensor.__eq__` returns a
+    tensor whose truth value raises, so two distinct models of the same shape would crash the
+    comparison rather than answer it.
+    """
+    model_parameters = list(model_parameters)
+    return len(parameters) == len(model_parameters) and all(p is q for p, q in zip(parameters, model_parameters))
+
+
 class Accelerator:
     """
     Creates an instance of an accelerator for distributed training or mixed precision training.
@@ -3015,11 +3026,15 @@ class Accelerator:
             self.unscale_gradients()
             parameters = [p for p in parameters]
             for model in self._models:
-                if parameters == [p for p in model.parameters()]:
+                if _is_exactly(parameters, model.parameters()):
                     if not self.is_fsdp2:
                         return model.clip_grad_norm_(max_norm, norm_type)
                     else:
                         return self._clip_grad_norm_dtensor_aware(parameters, max_norm, norm_type=norm_type)
+            # A subset of the model's parameters, which is what a partially frozen or adapter
+            # run clips. Return here rather than falling through: the tail below unscales a
+            # second time, and `GradScaler.unscale_` raises on the second call.
+            return self._clip_grad_norm_dtensor_aware(parameters, max_norm, norm_type=norm_type)
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # DeepSpeed handles gradient clipping internally, but we can retrieve the gradient norm
             if self.deepspeed_engine_wrapped is not None:
@@ -3042,8 +3057,9 @@ class Accelerator:
                 self.unscale_gradients()
                 parameters = [p for p in parameters]
                 for model in self._models:
-                    if parameters == [p for p in model.parameters()]:
+                    if _is_exactly(parameters, model.parameters()):
                         return model.clip_grad_norm_(max_norm, norm_type)
+                return self._clip_grad_norm_dtensor_aware(parameters, max_norm, norm_type=norm_type)
         self.unscale_gradients()
         return self._clip_grad_norm_dtensor_aware(list(parameters), max_norm, norm_type=norm_type)
 
