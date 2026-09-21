@@ -53,8 +53,8 @@ def assert_processes_stopped(pid_file):
             pass
 
 
-@pytest.mark.parametrize("timeout", [None, 5])
-def test_subprocess_drains_both_output_streams(timeout):
+@pytest.mark.parametrize("timeout_kwargs", [{}, {"timeout": None}, {"timeout": 5}], ids=["default", "none", "finite"])
+def test_subprocess_drains_both_output_streams(timeout_kwargs):
     result = execute_subprocess_async(
         [
             sys.executable,
@@ -65,9 +65,9 @@ def test_subprocess_drains_both_output_streams(timeout):
             "for _ in range(1000):\n"
             "    print('err' * 100, file=sys.stderr)\n",
         ],
-        timeout=timeout,
         quiet=True,
         echo=False,
+        **timeout_kwargs,
     )
 
     assert result.returncode == 0

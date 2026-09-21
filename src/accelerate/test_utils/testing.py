@@ -811,11 +811,12 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     return _RunOutput(p.returncode, out, err)
 
 
-def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
-    """Run a command, streaming output and raising on timeout.
+def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=None, quiet=False, echo=True) -> _RunOutput:
+    """Run a command, streaming output and enforcing an explicitly requested timeout.
 
-    The timeout covers output reading and process exit after creation; ``None``
-    disables it. Timeout, cancellation and reader errors kill and reap the child.
+    By default, wait without an execution deadline. A finite ``timeout`` covers
+    output reading and process exit after creation; ``None`` disables it.
+    Timeout, cancellation and reader errors kill and reap the child.
     On POSIX, a new session also allows cleanup of workers in its process group.
     Workers that detach from that group, and non-POSIX descendants, are not covered.
     Such workers can also delay cleanup if they retain the output pipes.
