@@ -62,6 +62,7 @@ def test_ddp_training_matches_reference(
                 if not torch.cuda.is_bf16_supported():
                     pytest.skip("Both CUDA devices must support BF16")
 
+    # Given: matching training settings and an isolated two-GPU launch configuration.
     script_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_causal_lm.py")
     reference_results_path, ddp_results_path = tmp_path / "reference.json", tmp_path / "ddp.json"
     config_path = tmp_path / "ddp_config.json"
@@ -82,14 +83,18 @@ def test_ddp_training_matches_reference(
         str(gradient_accumulation_steps),
     ]
 
-    # Seed Python hashing before launch too: older Gemma 4 implementations register
-    # RoPE buffers from a set, while DDP broadcasts buffers in registration order.
     with patch_environment(
+        # Avoid competing OpenMP thread pools in the training processes.
         omp_num_threads=1,
+        # Keep CUDA matrix multiplications repeatable for the numerical comparison.
         cublas_workspace_config=":4096:8",
+        # Keep this synthetic test independent of Hub availability.
         hf_hub_offline="1",
+        # Some Gemma implementations register RoPE buffers from a set.
+        # Use matching hash seeds so DDP's positional broadcasts don't mix up buffers.
         pythonhashseed="0",
     ):
+        # When: train the reference and DDP paths in separate processes.
         reference_process = execute_subprocess_async(
             [sys.executable, script_path, "--reference", "--output", str(reference_results_path)] + training_args,
             timeout=90,
@@ -102,6 +107,7 @@ def test_ddp_training_matches_reference(
         )
         assert ddp_process.returncode == 0, f"DDP launcher failed: {ddp_process.stderr}"
 
+    # Then: both paths must exercise the requested behavior and agree numerically.
     reference_results, ddp_results = (
         json.loads(reference_results_path.read_text()),
         json.loads(ddp_results_path.read_text()),
