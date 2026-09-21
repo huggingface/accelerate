@@ -63,19 +63,45 @@ def test_ddp_training_matches_reference(
 ):
     """DDP, accumulation and AMP match a same-precision plain-PyTorch reference."""
     # Given: identical starting weights/data, the selected precision, and no injected fault.
-    _require_precision_support(mixed_precision)
+    pytest.importorskip("transformers.models.gemma4", reason="Requires Transformers with Gemma 4 support")
+    if mixed_precision == "bf16":
+        for device in range(2):
+            with torch.cuda.device(device):
+                if not torch.cuda.is_bf16_supported():
+                    pytest.skip("Both CUDA devices must support BF16")
+    expected_dtype = {"no": "torch.float32", "bf16": "torch.bfloat16", "fp16": "torch.float16"}[mixed_precision]
+    expected_scale = INITIAL_LOSS_SCALE if mixed_precision == "fp16" else 1.0
 
     # When: train full reference batches and equivalent distributed, accumulated batches.
-    reference, ddp = _run_training_pair(tmp_path, mixed_precision, gradient_accumulation_steps)
+    reference, ddp = _run_training_pair(
+        tmp_path, mixed_precision=mixed_precision, gradient_accumulation_steps=gradient_accumulation_steps
+    )
 
-    # Then: every update attempt succeeds, and both paths exercise the requested behavior and agree.
-    _assert_execution_contract(reference, ddp, mixed_precision, gradient_accumulation_steps)
-    expected_scale = INITIAL_LOSS_SCALE if mixed_precision == "fp16" else 1.0
-    for context, attempt in _rank_attempts(reference, ddp):
-        assert not attempt["step_was_skipped"], context
-        assert attempt["parameters_changed"], context
-        assert attempt["loss_scale"] == expected_scale, context
-    _assert_numerical_parity(reference, ddp, loss_atol, parameter_atol)
+    # Then: every rank uses the requested precision and completes every update without skipping.
+    assert reference["world_size"] == 1
+    assert ddp["world_size"] == 2
+    for path, result in (("reference", reference), ("DDP", ddp)):
+        assert len(result["ranks"]) == result["world_size"], path
+        for rank, observations in enumerate(result["ranks"]):
+            context = f"{path}, rank {rank}"
+            assert observations["parameter_dtypes"] == ["torch.float32"], context
+            assert observations["linear_output_dtypes"] == [expected_dtype], context
+            assert len(observations["attempts"]) == NUM_UPDATE_ATTEMPTS, context
+            for index, attempt in enumerate(observations["attempts"]):
+                context = f"{path}, rank {rank}, attempt {index}"
+                assert attempt["index"] == index, context
+                assert not attempt["step_was_skipped"], context
+                assert attempt["parameters_changed"], context
+                assert attempt["loss_scale"] == expected_scale, context
+
+    # Accumulation must hold weights fixed between update boundaries.
+    for rank, observations in enumerate(ddp["ranks"]):
+        holds = observations["parameters_unchanged_during_accumulation"]
+        assert len(holds) == NUM_UPDATE_ATTEMPTS * (gradient_accumulation_steps - 1), f"DDP rank {rank}"
+        for microbatch, unchanged in enumerate(holds):
+            assert unchanged, f"DDP rank {rank}, accumulation interior {microbatch}: weights changed before boundary"
+
+    _assert_numerical_parity(reference, ddp, loss_atol=loss_atol, parameter_atol=parameter_atol)
 
 
 @require_cuda
@@ -84,38 +110,63 @@ def test_ddp_training_matches_reference(
 def test_fp16_skips_nonfinite_update_and_recovers(tmp_path):
     """Reject a deliberately corrupted update, then resume matching the reference."""
     # Given: FP16 with accumulation, and an explicit fault at the second update attempt.
-    _require_precision_support("fp16")
+    pytest.importorskip("transformers.models.gemma4", reason="Requires Transformers with Gemma 4 support")
     gradient_accumulation_steps = 2
-    fault_attempt = 1  # Zero-based: first establish a successful update, then test rejection and recovery.
+    reduced_scale = INITIAL_LOSS_SCALE * LOSS_SCALE_BACKOFF
 
     # When: inject infinity after backward at that boundary in both paths (on every DDP rank).
     reference, ddp = _run_training_pair(
-        tmp_path, "fp16", gradient_accumulation_steps, inject_nonfinite_at_attempt=fault_attempt
+        tmp_path,
+        mixed_precision="fp16",
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        inject_nonfinite_at_attempt=1,  # Zero-based: one successful update before the fault.
     )
 
-    # Then: only the faulty attempt is skipped; weights hold, the scale falls, and later updates succeed.
-    _assert_execution_contract(reference, ddp, "fp16", gradient_accumulation_steps)
-    for context, attempt in _rank_attempts(reference, ddp):
-        expected_skip = attempt["index"] == fault_attempt
-        expected_scale = INITIAL_LOSS_SCALE
-        if attempt["index"] >= fault_attempt:
-            expected_scale *= LOSS_SCALE_BACKOFF
-        assert attempt["step_was_skipped"] == expected_skip, context
-        assert attempt["parameters_changed"] == (not expected_skip), context
-        assert attempt["loss_scale"] == expected_scale, context
+    # Then: check successful training, rejection, and recovery on every rank.
+    assert reference["world_size"] == 1
+    assert ddp["world_size"] == 2
+    for path, result in (("reference", reference), ("DDP", ddp)):
+        assert len(result["ranks"]) == result["world_size"], path
+        for rank, observations in enumerate(result["ranks"]):
+            context = f"{path}, rank {rank}"
+            assert observations["parameter_dtypes"] == ["torch.float32"], context
+            assert observations["linear_output_dtypes"] == ["torch.float16"], context
+            attempts = observations["attempts"]
+            assert len(attempts) == NUM_UPDATE_ATTEMPTS, context
+            first, skipped, *recovery = attempts
+
+            # Before the fault: establish that an ordinary FP16 update works.
+            assert first["index"] == 0, context
+            assert not first["step_was_skipped"], context
+            assert first["parameters_changed"], context
+            assert first["loss_scale"] == INITIAL_LOSS_SCALE, context
+
+            # Faulty attempt: reject the gradients without changing weights, and lower the scale.
+            assert skipped["index"] == 1, context
+            assert skipped["step_was_skipped"], f"{context}, attempt 1"
+            assert not skipped["parameters_changed"], f"{context}, attempt 1"
+            assert skipped["loss_scale"] == reduced_scale, f"{context}, attempt 1"
+
+            # Recovery: later batches must update again, not remain stuck skipping.
+            assert recovery, f"{context}: no recovery attempts were exercised"
+            for index, attempt in enumerate(recovery, start=2):
+                context = f"{path}, rank {rank}, attempt {index}"
+                assert attempt["index"] == index, context
+                assert not attempt["step_was_skipped"], context
+                assert attempt["parameters_changed"], context
+                assert attempt["loss_scale"] == reduced_scale, context
+
+    # Skipping must not disturb the accumulation boundaries either.
+    for rank, observations in enumerate(ddp["ranks"]):
+        holds = observations["parameters_unchanged_during_accumulation"]
+        assert len(holds) == NUM_UPDATE_ATTEMPTS * (gradient_accumulation_steps - 1), f"DDP rank {rank}"
+        for microbatch, unchanged in enumerate(holds):
+            assert unchanged, f"DDP rank {rank}, accumulation interior {microbatch}: weights changed before boundary"
+
     _assert_numerical_parity(reference, ddp, loss_atol=1e-3, parameter_atol=1e-4)
 
 
-def _require_precision_support(mixed_precision):
-    pytest.importorskip("transformers.models.gemma4", reason="Requires Transformers with Gemma 4 support")
-    if mixed_precision == "bf16":
-        for device in range(2):
-            with torch.cuda.device(device):
-                if not torch.cuda.is_bf16_supported():
-                    pytest.skip("Both CUDA devices must support BF16")
-
-
-def _run_training_pair(tmp_path, mixed_precision, gradient_accumulation_steps, inject_nonfinite_at_attempt=None):
+def _run_training_pair(tmp_path, *, mixed_precision, gradient_accumulation_steps, inject_nonfinite_at_attempt=None):
     """Launch independent reference/DDP experiments with the same explicit scenario."""
     script_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_causal_lm.py")
     reference_results_path, ddp_results_path = tmp_path / "reference.json", tmp_path / "ddp.json"
@@ -165,37 +216,10 @@ def _run_training_pair(tmp_path, mixed_precision, gradient_accumulation_steps, i
     return json.loads(reference_results_path.read_text()), json.loads(ddp_results_path.read_text())
 
 
-def _rank_attempts(reference, ddp):
-    for path, result in (("reference", reference), ("DDP", ddp)):
-        for rank, observations in enumerate(result["ranks"]):
-            for attempt in observations["attempts"]:
-                yield f"{path}, rank {rank}, attempt {attempt['index']}", attempt
-
-
-def _assert_execution_contract(reference, ddp, mixed_precision, gradient_accumulation_steps):
-    """Check coverage of the requested execution, independently of numerical closeness."""
-    assert reference["world_size"] == 1
-    assert ddp["world_size"] == 2
-    expected_dtype = {"no": "torch.float32", "bf16": "torch.bfloat16", "fp16": "torch.float16"}[mixed_precision]
-    for path, result in (("reference", reference), ("DDP", ddp)):
-        assert result["parameters"], path
-        assert len(result["ranks"]) == result["world_size"], path
-        for rank, observations in enumerate(result["ranks"]):
-            context = f"{path}, rank {rank}"
-            assert [attempt["index"] for attempt in observations["attempts"]] == list(range(NUM_UPDATE_ATTEMPTS)), (
-                context
-            )
-            assert observations["parameter_dtypes"] == ["torch.float32"], context
-            assert observations["linear_output_dtypes"] == [expected_dtype], context
-
-    for rank, observations in enumerate(ddp["ranks"]):
-        holds = observations["parameters_unchanged_during_accumulation"]
-        assert len(holds) == NUM_UPDATE_ATTEMPTS * (gradient_accumulation_steps - 1), f"DDP rank {rank}"
-        for microbatch, unchanged in enumerate(holds):
-            assert unchanged, f"DDP rank {rank}, accumulation interior {microbatch}: weights changed before boundary"
-
-
-def _assert_numerical_parity(reference, ddp, loss_atol, parameter_atol):
+def _assert_numerical_parity(reference, ddp, *, loss_atol, parameter_atol):
+    """Compare losses and final weights, including error relative to the size of the update."""
+    assert reference["parameters"], "Reference returned no parameters"
+    assert ddp["parameters"], "DDP returned no parameters"
     reference_parameters = torch.tensor(reference["parameters"], dtype=torch.float64)
     ddp_parameters = torch.tensor(ddp["parameters"], dtype=torch.float64)
     # Absolute bounds can hide incorrectly scaled small updates. Normalize the
@@ -207,22 +231,20 @@ def _assert_numerical_parity(reference, ddp, loss_atol, parameter_atol):
     # Different batch and reduction orders introduce rounding, especially under AMP.
     reference_losses = [attempt["loss"] for attempt in reference["ranks"][0]["attempts"]]
     ddp_losses = [attempt["loss"] for attempt in ddp["ranks"][0]["attempts"]]
-    for field, actual, expected, atol in (
-        (
-            "losses",
-            torch.tensor(ddp_losses, dtype=torch.float64),
-            torch.tensor(reference_losses, dtype=torch.float64),
-            loss_atol,
-        ),
-        ("parameters", ddp_parameters, reference_parameters, parameter_atol),
-    ):
-        torch.testing.assert_close(
-            actual,
-            expected,
-            rtol=0,
-            atol=atol,
-            msg=lambda message, field=field: f"{field}: {message}",
-        )
+    torch.testing.assert_close(
+        torch.tensor(ddp_losses, dtype=torch.float64),
+        torch.tensor(reference_losses, dtype=torch.float64),
+        rtol=0,
+        atol=loss_atol,
+        msg=lambda message: f"losses: {message}",
+    )
+    torch.testing.assert_close(
+        ddp_parameters,
+        reference_parameters,
+        rtol=0,
+        atol=parameter_atol,
+        msg=lambda message: f"parameters: {message}",
+    )
 
 
 def test_training_fault_is_opt_in():

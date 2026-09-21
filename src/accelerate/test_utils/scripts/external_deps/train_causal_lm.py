@@ -20,7 +20,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
 from accelerate.utils import GradScalerKwargs, gather_object, set_seed
@@ -30,7 +30,7 @@ NUM_UPDATE_ATTEMPTS = 10
 EFFECTIVE_BATCH_SIZE = 8
 INITIAL_LOSS_SCALE = 128.0
 LOSS_SCALE_BACKOFF = 0.5
-# Keep scale growth outside this short experiment; only an injected fault lowers it.
+# Keep scale growth outside this short experiment so unexpected scale changes fail the test.
 SCALER_KWARGS = dict(init_scale=INITIAL_LOSS_SCALE, backoff_factor=LOSS_SCALE_BACKOFF, growth_interval=2000)
 
 
@@ -104,61 +104,57 @@ def microbatch_size_for(effective_batch_size, world_size, gradient_accumulation_
     return microbatch_size
 
 
-def train_reference(
-    model, optimizer, input_ids, effective_batch_size, mixed_precision, device, inject_nonfinite_at_attempt
-):
+def train_reference(model, optimizer, input_ids, *, mixed_precision, device, inject_nonfinite_at_attempt):
     """Train full effective batches with ordinary PyTorch as the reference."""
     attempts = []
 
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(mixed_precision)
     scaler = torch.amp.GradScaler("cuda", enabled=mixed_precision == "fp16", **SCALER_KWARGS)
 
-    for update_idx, batch in enumerate(input_ids.split(effective_batch_size)):
+    for update_attempt, batch in enumerate(input_ids.split(EFFECTIVE_BATCH_SIZE)):
+        batch = batch.to(device)
+        parameters_before_step = flatten_parameters(model).clone()
+        scale_before_step = scaler.get_scale()
+
         optimizer.zero_grad(set_to_none=True)
         with torch.autocast("cuda", dtype=dtype) if dtype else nullcontext():
-            loss = model(input_ids=batch.to(device), labels=batch.to(device)).loss
+            loss = model(input_ids=batch, labels=batch).loss
         scaler.scale(loss).backward()
 
         # Faults are requested by the test, never implied by the precision mode.
-        if update_idx == inject_nonfinite_at_attempt:
+        if update_attempt == inject_nonfinite_at_attempt:
             next(model.parameters()).grad.fill_(float("inf"))
-        parameters_before_step = flatten_parameters(model).clone()
-        previous_scale = scaler.get_scale()
         scaler.step(optimizer)
         scaler.update()
 
+        # Record the outcome; the test owns the assertions about what should have happened.
+        parameters_changed = not torch.equal(parameters_before_step, flatten_parameters(model))
+        scale_after_step = scaler.get_scale()
         attempts.append(
             {
-                "index": update_idx,
+                "index": update_attempt,
                 "loss": loss.detach().item(),
-                "parameters_changed": not torch.equal(parameters_before_step, flatten_parameters(model)),
-                "step_was_skipped": scaler.get_scale() < previous_scale,
-                "loss_scale": scaler.get_scale(),
+                "parameters_changed": parameters_changed,
+                "step_was_skipped": scale_after_step < scale_before_step,
+                "loss_scale": scale_after_step,
             }
         )
 
     return model, {"attempts": attempts}
 
 
-def train_with_accelerate(
-    model,
-    optimizer,
-    input_ids,
-    effective_batch_size,
-    accelerator,
-    gradient_accumulation_steps,
-    inject_nonfinite_at_attempt,
-):
+def train_with_accelerate(model, optimizer, input_ids, *, accelerator, inject_nonfinite_at_attempt):
     """Train distributed microbatches; let Accelerate own synchronization and scaling."""
     attempts, parameters_unchanged_during_accumulation = [], []
     update_attempt = 0
 
-    microbatch_size = microbatch_size_for(effective_batch_size, accelerator.num_processes, gradient_accumulation_steps)
-    dataloader = DataLoader(TensorDataset(input_ids), batch_size=microbatch_size, shuffle=False)
+    gradient_accumulation_steps = accelerator.gradient_accumulation_steps
+    microbatch_size = microbatch_size_for(EFFECTIVE_BATCH_SIZE, accelerator.num_processes, gradient_accumulation_steps)
+    dataloader = DataLoader(input_ids, batch_size=microbatch_size, shuffle=False)
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
     window_loss = torch.zeros((), device=accelerator.device)
 
-    for (batch,) in dataloader:
+    for batch in dataloader:
         with accelerator.accumulate(model):
             parameters_before_step = flatten_parameters(model).clone()
             loss = model(input_ids=batch, labels=batch).loss
@@ -171,25 +167,27 @@ def train_with_accelerate(
             optimizer.step()
             optimizer.zero_grad()
 
+            # Record interior microbatches separately from completed update attempts.
+            parameters_changed = not torch.equal(parameters_before_step, flatten_parameters(model))
             window_loss += loss.detach() / gradient_accumulation_steps
-            if accelerator.sync_gradients:
-                # Every microbatch has equal valid-target counts, so this mean
-                # reports the same effective-batch objective as the reference.
-                attempts.append(
-                    {
-                        "index": update_attempt,
-                        "loss": accelerator.reduce(window_loss, reduction="mean").item(),
-                        "parameters_changed": not torch.equal(parameters_before_step, flatten_parameters(model)),
-                        "step_was_skipped": accelerator.optimizer_step_was_skipped,
-                        "loss_scale": accelerator.scaler.get_scale() if accelerator.scaler else 1.0,
-                    }
-                )
-                update_attempt += 1
-                window_loss.zero_()
-            else:
-                parameters_unchanged_during_accumulation.append(
-                    torch.equal(parameters_before_step, flatten_parameters(model))
-                )
+            if not accelerator.sync_gradients:
+                parameters_unchanged_during_accumulation.append(not parameters_changed)
+                continue
+
+            # Equal valid-target counts make this mean match the reference's effective-batch loss.
+            effective_batch_loss = accelerator.reduce(window_loss, reduction="mean").item()
+            loss_scale = accelerator.scaler.get_scale() if accelerator.scaler else 1.0
+            attempts.append(
+                {
+                    "index": update_attempt,
+                    "loss": effective_batch_loss,
+                    "parameters_changed": parameters_changed,
+                    "step_was_skipped": accelerator.optimizer_step_was_skipped,
+                    "loss_scale": loss_scale,
+                }
+            )
+            update_attempt += 1
+            window_loss.zero_()
 
     accelerator.wait_for_everyone()
 
@@ -243,19 +241,16 @@ def main():
             model,
             optimizer,
             input_ids,
-            EFFECTIVE_BATCH_SIZE,
-            args.mixed_precision,
-            device,
-            args.inject_nonfinite_at_attempt,
+            mixed_precision=args.mixed_precision,
+            device=device,
+            inject_nonfinite_at_attempt=args.inject_nonfinite_at_attempt,
         )
     else:
         model, observations = train_with_accelerate(
             model,
             optimizer,
             input_ids,
-            EFFECTIVE_BATCH_SIZE,
             accelerator=accelerator,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
             inject_nonfinite_at_attempt=args.inject_nonfinite_at_attempt,
         )
 
