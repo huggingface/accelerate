@@ -974,6 +974,28 @@ class ModelingUtilsTester(unittest.TestCase):
         max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
         assert {0: 0, "cpu": 100} == max_memory
 
+    @require_non_cpu
+    def test_get_balanced_memory_low_zero(self):
+        model = ModelForTest()
+        # model has size 236: linear1 64, batchnorm 72, linear2 100
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 300}, low_zero=True)
+        assert {0: 0, 1: 300} == max_memory
+
+        # The other devices are looked up by id, so a non-contiguous sub-set works here too.
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 2: 300}, low_zero=True)
+        assert {0: 0, 2: 300} == max_memory
+
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 3: 300}, low_zero=True)
+        assert {0: 0, 3: 300} == max_memory
+
+        # If we set a device to 0, it's not counted, and device 0 stays empty.
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 0, 2: 300}, low_zero=True)
+        assert {0: 0, 1: 0, 2: 300} == max_memory
+
+        # Device 0 only takes what does not fit on the others.
+        max_memory = get_balanced_memory(model, max_memory={0: 200, 2: 200}, low_zero=True)
+        assert {0: 36, 2: 200} == max_memory
+
     def test_get_balanced_memory_no_split_module_classes_set(self):
         """Regression test: no_split_module_classes should accept a set without raising TypeError.
 

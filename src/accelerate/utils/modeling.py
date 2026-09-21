@@ -1070,7 +1070,9 @@ def get_balanced_memory(
         max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
-        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        # `num_devices` is a count, not a list of ids, so the other GPUs must be read from `gpus_idx_list`:
+        # their ids are not necessarily `1, ..., num_devices - 1`.
+        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in gpus_idx_list[1:]]))
         max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory
