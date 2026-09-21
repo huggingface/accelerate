@@ -21,10 +21,17 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from transformers import Gemma4ForCausalLM, Gemma4TextConfig
 
 from accelerate import Accelerator
 from accelerate.utils import GradScalerKwargs, gather_object, set_seed
+
+
+NUM_UPDATE_ATTEMPTS = 10
+EFFECTIVE_BATCH_SIZE = 8
+INITIAL_LOSS_SCALE = 128.0
+LOSS_SCALE_BACKOFF = 0.5
+# Keep scale growth outside this short experiment; only an injected fault lowers it.
+SCALER_KWARGS = dict(init_scale=INITIAL_LOSS_SCALE, backoff_factor=LOSS_SCALE_BACKOFF, growth_interval=2000)
 
 
 def flatten_parameters(model):
@@ -33,6 +40,8 @@ def flatten_parameters(model):
 
 def create_model():
     """Create a tiny, randomly initialized Gemma 4 text model for offline tests."""
+    from transformers import Gemma4ForCausalLM, Gemma4TextConfig
+
     return Gemma4ForCausalLM(
         Gemma4TextConfig(
             vocab_size=32,
@@ -62,27 +71,47 @@ def create_model():
     )
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--reference", action="store_true")
     parser.add_argument("--mixed-precision", choices=("no", "bf16", "fp16"), default="no")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
-    return parser.parse_args()
-
-
-def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_precision, device):
-    """Train full effective batches with ordinary PyTorch as the reference."""
-    losses, step_was_skipped, loss_scales, parameters_unchanged_during_accumulation, parameters_changed = (
-        [],
-        [],
-        [],
-        [],
-        [],
+    parser.add_argument(
+        "--inject-nonfinite-at-attempt",
+        type=int,
+        default=None,
+        help="Test-only fault: inject infinite gradients on every rank at this zero-based update attempt (FP16 only).",
     )
+    args = parser.parse_args(argv)
+    if args.gradient_accumulation_steps < 1:
+        parser.error("gradient accumulation steps must be positive")
+    if args.inject_nonfinite_at_attempt is not None:
+        if args.mixed_precision != "fp16":
+            parser.error("nonfinite-gradient injection requires FP16")
+        if not 0 <= args.inject_nonfinite_at_attempt < NUM_UPDATE_ATTEMPTS:
+            parser.error(f"injection attempt must be between 0 and {NUM_UPDATE_ATTEMPTS - 1}")
+    return args
+
+
+def microbatch_size_for(effective_batch_size, world_size, gradient_accumulation_steps):
+    """Reject layouts that would silently truncate or change the effective batch."""
+    if min(effective_batch_size, world_size, gradient_accumulation_steps) < 1:
+        raise ValueError("batch size, world size and accumulation steps must be positive")
+    microbatch_size, remainder = divmod(effective_batch_size, world_size * gradient_accumulation_steps)
+    if remainder:
+        raise ValueError("effective batch size must be divisible by world size * accumulation steps")
+    return microbatch_size
+
+
+def train_reference(
+    model, optimizer, input_ids, effective_batch_size, mixed_precision, device, inject_nonfinite_at_attempt
+):
+    """Train full effective batches with ordinary PyTorch as the reference."""
+    attempts = []
 
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(mixed_precision)
-    scaler = torch.amp.GradScaler("cuda", init_scale=128.0, enabled=mixed_precision == "fp16")
+    scaler = torch.amp.GradScaler("cuda", enabled=mixed_precision == "fp16", **SCALER_KWARGS)
 
     for update_idx, batch in enumerate(input_ids.split(effective_batch_size)):
         optimizer.zero_grad(set_to_none=True)
@@ -90,32 +119,25 @@ def train_reference(model, optimizer, input_ids, effective_batch_size, mixed_pre
             loss = model(input_ids=batch.to(device), labels=batch.to(device)).loss
         scaler.scale(loss).backward()
 
-        # Inject nonfinite gradients to check skipped-step handling and recovery.
-        if mixed_precision == "fp16" and update_idx == 1:
+        # Faults are requested by the test, never implied by the precision mode.
+        if update_idx == inject_nonfinite_at_attempt:
             next(model.parameters()).grad.fill_(float("inf"))
         parameters_before_step = flatten_parameters(model).clone()
         previous_scale = scaler.get_scale()
         scaler.step(optimizer)
         scaler.update()
 
-        did_skip = scaler.get_scale() < previous_scale
-        if did_skip:
-            assert torch.equal(parameters_before_step, flatten_parameters(model))
-        parameters_changed.append(not torch.equal(parameters_before_step, flatten_parameters(model)))
-        losses.append(loss.detach().item())
-        step_was_skipped.append(did_skip)
-        loss_scales.append(scaler.get_scale())
+        attempts.append(
+            {
+                "index": update_idx,
+                "loss": loss.detach().item(),
+                "parameters_changed": not torch.equal(parameters_before_step, flatten_parameters(model)),
+                "step_was_skipped": scaler.get_scale() < previous_scale,
+                "loss_scale": scaler.get_scale(),
+            }
+        )
 
-    return (
-        model,
-        losses,
-        {
-            "parameters_changed": parameters_changed,
-            "step_was_skipped": step_was_skipped,
-            "loss_scales": loss_scales,
-            "parameters_unchanged_during_accumulation": parameters_unchanged_during_accumulation,
-        },
-    )
+    return model, {"attempts": attempts}
 
 
 def train_with_accelerate(
@@ -124,18 +146,14 @@ def train_with_accelerate(
     input_ids,
     effective_batch_size,
     accelerator,
-    mixed_precision,
     gradient_accumulation_steps,
+    inject_nonfinite_at_attempt,
 ):
-    losses, step_was_skipped, loss_scales, parameters_unchanged_during_accumulation, parameters_changed = (
-        [],
-        [],
-        [],
-        [],
-        [],
-    )
+    """Train distributed microbatches; let Accelerate own synchronization and scaling."""
+    attempts, parameters_unchanged_during_accumulation = [], []
+    update_attempt = 0
 
-    microbatch_size = effective_batch_size // (accelerator.num_processes * gradient_accumulation_steps)
+    microbatch_size = microbatch_size_for(effective_batch_size, accelerator.num_processes, gradient_accumulation_steps)
     dataloader = DataLoader(TensorDataset(input_ids), batch_size=microbatch_size, shuffle=False)
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
     window_loss = torch.zeros((), device=accelerator.device)
@@ -146,22 +164,27 @@ def train_with_accelerate(
             loss = model(input_ids=batch, labels=batch).loss
             accelerator.backward(loss)
 
-            if mixed_precision == "fp16" and len(losses) == 1 and accelerator.sync_gradients:
+            # Inject after backward on every rank, only at the requested update boundary.
+            # This does not test propagation of a fault originating on a single rank.
+            if accelerator.sync_gradients and update_attempt == inject_nonfinite_at_attempt:
                 next(model.parameters()).grad.fill_(float("inf"))
             optimizer.step()
             optimizer.zero_grad()
 
             window_loss += loss.detach() / gradient_accumulation_steps
             if accelerator.sync_gradients:
-                did_skip = accelerator.optimizer_step_was_skipped
-                if did_skip:
-                    assert torch.equal(parameters_before_step, flatten_parameters(model))
                 # Every microbatch has equal valid-target counts, so this mean
                 # reports the same effective-batch objective as the reference.
-                losses.append(accelerator.reduce(window_loss, reduction="mean").item())
-                parameters_changed.append(not torch.equal(parameters_before_step, flatten_parameters(model)))
-                step_was_skipped.append(did_skip)
-                loss_scales.append(accelerator.scaler.get_scale() if accelerator.scaler else 1.0)
+                attempts.append(
+                    {
+                        "index": update_attempt,
+                        "loss": accelerator.reduce(window_loss, reduction="mean").item(),
+                        "parameters_changed": not torch.equal(parameters_before_step, flatten_parameters(model)),
+                        "step_was_skipped": accelerator.optimizer_step_was_skipped,
+                        "loss_scale": accelerator.scaler.get_scale() if accelerator.scaler else 1.0,
+                    }
+                )
+                update_attempt += 1
                 window_loss.zero_()
             else:
                 parameters_unchanged_during_accumulation.append(
@@ -170,16 +193,10 @@ def train_with_accelerate(
 
     accelerator.wait_for_everyone()
 
-    return (
-        model,
-        losses,
-        {
-            "parameters_changed": parameters_changed,
-            "step_was_skipped": step_was_skipped,
-            "loss_scales": loss_scales,
-            "parameters_unchanged_during_accumulation": parameters_unchanged_during_accumulation,
-        },
-    )
+    return model, {
+        "attempts": attempts,
+        "parameters_unchanged_during_accumulation": parameters_unchanged_during_accumulation,
+    }
 
 
 def main():
@@ -190,18 +207,21 @@ def main():
         accelerator = Accelerator(
             mixed_precision=args.mixed_precision,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
-            kwargs_handlers=[GradScalerKwargs(init_scale=128.0)],
+            kwargs_handlers=[GradScalerKwargs(**SCALER_KWARGS)],
         )
+    microbatch_size_for(
+        EFFECTIVE_BATCH_SIZE, 1 if args.reference else accelerator.num_processes, args.gradient_accumulation_steps
+    )
     device = torch.device("cuda:0") if args.reference else accelerator.device
 
     # Limit numerical variation when comparing different batch layouts and process counts.
     torch.set_float32_matmul_precision("highest")
     set_seed(1337, deterministic=True)
 
-    num_updates = 10
-    effective_batch_size = 8
+    # Complete effective batches, with equal-length, unmasked targets in every row.
+    # The mean-of-means comparison below does not cover unequal valid-token counts.
     input_ids = torch.randint(
-        3, 32, (num_updates * effective_batch_size, 12), generator=torch.Generator().manual_seed(1337)
+        3, 32, (NUM_UPDATE_ATTEMPTS * EFFECTIVE_BATCH_SIZE, 12), generator=torch.Generator().manual_seed(1337)
     )
 
     model = create_model()
@@ -219,18 +239,24 @@ def main():
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
 
     if args.reference:
-        model, losses, observations = train_reference(
-            model, optimizer, input_ids, effective_batch_size, args.mixed_precision, device
-        )
-    else:
-        model, losses, observations = train_with_accelerate(
+        model, observations = train_reference(
             model,
             optimizer,
             input_ids,
-            effective_batch_size,
+            EFFECTIVE_BATCH_SIZE,
+            args.mixed_precision,
+            device,
+            args.inject_nonfinite_at_attempt,
+        )
+    else:
+        model, observations = train_with_accelerate(
+            model,
+            optimizer,
+            input_ids,
+            EFFECTIVE_BATCH_SIZE,
             accelerator=accelerator,
-            mixed_precision=args.mixed_precision,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
+            inject_nonfinite_at_attempt=args.inject_nonfinite_at_attempt,
         )
 
     hook.remove()
@@ -248,7 +274,6 @@ def main():
         args.output.write_text(
             json.dumps(
                 {
-                    "losses": losses,
                     "parameters": flatten_parameters(model).cpu().tolist(),
                     "parameter_delta_norm": (flatten_parameters(model).cpu() - initial_parameters).norm().item(),
                     "world_size": 1 if args.reference else accelerator.num_processes,
