@@ -37,9 +37,13 @@ from accelerate.utils import ComputeEnvironment, DistributedType, patch_environm
 @pytest.mark.parametrize(
     "mixed_precision, gradient_accumulation_steps, loss_atol, parameter_atol",
     [
+        # Does distributing FP32 training work without gradient accumulation?
         pytest.param("no", 1, 1e-4, 1e-5, id="fp32_ddp"),
+        # Does it still work when we add gradient accumulation?
         pytest.param("no", 2, 1e-4, 1e-5, id="fp32_accumulation"),
+        # Does accumulation work with BF16 mixed precision?
         pytest.param("bf16", 2, 1e-2, 1e-3, id="bf16_accumulation"),
+        # Does it work with FP16 gradient scaling and skipped updates?
         pytest.param("fp16", 2, 1e-3, 1e-4, id="fp16_accumulation"),
     ],
 )
