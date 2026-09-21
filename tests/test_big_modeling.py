@@ -800,10 +800,17 @@ class BigModelingTester(unittest.TestCase):
         model = ModelForTest()
         device_map = {"": 0}
         with mock.patch("torch.accelerator.is_available", return_value=True), \
-             mock.patch("torch.accelerator.current_accelerator", return_value=torch.device("xpu")), \
+             mock.patch("torch.accelerator.current_accelerator", return_value=torch.device("tpu")), \
              mock.patch.object(model, "to") as mock_to:
             dispatch_model(model, device_map)
-            mock_to.assert_called_once_with("xpu:0")
+            mock_to.assert_called_once_with("tpu:0")
+
+        # Verify CUDA path remains intact (leaves integer device index unchanged)
+        with mock.patch("torch.accelerator.is_available", return_value=True), \
+             mock.patch("torch.accelerator.current_accelerator", return_value=torch.device("cuda")), \
+             mock.patch.object(model, "to") as mock_to:
+            dispatch_model(model, device_map)
+            mock_to.assert_called_once_with(0)
 
     @require_non_cpu
     def test_dispatch_model_force_hooks(self):

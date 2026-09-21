@@ -339,7 +339,12 @@ def set_module_tensor_to_device(
                 device = f"musa:{device}"
             elif is_hpu_available():
                 device = "hpu"
-            elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+            elif (
+                hasattr(torch, "accelerator")
+                and torch.accelerator.is_available()
+                # Keep native CUDA path intact.
+                and torch.accelerator.current_accelerator().type != "cuda"
+            ):
                 device = f"{torch.accelerator.current_accelerator().type}:{device}"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
@@ -814,7 +819,12 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
-        elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+        elif (
+            hasattr(torch, "accelerator")
+            and torch.accelerator.is_available()
+            # Keep native CUDA path intact.
+            and torch.accelerator.current_accelerator().type != "cuda"
+        ):
             acc_type = torch.accelerator.current_accelerator().type
             for i in range(torch.accelerator.device_count()):
                 try:
@@ -865,7 +875,12 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.xpu.device_count()
     elif is_hpu_available():
         num_devices = torch.hpu.device_count()
-    elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+    elif (
+        hasattr(torch, "accelerator")
+        and torch.accelerator.is_available()
+        # Keep native CUDA path intact.
+        and torch.accelerator.current_accelerator().type != "cuda"
+    ):
         num_devices = torch.accelerator.device_count()
     else:
         num_devices = torch.cuda.device_count()
@@ -1002,7 +1017,12 @@ def get_balanced_memory(
         expected_device_type = "hpu"
     elif is_mps_available():
         expected_device_type = "mps"
-    elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+    elif (
+        hasattr(torch, "accelerator")
+        and torch.accelerator.is_available()
+        # Keep native CUDA path intact.
+        and torch.accelerator.current_accelerator().type != "cuda"
+    ):
         expected_device_type = torch.accelerator.current_accelerator().type
     else:
         expected_device_type = "cuda"

@@ -510,7 +510,13 @@ def dispatch_model(
             device = f"musa:{device}"
         elif is_neuron_available() and isinstance(device, int):
             device = f"neuron:{device}"
-        elif isinstance(device, int) and hasattr(torch, "accelerator") and torch.accelerator.is_available():
+        elif (
+            isinstance(device, int)
+            and hasattr(torch, "accelerator")
+            and torch.accelerator.is_available()
+            # Keep native CUDA path intact.
+            and torch.accelerator.current_accelerator().type != "cuda"
+        ):
             device = f"{torch.accelerator.current_accelerator().type}:{device}"
         model.to(device)
     # Convert OrderedDict back to dict for easier usage
