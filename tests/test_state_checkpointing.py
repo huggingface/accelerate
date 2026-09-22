@@ -20,14 +20,19 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import patch
 
+import numpy as np
 import pytest
 import torch
-from parameterized import parameterized_class
+from parameterized import parameterized, parameterized_class
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
+from accelerate.checkpointing import load_accelerator_state, save_accelerator_state
+from accelerate.state import PartialState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
@@ -36,7 +41,7 @@ from accelerate.test_utils import (
     run_first,
 )
 from accelerate.test_utils.testing import AccelerateTestCase
-from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
+from accelerate.utils import RNG_STATE_NAME, DistributedType, ProjectConfiguration, patch_environment, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +90,43 @@ class DummyModel(nn.Module):
 
     def forward(self, x):
         return x * self.a + self.b
+
+
+class RandomStateCheckpointTest(AccelerateTestCase):
+    @parameterized.expand([(failure, rank) for failure in ("missing", "corrupt", "invalid_state") for rank in (0, 1)])
+    def test_failed_rng_restore_warns(self, failure, rank):
+        state = PartialState(cpu=True)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rng_file = Path(tmpdir) / f"{RNG_STATE_NAME}_{rank}.pkl"
+            if failure == "corrupt":
+                rng_file.write_bytes(b"CORRUPTED")
+            elif failure == "invalid_state":
+                torch.save({"random_state": None}, rng_file)
+
+            with patch.object(state, "process_index", rank):
+                with self.assertLogs("accelerate.checkpointing", level="WARNING") as logs:
+                    attributes = load_accelerator_state(tmpdir, [], [], [], [], rank)
+
+            self.assertEqual(attributes, {})
+            self.assertEqual(len(logs.records), 1)
+            self.assertEqual(logs.records[0].levelno, logging.WARNING)
+            self.assertIn(str(rng_file), logs.output[0])
+            self.assertIn(f"[RANK {rank}]", logs.output[0])
+            self.assertIn("reproducibility", logs.output[0])
+
+    def test_successful_rng_restore(self):
+        PartialState(cpu=True)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_accelerator_state(Path(tmpdir), [], [], [], [], 0, step=12)
+            expected = (random.random(), np.random.random(), torch.rand(3))
+
+            with self.assertNoLogs("accelerate.checkpointing", level="WARNING"):
+                attributes = load_accelerator_state(tmpdir, [], [], [], [], 0)
+
+            self.assertEqual(attributes, {"step": 12})
+            self.assertEqual(random.random(), expected[0])
+            self.assertEqual(np.random.random(), expected[1])
+            torch.testing.assert_close(torch.rand(3), expected[2], rtol=0, atol=0)
 
 
 def parameterized_custom_name_func(func, param_num, param):

@@ -290,8 +290,9 @@ def load_accelerator_state(
         logger.info("GradScaler state loaded successfully")
 
     # Random states
+    input_rng_file = input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl")
     try:
-        states = load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
+        states = load(input_rng_file)
         if "step" in states:
             override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
@@ -314,8 +315,11 @@ def load_accelerator_state(
         if is_torch_xla_available():
             xm.set_rng_state(states["xm_seed"])
         logger.info("All random states loaded successfully")
-    except Exception:
-        logger.info("Could not load random states")
+    except Exception as e:
+        logger.warning(
+            f"Could not load random states from {input_rng_file}: {e}. Training reproducibility may be affected.",
+            main_process_only=False,
+        )
 
     return override_attributes
 
