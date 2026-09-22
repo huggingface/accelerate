@@ -161,6 +161,12 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
             for name, value in list(new_module.__dict__.items()):
                 if hasattr(value, "__func__") and getattr(value, "__self__", None) is module:
                     new_module.__dict__[name] = MethodType(value.__func__, new_module)
+                elif isinstance(value, partial) and value.args and value.args[0] is module:
+                    # Hooks bind the original module as the first partial argument. Rebind it so the copy calls the
+                    # compiled children instead of the original, uncompiled module.
+                    new_module.__dict__[name] = partial(
+                        value.func, new_module, *value.args[1:], **value.keywords
+                    )
             new_module._modules = {}
             for name, submodule in module.named_children():
                 new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))

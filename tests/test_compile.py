@@ -194,6 +194,25 @@ class RegionalCompilationRebindTester(unittest.TestCase):
         assert not hasattr(model, "trace")
         assert compiled_model.trace == ("twin", "OptimizedModule")
 
+    def test_hook_bound_partials_are_rebound(self):
+        from accelerate.hooks import ModelHook, add_hook_to_module
+
+        model, inputs = self._get_model_and_inputs()
+        add_hook_to_module(model, ModelHook())
+        assert model.__dict__["forward"].args[0] is model
+
+        compiled_model = compile_regions(model, backend="eager")
+        compiled_model.tag = "twin"
+
+        assert compiled_model.__dict__["forward"].args[0] is compiled_model
+
+        calls = []
+        for block in compiled_model.blocks:
+            block.register_forward_pre_hook(lambda module, args: calls.append(module))
+
+        compiled_model(inputs)
+        assert len(calls) == len(model.blocks)
+
     def test_no_instance_bound_methods_is_a_no_op(self):
         model, inputs = self._get_model_and_inputs()
         assert "forward" not in model.__dict__
