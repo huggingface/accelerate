@@ -376,6 +376,64 @@ class CheckpointTest(AccelerateTestCase):
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
 
+    def test_automatic_loading_without_any_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = accelerator.prepare(model)
+            # An empty `checkpoints` folder is what an interrupted first `save_state` leaves behind
+            os.makedirs(os.path.join(tmpdir, "checkpoints"), exist_ok=True)
+            with self.assertRaises(ValueError) as ve:
+                accelerator.load_state()
+            message = str(ve.exception)
+            assert "checkpoint_<n>" in message
+            assert os.path.join(tmpdir, "checkpoints") in message
+
+    def test_automatic_loading_ignores_other_entries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = accelerator.prepare(model)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            with torch.no_grad():
+                model.a.fill_(1.0)
+                model.b.fill_(2.0)
+            # `checkpoint_1` is the one `load_state` must pick up
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            checkpoints_dir = os.path.join(tmpdir, "checkpoints")
+            open(os.path.join(checkpoints_dir, ".DS_Store"), "w").close()
+            os.makedirs(os.path.join(checkpoints_dir, "best_model"))
+            with torch.no_grad():
+                model.a.fill_(0.0)
+                model.b.fill_(0.0)
+
+            accelerator.load_state()
+            assert model.a.item() == 1.0
+            assert model.b.item() == 2.0
+
+    def test_checkpoint_deletion_ignores_other_entries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True, total_limit=2)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = accelerator.prepare(model)
+            checkpoints_dir = os.path.join(tmpdir, "checkpoints")
+            # Save 3 states, with a stray file dropped in after the first one
+            for step in range(3):
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+                if step == 0:
+                    open(os.path.join(checkpoints_dir, "train_log_9.txt"), "w").close()
+            assert not os.path.exists(os.path.join(checkpoints_dir, "checkpoint_0"))
+            assert os.path.exists(os.path.join(checkpoints_dir, "checkpoint_1"))
+            assert os.path.exists(os.path.join(checkpoints_dir, "checkpoint_2"))
+            assert os.path.exists(os.path.join(checkpoints_dir, "train_log_9.txt"))
+
     @run_first
     @require_non_cpu
     @require_non_torch_xla

@@ -181,6 +181,26 @@ _dispatch_batches = object()
 _even_batches = object()
 _use_seedable_sampler = object()
 
+# Matches the folder names `save_state` creates when `automatic_checkpoint_naming` is on.
+_CHECKPOINT_FOLDER_PATTERN = re.compile(r"^checkpoint_(\d+)$")
+
+
+def _sorted_checkpoint_folders(checkpoints_dir: str) -> list[str]:
+    """
+    Returns the paths of the automatically named checkpoint folders inside `checkpoints_dir`, oldest first.
+
+    Only directories named `checkpoint_<n>` are returned and they are ordered by `<n>`, so anything else living in the
+    folder (a `.DS_Store` file, a `best_model` directory, a training log) is left alone instead of being counted,
+    sorted or deleted as if it were a checkpoint.
+    """
+    checkpoints = []
+    for name in os.listdir(checkpoints_dir):
+        match = _CHECKPOINT_FOLDER_PATTERN.match(name)
+        path = os.path.join(checkpoints_dir, name)
+        if match is not None and os.path.isdir(path):
+            checkpoints.append((int(match.group(1)), path))
+    return [path for _, path in sorted(checkpoints)]
+
 
 class Accelerator:
     """
@@ -3664,17 +3684,12 @@ class Accelerator:
             output_dir = os.path.join(self.project_dir, "checkpoints")
         os.makedirs(output_dir, exist_ok=True)
         if self.project_configuration.automatic_checkpoint_naming:
-            folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
+            folders = _sorted_checkpoint_folders(output_dir)
             if (
                 self.project_configuration.total_limit is not None
                 and (len(folders) + 1 > self.project_configuration.total_limit)
                 and self.is_main_process
             ):
-
-                def _inner(folder):
-                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
-
-                folders.sort(key=_inner)
                 logger.warning(
                     f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
                 )
@@ -3830,12 +3845,9 @@ class Accelerator:
         elif self.project_configuration.automatic_checkpoint_naming:
             # Pick up from automatic checkpoint naming
             input_dir = os.path.join(self.project_dir, "checkpoints")
-            folders = [os.path.join(input_dir, folder) for folder in os.listdir(input_dir)]
-
-            def _inner(folder):
-                return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
-
-            folders.sort(key=_inner)
+            folders = _sorted_checkpoint_folders(input_dir)
+            if len(folders) == 0:
+                raise ValueError(f"Tried to find a `checkpoint_<n>` folder in {input_dir} but there is none")
             input_dir = folders[-1]
         else:
             raise ValueError("No input_dir provided and automatic checkpoint naming is disabled.")
