@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, SequentialSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -569,6 +569,24 @@ class DataLoaderTester(AccelerateTestCase):
             vals_3.append(val)
 
         assert vals_1 != vals_3
+
+    @parameterized.expand([1, 2], name_func=parameterized_custom_name_func)
+    def test_batch_sampler_passed_as_sampler(self, num_processes):
+        # `DataLoader(sampler=BatchSampler(...), batch_size=None)` keeps the batching on
+        # `sampler` and leaves `batch_sampler` unset. At one process nothing carried it over,
+        # so `batch_size` reached `DataLoaderShard` twice and construction raised.
+        dataset = torch.arange(16)
+        batch_sampler = BatchSampler(SequentialSampler(dataset), batch_size=4, drop_last=False)
+        dataloader = DataLoader(dataset, sampler=batch_sampler, batch_size=None)
+
+        prepared = prepare_data_loader(dataloader, num_processes=num_processes, process_index=0)
+
+        expected = (
+            [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
+            if num_processes == 1
+            else [[0, 1, 2, 3], [8, 9, 10, 11]]
+        )
+        assert [batch.tolist() for batch in prepared] == expected
 
     def test_skip_batch_sampler(self):
         batch_sampler = BatchSampler(range(16), batch_size=4, drop_last=False)

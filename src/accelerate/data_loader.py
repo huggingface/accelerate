@@ -1259,6 +1259,14 @@ def prepare_data_loader(
                 even_batches=even_batches,
             )
 
+    if sampler_is_batch_sampler and new_batch_sampler is None and not dispatch_batches:
+        # `DataLoader(sampler=BatchSampler(...), batch_size=None)` keeps the batching on
+        # `sampler`, and the shard above is the only place that looks there. At one process
+        # that block is skipped, so `batch_size` below lands in `kwargs` and collides with the
+        # explicit one the `sampler_is_batch_sampler` branch passes. Sharding is what one
+        # process does not need; the batch sampler itself it still does.
+        new_batch_sampler = dataloader.sampler
+
     # We ignore all of those since they are all dealt with by our new_batch_sampler
     ignore_kwargs = [
         "batch_size",
