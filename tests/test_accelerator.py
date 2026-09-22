@@ -153,6 +153,29 @@ class AcceleratorTester(AccelerateTestCase):
         state.someotherthing = "MyValue"
         assert state.someotherthing == "MyValue"
 
+    def test_split_between_processes_tuple_padding(self):
+        class _FakeState:
+            split_between_processes = PartialState.split_between_processes
+
+            def __init__(self, process_index):
+                self.num_processes = 2
+                self.process_index = process_index
+
+        state = _FakeState(process_index=0)
+        with state.split_between_processes((1, 2, 3), apply_padding=True) as result:
+            assert result == (1, 2)
+            assert isinstance(result, tuple)
+
+        state = _FakeState(process_index=1)
+        with state.split_between_processes((1, 2, 3), apply_padding=True) as result:
+            assert result == (3, 3)
+            assert isinstance(result, tuple)
+
+        state = _FakeState(process_index=0)
+        with state.split_between_processes([1, 2, 3], apply_padding=True) as result:
+            assert result == [1, 2]
+            assert isinstance(result, list)
+
     def test_accelerator_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to
