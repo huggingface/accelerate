@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -24,7 +26,7 @@ import accelerate.commands.env as accelerate_env_cmd
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
 from accelerate.commands.estimate import add_timm_hub_prefix, estimate_command, estimate_command_parser, gather_data
-from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
+from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser, simple_launcher
 from accelerate.commands.to_fsdp2 import (
     convert_config_to_fsdp2,
     to_fsdp2_command,
@@ -180,6 +182,22 @@ class AccelerateLauncherTester(unittest.TestCase):
             _, current_env = prepare_simple_launcher_cmd_env(args)
             assert "KMP_AFFINITY" not in current_env
             assert "KMP_BLOCKTIME" not in current_env
+
+    def test_simple_launcher_includes_child_stderr_in_error(self):
+        """A failed child process should expose its own error to callers catching the exception."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            child_path = Path(tmp_dir) / "failing_child.py"
+            child_path.write_text("raise ValueError('the real cause')\n")
+
+            args = launch_command_parser().parse_args(
+                ["--cpu", "--num_processes", "1", str(child_path)]
+            )
+            args, _, _ = _validate_launch_command(args)
+
+            with self.assertRaises(subprocess.CalledProcessError) as context:
+                simple_launcher(args)
+
+            self.assertIn("the real cause", context.exception.stderr)
 
     def test_validate_launch_command(self):
         """Test that the validation function combines args and defaults."""
