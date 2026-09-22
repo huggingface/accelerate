@@ -17,6 +17,7 @@ import weakref
 
 import pytest
 import torch
+from unittest.mock import MagicMock
 from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
@@ -664,6 +665,34 @@ class DataLoaderTester(AccelerateTestCase):
 
         test_iteration(DataLoaderShard)
         test_iteration(DataLoaderDispatcher)
+
+    def test_skip_first_batches_preserves_loader_config(self):
+        shard = DataLoaderShard(
+            list(range(16)),
+            batch_size=4,
+            _drop_last=True,
+            _non_blocking=True,
+            torch_device_mesh=MagicMock(),
+        )
+        skipped_shard = skip_first_batches(shard, num_batches=1)
+        assert skipped_shard._drop_last is True
+        assert skipped_shard._non_blocking is True
+        assert skipped_shard.torch_device_mesh is shard.torch_device_mesh
+
+        def slice_fn(batch):
+            return batch
+        dispatcher = DataLoaderDispatcher(
+            list(range(16)),
+            batch_size=4,
+            _drop_last=True,
+            _non_blocking=True,
+            slice_fn=slice_fn,
+            torch_device_mesh=MagicMock(),
+        )
+        skipped_dispatcher = skip_first_batches(dispatcher, num_batches=1)
+        assert skipped_dispatcher._non_blocking is True
+        assert skipped_dispatcher.slice_fn is slice_fn
+        assert skipped_dispatcher.torch_device_mesh is not None
 
     def test_skip_first_batches_does_not_reset_sampler_epoch(self):
         # Regression test: skip_first_batches must preserve the original dataloader.batch_sampler.sampler's iteration.
