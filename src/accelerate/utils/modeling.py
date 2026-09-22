@@ -990,13 +990,15 @@ def get_balanced_memory(
     # Integer keys always refer to accelerator devices, so they are counted directly: resolving them through
     # `torch.device` errors out on machines without an accelerator ("Cannot access accelerator device when
     # none is available.").
-    num_devices = len(
-        [
-            d
-            for d in max_memory
-            if (isinstance(d, int) or torch.device(d).type == expected_device_type) and max_memory[d] > 0
-        ]
+    gpus_idx_list = list(
+        sorted(
+            device_id
+            for device_id, device_mem in max_memory.items()
+            if (isinstance(device_id, int) or torch.device(device_id).type == expected_device_type)
+            and device_mem > 0
+        )
     )
+    num_devices = len(gpus_idx_list)
 
     if num_devices == 0:
         return max_memory
@@ -1059,18 +1061,12 @@ def get_balanced_memory(
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
-    # Sorted list of GPUs id (we may have some gpu ids not included in the our max_memory list - let's ignore them)
-    gpus_idx_list = list(
-        sorted(
-            device_id for device_id, device_mem in max_memory.items() if isinstance(device_id, int) and device_mem > 0
-        )
-    )
     # The last device is left with max_memory just in case the buffer is not enough.
     for idx in gpus_idx_list[:-1]:
         max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
-        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        min_zero = max(0, module_sizes[""] - sum(max_memory[device_id] for device_id in gpus_idx_list[1:]))
         max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory

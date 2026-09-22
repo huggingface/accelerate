@@ -20,6 +20,8 @@ import logging
 import os
 import subprocess
 import sys
+from collections import deque
+import threading
 from pathlib import Path
 
 import torch
@@ -992,11 +994,31 @@ def launch_command_parser(subparsers=None):
 def simple_launcher(args):
     cmd, current_env = prepare_simple_launcher_cmd_env(args)
 
-    process = subprocess.Popen(cmd, env=current_env)
+    process = subprocess.Popen(cmd, env=current_env, stderr=subprocess.PIPE, text=True, errors="replace")
+    # Keep the child's stderr flowing while retaining a bounded tail. Programmatic callers can otherwise only see
+    # "returned non-zero exit status", even when the child printed the actual cause just above.
+    captured_stderr = deque(maxlen=200)
+
+    def _forward_stderr():
+        for line in iter(process.stderr.readline, ""):
+            if not args.quiet:
+                sys.stderr.write(line)
+                sys.stderr.flush()
+            captured_stderr.append(line)
+        process.stderr.close()
+
+    stderr_reader = threading.Thread(target=_forward_stderr)
+    stderr_reader.start()
     process.wait()
+    stderr_reader.join()
+
     if process.returncode != 0:
         if not args.quiet:
-            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+            raise subprocess.CalledProcessError(
+                returncode=process.returncode,
+                cmd=cmd,
+                stderr="".join(captured_stderr),
+            )
         else:
             sys.exit(1)
 
