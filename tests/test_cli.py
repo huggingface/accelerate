@@ -23,13 +23,7 @@ from huggingface_hub.utils import GatedRepoError
 import accelerate.commands.env as accelerate_env_cmd
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
-from accelerate.commands.estimate import (
-    add_timm_hub_prefix,
-    create_empty_model,
-    estimate_command,
-    estimate_command_parser,
-    gather_data,
-)
+from accelerate.commands.estimate import add_timm_hub_prefix, estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
 from accelerate.commands.to_fsdp2 import (
     convert_config_to_fsdp2,
@@ -576,24 +570,12 @@ class ModelEstimatorTester(unittest.TestCase):
 
     @require_transformers
     def test_no_split_modules(self):
-        args = self.parser.parse_args(["HuggingFaceM4/idefics-80b-instruct", "--dtypes", "float32"])
-        model = create_empty_model(args.model_name, library_name=args.library_name)
-        with patch("accelerate.commands.estimate.create_empty_model", return_value=model):
-            output = gather_data(args)
-
-        def module_size(module, recurse=True):
-            tensors = list(module.parameters(recurse=recurse)) + list(module.buffers(recurse=recurse))
-            return sum(tensor.numel() * tensor.element_size() for tensor in tensors)
-
-        largest_leaf = max(
-            module_size(module, recurse=False) for module in model.modules() if not list(module.children())
-        )
-        largest_no_split = max(
-            module_size(module) for module in model.modules() if module.__class__.__name__ in model._no_split_modules
-        )
-
-        assert output[0][1] > largest_leaf, "Largest layer calculation did not factor in `no_split` modules."
-        assert output[0][1] == largest_no_split
+        args = self.parser.parse_args(["huggyllama/llama-7b", "--dtypes", "float32"])
+        output = gather_data(args)
+        # LlamaDecoderLayer: four attention matrices, three MLP matrices and two layer norms, all FP32.
+        # (4 * 4096**2 + 3 * 4096 * 11008 + 2 * 4096) * 4 = 809533440 bytes.
+        # Ignoring no-split layers would instead select the 524288000-byte token embedding.
+        assert output[0][1] == 809533440
 
     @require_timm
     def test_timm_model(self):
