@@ -11,6 +11,8 @@ env:
 
 jobs:
   check-for-source:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     name: Check if setup was changed
     outputs:

@@ -2,8 +2,12 @@ name: Quality Check
 
 on: [pull_request]
 
+permissions: {}
+
 jobs:
   quality:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
