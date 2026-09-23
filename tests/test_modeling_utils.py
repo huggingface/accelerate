@@ -974,6 +974,19 @@ class ModelingUtilsTester(unittest.TestCase):
         max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
         assert {0: 0, "cpu": 100} == max_memory
 
+    @require_non_cpu
+    def test_get_balanced_memory_low_zero_non_contiguous(self):
+        model = ModelForTest()
+        max_memory = get_balanced_memory(model, max_memory={0: 200, 1: 0, 2: 200}, low_zero=True)
+        assert max_memory[0] == 0
+
+    @require_non_cpu
+    def test_get_balanced_memory_low_zero_missing_device(self):
+        model = ModelForTest()
+        max_memory = get_balanced_memory(model, max_memory={0: 200, 3: 200}, low_zero=True)
+        assert max_memory[0] == 0
+        assert max_memory[3] == 200
+
     def test_get_balanced_memory_no_split_module_classes_set(self):
         """Regression test: no_split_module_classes should accept a set without raising TypeError.
 
