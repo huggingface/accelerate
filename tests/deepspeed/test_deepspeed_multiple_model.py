@@ -29,7 +29,11 @@ from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.commands.launch import launch_command, launch_command_parser
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
+    execute_subprocess_async,
+    get_launch_command,
+    get_torch_dist_unique_port,
     path_in_accelerate_package,
+    require_cuda,
     require_deepspeed,
     require_huggingface_suite,
     require_multi_device,
@@ -111,6 +115,20 @@ class DeepSpeedInitializationContextTests(AccelerateTestCase):
             assert deepspeed_config() == plugin.deepspeed_config
             assert not is_deepspeed_zero3_enabled()
         assert deepspeed_config() == plugin.deepspeed_config
+
+    @require_cuda
+    @require_multi_device
+    def test_disabled_model_initialization_on_two_gpus(self) -> None:
+        command = get_launch_command(
+            multi_gpu=True,
+            num_processes=2,
+            num_machines=1,
+            main_process_port=get_torch_dist_unique_port(),
+        )
+        command.append(
+            path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_zero3_init_context.py")
+        )
+        execute_subprocess_async(cmd=command)
 
 
 @require_deepspeed
