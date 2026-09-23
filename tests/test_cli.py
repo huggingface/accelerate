@@ -15,6 +15,7 @@
 import os
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import torch
@@ -41,7 +42,7 @@ from accelerate.test_utils.testing import (
     run_command,
     run_first,
 )
-from accelerate.utils import patch_environment
+from accelerate.utils import ComputeEnvironment, DistributedType, DynamoBackend, patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
 
 
@@ -267,6 +268,36 @@ class ClusterConfigTester(unittest.TestCase):
     """
 
     test_config_path = Path("tests/test_configs")
+
+    def test_serialization_preserves_config(self):
+        for method in ("to_dict", "to_json_file", "to_yaml_file"):
+            with self.subTest(method=method), TemporaryDirectory() as directory:
+                nested = {"backend": DynamoBackend.EAGER, "options": {}}
+                config = ClusterConfig(
+                    compute_environment="LOCAL_MACHINE",
+                    distributed_type="NO",
+                    mixed_precision="no",
+                    debug=False,
+                    use_cpu=True,
+                    dynamo_config={"nested": nested},
+                )
+                if method == "to_dict":
+                    serialized = config.to_dict()
+                else:
+                    filename = Path(directory) / ("config.json" if method == "to_json_file" else "config.yaml")
+                    getattr(config, method)(str(filename))
+                    serialized = load_config_from_file(str(filename)).to_dict()
+
+                assert config.compute_environment is ComputeEnvironment.LOCAL_MACHINE
+                assert config.distributed_type is DistributedType.NO
+                assert config.deepspeed_config == {}
+                assert config.dynamo_config["nested"] is nested
+                assert nested["backend"] is DynamoBackend.EAGER
+                assert nested["options"] == {}
+                assert serialized["dynamo_config"]["nested"] == {"backend": "EAGER", "options": None}
+                assert "deepspeed_config" not in serialized
+                serialized["dynamo_config"]["nested"]["backend"] = "INDUCTOR"
+                assert nested["backend"] is DynamoBackend.EAGER
 
     def test_base_config(self):
         # Tests that all the dataclasses can be initialized

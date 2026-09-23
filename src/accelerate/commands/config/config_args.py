@@ -16,6 +16,7 @@
 
 import json
 import os
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Union
@@ -81,7 +82,7 @@ class BaseConfig:
     debug: bool
 
     def to_dict(self):
-        result = self.__dict__
+        result = deepcopy(self.__dict__)
         # For serialization, it's best to convert Enums to strings (or their underlying value type).
 
         def _convert_enums(value):
