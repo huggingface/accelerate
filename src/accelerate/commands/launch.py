@@ -994,10 +994,6 @@ def launch_command_parser(subparsers=None):
     return parser
 
 
-class ChildProcessFailure(RuntimeError):
-    """Tail of a launched process's stderr, raised as the cause so the failure survives the process boundary."""
-
-
 def simple_launcher(args):
     cmd, current_env = prepare_simple_launcher_cmd_env(args)
 
@@ -1014,7 +1010,7 @@ def simple_launcher(args):
             stderr = b"".join(tail).decode(errors="replace")
             raise subprocess.CalledProcessError(
                 returncode=process.returncode, cmd=cmd, stderr=stderr
-            ) from ChildProcessFailure(stderr)
+            ) from RuntimeError(stderr)
         else:
             sys.exit(1)
 
