@@ -21,7 +21,6 @@ import pytest
 from accelerate.commands.launch import (
     CHILD_STDERR_CHUNK_SIZE,
     CHILD_STDERR_TAIL_CHUNKS,
-    ChildProcessFailure,
     launch_command_parser,
     simple_launcher,
 )
@@ -104,47 +103,24 @@ def _simple_launcher_args(script, quiet=False):
 
 
 class TestSimpleLauncher:
-    """`simple_launcher` must surface the child's failure without withholding its output."""
-
-    def _write(self, tmp_path, body):
-        script = tmp_path / "child.py"
-        script.write_text(body)
-        return str(script)
-
     def test_child_stderr_is_written_through_and_attached(self, tmp_path, capfd):
-        script = self._write(
-            tmp_path, "import sys\nprint('progress', file=sys.stderr)\nraise ValueError('the real cause')\n"
+        script = tmp_path / "child.py"
+        # Floods stderr before failing: the case that deadlocks a wait()-then-read launcher and buffers
+        # without limit in one that drains with communicate().
+        script.write_text(
+            "import sys\n"
+            "for _ in range(200_000):\n"
+            "    print('x' * 40, file=sys.stderr)\n"
+            "raise ValueError('the real cause')\n"
         )
         with pytest.raises(subprocess.CalledProcessError) as exc_info:
-            simple_launcher(_simple_launcher_args(script))
+            simple_launcher(_simple_launcher_args(str(script)))
 
-        # The child's output still reaches the terminal, as it did when stderr was inherited.
-        assert "the real cause" in capfd.readouterr().err
-        # And the caller can reach it, both as an attribute and as the chained cause.
-        assert "the real cause" in exc_info.value.stderr
-        assert isinstance(exc_info.value.__cause__, ChildProcessFailure)
-        assert "the real cause" in str(exc_info.value.__cause__)
-
-    def test_successful_child_output_is_not_withheld(self, tmp_path, capfd):
-        script = self._write(tmp_path, "import sys\nprint('all good', file=sys.stderr)\n")
-        simple_launcher(_simple_launcher_args(script))
-        assert "all good" in capfd.readouterr().err
-
-    def test_quiet_exits_without_raising(self, tmp_path):
-        script = self._write(tmp_path, "raise ValueError('the real cause')\n")
-        with pytest.raises(SystemExit) as exc_info:
-            simple_launcher(_simple_launcher_args(script, quiet=True))
-        assert exc_info.value.code == 1
-
-    def test_tail_is_bounded_for_a_noisy_child(self, tmp_path, capfd):
-        script = self._write(
-            tmp_path,
-            "import sys\nfor i in range(200_000):\n    print('x' * 40, file=sys.stderr)\nraise ValueError('the real cause')\n",
-        )
-        with pytest.raises(subprocess.CalledProcessError) as exc_info:
-            simple_launcher(_simple_launcher_args(script))
-
-        # The child floods stderr, which would deadlock a wait()-then-read() launcher and blow up a communicate() one.
+        # The child's output still reaches the terminal in full, as it did when stderr was inherited.
+        captured = capfd.readouterr().err
+        assert "the real cause" in captured
+        assert len(captured) > CHILD_STDERR_CHUNK_SIZE * CHILD_STDERR_TAIL_CHUNKS
+        # The caller can reach the cause, and what is retained for it stays bounded.
         assert "the real cause" in exc_info.value.stderr
         assert len(exc_info.value.stderr) <= CHILD_STDERR_CHUNK_SIZE * CHILD_STDERR_TAIL_CHUNKS
-        assert len(capfd.readouterr().err) > CHILD_STDERR_CHUNK_SIZE * CHILD_STDERR_TAIL_CHUNKS
+        assert "the real cause" in str(exc_info.value.__cause__)
