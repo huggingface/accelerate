@@ -23,7 +23,7 @@ import functools
 import logging
 import os
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -1456,7 +1456,7 @@ class DeepSpeedPlugin:
                 "weights. Set it explicitly in your DeepSpeed config to override."
             )
 
-    def set_deepspeed_weakref(self):
+    def set_deepspeed_weakref(self) -> None:
         from .imports import is_transformers_available
 
         ds_config = copy.deepcopy(self.deepspeed_config)
@@ -1472,6 +1472,8 @@ class DeepSpeedPlugin:
             ds_config["train_micro_batch_size_per_gpu"] = 1
         if ds_config.get("train_batch_size", None) == "auto":
             del ds_config["train_batch_size"]
+        if self.hf_ds_config.is_zero3() and not self.zero3_init_flag:
+            del ds_config["zero_optimization"]
 
         if compare_versions("transformers", "<", "4.46"):
             from transformers.deepspeed import (
@@ -1491,7 +1493,7 @@ class DeepSpeedPlugin:
         return self.zero3_init_flag
 
     @contextmanager
-    def zero3_init_context_manager(self, enable=False):
+    def zero3_init_context_manager(self, enable: bool = False) -> Iterator[None]:
         old = self.zero3_init_flag
         if old == enable:
             yield
@@ -1499,10 +1501,12 @@ class DeepSpeedPlugin:
             self.zero3_init_flag = enable
             self.dschf = None
             self.set_deepspeed_weakref()
-            yield
-            self.zero3_init_flag = old
-            self.dschf = None
-            self.set_deepspeed_weakref()
+            try:
+                yield
+            finally:
+                self.zero3_init_flag = old
+                self.dschf = None
+                self.set_deepspeed_weakref()
 
     def _deepspeed_config_checks(self):
         env_variable_names_to_ignore = [
