@@ -10,8 +10,12 @@ concurrency:
   group: docker-image-builds
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
   latest-cpu:
+    permissions:
+      contents: read
     name: "Latest Accelerate CPU [dev]"
     runs-on:
       group: aws-general-8-plus
@@ -37,6 +41,8 @@ jobs:
             huggingface/accelerate:cpu-nightly-${{ env.date }}
 
   latest-cuda:
+    permissions:
+      contents: read
     name: "Latest Accelerate GPU [dev]"
     runs-on:
       group: aws-g6-4xlarge-plus
@@ -62,6 +68,8 @@ jobs:
             huggingface/accelerate:gpu-nightly-${{ env.date }}
 
   latest-cuda-deepspeed:
+    permissions:
+      contents: read
     name: "Latest Accelerate GPU DeepSpeed [dev]"
     runs-on:
       group: aws-g6-4xlarge-plus
@@ -87,6 +95,8 @@ jobs:
             huggingface/accelerate:gpu-deepspeed-nightly-${{ env.date }}
 
   latest-cuda-fp8-transformerengine:
+    permissions:
+      contents: read
     name: "Latest Accelerate GPU FP8 TransformerEngine [dev]"
     runs-on:
       group: aws-g6-4xlarge-plus
