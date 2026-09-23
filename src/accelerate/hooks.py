@@ -409,7 +409,6 @@ class AlignDevicesHook(ModelHook):
             ):
                 set_module_tensor_to_device(module, name, "meta")
                 if type(module).__name__ == "Linear8bitLt":
-                    # bitsandbytes keeps a reference to the quantized weight in its matmul state.
                     module.state.CB = None
                     module.state.SCB = None
                     module.state.CxB = None
