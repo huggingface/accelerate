@@ -15,8 +15,12 @@ env:
   TESTING_MOCKED_DATALOADERS: "1"
   IS_GITHUB_CI: "1"
 
+permissions: {}
+
 jobs:
   run-tests:
+    permissions:
+      contents: read
     runs-on:
       group: aws-general-8-plus
     strategy:
