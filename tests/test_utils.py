@@ -510,13 +510,17 @@ class UtilsTester(unittest.TestCase):
         assert result["a"].shape == torch.Size([4, 3])
         assert result["b"].shape == torch.Size([4, 4])
 
-        # NOTE: We can't merge multiple batches of non-tensor data
+        # NOTE: Non-tensor values are kept, in order, rather than dropped.
         data = [
             {"a": torch.randn(2, 3), "b": torch.randn(2, 4), "c": "test_string1"},
             {"a": torch.randn(2, 3), "b": torch.randn(2, 4), "c": "test_string2"},
         ]
-        with self.assertRaises(TypeError):
-            result = concatenate(data)
+        result = concatenate(data)
+        assert result["c"] == ["test_string1", "test_string2"]
+
+        # Multiple batches of a bare non-tensor value keep the batch order.
+        result = concatenate(["test_string1", "test_string2"])
+        assert result == ["test_string1", "test_string2"]
 
         batch1 = torch.randn(5, 10)
         batch2 = torch.randn(5, 10)

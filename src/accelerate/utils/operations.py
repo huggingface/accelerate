@@ -739,7 +739,11 @@ def concatenate(data, dim=0):
     elif isinstance(data, (tuple, list)) and len(data) == 1:
         return data[0]
     else:
-        raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
+        # Non-tensor values (e.g. a text label in a multimodal batch) cannot be
+        # concatenated into one object, but they still need to survive the
+        # per-process batch collation. Keeping them in order is the least
+        # surprising behavior and matches how other non-tensor data is returned.
+        return list(data)
 
 
 class CannotPadNestedTensorWarning(UserWarning):
