@@ -805,6 +805,27 @@ class StatefulDataLoaderTester(AccelerateTestCase):
 
     @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
     @require_torchdata_stateful_dataloader
+    def test_dataloader_shuffle_state_dict_resume(self, num_workers):
+        # Resuming mid-epoch must continue the saved permutation. Capturing the state dict at init used to build an
+        # extra iterator, so the resumed dataloader drew one permutation too many and continued in the wrong order.
+        def make_dataloader():
+            torch.manual_seed(1234)
+            dataloader = DataLoader(list(range(32)), batch_size=4, shuffle=True, num_workers=num_workers)
+            return prepare_data_loader(dataloader, use_stateful_dataloader=True)
+
+        dataloader = make_dataloader()
+        vals = []
+        for idx, val in enumerate(dataloader):
+            vals.append(val)
+            if idx == 2:
+                sd = dataloader.state_dict()
+
+        dataloader2 = make_dataloader()
+        dataloader2.load_state_dict(sd)
+        assert torch.equal(torch.cat(vals[3:]), torch.cat(list(dataloader2)))
+
+    @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
+    @require_torchdata_stateful_dataloader
     def test_dataloader_dispatcher_state_dict(self, num_workers):
         """
         Test that saving a stateful dataloader's state, then loading it back, gives the same results.
