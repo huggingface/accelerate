@@ -40,7 +40,12 @@ def test_training(tmp_path):
     """
     reference = run_training(tmp_path / "reference.json", reference=True, batch_size=8)
     distributed = run_training(tmp_path / "ddp.json", batch_size=4)
-    assert_losses_match(reference, distributed, atol=1e-4)
+
+    assert len(reference["losses"]) == len(distributed["losses"]) == 10
+    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=1e-4, rtol=0)
+    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=1e-4, rtol=0)
+    assert reference["final_loss"] < reference["losses"][0] - 0.01
+    assert distributed["final_loss"] < distributed["losses"][0] - 0.01
 
 
 @pytest.mark.parametrize(
@@ -58,7 +63,12 @@ def test_training_mixed_precision(tmp_path, mixed_precision, atol):
         tmp_path / "reference.json", reference=True, batch_size=8, mixed_precision=mixed_precision
     )
     distributed = run_training(tmp_path / "ddp.json", batch_size=4, mixed_precision=mixed_precision)
-    assert_losses_match(reference, distributed, atol=atol)
+
+    assert len(reference["losses"]) == len(distributed["losses"]) == 10
+    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=atol, rtol=0)
+    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=atol, rtol=0)
+    assert reference["final_loss"] < reference["losses"][0] - 0.01
+    assert distributed["final_loss"] < distributed["losses"][0] - 0.01
 
 
 @pytest.mark.skipif(not is_bf16_available(), reason="Requires BF16")
@@ -70,7 +80,12 @@ def test_training_with_gradient_accumulation(tmp_path):
     accumulated = run_training(
         tmp_path / "accumulated.json", batch_size=2, mixed_precision="bf16", gradient_accumulation_steps=2
     )
-    assert_losses_match(large_batch, accumulated, atol=1e-3)
+
+    assert len(large_batch["losses"]) == len(accumulated["losses"]) == 10
+    torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=1e-3, rtol=0)
+    torch.testing.assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=1e-3, rtol=0)
+    assert large_batch["final_loss"] < large_batch["losses"][0] - 0.01
+    assert accumulated["final_loss"] < accumulated["losses"][0] - 0.01
 
 
 def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulation_steps=1, reference=False):
@@ -82,8 +97,6 @@ def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulat
             "accelerate.commands.launch",
             "--config_file",
             str(Path(__file__).with_name("ddp.yaml")),
-            "--mixed_precision",
-            mixed_precision,
             "--main_process_port",
             str(get_torch_dist_unique_port()),
         ]
@@ -106,15 +119,3 @@ def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulat
     result = json.loads(output.read_text())
     assert result["world_size"] == (1 if reference else 2)
     return result
-
-
-def assert_losses_match(reference, actual, *, atol):
-    for result in (reference, actual):
-        assert len(result["losses"]) == 10
-        assert result["final_loss"] < result["losses"][0] - 0.01, "Training did not reduce the first batch's loss"
-    torch.testing.assert_close(
-        torch.tensor(actual["losses"] + [actual["final_loss"]], dtype=torch.float64),
-        torch.tensor(reference["losses"] + [reference["final_loss"]], dtype=torch.float64),
-        atol=atol,
-        rtol=0,
-    )

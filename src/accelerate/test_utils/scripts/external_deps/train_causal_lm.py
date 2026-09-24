@@ -88,8 +88,10 @@ def main():
     )
     dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:100]")
     tokens = tokenizer("\n\n".join(dataset["text"]), return_attention_mask=False)["input_ids"]
-    # Ten complete global batches of eight blocks, each with 31 unmasked shifted targets.
-    input_ids = torch.tensor(tokens[: 80 * 32]).reshape(80, 32)
+    block_size, num_blocks = 32, 80
+    # Full blocks give equal shifted-target counts, so averaging microbatch losses
+    # matches the full-batch token mean. All ten global batches are complete.
+    input_ids = torch.tensor(tokens[: num_blocks * block_size]).reshape(num_blocks, block_size)
     dataloader = DataLoader(input_ids, batch_size=args.batch_size, shuffle=False)
     model.train()
 
