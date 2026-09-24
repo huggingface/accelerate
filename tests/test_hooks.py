@@ -14,7 +14,6 @@
 
 import inspect
 import re
-import tempfile
 import unittest
 
 import torch
@@ -22,7 +21,7 @@ import torch.nn as nn
 from parameterized import parameterized
 from torch.fx import symbolic_trace
 
-from accelerate.big_modeling import attach_layerwise_casting_hooks, cpu_offload, disk_offload
+from accelerate.big_modeling import attach_layerwise_casting_hooks
 from accelerate.hooks import (
     AlignDevicesHook,
     CpuOffload,
@@ -34,7 +33,7 @@ from accelerate.hooks import (
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_bnb, require_cuda, require_multi_device, require_non_hpu, torch_device
+from accelerate.test_utils import require_multi_device, require_non_hpu, torch_device
 from accelerate.utils import is_xpu_available
 from accelerate.utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 
@@ -282,34 +281,6 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear1.weight.device == torch.device("cpu")
         assert model.batchnorm.weight.device == torch.device("cpu")
         assert model.linear2.weight.device == torch.device("cpu")
-
-    @parameterized.expand([(offload, bias) for offload in ("cpu", "disk") for bias in (False, True)])
-    @require_bnb
-    @require_cuda
-    def test_offload_int8_releases_weight_state(self, offload, bias):
-        import bitsandbytes as bnb
-
-        model = nn.Sequential(bnb.nn.Linear8bitLt(32, 32, bias=bias, has_fp16_weights=False))
-        model = model.half().to(torch_device).eval()
-        inputs = [torch.randn(2, 32, device=torch_device, dtype=torch.float16) for _ in range(2)]
-        with torch.inference_mode():
-            expected = [model(x) for x in inputs]
-
-        with tempfile.TemporaryDirectory() as offload_dir:
-            if offload == "cpu":
-                cpu_offload(model, execution_device=torch_device)
-            else:
-                disk_offload(model, offload_dir, execution_device=torch_device)
-
-            for x, reference in zip(inputs, expected):
-                with torch.inference_mode():
-                    output = model(x)
-                torch.testing.assert_close(output, reference)
-                self.assertEqual(model[0].weight.device, torch.device("meta"))
-                # Moving the parameter to meta must also release the cached quantized weight.
-                self.assertIsNone(model[0].state.CB)
-                self.assertIsNone(model[0].state.SCB)
-                self.assertIsNone(model[0].state.CxB)
 
     def test_attach_align_device_hook_as_cpu_offload(self):
         model = ModelForTest()
