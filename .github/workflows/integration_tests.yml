@@ -20,8 +20,12 @@ on:
 env:
   HF_HOME: ~/hf_cache
 
+permissions: {}
+
 jobs:
   run-trainer-tests:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
