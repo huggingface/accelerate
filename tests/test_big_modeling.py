@@ -661,6 +661,21 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
+    @require_multi_device
+    def test_dispatch_model_multi_devices_compile_fullgraph(self):
+        # A sharded model only carries AlignDevicesHook, whose forward is plain device movement,
+        # so Dynamo must be able to capture it in a single graph.
+        model = BiggerModelForTest()
+        device_map = {"linear1": 0, "linear2": 0, "batchnorm": 1, "linear3": 1, "linear4": 1}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        dispatch_model(model, device_map)
+        output = torch.compile(model, fullgraph=True)(x)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
     @require_non_cpu
     def test_dispatch_model_copy(self):
         original_model = ModelForTestCopy(id=1)
