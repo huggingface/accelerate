@@ -3859,9 +3859,6 @@ class Accelerator:
             else:
                 models.append(model)
 
-        # Restored below by `load_accelerator_state`, on the same path as every other backend:
-        # `load_fsdp_optimizer` hands torch's optimizer state-dict API the unwrapped optimizer, so
-        # nothing between here and the first `backward()` can reach the scaler.
         scaler = self.scaler
 
         # Load the optimizers taking care of FSDP and DeepSpeed nuances
