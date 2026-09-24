@@ -34,6 +34,10 @@ from accelerate.utils import is_bf16_available, patch_environment
 @require_multi_gpu
 @require_huggingface_suite
 def test_training(tmp_path):
+    """
+    Compare DDP losses with single-GPU training on the same effective batches.
+    A plain-PyTorch baseline can expose wrapper bugs that two Accelerate runs could share.
+    """
     reference = run_training(tmp_path / "reference.json", reference=True, batch_size=8)
     distributed = run_training(tmp_path / "ddp.json", batch_size=4)
     assert_losses_match(reference, distributed, atol=1e-4)
