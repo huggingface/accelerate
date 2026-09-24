@@ -13,8 +13,17 @@
 # limitations under the License.
 
 import argparse
+import subprocess
 import unittest
 
+import pytest
+
+from accelerate.commands.launch import (
+    CHILD_STDERR_CHUNK_SIZE,
+    CHILD_STDERR_TAIL_CHUNKS,
+    launch_command_parser,
+    simple_launcher,
+)
 from accelerate.utils.launch import prepare_multi_gpu_env
 
 
@@ -71,3 +80,47 @@ class TestPrepareMultiGpuEnv(unittest.TestCase):
         self.assertIn("master_port", args.__dict__)
         self.assertNotEqual(args.master_port, "0")
         self.assertTrue(args.master_port.isdigit())
+
+
+def _simple_launcher_args(script, quiet=False):
+    # Spelled out rather than relying on the defaults `launch_command` fills in before dispatching.
+    argv = [
+        "--cpu",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        "no",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+    ]
+    if quiet:
+        argv.append("--quiet")
+    return launch_command_parser().parse_args([*argv, script])
+
+
+class TestSimpleLauncher:
+    def test_child_stderr_is_written_through_and_attached(self, tmp_path, capfd):
+        script = tmp_path / "child.py"
+        # Floods stderr before failing: the case that deadlocks a wait()-then-read launcher and buffers
+        # without limit in one that drains with communicate().
+        script.write_text(
+            "import sys\n"
+            "for _ in range(200_000):\n"
+            "    print('x' * 40, file=sys.stderr)\n"
+            "raise ValueError('the real cause')\n"
+        )
+        with pytest.raises(subprocess.CalledProcessError) as exc_info:
+            simple_launcher(_simple_launcher_args(str(script)))
+
+        # The child's output still reaches the terminal in full, as it did when stderr was inherited.
+        captured = capfd.readouterr().err
+        assert "the real cause" in captured
+        assert len(captured) > CHILD_STDERR_CHUNK_SIZE * CHILD_STDERR_TAIL_CHUNKS
+        # The caller can reach the cause, and what is retained for it stays bounded.
+        assert "the real cause" in exc_info.value.stderr
+        assert len(exc_info.value.stderr) <= CHILD_STDERR_CHUNK_SIZE * CHILD_STDERR_TAIL_CHUNKS
+        assert "the real cause" in str(exc_info.value.__cause__)
