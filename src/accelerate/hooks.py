@@ -368,7 +368,9 @@ class AlignDevicesHook(ModelHook):
             value = self.weights_map[name]
             fp16_statistics = self._maybe_get_fp16_statistics(name, value)
 
-            # Track onloaded tied weights so _offload_weights can drop them from tied_params_map.
+            # In case we are using offloading with tied weights, we need to keep track of the offloaded weights
+            # that are loaded on device at this point, as we will need to remove them as well from the dictionary
+            # self.tied_params_map in order to allow to free memory.
             if name in self.tied_params_names and value.data_ptr() not in self.tied_params_map:
                 self.tied_params_map[value.data_ptr()] = {}
 
@@ -402,7 +404,8 @@ class AlignDevicesHook(ModelHook):
                 module.state.SCB = None
                 module.state.CxB = None
 
-        # Drop the tied weights onloaded above from tied_params_map so they can be freed.
+        # We may have loaded tied weights into self.tied_params_map (avoiding to load them several times in e.g. submodules): remove them from
+        # this dictionary to allow the garbage collector to do its job.
         for value_pointer, device in self.tied_pointers_to_remove:
             if isinstance(device, int):
                 if is_npu_available():
