@@ -1289,6 +1289,8 @@ def prepare_data_loader(
             new_dataset,
             split_batches=split_batches,
             batch_sampler=new_batch_sampler,
+            # `DataLoader(sampler=BatchSampler(...), batch_size=None)` batches through `sampler`
+            sampler=dataloader.sampler if sampler_is_batch_sampler and new_batch_sampler is None else None,
             _drop_last=dataloader.drop_last,
             _non_blocking=non_blocking,
             slice_fn=slice_fn_for_dispatch,

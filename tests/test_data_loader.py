@@ -632,6 +632,19 @@ class DataLoaderTester(AccelerateTestCase):
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
 
+    def test_dispatch_batches_with_batch_sampler_as_sampler(self):
+        # With `batch_size=None` the batching lives on `sampler`, which dispatching used to drop.
+        dataset = torch.arange(20).view(10, 2)
+        dataloader = DataLoader(
+            dataset, sampler=BatchSampler(range(10), batch_size=4, drop_last=False), batch_size=None
+        )
+        expected = [batch.tolist() for batch in dataloader]
+
+        prepared = prepare_data_loader(
+            dataloader, num_processes=1, process_index=0, dispatch_batches=True, put_on_device=True
+        )
+        assert [batch.tolist() for batch in prepared] == expected
+
     def test_set_epoch_in_batch_sampler(self):
         # Ensure that set_epoch gets propagated to custom batch samplers that accept it
         dataset = list(range(16))
