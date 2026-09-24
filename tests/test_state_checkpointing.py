@@ -361,6 +361,53 @@ class CheckpointTest(AccelerateTestCase):
             assert a2 == model.a.item()
             assert b2 == model.b.item()
 
+    def test_automatic_loading_ignores_stray_entries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = accelerator.prepare(model)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            saved_a = model.a.item()
+            with torch.no_grad():
+                model.a.fill_(123.0)
+
+            # Unrelated entries in the checkpoints dir (Finder droppings, editor
+            # backup dirs) used to crash the resume-from-latest sort with
+            # IndexError before any checkpoint was considered.
+            ckpt_dir = os.path.join(tmpdir, "checkpoints")
+            os.makedirs(os.path.join(ckpt_dir, ".ipynb_checkpoints"))
+            with open(os.path.join(ckpt_dir, ".DS_Store"), "w"):
+                pass
+            with open(os.path.join(ckpt_dir, "loss.png"), "w"):
+                pass
+
+            accelerator.load_state()
+            assert model.a.item() == saved_a
+
+    def test_checkpoint_deletion_ignores_stray_entries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True, total_limit=1)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = accelerator.prepare(model)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            ckpt_dir = os.path.join(tmpdir, "checkpoints")
+            os.makedirs(os.path.join(ckpt_dir, ".ipynb_checkpoints"))
+            with open(os.path.join(ckpt_dir, "loss.png"), "w"):
+                pass
+
+            # Triggers the total_limit cleanup path with strays present
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            assert not os.path.exists(os.path.join(ckpt_dir, "checkpoint_0"))
+            assert os.path.exists(os.path.join(ckpt_dir, "checkpoint_1"))
+            # Unrelated entries are not checkpoints; they must survive cleanup
+            assert os.path.exists(os.path.join(ckpt_dir, ".ipynb_checkpoints"))
+            assert os.path.exists(os.path.join(ckpt_dir, "loss.png"))
+
     def test_checkpoint_deletion(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)

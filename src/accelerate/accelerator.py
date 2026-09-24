@@ -3663,7 +3663,14 @@ class Accelerator:
             output_dir = os.path.join(self.project_dir, "checkpoints")
         os.makedirs(output_dir, exist_ok=True)
         if self.project_configuration.automatic_checkpoint_naming:
-            folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
+            # Only the automatic `checkpoint_<iteration>` layout is managed
+            # here; unrelated entries (e.g. `.DS_Store`, editor backup dirs)
+            # used to crash the numeric sort key below with IndexError.
+            folders = [
+                os.path.join(output_dir, folder)
+                for folder in os.listdir(output_dir)
+                if re.fullmatch(r"checkpoint_\d+", folder) and os.path.isdir(os.path.join(output_dir, folder))
+            ]
             if (
                 self.project_configuration.total_limit is not None
                 and (len(folders) + 1 > self.project_configuration.total_limit)
@@ -3829,7 +3836,14 @@ class Accelerator:
         elif self.project_configuration.automatic_checkpoint_naming:
             # Pick up from automatic checkpoint naming
             input_dir = os.path.join(self.project_dir, "checkpoints")
-            folders = [os.path.join(input_dir, folder) for folder in os.listdir(input_dir)]
+            # Only the automatic `checkpoint_<iteration>` layout is managed
+            # here; unrelated entries (e.g. `.DS_Store`, editor backup dirs)
+            # used to crash the numeric sort key below with IndexError.
+            folders = [
+                os.path.join(input_dir, folder)
+                for folder in os.listdir(input_dir)
+                if re.fullmatch(r"checkpoint_\d+", folder) and os.path.isdir(os.path.join(input_dir, folder))
+            ]
 
             def _inner(folder):
                 return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
