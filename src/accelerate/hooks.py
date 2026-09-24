@@ -126,11 +126,13 @@ class SequentialHook(ModelHook):
             module = hook.init_hook(module)
         return module
 
+    @_compiler_disable
     def pre_forward(self, module, *args, **kwargs):
         for hook in self.hooks:
             args, kwargs = hook.pre_forward(module, *args, **kwargs)
         return args, kwargs
 
+    @_compiler_disable
     def post_forward(self, module, output):
         for hook in self.hooks:
             output = hook.post_forward(module, output)
@@ -354,7 +356,7 @@ class AlignDevicesHook(ModelHook):
         return None
 
     @_compiler_disable
-    def _load_offloaded_weights(self, module):
+    def _onload_weights(self, module):
         self.tied_pointers_to_remove = set()
 
         for name, _ in named_module_tensors(
@@ -389,16 +391,6 @@ class AlignDevicesHook(ModelHook):
                 tied_params_map=self.tied_params_map,
             )
 
-    def pre_forward(self, module, *args, **kwargs):
-        if self.io_same_device:
-            self.input_device = find_device([args, kwargs])
-        if self.offload:
-            self._load_offloaded_weights(module)
-
-        return send_to_device(args, self.execution_device), send_to_device(
-            kwargs, self.execution_device, skip_keys=self.skip_keys
-        )
-
     @_compiler_disable
     def _offload_weights(self, module):
         for name, _ in named_module_tensors(
@@ -425,6 +417,16 @@ class AlignDevicesHook(ModelHook):
             if device in self.tied_params_map[value_pointer]:
                 del self.tied_params_map[value_pointer][device]
         self.tied_pointers_to_remove = set()
+
+    def pre_forward(self, module, *args, **kwargs):
+        if self.io_same_device:
+            self.input_device = find_device([args, kwargs])
+        if self.offload:
+            self._onload_weights(module)
+
+        return send_to_device(args, self.execution_device), send_to_device(
+            kwargs, self.execution_device, skip_keys=self.skip_keys
+        )
 
     def post_forward(self, module, output):
         if self.offload:
