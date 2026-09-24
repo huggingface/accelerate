@@ -52,7 +52,7 @@ from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.fsdp_utils import (
     _get_model_state_dict,
     _set_model_state_dict,
-    _unwrap_accelerated_optimizer,
+    _unwrap_optimizer,
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
     load_fsdp_optimizer,
@@ -222,8 +222,8 @@ class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
 
     def test_unwrap_is_idempotent_and_leaves_plain_optimizers_alone(self):
         inner = torch.optim.AdamW(torch.nn.Linear(4, 4).parameters())
-        assert _unwrap_accelerated_optimizer(inner) is inner
-        assert _unwrap_accelerated_optimizer(AcceleratedOptimizer(inner)) is inner
+        assert _unwrap_optimizer(inner) is inner
+        assert _unwrap_optimizer(AcceleratedOptimizer(inner)) is inner
 
 
 @require_non_cpu
