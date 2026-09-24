@@ -275,3 +275,16 @@ class TestParallelismConfig:
 
     def test_tp_handler(self):
         assert True, "Tensor parallelism handler doesn't hold any logic yet"
+
+    def test_to_json_returns_serializable_dict(self):
+        # Regression: to_json() built the dict but never returned it, so every
+        # call returned None and silently discarded the serialized config.
+        import json
+
+        config = ParallelismConfig(dp_shard_size=2, tp_size=2)
+        result = config.to_json()
+        assert isinstance(result, dict), f"to_json() should return a dict, got {type(result)}"
+        assert result["dp_shard_size"] == 2
+        assert result["tp_size"] == 2
+        assert "device_mesh" not in result
+        json.dumps(result)
