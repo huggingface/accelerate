@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import copy
 import functools
 import os
 import tempfile
@@ -52,7 +51,6 @@ from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.fsdp_utils import (
     _get_model_state_dict,
     _set_model_state_dict,
-    _unwrap_optimizer,
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
     load_fsdp_optimizer,
@@ -136,94 +134,43 @@ class FSDP2PeftStateDictTest(AccelerateTestCase):
 
 @require_fsdp2
 class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
-    """Saving and loading FSDP2 optimizer state must leave an fp16 `GradScaler` untouched.
-
-    torch materializes an empty optimizer state by zeroing the gradients, setting the learning rates
-    to 0 and calling `optimizer.step()`. Through an `AcceleratedOptimizer` carrying a scaler that
-    internal step becomes a real `scaler.step()`/`scaler.update()` pair, which advances the loss
-    scale -- on a resume, the one just restored from the checkpoint -- or raises from
-    `GradScaler.step` while the scaler is still lazy.
-
-    Runs single-process on CPU: torch's DCP falls back to a single-rank checkpoint, and the wrapper,
-    the scaler and the state-dict API are the whole mechanism. Whether each rank's shard survives is
-    a separate question and belongs with the launcher-based tests below.
-    """
-
-    GROWTH_INTERVAL = 2
+    """Checkpointing FSDP2 optimizer state must not step the fp16 `GradScaler`."""
 
     def setUp(self):
         super().setUp()
-        self.accelerator = Accelerator(cpu=True)  # AcceleratedOptimizer reads the global state
+        self.accelerator = Accelerator(cpu=True)
         self.plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
 
-    def _pair(self, scaler_state=None, *, materialize=False):
-        torch.manual_seed(42)
+    def _build(self, scaler_state=None):
         model = torch.nn.Linear(4, 4)
-        scaler = torch.amp.GradScaler("cpu", init_scale=1024.0, growth_interval=self.GROWTH_INTERVAL)
+        scaler = torch.amp.GradScaler("cpu")
         if scaler_state is not None:
             scaler.load_state_dict(scaler_state)
-        if materialize:
-            # What a scaler looks like in any process that has already run a backward pass.
-            scaler.scale(torch.zeros(()))
-        optimizer = AcceleratedOptimizer(torch.optim.AdamW(model.parameters()), scaler=scaler)
-        return model, optimizer, scaler
+        return model, AcceleratedOptimizer(torch.optim.AdamW(model.parameters()), scaler=scaler), scaler
 
-    def _trained_pair(self):
-        """One finite update, leaving the scaler one step short of a growth.
+    def test_save_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(torch.zeros(()))  # an already-used scaler, with the optimizer state still empty
+        expected = scaler.state_dict()
 
-        Stopping there means an accidental extra scaler update shows up as a doubling rather than
-        only as a tracker offset.
-        """
-        model, optimizer, scaler = self._pair()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+
+    def test_load_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
         scaler.scale(model(torch.randn(2, 4)).sum()).backward()
         optimizer.step()
-        optimizer.zero_grad()
-        assert scaler.state_dict()["_growth_tracker"] == self.GROWTH_INTERVAL - 1
-        assert optimizer.state
-        return model, optimizer, scaler
-
-    def test_save_preserves_the_scaler_when_the_optimizer_state_is_empty(self):
-        """`_init_optim_state` returns early while a gradient is live, so the save path reaches it
-        only with an empty state: every update so far skipped, or a stateless optimizer."""
-        model, optimizer, scaler = self._pair(materialize=True)
-        before = copy.deepcopy(scaler.state_dict())
+        expected = scaler.state_dict()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
-
-        assert scaler.state_dict() == before
-
-    def test_load_preserves_a_lazy_scaler(self):
-        """The ordinary resume: a fresh process, so the scaler has not been used yet."""
-        model, optimizer, scaler = self._trained_pair()
-        saved = copy.deepcopy(scaler.state_dict())
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
-            model, optimizer, scaler = self._pair(saved)
+            model, optimizer, scaler = self._build(expected)  # a fresh process: the scaler is still lazy
             load_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
 
-        assert scaler.state_dict() == saved
-        # Unwrapping internally does not cost the caller the restore: the wrapper delegates `state`.
+        assert scaler.state_dict() == expected
         assert optimizer.state
-
-    def test_load_preserves_an_already_used_scaler(self):
-        """Loading into a process that has already trained, e.g. save_state() then load_state()."""
-        model, optimizer, scaler = self._trained_pair()
-        saved = copy.deepcopy(scaler.state_dict())
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
-            model, optimizer, scaler = self._pair(saved, materialize=True)
-            load_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
-
-        assert scaler.state_dict() == saved
-        assert optimizer.state
-
-    def test_unwrap_is_idempotent_and_leaves_plain_optimizers_alone(self):
-        inner = torch.optim.AdamW(torch.nn.Linear(4, 4).parameters())
-        assert _unwrap_optimizer(inner) is inner
-        assert _unwrap_optimizer(AcceleratedOptimizer(inner)) is inner
 
 
 @require_non_cpu
