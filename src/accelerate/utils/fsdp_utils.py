@@ -289,7 +289,11 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
 
 
 def _unwrap_optimizer(optimizer):
-    """Return the plain `torch.optim.Optimizer` underneath accelerate's wrapper."""
+    """Return the plain `torch.optim.Optimizer` underneath accelerate's wrapper.
+
+    Needed by FSDP2: torch's `get/set_optimizer_state_dict` calls `optimizer.step()`
+    to initialize an empty state, which also steps the fp16 `GradScaler` in the wrapper.
+    """
     from ..optimizer import AcceleratedOptimizer
 
     while isinstance(optimizer, AcceleratedOptimizer):
