@@ -356,75 +356,81 @@ class AlignDevicesHook(ModelHook):
         return None
 
     @_compiler_disable
+    def _onload_weights(self, module):
+        self.tied_pointers_to_remove = set()
+
+        for name, _ in named_module_tensors(
+            module,
+            include_buffers=self.offload_buffers,
+            recurse=self.place_submodules,
+            remove_non_persistent=True,
+        ):
+            value = self.weights_map[name]
+            fp16_statistics = self._maybe_get_fp16_statistics(name, value)
+
+            # In case we are using offloading with tied weights, we need to keep track of the offloaded weights
+            # that are loaded on device at this point, as we will need to remove them as well from the dictionary
+            # self.tied_params_map in order to allow to free memory.
+            if name in self.tied_params_names and value.data_ptr() not in self.tied_params_map:
+                self.tied_params_map[value.data_ptr()] = {}
+
+            if (
+                value is not None
+                and self.tied_params_map is not None
+                and value.data_ptr() in self.tied_params_map
+                and self.execution_device not in self.tied_params_map[value.data_ptr()]
+            ):
+                self.tied_pointers_to_remove.add((value.data_ptr(), self.execution_device))
+
+            set_module_tensor_to_device(
+                module,
+                name,
+                self.execution_device,
+                value=value,
+                fp16_statistics=fp16_statistics,
+                tied_params_map=self.tied_params_map,
+            )
+
+    @_compiler_disable
+    def _offload_weights(self, module):
+        for name, _ in named_module_tensors(
+            module,
+            include_buffers=self.offload_buffers,
+            recurse=self.place_submodules,
+            remove_non_persistent=True,
+        ):
+            set_module_tensor_to_device(module, name, "meta")
+            if type(module).__name__ == "Linear8bitLt":
+                module.state.SCB = None
+                module.state.CxB = None
+
+        # We may have loaded tied weights into self.tied_params_map (avoiding to load them several times in e.g. submodules): remove them from
+        # this dictionary to allow the garbage collector to do its job.
+        for value_pointer, device in self.tied_pointers_to_remove:
+            if isinstance(device, int):
+                if is_npu_available():
+                    device = f"npu:{device}"
+                elif is_mlu_available():
+                    device = f"mlu:{device}"
+                elif is_musa_available():
+                    device = f"musa:{device}"
+            if device in self.tied_params_map[value_pointer]:
+                del self.tied_params_map[value_pointer][device]
+        self.tied_pointers_to_remove = set()
+
     def pre_forward(self, module, *args, **kwargs):
         if self.io_same_device:
             self.input_device = find_device([args, kwargs])
         if self.offload:
-            self.tied_pointers_to_remove = set()
-
-            for name, _ in named_module_tensors(
-                module,
-                include_buffers=self.offload_buffers,
-                recurse=self.place_submodules,
-                remove_non_persistent=True,
-            ):
-                value = self.weights_map[name]
-                fp16_statistics = self._maybe_get_fp16_statistics(name, value)
-
-                # In case we are using offloading with tied weights, we need to keep track of the offloaded weights
-                # that are loaded on device at this point, as we will need to remove them as well from the dictionary
-                # self.tied_params_map in order to allow to free memory.
-                if name in self.tied_params_names and value.data_ptr() not in self.tied_params_map:
-                    self.tied_params_map[value.data_ptr()] = {}
-
-                if (
-                    value is not None
-                    and self.tied_params_map is not None
-                    and value.data_ptr() in self.tied_params_map
-                    and self.execution_device not in self.tied_params_map[value.data_ptr()]
-                ):
-                    self.tied_pointers_to_remove.add((value.data_ptr(), self.execution_device))
-
-                set_module_tensor_to_device(
-                    module,
-                    name,
-                    self.execution_device,
-                    value=value,
-                    fp16_statistics=fp16_statistics,
-                    tied_params_map=self.tied_params_map,
-                )
+            self._onload_weights(module)
 
         return send_to_device(args, self.execution_device), send_to_device(
             kwargs, self.execution_device, skip_keys=self.skip_keys
         )
 
-    @_compiler_disable
     def post_forward(self, module, output):
         if self.offload:
-            for name, _ in named_module_tensors(
-                module,
-                include_buffers=self.offload_buffers,
-                recurse=self.place_submodules,
-                remove_non_persistent=True,
-            ):
-                set_module_tensor_to_device(module, name, "meta")
-                if type(module).__name__ == "Linear8bitLt":
-                    module.state.SCB = None
-                    module.state.CxB = None
-
-            # We may have loaded tied weights into self.tied_params_map (avoiding to load them several times in e.g. submodules): remove them from
-            # this dictionary to allow the garbage collector to do its job.
-            for value_pointer, device in self.tied_pointers_to_remove:
-                if isinstance(device, int):
-                    if is_npu_available():
-                        device = f"npu:{device}"
-                    elif is_mlu_available():
-                        device = f"mlu:{device}"
-                    elif is_musa_available():
-                        device = f"musa:{device}"
-                if device in self.tied_params_map[value_pointer]:
-                    del self.tied_params_map[value_pointer][device]
-            self.tied_pointers_to_remove = set()
+            self._offload_weights(module)
         if self.io_same_device and self.input_device is not None:
             output = send_to_device(output, self.input_device, skip_keys=self.skip_keys)
 
