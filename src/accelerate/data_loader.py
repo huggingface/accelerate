@@ -107,6 +107,29 @@ class SeedableRandomSampler(RandomSampler):
         self.epoch = epoch
 
 
+class _CheckpointableRandomSampler(RandomSampler):
+    """Remember the permutation's initial RNG state without storing all sample indices."""
+
+    def __init__(self, sampler):
+        super().__init__(sampler.data_source, sampler.replacement, sampler._num_samples, sampler.generator)
+        self.epoch_generator_state = None
+        self.resume_generator_state = None
+        self.uses_global_generator = sampler.generator is None
+
+    def __iter__(self):
+        generator = self.generator
+        if generator is None:
+            generator = torch.Generator()
+            if self.resume_generator_state is None:
+                seed = int(torch.empty((), dtype=torch.int64).random_().item())
+                generator.manual_seed(seed)
+        if self.resume_generator_state is not None:
+            generator.set_state(self.resume_generator_state)
+            self.resume_generator_state = None
+        self.epoch_generator_state = generator.get_state()
+        yield from RandomSampler(self.data_source, self.replacement, self._num_samples, generator)
+
+
 class BatchSamplerShard(BatchSampler):
     """
     Wraps a PyTorch `BatchSampler` to generate batches for one of the processes only. Instances of this class will
@@ -421,6 +444,9 @@ class DataLoaderAdapter:
 
     def __init__(self, dataset, use_stateful_dataloader=False, batch_sampler=None, **kwargs):
         self.use_stateful_dataloader = use_stateful_dataloader
+        self._resume_loader_state = None
+        self._epoch_loader_state = None
+        self._resume_source = None
         if is_torchdata_stateful_dataloader_available():
             from torchdata.stateful_dataloader import StatefulDataLoader
 
@@ -452,6 +478,77 @@ class DataLoaderAdapter:
 
     def state_dict(self):
         return self.dl_state_dict
+
+    def _checkpoint_sampler_state(self):
+        if self.use_stateful_dataloader:
+            return None
+        sampler = get_sampler(self)
+        if not isinstance(sampler, (_CheckpointableRandomSampler, SeedableRandomSampler)):
+            return None
+        finished = self.end_of_dataloader and self._epoch_loader_state is not None
+        loader_state = None if finished else self._epoch_loader_state
+        state = {"iteration": self.iteration + int(finished), "loader_rng": loader_state}
+        if isinstance(sampler, _CheckpointableRandomSampler):
+            state["sampler_rng"] = (
+                sampler.epoch_generator_state
+                if loader_state is not None
+                else (None if sampler.uses_global_generator else sampler.generator.get_state())
+            )
+        else:
+            state["initial_seed"] = sampler.initial_seed
+        return state
+
+    def _load_checkpoint_sampler_state(self, state):
+        sampler = get_sampler(self)
+        self.set_epoch(state["iteration"])
+        self._resume_loader_state = state["loader_rng"]
+        if isinstance(sampler, _CheckpointableRandomSampler):
+            if state["loader_rng"] is None and state.get("sampler_rng") is not None:
+                sampler.generator.set_state(state["sampler_rng"])
+            else:
+                sampler.resume_generator_state = state.get("sampler_rng")
+        elif isinstance(sampler, SeedableRandomSampler):
+            sampler.initial_seed = state["initial_seed"]
+
+    def _base_iterator(self):
+        if self.use_stateful_dataloader:
+            return iter(self.base_dataloader)
+        generator = self.base_dataloader.generator
+        if self._resume_loader_state is None:
+            self._epoch_loader_state = generator.get_state() if generator is not None else torch.get_rng_state()
+        else:
+            self._epoch_loader_state = self._resume_loader_state
+        source = self._resume_source
+        while source is not None:
+            source._epoch_loader_state = self._epoch_loader_state
+            source._resume_loader_state = None
+            source.iteration = self.iteration
+            source.end_of_dataloader = False
+            source = source._resume_source
+        if self._resume_loader_state is None:
+            return iter(self.base_dataloader)
+        # Recreate worker/base seeds without consuming the restored training RNG again.
+        replay_generator = torch.Generator(device=generator.device if generator is not None else "cpu")
+        replay_generator.set_state(self._resume_loader_state)
+        self._epoch_loader_state = self._resume_loader_state
+        self._resume_loader_state = None
+        self.base_dataloader.generator = replay_generator
+        try:
+            return iter(self.base_dataloader)
+        finally:
+            self.base_dataloader.generator = generator
+
+    def _finish_iteration(self):
+        self.iteration += 1
+        self._epoch_loader_state = None
+        sampler = get_sampler(self)
+        if isinstance(sampler, _CheckpointableRandomSampler):
+            sampler.epoch_generator_state = None
+        source = self._resume_source
+        while source is not None:
+            source.set_epoch(self.iteration)
+            source._epoch_loader_state = None
+            source = source._resume_source
 
     def load_state_dict(self, state_dict):
         self.base_dataloader.load_state_dict(state_dict)
@@ -494,6 +591,10 @@ class DataLoaderAdapter:
                     self.dl_state_dict["_index_sampler_state"]["samples_yielded"] -= self.batch_size * factor
 
     def _update_state_dict(self):
+        source = self._resume_source
+        while source is not None:
+            source.end_of_dataloader = self.end_of_dataloader
+            source = source._resume_source
         # The state_dict of the underlying base_dataloader may be ahead of what is currently being yielded.
         # E.g. the implementation of DataLoaderShard involves having an underlying iterator 1 element ahead of
         # what it wants to yield.
@@ -580,11 +681,12 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.begin()
 
         self.set_epoch(self.iteration)
-        dataloader_iter = self.base_dataloader.__iter__()
+        dataloader_iter = self._base_iterator()
         # We iterate one batch ahead to check when we are at the end
         try:
             current_batch = next(dataloader_iter)
         except StopIteration:
+            self._finish_iteration()
             self.end()
             return
 
@@ -607,7 +709,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                     yield current_batch
                 break
 
-        self.iteration += 1
+        self._finish_iteration()
         self.end()
 
     def __reduce__(self):
@@ -877,9 +979,9 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
             # shared seed to all dist processes. Thus, we need to create iterator for all dist processes.
             # But, we only iterate through the DataLoader on process 0.
-            main_iterator = self.base_dataloader.__iter__()
+            main_iterator = self._base_iterator()
         elif self.state.process_index == 0:
-            main_iterator = self.base_dataloader.__iter__()
+            main_iterator = self._base_iterator()
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
@@ -942,7 +1044,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1
-        self.iteration += 1
+        self._finish_iteration()
         self.end()
 
     def set_epoch(self, epoch: int):
@@ -1009,7 +1111,10 @@ def get_sampler(dataloader):
     if sampler_is_batch_sampler:
         sampler = getattr(dataloader.sampler, "sampler", None)
     else:
-        sampler = getattr(dataloader.batch_sampler, "sampler", None)
+        batch_sampler = dataloader.batch_sampler
+        while isinstance(batch_sampler, SkipBatchSampler):
+            batch_sampler = batch_sampler.batch_sampler
+        sampler = getattr(batch_sampler, "sampler", None)
     return sampler
 
 
@@ -1324,6 +1429,8 @@ def prepare_data_loader(
 
     if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
         dataloader.set_sampler(sampler)
+    elif type(sampler) is RandomSampler and not use_stateful_dataloader:
+        dataloader.set_sampler(_CheckpointableRandomSampler(sampler))
     if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
@@ -1403,6 +1510,7 @@ def skip_first_batches(dataloader, num_batches=0):
         dataloader = dataloader.dataloader
 
     dataset = dataloader.dataset
+    source_dataloader = dataloader
     sampler_is_batch_sampler = False
     if isinstance(dataset, IterableDataset):
         new_batch_sampler = None
@@ -1466,6 +1574,10 @@ def skip_first_batches(dataloader, num_batches=0):
             dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+
+    if isinstance(source_dataloader, (DataLoaderShard, DataLoaderDispatcher)):
+        dataloader._resume_source = source_dataloader
+        dataloader._resume_loader_state = source_dataloader._resume_loader_state
 
     if state.distributed_type == DistributedType.XLA:
         dataloader = MpDeviceLoaderWrapper(dataloader, device)

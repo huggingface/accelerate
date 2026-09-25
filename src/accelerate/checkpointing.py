@@ -143,6 +143,10 @@ def save_accelerator_state(
             output_dataloader_state_dict_file = output_dir.joinpath(dataloader_state_dict_name)
             state_dict = dataloader.state_dict()
             torch.save(state_dict, output_dataloader_state_dict_file)
+        elif hasattr(dataloader, "_checkpoint_sampler_state"):
+            sampler_state = dataloader._checkpoint_sampler_state()
+            if sampler_state is not None:
+                torch.save(sampler_state, output_dir / f"dl_sampler_state_{i}_{process_index}.bin")
         logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
 
     # GradScaler state
@@ -280,6 +284,10 @@ def load_accelerator_state(
             if input_dataloader_state_dict_file.exists():
                 state_dict = load(input_dataloader_state_dict_file, **load_kwargs)
                 dataloader.load_state_dict(state_dict)
+        elif hasattr(dataloader, "_load_checkpoint_sampler_state"):
+            sampler_state_file = input_dir / f"dl_sampler_state_{i}_{process_index}.bin"
+            if sampler_state_file.exists():
+                dataloader._load_checkpoint_sampler_state(load(sampler_state_file, map_location="cpu"))
     logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state

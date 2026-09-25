@@ -69,7 +69,12 @@ accelerator.load_state("my/save/path/checkpointing/checkpoint_0")
 ## Restoring the state of the DataLoader 
 
 After resuming from a checkpoint, it may also be desirable to resume from a particular point in the active `DataLoader` if 
-the state was saved during the middle of an epoch. You can use [`~Accelerator.skip_first_batches`] to do so. 
+the state was saved during the middle of an epoch. You can use [`~Accelerator.skip_first_batches`] to do so.
+
+For prepared map-style dataloaders using the standard random sampler or the seedable sampler,
+`save_state` also stores the epoch and the sampler's initial permutation state. `load_state` restores
+this state so that skipping batches resumes within the original permutation. Completing the skipped
+dataloader advances the original dataloader to the following epoch as well.
 
 ```python
 from accelerate import Accelerator
@@ -94,3 +99,9 @@ for batch in train_dataloader:
     # Do something
     pass
 ```
+
+The sampler state is stored separately per dataloader and process. Older checkpoints without this
+state still load, but cannot automatically recover an earlier permutation. Keep the dataset,
+batch size and distributed configuration unchanged. This does not restore arbitrary custom sampler
+state or random data augmentations in worker processes. When using `use_stateful_dataloader=True`,
+restore the dataloader with `load_state` instead of additionally calling `skip_first_batches`.
