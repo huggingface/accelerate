@@ -3,6 +3,11 @@ name: Build Docker images (scheduled)
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_PASSWORD:
+        required: true
   schedule:
     - cron: "0 1 * * *"
 

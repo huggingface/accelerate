@@ -42,7 +42,9 @@ jobs:
     needs: check-for-source
     if: (github.event_name == 'push') && (needs.check-for-source.outputs.changed == '1')
     uses: ./.github/workflows/build_docker_images.yml
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
 
   run-merge-tests:
     needs: build-docker-containers
