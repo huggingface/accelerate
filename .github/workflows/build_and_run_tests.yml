@@ -9,6 +9,8 @@ on:
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+permissions: {}
+
 jobs:
   check-for-source:
     permissions:
@@ -39,6 +41,8 @@ jobs:
           done
           
   build-docker-containers:
+    permissions:
+      contents: read
     needs: check-for-source
     if: (github.event_name == 'push') && (needs.check-for-source.outputs.changed == '1')
     uses: ./.github/workflows/build_docker_images.yml
@@ -47,11 +51,13 @@ jobs:
       DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
 
   run-merge-tests:
+    permissions: {}
     needs: build-docker-containers
     if: always()
     uses: ./.github/workflows/run_merge_tests.yml
 
   run-integration-tests:
+    permissions: {}
     needs: build-docker-containers
     if: always()
     uses: ./.github/workflows/self_hosted_integration_tests.yml
