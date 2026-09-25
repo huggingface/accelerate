@@ -799,10 +799,11 @@ class BigModelingTester(unittest.TestCase):
         device_map = {"": 0}
         with (
             mock.patch("torch.cuda.is_available", return_value=False),
-            mock.patch("torch.accelerator.is_available", return_value=True),
-            mock.patch("torch.accelerator.current_accelerator", return_value=SimpleNamespace(type="tpu")),
+            mock.patch("torch.accelerator", create=True) as accelerator,
             mock.patch.object(model, "to") as mock_to,
         ):
+            accelerator.is_available.return_value = True
+            accelerator.current_accelerator.return_value = SimpleNamespace(type="tpu")
             dispatch_model(model, device_map)
             mock_to.assert_called_once_with("tpu:0")
 
