@@ -339,6 +339,10 @@ def set_module_tensor_to_device(
                 device = f"musa:{device}"
             elif is_hpu_available():
                 device = "hpu"
+            elif torch.cuda.is_available():
+                pass
+            elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+                device = f"{torch.accelerator.current_accelerator().type}:{device}"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
@@ -812,13 +816,26 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
-        else:
+        elif torch.cuda.is_available():
             for i in range(torch.cuda.device_count()):
                 try:
                     _ = torch.tensor([0], device=i)
                     max_memory[i] = torch.cuda.mem_get_info(i)[0]
                     device_properties = torch.cuda.get_device_properties(i)
                     is_integrated_cuda = is_integrated_cuda or getattr(device_properties, "is_integrated", False)
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+            acc_type = torch.accelerator.current_accelerator().type
+            for i in range(torch.accelerator.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device(acc_type, i))
+                    if hasattr(torch.accelerator, "get_memory_info"):
+                        max_memory[i] = torch.accelerator.get_memory_info(i)[0]
+                    else:
+                        dev_mod = torch.get_device_module(acc_type)
+                        max_memory[i] = dev_mod.mem_get_info(i)[0]
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -850,8 +867,12 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.xpu.device_count()
     elif is_hpu_available():
         num_devices = torch.hpu.device_count()
-    else:
+    elif torch.cuda.is_available():
         num_devices = torch.cuda.device_count()
+    elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+        num_devices = torch.accelerator.device_count()
+    else:
+        num_devices = 0
     for device in gpu_devices:
         if device >= num_devices or device < 0:
             logger.warning(f"Device {device} is not available, available devices are {list(range(num_devices))}")
@@ -985,8 +1006,12 @@ def get_balanced_memory(
         expected_device_type = "hpu"
     elif is_mps_available():
         expected_device_type = "mps"
-    else:
+    elif torch.cuda.is_available():
         expected_device_type = "cuda"
+    elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+        expected_device_type = torch.accelerator.current_accelerator().type
+    else:
+        expected_device_type = None
     # Integer keys always refer to accelerator devices, so they are counted directly: resolving them through
     # `torch.device` errors out on machines without an accelerator ("Cannot access accelerator device when
     # none is available.").
