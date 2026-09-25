@@ -240,9 +240,10 @@ def launch_command_parser(subparsers=None):
     )
     resource_args.add_argument(
         "--dynamo_use_dynamic",
-        default=False,
+        default=None,
         action="store_true",
-        help="Whether to enable dynamic shape tracing.",
+        help="Whether to enable dynamic shape tracing. If not set, `torch.compile` uses its default, which "
+        "switches to dynamic shapes after the first recompilation.",
     )
     resource_args.add_argument(
         "--dynamo_use_regional_compilation",
