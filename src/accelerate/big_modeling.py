@@ -500,20 +500,21 @@ def dispatch_model(
     else:
         device = list(devices)[0]
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if is_npu_available() and isinstance(device, int):
-            device = f"npu:{device}"
-        elif is_mlu_available() and isinstance(device, int):
-            device = f"mlu:{device}"
-        elif is_sdaa_available() and isinstance(device, int):
-            device = f"sdaa:{device}"
-        elif is_musa_available() and isinstance(device, int):
-            device = f"musa:{device}"
-        elif is_neuron_available() and isinstance(device, int):
-            device = f"neuron:{device}"
-        elif isinstance(device, int) and torch.cuda.is_available():
-            pass
-        elif isinstance(device, int) and hasattr(torch, "accelerator") and torch.accelerator.is_available():
-            device = f"{torch.accelerator.current_accelerator().type}:{device}"
+        if isinstance(device, int):
+            if is_npu_available():
+                device = f"npu:{device}"
+            elif is_mlu_available():
+                device = f"mlu:{device}"
+            elif is_sdaa_available():
+                device = f"sdaa:{device}"
+            elif is_musa_available():
+                device = f"musa:{device}"
+            elif is_neuron_available():
+                device = f"neuron:{device}"
+            elif torch.cuda.is_available():
+                pass
+            elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+                device = f"{torch.accelerator.current_accelerator().type}:{device}"
         model.to(device)
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
