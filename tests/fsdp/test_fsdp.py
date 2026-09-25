@@ -15,12 +15,14 @@
 
 import functools
 import os
+import tempfile
 from contextlib import nullcontext
 
 import torch
 from transformers import AutoModel
 
 from accelerate.accelerator import Accelerator
+from accelerate.optimizer import AcceleratedOptimizer
 from accelerate.state import AcceleratorState, DistributedType
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
@@ -51,6 +53,8 @@ from accelerate.utils.fsdp_utils import (
     _set_model_state_dict,
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
+    load_fsdp_optimizer,
+    save_fsdp_optimizer,
 )
 
 
@@ -126,6 +130,47 @@ class FSDP2PeftStateDictTest(AccelerateTestCase):
 
         restored = {float(param.detach().flatten()[0]) for name, param in model.named_parameters() if "lora_" in name}
         assert restored == {0.5}
+
+
+@require_fsdp2
+class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
+    """Checkpointing FSDP2 optimizer state must not step the fp16 `GradScaler`."""
+
+    def setUp(self):
+        super().setUp()
+        self.accelerator = Accelerator(cpu=True)
+        self.plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+
+    def _build(self, scaler_state=None):
+        model = torch.nn.Linear(4, 4)
+        scaler = torch.amp.GradScaler("cpu")
+        if scaler_state is not None:
+            scaler.load_state_dict(scaler_state)
+        return model, AcceleratedOptimizer(torch.optim.AdamW(model.parameters()), scaler=scaler), scaler
+
+    def test_save_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(torch.zeros(()))  # an already-used scaler, with the optimizer state still empty
+        expected = scaler.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+
+    def test_load_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(model(torch.randn(2, 4)).sum()).backward()
+        optimizer.step()
+        expected = scaler.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+            model, optimizer, scaler = self._build(expected)  # a fresh process: the scaler is still lazy
+            load_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+        assert optimizer.state
 
 
 @require_non_cpu
