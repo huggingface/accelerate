@@ -28,6 +28,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
 from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, skip_first_batches
+from accelerate.hooks import ModelHook, add_hook_to_module
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
@@ -644,6 +645,19 @@ class AcceleratorTester(AccelerateTestCase):
         # check that pickle roundtrip works
         model_loaded = pickle.loads(pickle.dumps(model))
         model_loaded(inputs)
+
+    def test_can_unwrap_hooked_model_bf16(self):
+        # before the fix, unwrapping a model whose forward comes from an accelerate hook raised:
+        # Linear.forward() takes 2 positional arguments but 3 were given
+        model = create_components()[0]
+        add_hook_to_module(model, ModelHook())
+        accelerator = Accelerator(mixed_precision="bf16", cpu=True)
+        inputs = torch.randn(10, 2)
+        model = accelerator.prepare(model)
+        model(inputs)  # sanity check that this works
+
+        model = accelerator.unwrap_model(model, keep_fp32_wrapper=False)
+        model(inputs)  # check that this still works
 
     def test_can_unwrap_distributed_compiled_model_keep_torch_compile(self):
         model = create_components()[0]
