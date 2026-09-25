@@ -240,10 +240,6 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
         `bool`: Whether the model has DTensor parameters.
     """
     if not is_torch_distributed_available():
-        # DTensor lives under `torch.distributed`, so a torch build without a distributed backend
-        # cannot hold DTensor parameters, and importing it raises rather than returning False.
-        # AMD's Windows ROCm wheels are such a build: `torch.distributed` imports, but
-        # `torch.distributed.is_available()` is False and `torch._C._distributed_c10d` is absent.
         return False
 
     if is_torch_version(">=", "2.5.0"):
