@@ -42,18 +42,18 @@ def test_training(tmp_path):
     reference = run_training(tmp_path / "reference.json", reference=True, batch_size=8)
     distributed = run_training(tmp_path / "ddp.json", batch_size=4)
 
-    atol = 1e-4
+    loss_tolerance = 1e-4
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
-    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=atol, rtol=0)
-    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=atol, rtol=0)
+    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=loss_tolerance, rtol=0)
+    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=loss_tolerance, rtol=0)
     # Agreement alone also accepts two runs that never learn. On the first batch,
     # require a loss decrease larger than the comparison tolerance.
-    assert reference["final_loss"] < reference["losses"][0] - atol
-    assert distributed["final_loss"] < distributed["losses"][0] - atol
+    assert reference["final_loss"] < reference["losses"][0] - loss_tolerance
+    assert distributed["final_loss"] < distributed["losses"][0] - loss_tolerance
 
 
 @pytest.mark.parametrize(
-    "mixed_precision, atol",
+    "mixed_precision, loss_tolerance",
     [
         pytest.param("fp16", 1e-4),
         pytest.param("bf16", 1e-3, marks=pytest.mark.skipif(not is_bf16_available(), reason="Requires BF16")),
@@ -62,7 +62,7 @@ def test_training(tmp_path):
 @require_cuda
 @require_multi_gpu
 @require_huggingface_suite
-def test_training_mixed_precision(tmp_path, mixed_precision, atol):
+def test_training_mixed_precision(tmp_path, mixed_precision, loss_tolerance):
     """Compare DDP with single-GPU training at the same requested precision."""
     reference = run_training(
         tmp_path / "reference.json", reference=True, batch_size=8, mixed_precision=mixed_precision
@@ -70,12 +70,12 @@ def test_training_mixed_precision(tmp_path, mixed_precision, atol):
     distributed = run_training(tmp_path / "ddp.json", batch_size=4, mixed_precision=mixed_precision)
 
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
-    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=atol, rtol=0)
-    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=atol, rtol=0)
+    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=loss_tolerance, rtol=0)
+    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=loss_tolerance, rtol=0)
     # Agreement alone also accepts two runs that never learn. On the first batch,
     # require a loss decrease larger than the comparison tolerance.
-    assert reference["final_loss"] < reference["losses"][0] - atol
-    assert distributed["final_loss"] < distributed["losses"][0] - atol
+    assert reference["final_loss"] < reference["losses"][0] - loss_tolerance
+    assert distributed["final_loss"] < distributed["losses"][0] - loss_tolerance
 
 
 @pytest.mark.skipif(not is_bf16_available(), reason="Requires BF16")
@@ -89,14 +89,14 @@ def test_training_with_gradient_accumulation(tmp_path):
         tmp_path / "accumulated.json", batch_size=2, mixed_precision="bf16", gradient_accumulation_steps=2
     )
 
-    atol = 1e-3
+    loss_tolerance = 1e-3
     assert len(large_batch["losses"]) == len(accumulated["losses"]) == 10
-    torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=atol, rtol=0)
-    torch.testing.assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=atol, rtol=0)
+    torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=loss_tolerance, rtol=0)
+    torch.testing.assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=loss_tolerance, rtol=0)
     # Agreement alone also accepts two runs that never learn. On the first batch,
     # require a loss decrease larger than the comparison tolerance.
-    assert large_batch["final_loss"] < large_batch["losses"][0] - atol
-    assert accumulated["final_loss"] < accumulated["losses"][0] - atol
+    assert large_batch["final_loss"] < large_batch["losses"][0] - loss_tolerance
+    assert accumulated["final_loss"] < accumulated["losses"][0] - loss_tolerance
 
 
 def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulation_steps=1, reference=False):
@@ -126,6 +126,6 @@ def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulat
         command.append("--reference")
     result = execute_subprocess_async(command, env={**os.environ, "OMP_NUM_THREADS": "1"})
     assert result.returncode == 0, result.stderr
-    result = json.loads(output.read_text())
+    result = json.loads(output.read_text(encoding="utf-8"))
     assert result["world_size"] == (1 if reference else 2)
     return result

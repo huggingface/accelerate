@@ -62,14 +62,18 @@ def train_with_accelerate(model, optimizer, dataloader, accelerator):
     return losses
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--reference", action="store_true")
     parser.add_argument("--mixed-precision", choices=("no", "bf16", "fp16"), default="no")
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
 
     accelerator = None
     if not args.reference:
@@ -79,20 +83,15 @@ def main():
         )
     device = torch.device("cuda:0") if args.reference else accelerator.device
     set_seed(1337)
+    # Keep FP32 matrix multiplies in full precision for the loss comparison.
     torch.set_float32_matmul_precision("highest")
 
     checkpoint = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+    # Fix the attention implementation; training does not need a generation cache.
     model = AutoModelForCausalLM.from_pretrained(
         checkpoint, dtype=torch.float32, attn_implementation="eager", use_cache=False
     )
-    dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:100]")
-    tokens = tokenizer("\n\n".join(dataset["text"]), return_attention_mask=False)["input_ids"]
-    block_size, num_blocks = 32, 80
-    # Full blocks give equal shifted-target counts, so averaging microbatch losses
-    # matches the full-batch token mean. All ten global batches are complete.
-    input_ids = torch.tensor(tokens[: num_blocks * block_size]).reshape(num_blocks, block_size)
-    dataloader = DataLoader(input_ids, batch_size=args.batch_size, shuffle=False)
     model.train()
 
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(args.mixed_precision)
@@ -104,6 +103,15 @@ def main():
         linear = next(module for module in model.modules() if isinstance(module, torch.nn.Linear))
         linear.register_forward_hook(check_compute_dtype)
 
+    dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:100]")
+    text = "\n\n".join(dataset["text"])
+    tokens = tokenizer(text, return_attention_mask=False)["input_ids"]
+    block_size, num_blocks = 32, 80
+    # Full blocks give equal shifted-target counts, so averaging microbatch losses
+    # matches the full-batch token mean. All ten global batches are complete.
+    input_ids = torch.tensor(tokens[: num_blocks * block_size]).reshape(num_blocks, block_size)
+    dataloader = DataLoader(input_ids, batch_size=args.batch_size, shuffle=False)
+
     if args.reference:
         model.to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -114,22 +122,18 @@ def main():
         losses = train_with_accelerate(model, optimizer, dataloader, accelerator)
 
     # Revisit the first global batch to observe learning, including the final update.
-    batch = input_ids[:8].to(device)
+    first_global_batch = input_ids[:8].to(device)
     # Accelerate's prepared model handles autocast inside forward; only the reference needs it here.
     context = torch.autocast("cuda", dtype=dtype) if args.reference and dtype is not None else nullcontext()
     with torch.no_grad(), context:
-        final_loss = model(input_ids=batch, labels=batch).loss.item()
+        final_loss = model(input_ids=first_global_batch, labels=first_global_batch).loss.item()
     if args.reference or accelerator.is_main_process:
-        args.output.write_text(
-            json.dumps(
-                {
-                    "losses": losses,
-                    "final_loss": final_loss,
-                    "world_size": 1 if args.reference else accelerator.num_processes,
-                },
-                allow_nan=False,
-            )
-        )
+        results = {
+            "losses": losses,
+            "final_loss": final_loss,
+            "world_size": 1 if args.reference else accelerator.num_processes,
+        }
+        args.output.write_text(json.dumps(results, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     if accelerator:
         accelerator.end_training()
 
