@@ -46,6 +46,7 @@ def test_training(tmp_path):
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
     torch.testing.assert_close(distributed["losses"], reference["losses"], atol=loss_tolerance, rtol=0)
     torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=loss_tolerance, rtol=0)
+
     # Agreement alone also accepts two runs that never learn. On the first batch,
     # require a loss decrease larger than the comparison tolerance.
     assert reference["final_loss"] < reference["losses"][0] - loss_tolerance
@@ -72,6 +73,7 @@ def test_training_mixed_precision(tmp_path, mixed_precision, loss_tolerance):
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
     torch.testing.assert_close(distributed["losses"], reference["losses"], atol=loss_tolerance, rtol=0)
     torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=loss_tolerance, rtol=0)
+
     # Agreement alone also accepts two runs that never learn. On the first batch,
     # require a loss decrease larger than the comparison tolerance.
     assert reference["final_loss"] < reference["losses"][0] - loss_tolerance
@@ -93,6 +95,7 @@ def test_training_with_gradient_accumulation(tmp_path):
     assert len(large_batch["losses"]) == len(accumulated["losses"]) == 10
     torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=loss_tolerance, rtol=0)
     torch.testing.assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=loss_tolerance, rtol=0)
+
     # Agreement alone also accepts two runs that never learn. On the first batch,
     # require a loss decrease larger than the comparison tolerance.
     assert large_batch["final_loss"] < large_batch["losses"][0] - loss_tolerance
@@ -111,6 +114,7 @@ def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulat
             "--main_process_port",
             str(get_torch_dist_unique_port()),
         ]
+
     command += [
         str(script),
         "--output",
@@ -124,8 +128,10 @@ def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulat
     ]
     if reference:
         command.append("--reference")
+
     result = execute_subprocess_async(command, env={**os.environ, "OMP_NUM_THREADS": "1"})
     assert result.returncode == 0, result.stderr
+
     result = json.loads(output.read_text(encoding="utf-8"))
     assert result["world_size"] == (1 if reference else 2)
     return result

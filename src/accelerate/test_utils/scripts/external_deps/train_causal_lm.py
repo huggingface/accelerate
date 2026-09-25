@@ -33,6 +33,7 @@ def train_reference(model, optimizer, dataloader, mixed_precision, device):
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(mixed_precision)
     scaler = torch.amp.GradScaler("cuda", enabled=mixed_precision == "fp16")
     losses = []
+
     for batch in dataloader:
         batch = batch.to(device)
         with torch.autocast("cuda", dtype=dtype, enabled=dtype is not None):
@@ -41,24 +42,29 @@ def train_reference(model, optimizer, dataloader, mixed_precision, device):
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad()
+
         losses.append(loss.item())
+
     return losses
 
 
 def train_with_accelerate(model, optimizer, dataloader, accelerator):
     losses, window_losses = [], []
+
     for batch in dataloader:
         with accelerator.accumulate(model):
             loss = model(input_ids=batch, labels=batch).loss
             accelerator.backward(loss)
             optimizer.step()
             optimizer.zero_grad()
+
             window_losses.append(loss.detach())
             if accelerator.sync_gradients:
                 # Equal shifted-target counts make this a global effective-batch mean.
                 window_loss = torch.stack(window_losses).mean()
                 losses.append(accelerator.reduce(window_loss, reduction="mean").item())
                 window_losses.clear()
+
     return losses
 
 
@@ -82,6 +88,7 @@ def main():
             gradient_accumulation_steps=args.gradient_accumulation_steps,
         )
     device = torch.device("cuda:0") if args.reference else accelerator.device
+
     set_seed(1337)
     # Keep FP32 matrix multiplies in full precision for the loss comparison.
     torch.set_float32_matmul_precision("highest")
@@ -90,7 +97,10 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
     # Fix the attention implementation; training does not need a generation cache.
     model = AutoModelForCausalLM.from_pretrained(
-        checkpoint, dtype=torch.float32, attn_implementation="eager", use_cache=False
+        checkpoint,
+        dtype=torch.float32,
+        attn_implementation="eager",
+        use_cache=False,
     )
     model.train()
 
@@ -106,6 +116,7 @@ def main():
     dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:100]")
     text = "\n\n".join(dataset["text"])
     tokens = tokenizer(text, return_attention_mask=False)["input_ids"]
+
     block_size, num_blocks = 32, 80
     # Full blocks give equal shifted-target counts, so averaging microbatch losses
     # matches the full-batch token mean. All ten global batches are complete.
@@ -115,6 +126,7 @@ def main():
     if args.reference:
         model.to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
     if args.reference:
         losses = train_reference(model, optimizer, dataloader, args.mixed_precision, device)
     else:
@@ -127,6 +139,7 @@ def main():
     context = torch.autocast("cuda", dtype=dtype) if args.reference and dtype is not None else nullcontext()
     with torch.no_grad(), context:
         final_loss = model(input_ids=first_global_batch, labels=first_global_batch).loss.item()
+
     if args.reference or accelerator.is_main_process:
         results = {
             "losses": losses,
@@ -134,6 +147,7 @@ def main():
             "world_size": 1 if args.reference else accelerator.num_processes,
         }
         args.output.write_text(json.dumps(results, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+
     if accelerator:
         accelerator.end_training()
 
