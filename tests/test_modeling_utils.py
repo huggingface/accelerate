@@ -153,6 +153,10 @@ class ModelingUtilsTester(unittest.TestCase):
         ):
             if hasattr(torch, name):
                 self.assertEqual(dtype_byte_size(getattr(torch, name)), 1, msg=name)
+        # Sub-byte and packed dtypes still occupy one byte per element in storage.
+        for name in ("uint4", "float4_e2m1fn_x2"):
+            if hasattr(torch, name):
+                self.assertEqual(dtype_byte_size(getattr(torch, name)), 1, msg=name)
 
     def check_set_module_tensor_for_device(self, model, device1, device2):
         assert model.linear1.weight.device == torch.device(device1)
