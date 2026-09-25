@@ -168,12 +168,18 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
         if self.gradient_state.sync_gradients:
             if self.scaler is not None:
+                # AMP-aware optimizers can skip inside their kernel even when step() is called.
+                scale_before = (
+                    self.scaler.get_scale() if getattr(self.optimizer, "_step_supports_amp_scaling", False) else None
+                )
                 self.optimizer.step = self._optimizer_patched_step_method
 
                 self.scaler.step(self.optimizer, closure)
                 self.scaler.update()
 
-                if not self._accelerate_step_called:
+                if scale_before is not None:
+                    self._is_overflow = self.scaler.get_scale() < scale_before
+                elif not self._accelerate_step_called:
                     # If the optimizer step was skipped, gradient overflow was detected.
                     self._is_overflow = True
                 else:
