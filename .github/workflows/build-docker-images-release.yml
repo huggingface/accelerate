@@ -20,6 +20,8 @@ jobs:
       version: ${{ steps.step1.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - id: step1
         run: |
           version=$(python setup.py --version)

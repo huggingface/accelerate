@@ -14,6 +14,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
+        persist-credentials: false
         fetch-depth: 0
     - name: Secret Scanning
       uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c  # main
