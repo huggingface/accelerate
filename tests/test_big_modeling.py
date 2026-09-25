@@ -20,6 +20,7 @@ import unittest
 from collections import OrderedDict
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from unittest import mock
 
 import torch
 import torch.nn as nn
@@ -792,6 +793,18 @@ class BigModelingTester(unittest.TestCase):
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
+    def test_dispatch_model_with_accelerator(self):
+        model = ModelForTest()
+        device_map = {"": 0}
+        with (
+            mock.patch("torch.cuda.is_available", return_value=False),
+            mock.patch("torch.accelerator.is_available", return_value=True),
+            mock.patch("torch.accelerator.current_accelerator", return_value=SimpleNamespace(type="tpu")),
+            mock.patch.object(model, "to") as mock_to,
+        ):
+            dispatch_model(model, device_map)
+            mock_to.assert_called_once_with("tpu:0")
 
     @require_non_cpu
     def test_dispatch_model_force_hooks(self):
