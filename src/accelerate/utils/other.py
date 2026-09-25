@@ -239,6 +239,9 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
     Returns:
         `bool`: Whether the model has DTensor parameters.
     """
+    if not is_torch_distributed_available():
+        return False
+
     if is_torch_version(">=", "2.5.0"):
         from torch.distributed.tensor import DTensor
     else:
