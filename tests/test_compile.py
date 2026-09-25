@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+from functools import partial
 from types import MethodType
 from unittest import skip
 
 import torch
 from torch.utils.benchmark import Timer
 
+from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 from accelerate.test_utils import require_huggingface_suite, require_non_cpu, require_non_hpu, slow, torch_device
 from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
 
@@ -188,6 +190,29 @@ class RegionalCompilationRebindTester(unittest.TestCase):
 
         assert compiled_model is not model
         assert compiled_model.__dict__["forward"].__self__ is compiled_model
+
+        compiled_model(inputs)
+
+        assert not hasattr(model, "trace")
+        assert compiled_model.trace == ("twin", "OptimizedModule")
+
+    def test_hook_wrapped_forward_is_rebound(self):
+        """A hook installs `forward` as a partial, which carries no `__self__` to rebind.
+
+        Left alone, the copy keeps calling the original module and its compiled blocks
+        are never reached, silently running the uncompiled model.
+        """
+        model, inputs = self._get_model_and_inputs()
+        add_hook_to_module(model, AlignDevicesHook())
+
+        assert isinstance(model.__dict__["forward"], partial)
+        assert model.__dict__["forward"].args[0] is model
+
+        compiled_model = compile_regions(model, backend="eager")
+        compiled_model.tag = "twin"
+
+        assert compiled_model is not model
+        assert compiled_model.__dict__["forward"].args[0] is compiled_model
 
         compiled_model(inputs)
 

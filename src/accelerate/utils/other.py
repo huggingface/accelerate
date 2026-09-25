@@ -18,7 +18,7 @@ import re
 import socket
 from codecs import encode
 from collections import OrderedDict
-from functools import partial, reduce
+from functools import partial, reduce, update_wrapper
 from types import MethodType
 from typing import Optional
 
@@ -161,6 +161,17 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
             for name, value in list(new_module.__dict__.items()):
                 if hasattr(value, "__func__") and getattr(value, "__self__", None) is module:
                     new_module.__dict__[name] = MethodType(value.__func__, new_module)
+                elif isinstance(value, partial) and any(arg is module for arg in value.args):
+                    # `add_hook_to_module` installs `forward` as
+                    # `partial(new_forward, module)`, which carries no `__self__` for the
+                    # branch above to rebind. Left alone it keeps calling the original
+                    # module, so the copy's compiled children are never reached.
+                    rebound = partial(
+                        value.func,
+                        *(new_module if arg is module else arg for arg in value.args),
+                        **value.keywords,
+                    )
+                    new_module.__dict__[name] = update_wrapper(rebound, value)
             new_module._modules = {}
             for name, submodule in module.named_children():
                 new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
