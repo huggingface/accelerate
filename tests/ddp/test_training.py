@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -27,7 +28,7 @@ from accelerate.test_utils.testing import (
     require_huggingface_suite,
     require_multi_gpu,
 )
-from accelerate.utils import is_bf16_available, patch_environment
+from accelerate.utils import is_bf16_available
 
 
 @require_cuda
@@ -123,8 +124,7 @@ def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulat
     ]
     if reference:
         command.append("--reference")
-    with patch_environment(omp_num_threads=1):
-        result = execute_subprocess_async(command)
+    result = execute_subprocess_async(command, env={**os.environ, "OMP_NUM_THREADS": "1"})
     assert result.returncode == 0, result.stderr
     result = json.loads(output.read_text())
     assert result["world_size"] == (1 if reference else 2)

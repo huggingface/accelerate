@@ -35,7 +35,7 @@ def train_reference(model, optimizer, dataloader, mixed_precision, device):
     losses = []
     for batch in dataloader:
         batch = batch.to(device)
-        with torch.autocast("cuda", dtype=dtype) if dtype else nullcontext():
+        with torch.autocast("cuda", dtype=dtype, enabled=dtype is not None):
             loss = model(input_ids=batch, labels=batch).loss
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -115,8 +115,9 @@ def main():
 
     # Revisit the first global batch to observe learning, including the final update.
     batch = input_ids[:8].to(device)
-    autocast = torch.autocast("cuda", dtype=dtype) if args.reference and dtype else nullcontext()
-    with torch.no_grad(), autocast:
+    # Accelerate's prepared model handles autocast inside forward; only the reference needs it here.
+    context = torch.autocast("cuda", dtype=dtype) if args.reference and dtype is not None else nullcontext()
+    with torch.no_grad(), context:
         final_loss = model(input_ids=batch, labels=batch).loss.item()
     if args.reference or accelerator.is_main_process:
         args.output.write_text(
