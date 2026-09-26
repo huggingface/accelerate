@@ -17,6 +17,7 @@ import functools
 import os
 import tempfile
 from contextlib import nullcontext
+from unittest.mock import patch
 
 import torch
 from transformers import AutoModel
@@ -526,6 +527,27 @@ class FSDPPluginIntegration(AccelerateTestCase):
             else:
                 params_to_ignore = {model.layers[0].self_attn.q_proj.weight, model.layers[1].self_attn.q_proj.weight}
                 assert model._ignored_params == params_to_ignore
+
+
+@require_fsdp2
+class FSDP2StateDictAliasingTest(AccelerateTestCase):
+    def test_preserves_tied_aliases(self):
+        accelerator = Accelerator(cpu=True)
+        accelerator.state.distributed_type = DistributedType.FSDP
+        accelerator.state.fsdp_plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+
+        model = torch.nn.Module()
+        model.a = torch.nn.Linear(4, 4, bias=False)
+        model.b = torch.nn.Linear(4, 4, bias=False)
+        model.b.weight = model.a.weight
+
+        with patch(
+            "torch.distributed.checkpoint.state_dict.get_model_state_dict",
+            side_effect=lambda model, options: {k: v.clone() for k, v in model.state_dict().items()},
+        ):
+            state_dict = accelerator.get_state_dict(model)
+
+        assert state_dict["a.weight"].data_ptr() == state_dict["b.weight"].data_ptr()
 
 
 @require_fsdp2
