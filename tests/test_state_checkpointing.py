@@ -376,6 +376,57 @@ class CheckpointTest(AccelerateTestCase):
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
 
+    def test_checkpoint_deletion_with_non_checkpoint_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True, total_limit=2)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = accelerator.prepare(model)
+            checkpoints_dir = os.path.join(tmpdir, "checkpoints")
+
+            # Save 2 checkpoints
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            # Add stray non-checkpoint files (with and without digits)
+            with open(os.path.join(checkpoints_dir, "train_log_9.txt"), "w") as f:
+                f.write("log")
+            with open(os.path.join(checkpoints_dir, "README.md"), "w") as f:
+                f.write("readme")
+
+            # Save a 3rd checkpoint; total_limit=2 should prune only checkpoint_0
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            assert not os.path.exists(os.path.join(checkpoints_dir, "checkpoint_0"))
+            assert os.path.exists(os.path.join(checkpoints_dir, "checkpoint_1"))
+            assert os.path.exists(os.path.join(checkpoints_dir, "checkpoint_2"))
+            assert os.path.exists(os.path.join(checkpoints_dir, "train_log_9.txt"))
+            assert os.path.exists(os.path.join(checkpoints_dir, "README.md"))
+
+            # load_state should correctly resume from checkpoint_2 despite train_log_9.txt
+            accelerator.load_state()
+
+    def test_load_state_automatic_naming_empty_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+
+            # When checkpoints directory does not exist
+            with pytest.raises(ValueError, match="folder does not exist"):
+                accelerator.load_state()
+
+            # When checkpoints directory exists but contains no checkpoint folders
+            checkpoints_dir = os.path.join(tmpdir, "checkpoints")
+            os.makedirs(checkpoints_dir, exist_ok=True)
+            with pytest.raises(ValueError, match="No checkpoint directories found"):
+                accelerator.load_state()
+
+            # When checkpoints directory contains only non-checkpoint files
+            with open(os.path.join(checkpoints_dir, "README.md"), "w") as f:
+                f.write("readme")
+            with pytest.raises(ValueError, match="No checkpoint directories found"):
+                accelerator.load_state()
+
     @run_first
     @require_non_cpu
     @require_non_torch_xla

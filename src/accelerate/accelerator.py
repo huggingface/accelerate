@@ -3663,7 +3663,11 @@ class Accelerator:
             output_dir = os.path.join(self.project_dir, "checkpoints")
         os.makedirs(output_dir, exist_ok=True)
         if self.project_configuration.automatic_checkpoint_naming:
-            folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
+            folders = [
+                os.path.join(output_dir, folder)
+                for folder in os.listdir(output_dir)
+                if os.path.isdir(os.path.join(output_dir, folder)) and re.match(r"^checkpoint_(\d+)$", folder)
+            ]
             if (
                 self.project_configuration.total_limit is not None
                 and (len(folders) + 1 > self.project_configuration.total_limit)
@@ -3671,7 +3675,7 @@ class Accelerator:
             ):
 
                 def _inner(folder):
-                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+                    return int(re.match(r"^checkpoint_(\d+)$", os.path.basename(folder)).group(1))
 
                 folders.sort(key=_inner)
                 logger.warning(
@@ -3829,10 +3833,18 @@ class Accelerator:
         elif self.project_configuration.automatic_checkpoint_naming:
             # Pick up from automatic checkpoint naming
             input_dir = os.path.join(self.project_dir, "checkpoints")
-            folders = [os.path.join(input_dir, folder) for folder in os.listdir(input_dir)]
+            if not os.path.isdir(input_dir):
+                raise ValueError(f"Tried to find {input_dir} but folder does not exist")
+            folders = [
+                os.path.join(input_dir, folder)
+                for folder in os.listdir(input_dir)
+                if os.path.isdir(os.path.join(input_dir, folder)) and re.match(r"^checkpoint_(\d+)$", folder)
+            ]
+            if not folders:
+                raise ValueError(f"No checkpoint directories found in {input_dir} with automatic checkpoint naming.")
 
             def _inner(folder):
-                return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+                return int(re.match(r"^checkpoint_(\d+)$", os.path.basename(folder)).group(1))
 
             folders.sort(key=_inner)
             input_dir = folders[-1]
