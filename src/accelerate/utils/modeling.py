@@ -1203,7 +1203,13 @@ def get_module_size_with_ties(
     tied_modules = []
 
     for tied_param in tied_params:
-        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
+        # The tied parameter can either live inside a module still to treat, or be an entry of
+        # `modules_to_treat` itself: when the tied module was split in an earlier iteration, its
+        # direct parameters are re-added as top-level entries (e.g. ("b.w", Parameter)), so the
+        # match must also allow `tied_param == n`.
+        tied_module_index = [
+            i for i, (n, _) in enumerate(modules_to_treat) if tied_param == n or tied_param.startswith(n + ".")
+        ][0]
         tied_module_names.append(modules_to_treat[tied_module_index][0])
         tied_modules.append(modules_to_treat[tied_module_index][1])
 
