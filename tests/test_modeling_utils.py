@@ -743,6 +743,47 @@ class ModelingUtilsTester(unittest.TestCase):
         device_memory = {0: 4, "cpu": 96000}  # Low memory device, just to force splitting and trigger the error
         infer_auto_device_map(model, device_memory)
 
+    def test_infer_auto_device_map_tied_weights_partner_module_split(self):
+        # A tied parameter whose partner module gets split must not crash the map computation.
+        # When `b` is split, its direct parameters (e.g. `b.w`, tied to `a.p`) become top-level
+        # entries of the module list, so the tied-module lookup must also match them by exact
+        # name instead of only by prefix.
+        class Sub(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.p = nn.Parameter(torch.empty(64, dtype=torch.bfloat16))
+
+        class A(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.p = nn.Parameter(torch.empty(256, dtype=torch.bfloat16))
+
+        class B(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.w = nn.Parameter(torch.empty(256, dtype=torch.bfloat16))
+                self.p2 = nn.Parameter(torch.empty(4096, dtype=torch.bfloat16))
+                self.sub = Sub()
+
+        class Model(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.a = A()
+                self.b = B()
+
+        model = Model()
+        with torch.no_grad():
+            model.b.w = model.a.p  # tie b.w to a.p
+
+        # 4KB fits `a` (and the tied `b.w`) but not `b` as a whole: `b` is split, which used to
+        # raise an IndexError when the tied parameter was looked up afterwards.
+        device_map = infer_auto_device_map(model, max_memory={0: 4096}, no_split_module_classes=[])
+
+        assert set(device_map) == {"a", "b.w", "b.p2", "b.sub"}
+        assert device_map["a"] == 0
+        # Tied parameters must be co-located with the parameter they share storage with.
+        assert device_map["b.w"] == device_map["a"]
+
     @require_huggingface_suite
     def test_infer_auto_device_map_on_t0pp(self):
         from transformers import AutoConfig, AutoModelForSeq2SeqLM
