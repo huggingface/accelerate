@@ -294,6 +294,15 @@ class UtilsTester(unittest.TestCase):
             assert "5.4.0" in ctx.records[0].msg
             assert "5.5.0" in ctx.records[0].msg
 
+    def test_check_os_kernel_does_not_crash_on_unparseable_release(self):
+        # A kernel release without an X.Y.Z version (e.g. "6.6") must be skipped, not crash
+        # Accelerator.__init__ with a ValueError from the version unpacking.
+        with patch("platform.uname", return_value=Mock(release="6.6", system="Linux")):
+            try:
+                check_os_kernel()
+            except ValueError as e:
+                self.fail(f"check_os_kernel raised on an unparseable kernel release: {e}")
+
     def test_model_has_dtensor_false_without_a_distributed_build(self):
         # A torch build compiled without a distributed backend cannot hold DTensor parameters, and
         # importing torch.distributed.tensor on one raises instead of returning False. AMD's Windows
