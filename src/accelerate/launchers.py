@@ -131,9 +131,7 @@ def notebook_launcher(
     try:
         mixed_precision = PrecisionType(mixed_precision.lower())
     except ValueError:
-        raise ValueError(
-            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
-        )
+        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
 
     if (in_colab or in_kaggle) and (
         (os.environ.get("TPU_NAME", None) is not None) or (os.environ.get("PJRT_DEVICE", "") == "TPU")
@@ -194,7 +192,7 @@ def notebook_launcher(
                 world_size=num_nodes * num_processes,
                 master_addr=master_addr,
                 master_port=use_port,
-                mixed_precision=mixed_precision,
+                accelerate_mixed_precision=mixed_precision.value,
             )
 
             # Check for CUDA P2P and IB issues

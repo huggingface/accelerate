@@ -13,11 +13,13 @@
 # limitations under the License.
 
 import argparse
+import os
 import subprocess
 import unittest
 
 import pytest
 
+from accelerate.launchers import notebook_launcher
 from accelerate.commands.launch import (
     CHILD_STDERR_CHUNK_SIZE,
     CHILD_STDERR_TAIL_CHUNKS,
@@ -124,3 +126,23 @@ class TestSimpleLauncher:
         assert "the real cause" in exc_info.value.stderr
         assert len(exc_info.value.stderr) <= CHILD_STDERR_CHUNK_SIZE * CHILD_STDERR_TAIL_CHUNKS
         assert "the real cause" in str(exc_info.value.__cause__)
+
+
+def test_notebook_launcher_sets_accelerate_mixed_precision(monkeypatch):
+    # notebook_launcher used to set a bare MIXED_PRECISION key, which nothing
+    # in accelerate reads; the workers read ACCELERATE_MIXED_PRECISION.
+    captured = {}
+    monkeypatch.setattr(
+        "torch.distributed.launcher.api.elastic_launch",
+        lambda config, entrypoint: lambda *a: captured.update(
+            accel=os.environ.get("ACCELERATE_MIXED_PRECISION"), bare=os.environ.get("MIXED_PRECISION")
+        ),
+    )
+    notebook_launcher(lambda: None, num_processes=2, mixed_precision="fp16", use_port="29613")
+    assert captured["accel"] == "fp16"
+    assert captured["bare"] is None
+
+
+def test_notebook_launcher_invalid_precision_error():
+    with pytest.raises(ValueError, match="Unknown mixed_precision mode"):
+        notebook_launcher(lambda: None, num_processes=1, mixed_precision="bogus")
