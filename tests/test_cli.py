@@ -23,6 +23,7 @@ from huggingface_hub.utils import GatedRepoError
 import accelerate.commands.env as accelerate_env_cmd
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
+from accelerate.utils import ComputeEnvironment, DistributedType
 from accelerate.commands.estimate import add_timm_hub_prefix, estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
 from accelerate.commands.to_fsdp2 import (
@@ -327,6 +328,33 @@ class ClusterConfigTester(unittest.TestCase):
         assert config.distributed_type == "MULTI_GPU"
         assert config.num_processes == 2
         assert config.enable_cpu_affinity is True
+
+    def test_config_to_dict_immutability(self):
+        config = ClusterConfig(
+            compute_environment="LOCAL_MACHINE",
+            distributed_type="NO",
+            mixed_precision="no",
+            use_cpu=True,
+            debug=False,
+        )
+        assert config.dynamo_config == {}
+        assert config.compute_environment == ComputeEnvironment.LOCAL_MACHINE
+        assert config.distributed_type == DistributedType.NO
+
+        config_dict = config.to_dict()
+        # Verify original config was not mutated
+        assert config.dynamo_config == {}
+        assert config.compute_environment == ComputeEnvironment.LOCAL_MACHINE
+        assert config.distributed_type == DistributedType.NO
+        # Verify empty dicts are excluded from output dict
+        assert "dynamo_config" not in config_dict
+        # Verify Enums were properly converted to their value
+        assert config_dict["compute_environment"] == "LOCAL_MACHINE"
+        assert config_dict["distributed_type"] == "NO"
+
+        # Verify editing after to_dict still works
+        config.dynamo_config["dynamo_backend"] = "eager"
+        assert config.dynamo_config["dynamo_backend"] == "eager"
 
     def test_sagemaker_config(self):
         config = SageMakerConfig(
