@@ -81,22 +81,25 @@ class BaseConfig:
     debug: bool
 
     def to_dict(self):
-        result = self.__dict__
-        # For serialization, it's best to convert Enums to strings (or their underlying value type).
-
+        # For serialization, convert Enums to strings (or their underlying value type)
+        # without mutating the configuration object in place.
         def _convert_enums(value):
             if isinstance(value, Enum):
                 return value.value
             if isinstance(value, dict):
                 if not bool(value):
                     return None
-                for key1, value1 in value.items():
-                    value[key1] = _convert_enums(value1)
+                converted_dict = {k: _convert_enums(v) for k, v in value.items()}
+                return converted_dict
+            if isinstance(value, list):
+                return [_convert_enums(v) for v in value]
             return value
 
-        for key, value in result.items():
-            result[key] = _convert_enums(value)
-        result = {k: v for k, v in result.items() if v is not None}
+        result = {}
+        for key, value in self.__dict__.items():
+            converted = _convert_enums(value)
+            if converted is not None:
+                result[key] = converted
         return result
 
     @staticmethod
