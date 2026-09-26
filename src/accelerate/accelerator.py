@@ -4082,8 +4082,18 @@ class Accelerator:
         elif self.is_fsdp2:
             from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
 
+            shared_parameters = {}
+            for name, parameter in model.named_parameters(remove_duplicate=False):
+                shared_parameters.setdefault(id(parameter), []).append(name)
+
             options = StateDictOptions(full_state_dict=True, broadcast_from_rank0=True, cpu_offload=True)
             state_dict = get_model_state_dict(model, options=options)
+
+            for names in shared_parameters.values():
+                present = [name for name in names if name in state_dict]
+                if len(present) > 1:
+                    for alias in present[1:]:
+                        state_dict[alias] = state_dict[present[0]]
         elif self.distributed_type == DistributedType.FSDP:
             from torch.distributed.fsdp import FullStateDictConfig, StateDictType
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
