@@ -331,6 +331,27 @@ class ClusterConfigTester(unittest.TestCase):
 
         config = load_config_from_file(str(self.test_config_path / "0_30_0_sagemaker.yaml"))
 
+    def test_to_dict_does_not_mutate_config(self):
+        config = ClusterConfig(
+            compute_environment="LOCAL_MACHINE",
+            distributed_type="NO",
+            mixed_precision="no",
+            use_cpu=True,
+            debug=False,
+        )
+        serialized = config.to_dict()
+        assert "dynamo_config" not in serialized
+        assert config.dynamo_config == {}
+        assert type(config.compute_environment).__name__ == "ComputeEnvironment"
+        assert type(config.distributed_type).__name__ == "DistributedType"
+
+        config.dynamo_config["dynamo_backend"] = config.distributed_type
+        serialized = config.to_dict()
+        assert serialized["dynamo_config"] == {"dynamo_backend": "NO"}
+        assert type(config.dynamo_config["dynamo_backend"]).__name__ == "DistributedType"
+        serialized["dynamo_config"]["dynamo_backend"] = "EAGER"
+        assert config.dynamo_config["dynamo_backend"] == "NO"
+
 
 class TpuConfigTester(unittest.TestCase):
     """
