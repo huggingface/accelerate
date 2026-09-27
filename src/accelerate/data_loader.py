@@ -608,6 +608,9 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
                 break
 
         self.iteration += 1
+        source_dataloader = getattr(self, "_source_dataloader", None)
+        if source_dataloader is not None and getattr(source_dataloader, "iteration", None) == self.iteration - 1:
+            source_dataloader.iteration = self.iteration
         self.end()
 
     def __reduce__(self):
@@ -623,6 +626,9 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         # In case it is manually passed in, the user can set it to what they like
         if self.iteration != epoch:
             self.iteration = epoch
+        source_dataloader = getattr(self, "_source_dataloader", None)
+        if source_dataloader is not None and hasattr(source_dataloader, "iteration"):
+            source_dataloader.iteration = epoch
         if hasattr(self.batch_sampler, "set_epoch"):
             self.batch_sampler.set_epoch(epoch)
         if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
@@ -943,14 +949,28 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
                 yield batch
             batch_index += 1
         self.iteration += 1
+        source_dataloader = getattr(self, "_source_dataloader", None)
+        if source_dataloader is not None and getattr(source_dataloader, "iteration", None) == self.iteration - 1:
+            source_dataloader.iteration = self.iteration
         self.end()
 
     def set_epoch(self, epoch: int):
         # In case it is manually passed in, the user can set it to what they like
         if self.iteration != epoch:
             self.iteration = epoch
+        source_dataloader = getattr(self, "_source_dataloader", None)
+        if source_dataloader is not None and hasattr(source_dataloader, "iteration"):
+            source_dataloader.iteration = epoch
+        if hasattr(self.batch_sampler, "set_epoch"):
+            self.batch_sampler.set_epoch(epoch)
         if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
             self.batch_sampler.sampler.set_epoch(epoch)
+        if (
+            hasattr(self.batch_sampler, "batch_sampler")
+            and hasattr(self.batch_sampler.batch_sampler, "sampler")
+            and hasattr(self.batch_sampler.batch_sampler.sampler, "set_epoch")
+        ):
+            self.batch_sampler.batch_sampler.sampler.set_epoch(epoch)
         elif hasattr(self.dataset, "set_epoch"):
             self.dataset.set_epoch(epoch)
 
@@ -1351,6 +1371,22 @@ class SkipBatchSampler(BatchSampler):
     def __len__(self):
         return len(self.batch_sampler) - self.skip_batches
 
+    @property
+    def sampler(self):
+        return getattr(self.batch_sampler, "sampler", None)
+
+    def set_epoch(self, epoch: int):
+        if hasattr(self.batch_sampler, "set_epoch"):
+            self.batch_sampler.set_epoch(epoch)
+        elif hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
+            self.batch_sampler.sampler.set_epoch(epoch)
+        elif (
+            hasattr(self.batch_sampler, "batch_sampler")
+            and hasattr(self.batch_sampler.batch_sampler, "sampler")
+            and hasattr(self.batch_sampler.batch_sampler.sampler, "set_epoch")
+        ):
+            self.batch_sampler.batch_sampler.sampler.set_epoch(epoch)
+
 
 class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
     """
@@ -1431,6 +1467,7 @@ def skip_first_batches(dataloader, num_batches=0):
         kwargs["drop_last"] = dataloader.drop_last
         kwargs["batch_size"] = dataloader.batch_size
 
+    source_dataloader = getattr(dataloader, "_source_dataloader", dataloader)
     if isinstance(dataloader, DataLoaderDispatcher):
         if new_batch_sampler is None:
             # Need to manually skip batches in the dataloader
@@ -1466,6 +1503,9 @@ def skip_first_batches(dataloader, num_batches=0):
             dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
         else:
             dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+
+    if isinstance(dataloader, (DataLoaderShard, DataLoaderDispatcher)):
+        dataloader._source_dataloader = source_dataloader
 
     if state.distributed_type == DistributedType.XLA:
         dataloader = MpDeviceLoaderWrapper(dataloader, device)

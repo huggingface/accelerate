@@ -683,6 +683,43 @@ class DataLoaderTester(AccelerateTestCase):
         test_sampler_epoch(DataLoaderShard)
         test_sampler_epoch(DataLoaderDispatcher)
 
+    def test_skip_first_batches_advances_source_dataloader_iteration(self):
+        # Regression test: when the dataloader returned by skip_first_batches finishes an epoch,
+        # it must advance the source dataloader's iteration so the next epoch does not replay the resumed epoch.
+        def test_advance(dataloader_cls):
+            dataset = list(range(16))
+            generator = torch.Generator()
+            batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
+            dataloader = dataloader_cls(dataset, batch_sampler=batch_sampler)
+
+            dataloader.set_epoch(0)
+            assert dataloader.iteration == 0
+
+            new_dataloader = skip_first_batches(dataloader, num_batches=2)
+            for _ in new_dataloader:
+                pass
+
+            assert new_dataloader.iteration == 1
+            assert dataloader.iteration == 1
+
+        test_advance(DataLoaderShard)
+        test_advance(DataLoaderDispatcher)
+
+    def test_skip_batch_sampler_forwards_set_epoch(self):
+        # Regression test: SkipBatchSampler must forward set_epoch calls to the inner batch sampler.
+        dataset = list(range(16))
+        generator = torch.Generator()
+        batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
+        dataloader = DataLoaderShard(dataset, batch_sampler=batch_sampler)
+
+        new_dataloader = skip_first_batches(dataloader, num_batches=2)
+        assert isinstance(new_dataloader.batch_sampler, SkipBatchSampler)
+        new_dataloader.set_epoch(3)
+
+        assert new_dataloader.iteration == 3
+        assert dataloader.iteration == 3
+        assert batch_sampler.epoch == 3
+
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
         """When n_shards == num_processes, native HF dataset sharding should be used."""
