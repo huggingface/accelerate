@@ -154,6 +154,14 @@ class AcceleratorTester(AccelerateTestCase):
         state.someotherthing = "MyValue"
         assert state.someotherthing == "MyValue"
 
+    def test_wait_for_everyone_megatron(self):
+        state = PartialState()
+        with patch.object(state, "distributed_type", DistributedType.MEGATRON_LM), patch(
+            "torch.distributed.barrier"
+        ) as mock_barrier:
+            state.wait_for_everyone()
+            mock_barrier.assert_called_once_with(device_ids=[state.local_process_index])
+
     def test_accelerator_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to

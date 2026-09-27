@@ -408,6 +408,7 @@ class PartialState:
             DistributedType.MULTI_NEURON,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
+            DistributedType.MEGATRON_LM,
         ):
             torch.distributed.barrier(device_ids=[self.local_process_index])
         elif self.distributed_type == DistributedType.XLA:
