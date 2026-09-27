@@ -701,6 +701,7 @@ class DataLoaderTester(AccelerateTestCase):
 
             assert new_dataloader.iteration == 1
             assert dataloader.iteration == 1
+            assert batch_sampler.epoch == 1
 
         test_advance(DataLoaderShard)
         test_advance(DataLoaderDispatcher)

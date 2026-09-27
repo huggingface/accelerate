@@ -609,8 +609,15 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
         self.iteration += 1
         source_dataloader = getattr(self, "_source_dataloader", None)
-        if source_dataloader is not None and getattr(source_dataloader, "iteration", None) == self.iteration - 1:
-            source_dataloader.iteration = self.iteration
+        if (
+            source_dataloader is not None
+            and source_dataloader is not self
+            and getattr(source_dataloader, "iteration", None) == self.iteration - 1
+        ):
+            if hasattr(source_dataloader, "set_epoch"):
+                source_dataloader.set_epoch(self.iteration)
+            else:
+                source_dataloader.iteration = self.iteration
         self.end()
 
     def __reduce__(self):
@@ -627,8 +634,11 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         if self.iteration != epoch:
             self.iteration = epoch
         source_dataloader = getattr(self, "_source_dataloader", None)
-        if source_dataloader is not None and hasattr(source_dataloader, "iteration"):
-            source_dataloader.iteration = epoch
+        if source_dataloader is not None and source_dataloader is not self:
+            if hasattr(source_dataloader, "set_epoch"):
+                source_dataloader.set_epoch(epoch)
+            elif hasattr(source_dataloader, "iteration"):
+                source_dataloader.iteration = epoch
         if hasattr(self.batch_sampler, "set_epoch"):
             self.batch_sampler.set_epoch(epoch)
         if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
@@ -950,8 +960,15 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
             batch_index += 1
         self.iteration += 1
         source_dataloader = getattr(self, "_source_dataloader", None)
-        if source_dataloader is not None and getattr(source_dataloader, "iteration", None) == self.iteration - 1:
-            source_dataloader.iteration = self.iteration
+        if (
+            source_dataloader is not None
+            and source_dataloader is not self
+            and getattr(source_dataloader, "iteration", None) == self.iteration - 1
+        ):
+            if hasattr(source_dataloader, "set_epoch"):
+                source_dataloader.set_epoch(self.iteration)
+            else:
+                source_dataloader.iteration = self.iteration
         self.end()
 
     def set_epoch(self, epoch: int):
@@ -959,8 +976,11 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         if self.iteration != epoch:
             self.iteration = epoch
         source_dataloader = getattr(self, "_source_dataloader", None)
-        if source_dataloader is not None and hasattr(source_dataloader, "iteration"):
-            source_dataloader.iteration = epoch
+        if source_dataloader is not None and source_dataloader is not self:
+            if hasattr(source_dataloader, "set_epoch"):
+                source_dataloader.set_epoch(epoch)
+            elif hasattr(source_dataloader, "iteration"):
+                source_dataloader.iteration = epoch
         if hasattr(self.batch_sampler, "set_epoch"):
             self.batch_sampler.set_epoch(epoch)
         if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
