@@ -707,18 +707,22 @@ class DataLoaderTester(AccelerateTestCase):
 
     def test_skip_batch_sampler_forwards_set_epoch(self):
         # Regression test: SkipBatchSampler must forward set_epoch calls to the inner batch sampler.
-        dataset = list(range(16))
-        generator = torch.Generator()
-        batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
-        dataloader = DataLoaderShard(dataset, batch_sampler=batch_sampler)
+        def test_forward(dataloader_cls):
+            dataset = list(range(16))
+            generator = torch.Generator()
+            batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
+            dataloader = dataloader_cls(dataset, batch_sampler=batch_sampler)
 
-        new_dataloader = skip_first_batches(dataloader, num_batches=2)
-        assert isinstance(new_dataloader.batch_sampler, SkipBatchSampler)
-        new_dataloader.set_epoch(3)
+            new_dataloader = skip_first_batches(dataloader, num_batches=2)
+            assert isinstance(new_dataloader.batch_sampler, SkipBatchSampler)
+            new_dataloader.set_epoch(3)
 
-        assert new_dataloader.iteration == 3
-        assert dataloader.iteration == 3
-        assert batch_sampler.epoch == 3
+            assert new_dataloader.iteration == 3
+            assert dataloader.iteration == 3
+            assert batch_sampler.epoch == 3
+
+        test_forward(DataLoaderShard)
+        test_forward(DataLoaderDispatcher)
 
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
