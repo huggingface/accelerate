@@ -28,15 +28,32 @@ from accelerate import Accelerator
 from accelerate.utils import set_seed
 
 
-def train_reference(model, optimizer, dataloader, mixed_precision, device):
+def register_mixed_precision_check(model, expected_dtype):
+    """Check the first Linear layer's output dtype, not every internal calculation.
+
+    Loss checks alone accepted disabled autocast in a BF16 accumulation experiment.
+    Observe inside the model because Accelerate converts returned outputs to FP32.
+    """
+
+    def check_output_dtype(module, inputs, output):
+        assert output.dtype == expected_dtype, f"Expected {expected_dtype} output, got {output.dtype}"
+
+    for module in model.modules():
+        if isinstance(module, torch.nn.Linear):
+            module.register_forward_hook(check_output_dtype)
+            return
+
+    raise ValueError("Expected a Linear layer to check mixed-precision output.")
+
+
+def train_reference(model, optimizer, dataloader, mixed_precision_dtype, device):
     """Single-device PyTorch; bypass Accelerate's preparation, backward and optimizer wrappers."""
-    dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(mixed_precision)
-    scaler = torch.amp.GradScaler("cuda", enabled=mixed_precision == "fp16")
+    scaler = torch.amp.GradScaler("cuda", enabled=mixed_precision_dtype == torch.float16)
     losses = []
 
     for batch in dataloader:
         batch = batch.to(device)
-        with torch.autocast("cuda", dtype=dtype, enabled=dtype is not None):
+        with torch.autocast("cuda", dtype=mixed_precision_dtype, enabled=mixed_precision_dtype is not None):
             loss = model(input_ids=batch, labels=batch).loss
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -90,37 +107,35 @@ def main():
     device = torch.device("cuda:0") if args.reference else accelerator.device
 
     set_seed(1337)
-    # Keep FP32 matrix multiplies in full precision for the loss comparison.
+    # Explicitly use full FP32 matmul precision for this comparison.
     torch.set_float32_matmul_precision("highest")
 
     checkpoint = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-    # Fix the attention implementation; training does not need a generation cache.
+    # Training does not reuse the attention cache used for generation.
     model = AutoModelForCausalLM.from_pretrained(
         checkpoint,
         dtype=torch.float32,
-        attn_implementation="eager",
         use_cache=False,
     )
     model.train()
 
-    dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(args.mixed_precision)
-    if dtype:
-        # Returned logits are upcast by Accelerate; observe an operation inside forward.
-        def check_compute_dtype(module, inputs, output):
-            assert output.dtype == dtype, f"Expected {dtype} compute, got {output.dtype}"
-
-        linear = next(module for module in model.modules() if isinstance(module, torch.nn.Linear))
-        linear.register_forward_hook(check_compute_dtype)
+    mixed_precision_dtype = {
+        "no": None,
+        "bf16": torch.bfloat16,
+        "fp16": torch.float16,
+    }[args.mixed_precision]
+    if mixed_precision_dtype is not None:
+        register_mixed_precision_check(model, mixed_precision_dtype)
 
     dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:100]")
     text = "\n\n".join(dataset["text"])
-    tokens = tokenizer(text, return_attention_mask=False)["input_ids"]
+    token_ids = tokenizer(text, return_attention_mask=False)["input_ids"]
 
     block_size, num_blocks = 32, 80
-    # Full blocks give equal shifted-target counts, so averaging microbatch losses
-    # matches the full-batch token mean. All ten global batches are complete.
-    input_ids = torch.tensor(tokens[: num_blocks * block_size]).reshape(num_blocks, block_size)
+    # Each block has 31 next-token targets, so equally sized microbatch losses
+    # can be averaged without reweighting. Eight blocks per update give ten complete updates.
+    input_ids = torch.tensor(token_ids[: num_blocks * block_size]).reshape(num_blocks, block_size)
     dataloader = DataLoader(input_ids, batch_size=args.batch_size, shuffle=False)
 
     if args.reference:
@@ -128,7 +143,7 @@ def main():
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
     if args.reference:
-        losses = train_reference(model, optimizer, dataloader, args.mixed_precision, device)
+        losses = train_reference(model, optimizer, dataloader, mixed_precision_dtype, device)
     else:
         model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
         losses = train_with_accelerate(model, optimizer, dataloader, accelerator)
@@ -136,7 +151,11 @@ def main():
     # Revisit the first global batch to observe learning, including the final update.
     first_global_batch = input_ids[:8].to(device)
     # Accelerate's prepared model handles autocast inside forward; only the reference needs it here.
-    context = torch.autocast("cuda", dtype=dtype) if args.reference and dtype is not None else nullcontext()
+    context = (
+        torch.autocast("cuda", dtype=mixed_precision_dtype)
+        if args.reference and mixed_precision_dtype is not None
+        else nullcontext()
+    )
     with torch.no_grad(), context:
         final_loss = model(input_ids=first_global_batch, labels=first_global_batch).loss.item()
 
