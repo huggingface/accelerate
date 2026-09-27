@@ -1393,9 +1393,11 @@ class SkipBatchSampler(BatchSampler):
 
     @property
     def sampler(self):
+        """Exposes the underlying sampler from the wrapped batch sampler, if available."""
         return getattr(self.batch_sampler, "sampler", None)
 
     def set_epoch(self, epoch: int):
+        """Forwards epoch updates down to the inner batch sampler or sampler."""
         if hasattr(self.batch_sampler, "set_epoch"):
             self.batch_sampler.set_epoch(epoch)
         elif hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
