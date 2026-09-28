@@ -1700,7 +1700,8 @@ def load_state_dict(checkpoint_file, device_map=None):
             # if we only have one device we can load everything directly
             if len(set(device_map.values())) == 1:
                 device = list(device_map.values())[0]
-                target_device = device
+                # weights offloaded to disk are read on the CPU first
+                target_device = "cpu" if device == "disk" else device
                 if isinstance(device, int):
                     if is_npu_available():
                         target_device = f"npu:{device}"
@@ -2053,6 +2054,9 @@ def load_checkpoint_in_model(
                         else:
                             set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
                         offload_weight(param, param_name, offload_folder, index=offload_index)
+                    else:
+                        # Buffers stay in memory unless `offload_buffers=True`, so they still need their value.
+                        set_module_tensor_to_device(model, param_name, "cpu", value=param, dtype=new_dtype)
                 elif param_device == "cpu" and offload_state_dict:
                     if new_dtype is None:
                         new_dtype = param.dtype
