@@ -191,6 +191,26 @@ class AcceleratorTester(AccelerateTestCase):
                 assert any("Assigning" in log for log in cm.output)
                 assert any("cpu cores to process" in log for log in cm.output)
 
+    def test_wait_for_everyone_multi_cpu_does_not_pass_device_ids(self):
+        # On MULTI_CPU (gloo), `barrier(device_ids=...)` makes torch run the barrier on the machine's accelerator
+        # (e.g. MPS on macOS) instead of on CPU, which raises `NotImplementedError`. Regression test for that.
+        PartialState(cpu=True)
+        with patch.dict(
+            PartialState._shared_state, {"distributed_type": DistributedType.MULTI_CPU, "local_process_index": 0}
+        ):
+            with patch("torch.distributed.barrier") as mock_barrier:
+                PartialState().wait_for_everyone()
+        mock_barrier.assert_called_once_with()
+
+    def test_wait_for_everyone_multi_device_passes_device_ids(self):
+        PartialState(cpu=True)
+        with patch.dict(
+            PartialState._shared_state, {"distributed_type": DistributedType.MULTI_GPU, "local_process_index": 1}
+        ):
+            with patch("torch.distributed.barrier") as mock_barrier:
+                PartialState().wait_for_everyone()
+        mock_barrier.assert_called_once_with(device_ids=[1])
+
     def test_mutable_states(self):
         accelerator = Accelerator()
         state = GradientState()

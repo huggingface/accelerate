@@ -409,7 +409,12 @@ class PartialState:
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
-            torch.distributed.barrier(device_ids=[self.local_process_index])
+            if self.distributed_type == DistributedType.MULTI_CPU:
+                # Don't pass `device_ids` on CPU: torch would then run the barrier on the machine's accelerator
+                # (e.g. MPS on macOS) rather than on the gloo/CPU process group, which fails or is not implemented.
+                torch.distributed.barrier()
+            else:
+                torch.distributed.barrier(device_ids=[self.local_process_index])
         elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
