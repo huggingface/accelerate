@@ -29,10 +29,10 @@ from accelerate.utils import set_seed
 
 
 def register_mixed_precision_check(model, expected_dtype):
-    """Check the first Linear layer's output dtype, not every internal calculation.
+    """Check that a Linear layer produces output in the requested mixed precision.
 
-    Loss checks alone accepted disabled autocast in a BF16 accumulation experiment.
-    Observe inside the model because Accelerate converts returned outputs to FP32.
+    Training can succeed with similar losses even when mixed precision is
+    inactive. Check the output dtype to ensure it was actually used.
     """
 
     def check_output_dtype(module, inputs, output):
