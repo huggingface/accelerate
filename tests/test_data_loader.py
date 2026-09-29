@@ -683,6 +683,14 @@ class DataLoaderTester(AccelerateTestCase):
         test_sampler_epoch(DataLoaderShard)
         test_sampler_epoch(DataLoaderDispatcher)
 
+    def test_skip_first_batches_preserves_configuration(self):
+        dataset = list(range(16))
+        for dataloader_cls in (DataLoaderShard, DataLoaderDispatcher):
+            dataloader = dataloader_cls(dataset, batch_size=4, _drop_last=True, _non_blocking=True)
+            new_dataloader = skip_first_batches(dataloader, num_batches=1)
+            assert new_dataloader._drop_last is True
+            assert new_dataloader._non_blocking is True
+
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
         """When n_shards == num_processes, native HF dataset sharding should be used."""
