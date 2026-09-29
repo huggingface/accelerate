@@ -542,6 +542,32 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.batchnorm.running_mean.device == torch.device("meta")
         assert model.linear2.weight.device == torch.device("cpu")
 
+    def test_load_checkpoint_in_model_disk_offload_loads_buffers(self):
+        device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
+        model = ModelForTest()
+        with torch.no_grad():
+            model.batchnorm.running_mean.fill_(0.5)
+            model.batchnorm.running_var.fill_(2.0)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), fname)
+            new_model = ModelForTest()
+            load_checkpoint_in_model(new_model, fname, device_map=device_map, offload_folder=tmp_dir)
+        # Buffers are not offloaded by default, so they are loaded with the checkpoint values
+        assert new_model.batchnorm.running_mean.device == torch.device("cpu")
+        torch.testing.assert_close(new_model.batchnorm.running_mean, model.batchnorm.running_mean)
+        torch.testing.assert_close(new_model.batchnorm.running_var, model.batchnorm.running_var)
+
+    def test_load_checkpoint_in_model_all_disk_safetensors(self):
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "model.safetensors")
+            save_file(model.state_dict(), fname, metadata={"format": "pt"})
+            new_model = ModelForTest()
+            load_checkpoint_in_model(new_model, fname, device_map={"": "disk"}, offload_folder=tmp_dir)
+            assert new_model.linear1.weight.device == torch.device("meta")
+            assert os.path.isfile(os.path.join(tmp_dir, "linear1.weight.dat"))
+
     @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_in_model_two_gpu(self):
