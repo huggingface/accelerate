@@ -567,7 +567,10 @@ def check_os_kernel():
     if system != "Linux":
         return
 
-    _, version, *_ = re.split(r"(\d+\.\d+\.\d+)", info.release)
+    match = re.search(r"(\d+\.\d+\.\d+)", info.release)
+    if match is None:
+        return
+    version = match.group()
     min_version = "5.5.0"
     if Version(version) < Version(min_version):
         msg = (
