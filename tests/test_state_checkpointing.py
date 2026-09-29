@@ -376,6 +376,51 @@ class CheckpointTest(AccelerateTestCase):
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
 
+    def test_automatic_loading_empty_dir_raises_filenotfound(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = DummyModel()
+            model = accelerator.prepare(model)
+            # checkpoints folder exists but has no checkpoints
+            os.makedirs(os.path.join(tmpdir, "checkpoints"), exist_ok=True)
+            with self.assertRaises(FileNotFoundError):
+                accelerator.load_state()
+
+    def test_automatic_checkpoint_naming_with_stray_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True, total_limit=2)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = accelerator.prepare(model)
+            checkpoints_dir = os.path.join(tmpdir, "checkpoints")
+
+            # Save 2 checkpoints: checkpoint_0, checkpoint_1
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            # Introduce stray files and directories
+            with open(os.path.join(checkpoints_dir, ".DS_Store"), "w") as f:
+                f.write("dummy")
+            with open(os.path.join(checkpoints_dir, "train_log_9.txt"), "w") as f:
+                f.write("log")
+            os.makedirs(os.path.join(checkpoints_dir, "best_model"), exist_ok=True)
+
+            # Save 3rd checkpoint: should prune checkpoint_0, leaving checkpoint_1 and checkpoint_2
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            remaining = os.listdir(checkpoints_dir)
+            assert "checkpoint_0" not in remaining
+            assert "checkpoint_1" in remaining
+            assert "checkpoint_2" in remaining
+            assert ".DS_Store" in remaining
+            assert "train_log_9.txt" in remaining
+            assert "best_model" in remaining
+
+            # load_state should safely ignore stray files and load checkpoint_2
+            accelerator.load_state()
+
     @run_first
     @require_non_cpu
     @require_non_torch_xla
