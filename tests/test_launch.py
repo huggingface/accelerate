@@ -19,13 +19,13 @@ import unittest
 
 import pytest
 
-from accelerate.launchers import notebook_launcher
 from accelerate.commands.launch import (
     CHILD_STDERR_CHUNK_SIZE,
     CHILD_STDERR_TAIL_CHUNKS,
     launch_command_parser,
     simple_launcher,
 )
+from accelerate.launchers import notebook_launcher
 from accelerate.utils.launch import prepare_multi_gpu_env
 
 
