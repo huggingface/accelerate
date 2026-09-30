@@ -283,6 +283,7 @@ from .other import (
     compile_regions_fsdp2,
     convert_bytes,
     extract_model_from_parallel,
+    get_model_tp_size,
     get_module_children_bottom_up,
     get_pretty_name,
     has_compiled_regions,

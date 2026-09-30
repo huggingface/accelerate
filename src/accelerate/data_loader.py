@@ -564,6 +564,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.gradient_state = GradientState()
         self._drop_last = _drop_last
         self._non_blocking = _non_blocking
+        self.torch_device_mesh = torch_device_mesh
         self.iteration = iteration
 
     def adjust_state_dict_for_prefetch(self):
@@ -1442,6 +1443,9 @@ def skip_first_batches(dataloader, num_batches=0):
             split_batches=dataloader.split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader._drop_last,
+            _non_blocking=dataloader._non_blocking,
+            slice_fn=dataloader.slice_fn,
+            torch_device_mesh=dataloader.torch_device_mesh,
             iteration=dataloader.iteration,
             **kwargs,
         )
@@ -1460,6 +1464,8 @@ def skip_first_batches(dataloader, num_batches=0):
             rng_types=dataloader.rng_types,
             synchronized_generator=dataloader.synchronized_generator,
             _drop_last=dataloader._drop_last,
+            _non_blocking=dataloader._non_blocking,
+            torch_device_mesh=dataloader.torch_device_mesh,
             iteration=dataloader.iteration,
             **kwargs,
         )

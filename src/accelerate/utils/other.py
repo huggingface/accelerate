@@ -239,6 +239,9 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
     Returns:
         `bool`: Whether the model has DTensor parameters.
     """
+    if not is_torch_distributed_available():
+        return False
+
     if is_torch_version(">=", "2.5.0"):
         from torch.distributed.tensor import DTensor
     else:
@@ -246,6 +249,29 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
         from torch.distributed._tensor import DTensor
 
     return any(isinstance(p, DTensor) for p in model.parameters())
+
+
+def get_model_tp_size(model: torch.nn.Module) -> Optional[int]:
+    """
+    Get the tensor parallel degree a `transformers` model was sharded with, or `None` if it was not sharded.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to inspect.
+
+    Returns:
+        `Optional[int]`: The model's tensor parallel size.
+    """
+    # `transformers<5` records it on the model itself, while `transformers>=5` moved it to the
+    # `DistributedConfig` held by the model config and left `model.tp_size` behind as a `None` stub.
+    tp_size = getattr(model, "tp_size", None)
+    if tp_size is not None:
+        return tp_size
+
+    distributed_config = getattr(getattr(model, "config", None), "distributed_config", None)
+    if isinstance(distributed_config, dict):
+        return distributed_config.get("tp_size")
+    return getattr(distributed_config, "tp_size", None)
 
 
 def extract_model_from_parallel(
@@ -321,7 +347,9 @@ def extract_model_from_parallel(
                 forward = forward.__wrapped__
                 if forward == original_forward:
                     break
-            model.forward = MethodType(forward, model)
+            # `_original_forward` is already bound to the model (for example the `functools.partial` that an
+            # accelerate hook installs), so binding it again would pass the model twice.
+            model.forward = original_forward if forward == original_forward else MethodType(forward, model)
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
@@ -539,7 +567,10 @@ def check_os_kernel():
     if system != "Linux":
         return
 
-    _, version, *_ = re.split(r"(\d+\.\d+\.\d+)", info.release)
+    match = re.search(r"(\d+\.\d+\.\d+)", info.release)
+    if match is None:
+        return
+    version = match.group()
     min_version = "5.5.0"
     if Version(version) < Version(min_version):
         msg = (

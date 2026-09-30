@@ -75,7 +75,7 @@ directory. After training, artifacts in this directory are uploaded to S3:
 <Tip warning={true}>
 
     SageMaker doesn’t support argparse actions. If you want to use, for example, boolean hyperparameters, you need to
-    specify type as bool in your script and provide an explicit True or False value for this hyperparameter. [[REF]](https://sagemaker.readthedocs.io/en/stable/frameworks/pytorch/using_pytorch.html#prepare-a-pytorch-training-script).
+    specify type as bool in your script and provide an explicit True or False value for this hyperparameter. [[REF]](https://sagemaker.readthedocs.io/en/v2/frameworks/pytorch/using_pytorch.html#prepare-a-pytorch-training-script).
 
 </Tip>
 
@@ -177,7 +177,7 @@ ec2_instance_type: local
 
 ### Advanced configuration
 
-The configuration allows you to override parameters for the [Estimator](https://sagemaker.readthedocs.io/en/stable/api/training/estimators.html).
+The configuration allows you to override parameters for the [Estimator](https://sagemaker.readthedocs.io/en/v2/api/training/estimators.html).
 These settings have to be applied in the config file and are not part of `accelerate config`. You can control many additional aspects of the training job, e.g. use Spot instances, enable network isolation and many more.
 
 ```yaml
@@ -186,7 +186,7 @@ additional_args:
   enable_network_isolation: True
 ```
 
-You can find all available configuration [here](https://sagemaker.readthedocs.io/en/stable/api/training/estimators.html).
+You can find all available configuration [here](https://sagemaker.readthedocs.io/en/v2/api/training/estimators.html).
 
 ### Use Spot Instances
 
