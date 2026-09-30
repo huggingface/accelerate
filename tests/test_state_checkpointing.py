@@ -20,6 +20,7 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -28,6 +29,8 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
+from accelerate.checkpointing import load_accelerator_state, save_accelerator_state
+from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
@@ -40,6 +43,57 @@ from accelerate.utils import DistributedType, ProjectConfiguration, patch_enviro
 
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture
+def initialized_accelerator():
+    Accelerator()
+    yield
+    AcceleratorState._reset_state(True)
+
+
+def test_stateful_dataloader_checkpoint_save_names(tmp_path, initialized_accelerator):
+    dataloader = Mock(use_stateful_dataloader=True, dataset=None)
+    dataloader.state_dict.return_value = {"source": "single_process"}
+    with patch("accelerate.checkpointing.PartialState") as partial_state:
+        partial_state.return_value.num_processes = 1
+        save_accelerator_state(tmp_path, [], [], [], [dataloader], 0, 0)
+
+    assert (tmp_path / "dl_state_dict.bin").exists()
+    assert not (tmp_path / "dl_state_dict_rank0.bin").exists()
+
+    distributed_dir = tmp_path / "distributed"
+    distributed_dir.mkdir()
+    with patch("accelerate.checkpointing.PartialState") as partial_state:
+        partial_state.return_value.num_processes = 2
+        save_accelerator_state(distributed_dir, [], [], [], [dataloader, dataloader], 1, 0)
+    assert (distributed_dir / "dl_state_dict_rank1.bin").exists()
+    assert (distributed_dir / "dl_state_dict_1_rank1.bin").exists()
+
+
+def test_stateful_dataloader_checkpoint_load_prefers_process_state_and_falls_back(tmp_path, initialized_accelerator):
+    dataloaders = [Mock(use_stateful_dataloader=True, dataset=None) for _ in range(2)]
+    for index, source in enumerate(("legacy_0", "legacy_1")):
+        name = "dl_state_dict.bin" if index == 0 else f"dl_state_dict_{index}.bin"
+        torch.save({"source": source}, tmp_path / name)
+    torch.save({"source": "process_1_loader_0"}, tmp_path / "dl_state_dict_rank1.bin")
+    torch.save({"source": "process_1_loader_1"}, tmp_path / "dl_state_dict_1_rank1.bin")
+
+    with patch("accelerate.checkpointing.PartialState") as partial_state:
+        partial_state.return_value.num_processes = 2
+        load_accelerator_state(tmp_path, [], [], [], dataloaders, 1)
+    assert dataloaders[0].load_state_dict.call_args.args[0] == {"source": "process_1_loader_0"}
+    assert dataloaders[1].load_state_dict.call_args.args[0] == {"source": "process_1_loader_1"}
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    torch.save({"source": "legacy_0"}, legacy_dir / "dl_state_dict.bin")
+    torch.save({"source": "legacy_1"}, legacy_dir / "dl_state_dict_1.bin")
+    with patch("accelerate.checkpointing.PartialState") as partial_state:
+        partial_state.return_value.num_processes = 2
+        load_accelerator_state(legacy_dir, [], [], [], dataloaders, 1)
+    assert dataloaders[0].load_state_dict.call_args.args[0] == {"source": "legacy_0"}
+    assert dataloaders[1].load_state_dict.call_args.args[0] == {"source": "legacy_1"}
 
 
 def dummy_dataloaders(a=2, b=3, batch_size=16, n_train_batches: int = 10, n_valid_batches: int = 2):
