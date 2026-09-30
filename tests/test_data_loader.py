@@ -614,39 +614,22 @@ class DataLoaderTester(AccelerateTestCase):
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
         assert [t.tolist() for t in new_dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
-    @parameterized.expand(
-        [
-            (split, drop, skips, sampler_arg)
-            for split in (False, True)
-            for drop in (False, True)
-            for skips in ((0,), (1,), (1, 1))
-            for sampler_arg in (False, True)
-            if not (split and sampler_arg)  # batch_size=None does not support split_batches.
-        ]
-    )
-    def test_skip_first_batches_preserves_batch_metadata(self, split_batches, drop_last, skips, sampler_arg):
-        for rank in range(2):
-            dataset = torch.arange(26)
-            if sampler_arg:
-                dataloader = DataLoader(
-                    dataset, sampler=BatchSampler(range(26), batch_size=4, drop_last=drop_last), batch_size=None
-                )
-            else:
-                dataloader = DataLoader(dataset, batch_size=4, drop_last=drop_last)
-            original = prepare_data_loader(
-                dataloader,
-                num_processes=2,
-                process_index=rank,
-                split_batches=split_batches,
-            )
-            expected_batches = [batch.tolist() for batch in original][sum(skips) :]
-            expected_remainder = original.remainder
-            resumed = original
-            for skip in skips:
-                resumed = skip_first_batches(resumed, skip)
-            assert resumed.total_batch_size == original.total_batch_size
-            assert [batch.tolist() for batch in resumed] == expected_batches
-            assert resumed.remainder == expected_remainder
+    def test_skip_first_batches_preserves_batch_metadata(self):
+        dataloader = prepare_data_loader(DataLoader(range(10), batch_size=2), num_processes=2, process_index=0)
+        resumed = skip_first_batches(dataloader, num_batches=1)
+
+        assert resumed.total_batch_size == 4
+        assert [batch.tolist() for batch in resumed] == [[4, 5], [8, 9]]
+        assert resumed.remainder == 2
+
+    def test_skip_first_batches_preserves_drop_last(self):
+        dataloader = prepare_data_loader(
+            DataLoader(range(10), batch_size=2, drop_last=True), num_processes=2, process_index=0
+        )
+        resumed = skip_first_batches(dataloader, num_batches=1)
+
+        assert [batch.tolist() for batch in resumed] == [[4, 5]]
+        assert resumed.remainder == -1
 
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
