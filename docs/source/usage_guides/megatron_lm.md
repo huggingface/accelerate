@@ -439,7 +439,7 @@ while completed_steps < args.max_train_steps:
 ## Utility for Checkpoint reshaping and interoperability
 
 1. The scripts for these are present in Transformers library under respective models. 
-Currently, it is available for GPT model [checkpoint_reshaping_and_interoperability.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/megatron_gpt2/checkpoint_reshaping_and_interoperability.py)
+Currently, it is available for GPT model [checkpoint_reshaping_and_interoperability.py](https://github.com/huggingface/transformers/blob/v5.14.1/src/transformers/models/megatron_gpt2/checkpoint_reshaping_and_interoperability.py)
 
 2. Below is an example of conversion of checkpoint from Megatron-LM to universal Transformers sharded checkpoint.
 ```bash
