@@ -18,14 +18,16 @@ import unittest
 import torch
 import torch.nn as nn
 
-from accelerate import Accelerator, init_empty_weights
+from accelerate import Accelerator, cpu_offload, init_empty_weights
 from accelerate.test_utils import (
     require_bnb,
+    require_cuda,
     require_cuda_or_xpu,
     require_huggingface_suite,
     require_multi_device,
     require_non_torch_xla,
     slow,
+    torch_device,
 )
 from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils.bnb import load_and_quantize_model
@@ -37,6 +39,30 @@ class BitsAndBytesConfigIntegration(unittest.TestCase):
     def test_BnbQuantizationConfig(self):
         with self.assertRaises(ValueError):
             BnbQuantizationConfig(load_in_8bit=True, load_in_4bit=True)
+
+
+@require_cuda
+@require_bnb
+class Int8OffloadTest(unittest.TestCase):
+    def test_cpu_offload_releases_int8_weight_state(self):
+        import bitsandbytes as bnb
+
+        model = nn.Sequential(bnb.nn.Linear8bitLt(32, 32, has_fp16_weights=False))
+        model = model.half().to(torch_device).eval()
+        inputs = [torch.randn(2, 32, device=torch_device, dtype=torch.float16) for _ in range(2)]
+        with torch.inference_mode():
+            expected = [model(x) for x in inputs]
+
+        cpu_offload(model, execution_device=torch_device)
+
+        for x, reference in zip(inputs, expected):
+            with torch.inference_mode():
+                output = model(x)
+            torch.testing.assert_close(output, reference)
+            assert model[0].weight.device == torch.device("meta")
+            # Moving the parameter to meta must also release the cached quantized weight.
+            assert model[0].state.CB is None
+            assert model[0].state.SCB is None
 
 
 @require_non_torch_xla

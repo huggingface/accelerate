@@ -102,7 +102,7 @@ class ParallelismConfig:
 
         _non_serializable_fields = ["device_mesh"]
 
-        copy.deepcopy(
+        return copy.deepcopy(
             {
                 k: copy.deepcopy(v.__dict__) if hasattr(v, "__dict__") else v
                 for k, v in self.__dict__.items()

@@ -169,18 +169,9 @@ def dtype_byte_size(dtype: torch.dtype):
         return 1 / 2
     elif dtype == CustomDtype.FP8:
         return 1
-    elif is_torch_version(">=", "2.1.0") and dtype in [
-        getattr(torch, name)
-        for name in (
-            "float8_e4m3fn",
-            "float8_e5m2",
-            "float8_e4m3fnuz",
-            "float8_e5m2fnuz",
-            "float8_e8m0fnu",
-        )
-        if hasattr(torch, name)
-    ]:
-        return 1
+    elif is_torch_version(">=", "2.1.0"):
+        # The name regex below misreads FP8 and sub-byte dtypes such as `uint4` and `float4_e2m1fn_x2`
+        return dtype.itemsize
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
@@ -339,6 +330,10 @@ def set_module_tensor_to_device(
                 device = f"musa:{device}"
             elif is_hpu_available():
                 device = "hpu"
+            elif torch.cuda.is_available():
+                pass
+            elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+                device = f"{torch.accelerator.current_accelerator().type}:{device}"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
@@ -812,13 +807,26 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
-        else:
+        elif torch.cuda.is_available():
             for i in range(torch.cuda.device_count()):
                 try:
                     _ = torch.tensor([0], device=i)
                     max_memory[i] = torch.cuda.mem_get_info(i)[0]
                     device_properties = torch.cuda.get_device_properties(i)
                     is_integrated_cuda = is_integrated_cuda or getattr(device_properties, "is_integrated", False)
+                except Exception:
+                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
+                    continue
+        elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+            acc_type = torch.accelerator.current_accelerator().type
+            for i in range(torch.accelerator.device_count()):
+                try:
+                    _ = torch.tensor(0, device=torch.device(acc_type, i))
+                    if hasattr(torch.accelerator, "get_memory_info"):
+                        max_memory[i] = torch.accelerator.get_memory_info(i)[0]
+                    else:
+                        dev_mod = torch.get_device_module(acc_type)
+                        max_memory[i] = dev_mod.mem_get_info(i)[0]
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -850,8 +858,12 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.xpu.device_count()
     elif is_hpu_available():
         num_devices = torch.hpu.device_count()
-    else:
+    elif torch.cuda.is_available():
         num_devices = torch.cuda.device_count()
+    elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+        num_devices = torch.accelerator.device_count()
+    else:
+        num_devices = 0
     for device in gpu_devices:
         if device >= num_devices or device < 0:
             logger.warning(f"Device {device} is not available, available devices are {list(range(num_devices))}")
@@ -985,8 +997,12 @@ def get_balanced_memory(
         expected_device_type = "hpu"
     elif is_mps_available():
         expected_device_type = "mps"
-    else:
+    elif torch.cuda.is_available():
         expected_device_type = "cuda"
+    elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+        expected_device_type = torch.accelerator.current_accelerator().type
+    else:
+        expected_device_type = None
     # Integer keys always refer to accelerator devices, so they are counted directly: resolving them through
     # `torch.device` errors out on machines without an accelerator ("Cannot access accelerator device when
     # none is available.").
@@ -1070,7 +1086,9 @@ def get_balanced_memory(
         max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
-        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        # `num_devices` is a count, not a list of ids, so the other GPUs must be read from `gpus_idx_list`:
+        # their ids are not necessarily `1, ..., num_devices - 1`.
+        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in gpus_idx_list[1:]]))
         max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory
@@ -1185,7 +1203,9 @@ def get_module_size_with_ties(
     tied_modules = []
 
     for tied_param in tied_params:
-        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
+        tied_module_index = [
+            i for i, (n, _) in enumerate(modules_to_treat) if tied_param == n or tied_param.startswith(n + ".")
+        ][0]
         tied_module_names.append(modules_to_treat[tied_module_index][0])
         tied_modules.append(modules_to_treat[tied_module_index][1])
 
@@ -1682,7 +1702,8 @@ def load_state_dict(checkpoint_file, device_map=None):
             # if we only have one device we can load everything directly
             if len(set(device_map.values())) == 1:
                 device = list(device_map.values())[0]
-                target_device = device
+                # weights offloaded to disk are read on the CPU first
+                target_device = "cpu" if device == "disk" else device
                 if isinstance(device, int):
                     if is_npu_available():
                         target_device = f"npu:{device}"
@@ -2035,6 +2056,9 @@ def load_checkpoint_in_model(
                         else:
                             set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
                         offload_weight(param, param_name, offload_folder, index=offload_index)
+                    else:
+                        # Buffers stay in memory unless `offload_buffers=True`, so they still need their value.
+                        set_module_tensor_to_device(model, param_name, "cpu", value=param, dtype=new_dtype)
                 elif param_device == "cpu" and offload_state_dict:
                     if new_dtype is None:
                         new_dtype = param.dtype

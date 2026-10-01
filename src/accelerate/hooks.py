@@ -409,6 +409,7 @@ class AlignDevicesHook(ModelHook):
             ):
                 set_module_tensor_to_device(module, name, "meta")
                 if type(module).__name__ == "Linear8bitLt":
+                    module.state.CB = None
                     module.state.SCB = None
                     module.state.CxB = None
 
