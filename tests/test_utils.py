@@ -63,7 +63,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
-from accelerate.utils.operations import is_namedtuple
+from accelerate.utils.operations import copy_tensor_to_devices, gather_tensor_shape, is_namedtuple
 
 
 if is_torch_xla_available():
@@ -721,3 +721,38 @@ def test_purge_env_vars_restores_previous_values():
 
     del os.environ["ACCELERATE_SOME_ENV_VAR"]
     del os.environ["ACCELERATE_ANOTHER_ENV_VAR"]
+
+
+def test_gather_tensor_shape():
+    # Regular tensor
+    tensor = torch.randn(2, 3, 4)
+    shape, dtype = gather_tensor_shape(tensor)
+    assert shape == (2, 3, 4)
+    assert dtype is not None
+
+    # Tensor with zero dimension (e.g. empty batch / empty sequence)
+    zero_dim_tensor = torch.zeros(3, 0, 4)
+    shape, dtype = gather_tensor_shape(zero_dim_tensor)
+    assert shape == (3, 0, 4)
+
+    # Tensor with zero at first dimension
+    empty_batch = torch.zeros(0, 10)
+    shape, dtype = gather_tensor_shape(empty_batch)
+    assert shape == (0, 10)
+
+    # 0-dim scalar tensor
+    scalar = torch.tensor(42)
+    shape, dtype = gather_tensor_shape(scalar)
+    assert shape == ()
+
+
+def test_copy_tensor_to_devices():
+    # Normal tensor copy
+    tensor = torch.randn(2, 5)
+    copied = copy_tensor_to_devices(tensor)
+    assert copied.shape == (2, 5)
+    assert torch.allclose(copied, tensor)
+
+    zero_tensor = torch.zeros(2, 0, 3)
+    copied = copy_tensor_to_devices(zero_tensor)
+    assert copied.shape == (2, 0, 3)
