@@ -12,23 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
-import sys
 from pathlib import Path
 
 import pytest
 import torch
 
+from accelerate.test_utils.distributed_training import run_training
 from accelerate.test_utils.testing import (
-    execute_subprocess_async,
-    get_torch_dist_unique_port,
-    path_in_accelerate_package,
     require_cuda,
     require_huggingface_suite,
     require_multi_gpu,
 )
 from accelerate.utils import is_bf16_available
+
+
+DDP_CONFIG_FILE = Path(__file__).with_name("ddp.yaml")
 
 
 @require_cuda
@@ -40,44 +38,51 @@ def test_training(tmp_path):
     A plain-PyTorch baseline can expose wrapper bugs that two Accelerate runs could share.
     """
     reference = run_training(tmp_path / "reference.json", reference=True, batch_size=8)
-    distributed = run_training(tmp_path / "ddp.json", batch_size=4)
+    distributed = run_training(tmp_path / "ddp.json", config_file=DDP_CONFIG_FILE, batch_size=4)
 
-    loss_tolerance = 1e-4
+    max_loss_difference = 1e-4
+    min_loss_decrease = 1e-4
+    assert reference["world_size"] == 1
+    assert distributed["world_size"] == 2
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
-    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=loss_tolerance, rtol=0)
-    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=loss_tolerance, rtol=0)
+    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=max_loss_difference, rtol=0)
+    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=max_loss_difference, rtol=0)
 
-    # Agreement alone also accepts two runs that never learn. On the first batch,
-    # require a loss decrease larger than the comparison tolerance.
-    assert reference["final_loss"] < reference["losses"][0] - loss_tolerance
-    assert distributed["final_loss"] < distributed["losses"][0] - loss_tolerance
+    # Agreement alone also accepts two runs that never learn. Require progress on the first batch.
+    assert reference["final_loss"] < reference["losses"][0] - min_loss_decrease
+    assert distributed["final_loss"] < distributed["losses"][0] - min_loss_decrease
 
 
 @pytest.mark.parametrize(
-    "mixed_precision, loss_tolerance",
+    "mixed_precision, max_loss_difference, min_loss_decrease",
     [
-        pytest.param("fp16", 1e-4),
-        pytest.param("bf16", 1e-3, marks=pytest.mark.skipif(not is_bf16_available(), reason="Requires BF16")),
+        pytest.param("fp16", 1e-4, 1e-4, id="fp16"),
+        pytest.param(
+            "bf16", 1e-3, 1e-3, id="bf16", marks=pytest.mark.skipif(not is_bf16_available(), reason="Requires BF16")
+        ),
     ],
 )
 @require_cuda
 @require_multi_gpu
 @require_huggingface_suite
-def test_training_mixed_precision(tmp_path, mixed_precision, loss_tolerance):
+def test_training_mixed_precision(tmp_path, mixed_precision, max_loss_difference, min_loss_decrease):
     """Compare DDP with single-GPU training at the same requested precision."""
     reference = run_training(
         tmp_path / "reference.json", reference=True, batch_size=8, mixed_precision=mixed_precision
     )
-    distributed = run_training(tmp_path / "ddp.json", batch_size=4, mixed_precision=mixed_precision)
+    distributed = run_training(
+        tmp_path / "ddp.json", config_file=DDP_CONFIG_FILE, batch_size=4, mixed_precision=mixed_precision
+    )
 
+    assert reference["world_size"] == 1
+    assert distributed["world_size"] == 2
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
-    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=loss_tolerance, rtol=0)
-    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=loss_tolerance, rtol=0)
+    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=max_loss_difference, rtol=0)
+    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=max_loss_difference, rtol=0)
 
-    # Agreement alone also accepts two runs that never learn. On the first batch,
-    # require a loss decrease larger than the comparison tolerance.
-    assert reference["final_loss"] < reference["losses"][0] - loss_tolerance
-    assert distributed["final_loss"] < distributed["losses"][0] - loss_tolerance
+    # Agreement alone also accepts two runs that never learn. Require progress on the first batch.
+    assert reference["final_loss"] < reference["losses"][0] - min_loss_decrease
+    assert distributed["final_loss"] < distributed["losses"][0] - min_loss_decrease
 
 
 @pytest.mark.skipif(not is_bf16_available(), reason="Requires BF16")
@@ -86,52 +91,24 @@ def test_training_mixed_precision(tmp_path, mixed_precision, loss_tolerance):
 @require_huggingface_suite
 def test_training_with_gradient_accumulation(tmp_path):
     """Keep BF16 and eight blocks per update: 2 ranks * 4 blocks, or 2 ranks * 2 blocks * 2 steps."""
-    large_batch = run_training(tmp_path / "large.json", batch_size=4, mixed_precision="bf16")
+    large_batch = run_training(
+        tmp_path / "large.json", config_file=DDP_CONFIG_FILE, batch_size=4, mixed_precision="bf16"
+    )
     accumulated = run_training(
-        tmp_path / "accumulated.json", batch_size=2, mixed_precision="bf16", gradient_accumulation_steps=2
+        tmp_path / "accumulated.json",
+        config_file=DDP_CONFIG_FILE,
+        batch_size=2,
+        mixed_precision="bf16",
+        gradient_accumulation_steps=2,
     )
 
-    loss_tolerance = 1e-3
+    max_loss_difference = 1e-3
+    min_loss_decrease = 1e-3
+    assert large_batch["world_size"] == accumulated["world_size"] == 2
     assert len(large_batch["losses"]) == len(accumulated["losses"]) == 10
-    torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=loss_tolerance, rtol=0)
-    torch.testing.assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=loss_tolerance, rtol=0)
+    torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=max_loss_difference, rtol=0)
+    torch.testing.assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=max_loss_difference, rtol=0)
 
-    # Agreement alone also accepts two runs that never learn. On the first batch,
-    # require a loss decrease larger than the comparison tolerance.
-    assert large_batch["final_loss"] < large_batch["losses"][0] - loss_tolerance
-    assert accumulated["final_loss"] < accumulated["losses"][0] - loss_tolerance
-
-
-def run_training(output, *, batch_size, mixed_precision="no", gradient_accumulation_steps=1, reference=False):
-    script = path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_causal_lm.py")
-    command = [sys.executable]
-    if not reference:
-        command += [
-            "-m",
-            "accelerate.commands.launch",
-            "--config_file",
-            str(Path(__file__).with_name("ddp.yaml")),
-            "--main_process_port",
-            str(get_torch_dist_unique_port()),
-        ]
-
-    command += [
-        str(script),
-        "--output",
-        str(output),
-        "--batch-size",
-        str(batch_size),
-        "--mixed-precision",
-        mixed_precision,
-        "--gradient-accumulation-steps",
-        str(gradient_accumulation_steps),
-    ]
-    if reference:
-        command.append("--reference")
-
-    result = execute_subprocess_async(command, env={**os.environ, "OMP_NUM_THREADS": "1"})
-    assert result.returncode == 0, result.stderr
-
-    result = json.loads(output.read_text(encoding="utf-8"))
-    assert result["world_size"] == (1 if reference else 2)
-    return result
+    # Agreement alone also accepts two runs that never learn. Require progress on the first batch.
+    assert large_batch["final_loss"] < large_batch["losses"][0] - min_loss_decrease
+    assert accumulated["final_loss"] < accumulated["losses"][0] - min_loss_decrease
