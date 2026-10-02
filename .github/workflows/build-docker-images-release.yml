@@ -9,8 +9,12 @@ concurrency:
   group: docker-image-builds
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
   get-version:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.step1.outputs.version }}
@@ -26,6 +30,7 @@ jobs:
           echo "version=$version" >> $GITHUB_OUTPUT
 
   version-cpu:
+    permissions: {}
     name: "Latest Accelerate CPU [version]"
     runs-on:
       group: aws-general-8-plus
@@ -47,6 +52,7 @@ jobs:
           tags: huggingface/accelerate:cpu-release-${{ needs.get-version.outputs.version }}
 
   version-cuda:
+    permissions: {}
     name: "Latest Accelerate GPU [version]"
     runs-on:
       group: aws-g6-4xlarge-plus
@@ -68,6 +74,7 @@ jobs:
           tags: huggingface/accelerate:gpu-release-${{needs.get-version.outputs.version}}
 
   version-cuda-deepspeed:
+    permissions: {}
     name: "Latest Accelerate GPU DeepSpeed [version]"
     runs-on:
       group: aws-g6-4xlarge-plus
@@ -89,6 +96,7 @@ jobs:
           tags: huggingface/accelerate:gpu-deepspeed-release-${{needs.get-version.outputs.version}}
 
   version-cuda-fp8-transformerengine:
+    permissions: {}
     name: "Latest Accelerate GPU FP8 TransformerEngine [version]"
     runs-on:
       group: aws-g6-4xlarge-plus

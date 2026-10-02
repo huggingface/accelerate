@@ -570,13 +570,12 @@ class ModelEstimatorTester(unittest.TestCase):
 
     @require_transformers
     def test_no_split_modules(self):
-        # idefics-80b-instruct has ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
-        args = self.parser.parse_args(["HuggingFaceM4/idefics-80b-instruct", "--dtypes", "float32"])
+        args = self.parser.parse_args(["huggyllama/llama-7b", "--dtypes", "float32"])
         output = gather_data(args)
-        # without factoring in `no_split` modules, the largest layer is 721420288 bytes
-        assert output[0][1] != 721420288, "Largest layer calculation incorrect, did not factor in `no_split` modules."
-        # the real answer is 3240165632 bytes
-        assert output[0][1] == 3240165632
+        # LlamaDecoderLayer: four attention matrices, three MLP matrices and two layer norms, all FP32.
+        # (4 * 4096**2 + 3 * 4096 * 11008 + 2 * 4096) * 4 = 809533440 bytes.
+        # Ignoring no-split layers would instead select the 524288000-byte token embedding.
+        assert output[0][1] == 809533440
 
     @require_timm
     def test_timm_model(self):

@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 import sys
+from collections import deque
 from pathlib import Path
 
 import torch
@@ -68,6 +69,10 @@ if is_rich_available():
 
 
 logger = logging.getLogger(__name__)
+
+# Bound the child stderr kept for the raised error to the last 512 KiB, so a long run does not buffer it all.
+CHILD_STDERR_CHUNK_SIZE = 8192
+CHILD_STDERR_TAIL_CHUNKS = 64
 
 
 options_to_group = {
@@ -992,11 +997,20 @@ def launch_command_parser(subparsers=None):
 def simple_launcher(args):
     cmd, current_env = prepare_simple_launcher_cmd_env(args)
 
-    process = subprocess.Popen(cmd, env=current_env)
+    # Tee the child's stderr: write it through as it arrives so output stays live, and keep the tail for the error.
+    process = subprocess.Popen(cmd, env=current_env, stderr=subprocess.PIPE)
+    tail = deque(maxlen=CHILD_STDERR_TAIL_CHUNKS)
+    while chunk := process.stderr.read1(CHILD_STDERR_CHUNK_SIZE):
+        sys.stderr.buffer.write(chunk)
+        sys.stderr.flush()
+        tail.append(chunk)
     process.wait()
     if process.returncode != 0:
         if not args.quiet:
-            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+            stderr = b"".join(tail).decode(errors="replace")
+            raise subprocess.CalledProcessError(
+                returncode=process.returncode, cmd=cmd, stderr=stderr
+            ) from RuntimeError(stderr)
         else:
             sys.exit(1)
 

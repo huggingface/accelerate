@@ -9,8 +9,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   run-gaudi3-tests:
+    permissions:
+      contents: read
     runs-on:
       group: itac-bm-emr-gaudi3-dell-2gaudi
 
