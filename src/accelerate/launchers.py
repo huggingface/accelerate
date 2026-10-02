@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import socket
 import sys
 import tempfile
 from dataclasses import fields
@@ -282,6 +283,22 @@ def notebook_launcher(
             function(*args)
 
 
+def _has_loopback_alias():
+    """Whether the loopback interface is named `lo`, as it is on Unix-like platforms but not on Windows."""
+    try:
+        return any(name == "lo" for _, name in socket.if_nameindex())
+    except OSError:
+        return False
+
+
+def _debug_start_method():
+    """The multiprocessing start method to use for `debug_launcher`, preferring `fork` where it exists."""
+    from torch.multiprocessing import get_all_start_methods
+
+    available = get_all_start_methods()
+    return "fork" if "fork" in available else available[0]
+
+
 def debug_launcher(function, args=(), num_processes=2):
     """
     Launches a training function using several processes on CPU for debugging purposes.
@@ -293,6 +310,9 @@ def debug_launcher(function, args=(), num_processes=2):
 
     </Tip>
 
+    Where `fork` is not available the processes are started with `spawn` instead, which requires `function` to be
+    importable and this call to sit under an `if __name__ == "__main__":` guard.
+
     Args:
         function (`Callable`):
             The training function to execute.
@@ -303,18 +323,24 @@ def debug_launcher(function, args=(), num_processes=2):
     """
     from torch.multiprocessing import start_processes
 
-    with tempfile.NamedTemporaryFile() as tmp_file:
+    # The rendezvous file is created by `FileStore`, so only its path needs to reach the child processes. It cannot
+    # be created through `NamedTemporaryFile`: that keeps the file open in the parent, and on Windows a spawned
+    # child process cannot open a file that is still open elsewhere.
+    with tempfile.TemporaryDirectory() as tmp_dir:
         # torch.distributed will expect a few environment variable to be here. We set the ones common to each
         # process here (the other ones will be set be the launcher).
-        # gloo's default interface selection (hostname-based) is flaky on CI runners, pin it to loopback
-        with patch_environment(
+        patched_env = dict(
             world_size=num_processes,
             master_addr="127.0.0.1",
             master_port="29500",
             accelerate_mixed_precision="no",
-            accelerate_debug_rdv_file=tmp_file.name,
+            accelerate_debug_rdv_file=os.path.join(tmp_dir, "debug_rdv_file"),
             accelerate_use_cpu="yes",
-            gloo_socket_ifname="lo",
-        ):
+        )
+        # gloo's default interface selection (hostname-based) is flaky on CI runners, pin it to loopback, but only
+        # where that name exists: gloo cannot resolve `lo` on platforms that name the interface differently.
+        if _has_loopback_alias():
+            patched_env["gloo_socket_ifname"] = "lo"
+        with patch_environment(**patched_env):
             launcher = PrepareForLaunch(function, debug=True)
-            start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
+            start_processes(launcher, args=args, nprocs=num_processes, start_method=_debug_start_method())
