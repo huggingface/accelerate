@@ -290,8 +290,9 @@ def load_accelerator_state(
         logger.info("GradScaler state loaded successfully")
 
     # Random states
+    input_rng_file = input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl")
     try:
-        states = load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
+        states = load(input_rng_file)
         if "step" in states:
             override_attributes["step"] = states["step"]
         random.setstate(states["random_state"])
@@ -314,8 +315,17 @@ def load_accelerator_state(
         if is_torch_xla_available():
             xm.set_rng_state(states["xm_seed"])
         logger.info("All random states loaded successfully")
-    except Exception:
-        logger.info("Could not load random states")
+    except Exception as e:
+        # This used to be logged at `INFO`, which is below the effective level of a default setup
+        # (`logging` inherits `WARNING` from the root logger), so a checkpoint whose random states
+        # could not be restored resumed silently with different random numbers. Warn on every
+        # process instead, since each one restores its own file.
+        logger.warning(
+            f"Could not load the random states from {input_rng_file}: {e}. Training will resume, "
+            "but the random number generators were not restored, so this run may not reproduce "
+            "the interrupted one.",
+            main_process_only=False,
+        )
 
     return override_attributes
 
