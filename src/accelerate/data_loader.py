@@ -1406,12 +1406,12 @@ def skip_first_batches(dataloader, num_batches=0):
         dataloader = dataloader.dataloader
 
     dataset = dataloader.dataset
-    #batch_size=None means there's no batch sampler to wrap.
+    # Without automatic batching you wrap the sampler directly
     use_sampler = False
     if isinstance(dataset, IterableDataset):
         new_batch_sampler = None
     else:
-        use_sampler = dataloader.batch_sampler is None or isinstance(dataloader.sampler, BatchSampler)
+        use_sampler = dataloader.batch_sampler is None
         batch_sampler = dataloader.sampler if use_sampler else dataloader.batch_sampler
         new_batch_sampler = SkipBatchSampler(batch_sampler, skip_batches=num_batches)
 
@@ -1435,7 +1435,7 @@ def skip_first_batches(dataloader, num_batches=0):
         kwargs["drop_last"] = dataloader.drop_last
         kwargs["batch_size"] = dataloader.batch_size
     elif use_sampler:
-        #keep the sampler here so the collate input stays the same
+        # Keep the sampler here so the collate input stays the same
         kwargs["sampler"] = new_batch_sampler
         kwargs["batch_size"] = dataloader.batch_size
     else:

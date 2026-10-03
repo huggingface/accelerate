@@ -634,6 +634,7 @@ class DataLoaderTester(AccelerateTestCase):
         dataloader = loader_cls(
             dataset, sampler=sampler, batch_size=None, collate_fn=collate_fn if custom_collate else None
         )
+
         expected = list(dataloader)
         for num_batches in (0, 1, len(expected)):
             with self.subTest(num_batches=num_batches):
@@ -650,6 +651,54 @@ class DataLoaderTester(AccelerateTestCase):
 
         resumed = skip_first_batches(skip_first_batches(dataloader, num_batches=1), num_batches=1)
         torch.testing.assert_close(list(resumed), expected[2:])
+
+    @parameterized.expand(
+        [
+            (loader_cls.__name__, loader_cls, drop_last, custom_collate)
+            for loader_cls in (DataLoader, DataLoaderShard, DataLoaderDispatcher)
+            for drop_last in (False, True)
+            for custom_collate in (False, True)
+        ]
+    )
+    def test_skip_first_batches_with_auto_batching(self, name, loader_cls, drop_last, custom_collate):
+        dataset = torch.arange(28).reshape(14, 2)
+        sampler = BatchSampler(list(reversed(range(len(dataset)))), batch_size=2, drop_last=False)
+
+        def collate_fn(samples):
+            return {"values": torch.stack(samples) + 100}
+
+        dataloader = loader_cls(
+            dataset,
+            sampler=sampler,
+            batch_size=2,
+            drop_last=drop_last,
+            collate_fn=collate_fn if custom_collate else None,
+        )
+        expected = list(dataloader)
+        for num_batches in (0, 1, len(expected)):
+            with self.subTest(num_batches=num_batches):
+                resumed = skip_first_batches(dataloader, num_batches=num_batches)
+                if loader_cls is DataLoaderDispatcher and num_batches == len(expected):
+                    with pytest.raises(ValueError, match="Batch does not contain any data"):
+                        list(resumed)
+                else:
+                    torch.testing.assert_close(list(resumed), expected[num_batches:])
+                assert resumed.collate_fn is dataloader.collate_fn
+                assert len(resumed) == len(expected) - num_batches
+
+        resumed = skip_first_batches(skip_first_batches(dataloader, num_batches=1), num_batches=1)
+        torch.testing.assert_close(list(resumed), expected[2:])
+        assert len(resumed) == len(expected) - 2
+
+    def test_skip_first_batches_preserves_nested_batch_shapes(self):
+        dataset = torch.arange(24).reshape(12, 2)
+        sampler = BatchSampler(range(12), batch_size=2, drop_last=False)
+        dataloader = DataLoader(dataset, sampler=sampler, batch_size=2)
+
+        resumed = list(skip_first_batches(dataloader, num_batches=1))
+
+        assert [tuple(batch.shape) for batch in resumed] == [(2, 2, 2), (2, 2, 2)]
+        torch.testing.assert_close(resumed, list(dataloader)[1:])
 
     def test_skip_first_batches_preserves_batch_metadata(self):
         dataloader = prepare_data_loader(DataLoader(range(10), batch_size=2), num_processes=2, process_index=0)
