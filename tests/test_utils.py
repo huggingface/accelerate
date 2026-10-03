@@ -13,6 +13,8 @@
 # limitations under the License.
 import os
 import pickle
+import signal
+import sys
 import tempfile
 import unittest
 import warnings
@@ -30,6 +32,7 @@ from accelerate.big_modeling import cpu_offload_with_hook
 from accelerate.hooks import attach_align_device_hook, remove_hook_from_module
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
+    execute_subprocess_async,
     require_huggingface_suite,
     require_non_cpu,
     require_non_torch_xla,
@@ -70,6 +73,18 @@ if is_torch_xla_available():
     from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
+
+
+class TestExecuteSubprocessAsync:
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX signal exit codes")
+    def test_signal_exit_raises(self):
+        command = [
+            sys.executable,
+            "-c",
+            "import os, signal; os.kill(os.getpid(), signal.SIGTERM)",
+        ]
+        with pytest.raises(RuntimeError, match=f"returncode {-signal.SIGTERM}"):
+            execute_subprocess_async(command, echo=False)
 
 
 class UtilsTester(unittest.TestCase):
