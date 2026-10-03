@@ -1406,12 +1406,13 @@ def skip_first_batches(dataloader, num_batches=0):
         dataloader = dataloader.dataloader
 
     dataset = dataloader.dataset
-    sampler_is_batch_sampler = False
+    #batch_size=None means there's no batch sampler to wrap.
+    use_sampler = False
     if isinstance(dataset, IterableDataset):
         new_batch_sampler = None
     else:
-        sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
-        batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
+        use_sampler = dataloader.batch_sampler is None or isinstance(dataloader.sampler, BatchSampler)
+        batch_sampler = dataloader.sampler if use_sampler else dataloader.batch_sampler
         new_batch_sampler = SkipBatchSampler(batch_sampler, skip_batches=num_batches)
 
     # We ignore all of those since they are all dealt with by our new_batch_sampler
@@ -1433,6 +1434,12 @@ def skip_first_batches(dataloader, num_batches=0):
     if new_batch_sampler is None:
         kwargs["drop_last"] = dataloader.drop_last
         kwargs["batch_size"] = dataloader.batch_size
+    elif use_sampler:
+        #keep the sampler here so the collate input stays the same
+        kwargs["sampler"] = new_batch_sampler
+        kwargs["batch_size"] = dataloader.batch_size
+    else:
+        kwargs["batch_sampler"] = new_batch_sampler
 
     if isinstance(dataloader, DataLoaderDispatcher):
         if new_batch_sampler is None:
@@ -1441,7 +1448,6 @@ def skip_first_batches(dataloader, num_batches=0):
         dataloader = DataLoaderDispatcher(
             dataset,
             split_batches=dataloader.split_batches,
-            batch_sampler=new_batch_sampler,
             _drop_last=dataloader._drop_last,
             _non_blocking=dataloader._non_blocking,
             slice_fn=dataloader.slice_fn,
@@ -1453,11 +1459,6 @@ def skip_first_batches(dataloader, num_batches=0):
         if new_batch_sampler is None:
             # Need to manually skip batches in the dataloader
             kwargs["skip_batches"] = num_batches
-        elif sampler_is_batch_sampler:
-            kwargs["sampler"] = new_batch_sampler
-            kwargs["batch_size"] = dataloader.batch_size
-        else:
-            kwargs["batch_sampler"] = new_batch_sampler
         dataloader = DataLoaderShard(
             dataset,
             device=dataloader.device,
@@ -1474,7 +1475,7 @@ def skip_first_batches(dataloader, num_batches=0):
             # Need to manually skip batches in the dataloader
             dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
         else:
-            dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+            dataloader = DataLoader(dataset, **kwargs)
 
     if state.distributed_type == DistributedType.XLA:
         dataloader = MpDeviceLoaderWrapper(dataloader, device)

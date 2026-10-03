@@ -614,6 +614,43 @@ class DataLoaderTester(AccelerateTestCase):
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
         assert [t.tolist() for t in new_dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
+    @parameterized.expand(
+        [
+            (loader_cls.__name__, loader_cls, batch_size, custom_collate)
+            for loader_cls in (DataLoader, DataLoaderShard, DataLoaderDispatcher)
+            for batch_size in (None, 4)
+            for custom_collate in (False, True)
+        ]
+    )
+    def test_skip_first_batches_without_auto_batching(self, name, loader_cls, batch_size, custom_collate):
+        dataset = torch.arange(20).reshape(10, 2)
+        sampler = list(reversed(range(len(dataset))))
+        if batch_size is not None:
+            sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=False)
+
+        def collate_fn(sample):
+            return {"values": sample + 100}
+
+        dataloader = loader_cls(
+            dataset, sampler=sampler, batch_size=None, collate_fn=collate_fn if custom_collate else None
+        )
+        expected = list(dataloader)
+        for num_batches in (0, 1, len(expected)):
+            with self.subTest(num_batches=num_batches):
+                resumed = skip_first_batches(dataloader, num_batches=num_batches)
+                if loader_cls is DataLoaderDispatcher and num_batches == len(expected):
+                    with pytest.raises(ValueError, match="Batch does not contain any data"):
+                        list(resumed)
+                else:
+                    torch.testing.assert_close(list(resumed), expected[num_batches:])
+                assert resumed.batch_size is None
+                assert resumed.batch_sampler is None
+                assert resumed.collate_fn is dataloader.collate_fn
+                assert len(resumed) == len(expected) - num_batches
+
+        resumed = skip_first_batches(skip_first_batches(dataloader, num_batches=1), num_batches=1)
+        torch.testing.assert_close(list(resumed), expected[2:])
+
     def test_skip_first_batches_preserves_batch_metadata(self):
         dataloader = prepare_data_loader(DataLoader(range(10), batch_size=2), num_processes=2, process_index=0)
         resumed = skip_first_batches(dataloader, num_batches=1)
