@@ -150,12 +150,13 @@ def test_op_checker(state):
 def test_copy_tensor_to_devices(state):
     if state.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.XLA]:
         return
-    if state.is_main_process:
-        tensor = torch.tensor([1, 2, 3], dtype=torch.int).to(state.device)
-    else:
-        tensor = None
-    tensor = copy_tensor_to_devices(tensor)
-    assert torch.allclose(tensor, torch.tensor([1, 2, 3], dtype=torch.int, device=state.device))
+    for expected in [
+        torch.tensor([1, 2, 3], dtype=torch.int, device=state.device),
+        torch.zeros(3, 0, 4, dtype=torch.int, device=state.device),
+    ]:
+        tensor = expected if state.is_main_process else None
+        tensor = copy_tensor_to_devices(tensor)
+        assert torch.allclose(tensor, expected)
 
 
 def _mp_fn(index):
