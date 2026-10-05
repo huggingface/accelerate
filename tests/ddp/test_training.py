@@ -34,8 +34,9 @@ DDP_CONFIG_FILE = Path(__file__).with_name("ddp.yaml")
 @require_huggingface_suite
 def test_training(tmp_path):
     """
-    Compare DDP losses with single-GPU training on the same effective batches.
-    A plain-PyTorch baseline can expose wrapper bugs that two Accelerate runs could share.
+    Train on eight examples per update: one GPU with eight, or two GPUs with four each.
+    Compare the losses and require both runs to improve on the first batch.
+    A plain-PyTorch reference can expose wrapper bugs that two Accelerate runs could share.
     """
     reference = run_training(
         tmp_path / "reference.json",
@@ -54,6 +55,7 @@ def test_training(tmp_path):
     assert reference["world_size"] == 1
     assert distributed["world_size"] == 2
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
+
     torch.testing.assert_close(distributed["losses"], reference["losses"], atol=max_loss_difference, rtol=0)
     torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=max_loss_difference, rtol=0)
 
@@ -75,7 +77,10 @@ def test_training(tmp_path):
 @require_multi_gpu
 @require_huggingface_suite
 def test_training_mixed_precision(tmp_path, mixed_precision, max_loss_difference, min_loss_decrease):
-    """Compare DDP with single-GPU training at the same requested precision."""
+    """Keep eight examples per update and use the same requested precision in both runs.
+
+    Compare the losses and require progress; the worker also checks that mixed precision ran.
+    """
     reference = run_training(
         tmp_path / "reference.json",
         reference=True,
@@ -92,6 +97,7 @@ def test_training_mixed_precision(tmp_path, mixed_precision, max_loss_difference
     assert reference["world_size"] == 1
     assert distributed["world_size"] == 2
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
+
     torch.testing.assert_close(distributed["losses"], reference["losses"], atol=max_loss_difference, rtol=0)
     torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=max_loss_difference, rtol=0)
 
@@ -105,7 +111,11 @@ def test_training_mixed_precision(tmp_path, mixed_precision, max_loss_difference
 @require_multi_gpu
 @require_huggingface_suite
 def test_training_with_gradient_accumulation(tmp_path):
-    """Keep BF16 and eight blocks per update: 2 ranks * 4 blocks, or 2 ranks * 2 blocks * 2 steps."""
+    """Keep BF16 and eight examples per update across two GPUs.
+
+    Compare four examples per GPU at once with two batches of two examples per GPU.
+    Their losses should agree, and both runs should improve on the first batch.
+    """
     large_batch = run_training(
         tmp_path / "large.json",
         config_file=DDP_CONFIG_FILE,
@@ -125,6 +135,7 @@ def test_training_with_gradient_accumulation(tmp_path):
 
     assert large_batch["world_size"] == accumulated["world_size"] == 2
     assert len(large_batch["losses"]) == len(accumulated["losses"]) == 10
+
     torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=max_loss_difference, rtol=0)
     torch.testing.assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=max_loss_difference, rtol=0)
 

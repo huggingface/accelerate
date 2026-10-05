@@ -66,6 +66,7 @@ def train_reference(model, optimizer, dataloader, mixed_precision_dtype, device)
 
 
 def train_with_accelerate(model, optimizer, dataloader, accelerator):
+    """Train with Accelerate and record one global mean loss per optimizer update."""
     losses, window_losses = [], []
 
     for batch in dataloader:
@@ -77,7 +78,8 @@ def train_with_accelerate(model, optimizer, dataloader, accelerator):
 
             window_losses.append(loss.detach())
             if accelerator.sync_gradients:
-                # Equal shifted-target counts make this a global effective-batch mean.
+                # Each microbatch has the same number of next-token targets.
+                # Average within this accumulation window, then across processes.
                 window_loss = torch.stack(window_losses).mean()
                 losses.append(accelerator.reduce(window_loss, reduction="mean").item())
                 window_losses.clear()
@@ -148,7 +150,8 @@ def main():
         model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
         losses = train_with_accelerate(model, optimizer, dataloader, accelerator)
 
-    # Revisit the first global batch to observe learning, including the final update.
+    # In DDP, both processes revisit the same first eight examples after the final update.
+    # This measures progress on training data, not performance on unseen text.
     first_global_batch = input_ids[:8].to(device)
     # Accelerate's prepared model handles autocast inside forward; only the reference needs it here.
     context = (

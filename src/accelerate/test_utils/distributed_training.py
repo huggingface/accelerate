@@ -35,10 +35,13 @@ def run_training(
     mixed_precision="no",
     gradient_accumulation_steps=1,
 ):
+    """Run a training worker and return its measurements; the caller checks the results."""
+    # Require an explicit setup instead of using the machine's default launch configuration.
     if not reference and config_file is None:
         raise ValueError("Distributed training requires an explicit launch configuration.")
     if reference and config_file is not None:
         raise ValueError("The plain-PyTorch reference does not use a launch configuration.")
+
     command = [sys.executable]
     if not reference:
         command = get_launch_command(
