@@ -625,7 +625,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             dummy_optimizer = DummyOptim(params=model.parameters(), lr=5e-5, weight_decay=1e-4)
             dummy_lr_scheduler = DummyScheduler(dummy_optimizer, warmup_num_steps=10, total_num_steps=1000)
             hidden_size = model.config.hidden_size
-            model, _, train_dataloader, eval_dataloader, _ = accelerator.prepare(
+            model, _, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                 model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
             )
             config = accelerator.deepspeed_config
@@ -636,7 +636,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             assert config["optimizer"]["params"]["weight_decay"] == 1e-4
 
             assert config["scheduler"]["params"]["warmup_min_lr"] == 0.0
-            assert config["scheduler"]["params"]["warmup_max_lr"] == 5e-05
+            assert config["scheduler"]["params"]["warmup_max_lr"] == lr_scheduler.scheduler.max_lrs
+            assert all(lr == 5e-05 for lr in lr_scheduler.scheduler.max_lrs)
             assert config["scheduler"]["params"]["warmup_num_steps"] == 10
 
             assert config["gradient_clipping"] == 1.0
