@@ -66,8 +66,7 @@ def run_training(
     if reference:
         command.append("--reference")
 
-    # Avoid CPU oversubscription across training processes.
-    result = execute_subprocess_async(command, env={**os.environ, "OMP_NUM_THREADS": "1"})
+    result = execute_subprocess_async(command)
     assert result.returncode == 0, result.stderr
     return json.loads(output.read_text(encoding="utf-8"))
 
@@ -90,8 +89,6 @@ def run_token_weighting_example(output, *, example_file, num_processes):
     ]
     env = {
         **os.environ,
-        # Avoid CPU oversubscription across training processes.
-        "OMP_NUM_THREADS": "1",
         "CUDA_VISIBLE_DEVICES": "",
         "HF_HUB_OFFLINE": "1",
         # The example otherwise forces two epochs when this test flag is enabled.
