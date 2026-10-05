@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,6 +22,8 @@ import torch
 
 from accelerate.test_utils.distributed_training import run_training
 from accelerate.test_utils.testing import (
+    execute_subprocess_async,
+    path_in_accelerate_package,
     require_cuda,
     require_huggingface_suite,
     require_multi_gpu,
@@ -142,3 +147,58 @@ def test_training_with_gradient_accumulation(tmp_path):
     # Agreement alone also accepts two runs that never learn. Require progress on the first batch.
     assert large_batch["final_loss"] < large_batch["losses"][0] - min_loss_decrease
     assert accumulated["final_loss"] < accumulated["losses"][0] - min_loss_decrease
+
+
+@require_huggingface_suite
+@pytest.mark.skipif(
+    not (torch.distributed.is_available() and torch.distributed.is_gloo_available()), reason="Requires Gloo"
+)
+def test_gradient_accumulation_example(tmp_path):
+    """Starting from the same model and the same examples, does dividing training into smaller batches
+    with unequal numbers of prediction targets produce the expected update?
+
+    Exercise the actual example's training loop on two CPU ranks, including in CPU-only CI.
+    The example suite separately checks its command-line entry point and collators.
+    """
+    output = tmp_path / "token_weighting.json"
+    script = path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_token_weighting.py")
+    command = [
+        sys.executable,
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nnodes=1",
+        "--nproc-per-node=2",
+        script,
+        "--example",
+        str(Path("examples/by_feature/gradient_accumulation_for_autoregressive_models.py").resolve()),
+        "--output",
+        str(output),
+    ]
+    # torchrun creates two CPU ranks; accelerate launch --cpu starts a single process.
+    env = {
+        **os.environ,
+        "OMP_NUM_THREADS": "1",
+        "CUDA_VISIBLE_DEVICES": "",
+        "HF_HUB_OFFLINE": "1",
+        "TESTING_MOCKED_DATALOADERS": "0",
+    }
+    process = execute_subprocess_async(command, env=env)
+    assert process.returncode == 0, f"DDP launcher failed: {process.stderr}"
+    results = [json.loads(output.with_suffix(f".rank{rank}.json").read_text()) for rank in range(2)]
+    # Unequal microbatches AND ranks, counting actual shifted targets only.
+    assert [[batch["tokens"] for batch in result["batches"]] for result in results] == [[3, 7], [12, 6]]
+    parameters = [torch.tensor(result["parameters"], dtype=torch.float64) for result in results]
+    # AdamW can conceal a uniformly mis-scaled gradient in its adaptive update.
+    # Check the gradients as well as the resulting parameters against the full batch.
+    for result, actual in zip(results, parameters):
+        assert len(result["gradients"]) == 1
+        gradients = torch.tensor(result["gradients"][0], dtype=torch.float64)
+        reference_gradients = torch.tensor(result["reference_gradients"], dtype=torch.float64)
+        assert reference_gradients.norm().item() > 0
+        relative_gradient_error = (gradients - reference_gradients).norm().item() / reference_gradients.norm().item()
+        assert relative_gradient_error < 1e-4, f"Token-weighted relative gradient error: {relative_gradient_error:.6%}"
+        reference = torch.tensor(result["reference_parameters"], dtype=torch.float64)
+        assert result["reference_update_norm"] > 0
+        relative_update_error = (actual - reference).norm().item() / result["reference_update_norm"]
+        assert relative_update_error < 1e-4, f"Token-weighted relative update error: {relative_update_error:.6%}"

@@ -269,6 +269,62 @@ class FeatureExamplesTests(TempDirTestCase):
         ]
         run_command(self.launch_args + testargs)
 
+    def test_autoregressive_dataloaders_preserve_labels(self):
+        import contextlib
+        import importlib.util
+
+        import datasets
+        from tokenizers import Tokenizer
+        from tokenizers.models import WordLevel
+        from tokenizers.pre_tokenizers import Whitespace
+        from transformers import PreTrainedTokenizerFast
+
+        from accelerate.test_utils.training import mocked_dataloaders_for_autoregressive_models
+        from accelerate.utils import DistributedType
+
+        spec = importlib.util.spec_from_file_location(
+            "autoregressive_example", "examples/by_feature/gradient_accumulation_for_autoregressive_models.py"
+        )
+        example = importlib.util.module_from_spec(spec)
+        with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
+            spec.loader.exec_module(example)
+
+        tokenizer = Tokenizer(WordLevel({"[EOS]": 0, "a": 1, "b": 2, "c": 3, "[UNK]": 4}, unk_token="[UNK]"))
+        tokenizer.pre_tokenizer = Whitespace()
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_object=tokenizer, eos_token="[EOS]", unk_token="[UNK]", model_max_length=8
+        )
+        accelerator = mock.Mock(distributed_type=DistributedType.NO, mixed_precision="no")
+        accelerator.main_process_first = contextlib.nullcontext
+        accelerator.local_main_process_first = contextlib.nullcontext
+        for loader, dataset_module, columns, kwargs in (
+            (example.get_dataloaders, example, {"text": ["a b c", "a b"]}, {"max_training_samples": 2}),
+            (
+                mocked_dataloaders_for_autoregressive_models,
+                datasets,
+                {"sentence1": ["a b c", "a b"], "sentence2": ["", ""], "label": [0, 1]},
+                {},
+            ),
+        ):
+            with self.subTest(loader=loader.__name__):
+                dataset = datasets.Dataset.from_dict(columns)
+                with (
+                    mock.patch.object(example.AutoTokenizer, "from_pretrained", return_value=tokenizer),
+                    mock.patch.object(
+                        dataset_module,
+                        "load_dataset",
+                        return_value=datasets.DatasetDict(train=dataset, validation=dataset),
+                    ),
+                ):
+                    train_dataloader, eval_dataloader = loader(accelerator, batch_size=2, **kwargs)
+                for dataloader in (train_dataloader, eval_dataloader):
+                    # Models shift these labels internally; the collator must not.
+                    batches = list(dataloader)
+                    rows = [row for batch in batches for row in batch["input_ids"].tolist()]
+                    labels = [row for batch in batches for row in batch["labels"].tolist()]
+                    assert [row[:length] for row, length in zip(rows, (3, 2))] == [[1, 2, 3], [1, 2]]
+                    assert labels == [[token if token != 0 else -100 for token in row] for row in rows]
+
     def test_local_sgd(self):
         testargs = ["examples/by_feature/local_sgd.py"]
         run_command(self.launch_args + testargs)
