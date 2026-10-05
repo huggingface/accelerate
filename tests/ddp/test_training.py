@@ -192,15 +192,15 @@ def test_gradient_accumulation_example(tmp_path):
 
     results = [json.loads(output.with_suffix(f".rank{rank}.json").read_text()) for rank in range(2)]
 
-    # Prediction targets in each rank's two microbatches.
     expected_target_counts = [[3, 7], [12, 6]]
 
     for rank, result in enumerate(results):
+        # Did this rank receive the intended targets and take one step?
         target_counts = [batch["tokens"] for batch in result["batches"]]
         assert target_counts == expected_target_counts[rank]
         assert len(result["gradients"]) == 1
 
-        # AdamW can conceal uniform gradient scaling in its parameter update.
+        # Do the gradients match? AdamW can hide a scaling error in its update.
         gradients = torch.tensor(result["gradients"][0], dtype=torch.float64)
         reference_gradients = torch.tensor(result["reference_gradients"], dtype=torch.float64)
         reference_gradient_norm = reference_gradients.norm().item()
@@ -211,7 +211,7 @@ def test_gradient_accumulation_example(tmp_path):
             f"Rank {rank}: Token-weighted relative gradient error: {relative_gradient_error:.6%}"
         )
 
-        # Measure parameter differences relative to the reference update's size.
+        # Do the updates match relative to the size of the reference update?
         parameters = torch.tensor(result["parameters"], dtype=torch.float64)
         reference_parameters = torch.tensor(result["reference_parameters"], dtype=torch.float64)
         reference_update_norm = result["reference_update_norm"]
