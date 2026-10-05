@@ -32,7 +32,7 @@ from accelerate.test_utils.testing import (
 from accelerate.utils import is_bf16_available
 
 
-DDP_CONFIG_FILE = Path(__file__).with_name("ddp.yaml")
+DDP_CONFIG_FILE = Path(__file__).parent / "ddp.yaml"
 
 
 @require_cuda
