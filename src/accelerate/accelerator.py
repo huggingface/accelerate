@@ -2329,6 +2329,11 @@ class Accelerator:
                 config_kwargs.update(
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
                 )
+            auto_warmup_max_lr = (
+                isinstance(scheduler, DummyScheduler)
+                and scheduler.lr_scheduler_callable is None
+                and deepspeed_plugin.is_auto("scheduler.params.warmup_max_lr")
+            )
             if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is None:
                 max_lr = (
                     getattr(scheduler.optimizer, "lr", None)
@@ -2384,6 +2389,18 @@ class Accelerator:
                     if scheduler is not None:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
+
+            if auto_warmup_max_lr:
+                scheduler_config = self.deepspeed_config["scheduler"]
+
+                def lr_scheduler_callable(optimizer):
+                    # DeepSpeed may create parameter groups with different learning rates (e.g. Muon).
+                    # Resolve `auto` after those groups exist, including on versions where None uses only group 0.
+                    scheduler_config["params"]["warmup_max_lr"] = [group["lr"] for group in optimizer.param_groups]
+                    scheduler_class = getattr(deepspeed.runtime.lr_schedules, scheduler_config["type"])
+                    return scheduler_class(optimizer, **scheduler_config["params"])
+
+                kwargs["lr_scheduler"] = lr_scheduler_callable
 
             if self.device.type == "hpu":
                 # This env variable is initialized here to make sure it is set to "true"
