@@ -12,19 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
-import sys
 from pathlib import Path
 
 import pytest
 import torch
 from torch.testing import assert_close
 
-from accelerate.test_utils.distributed_training import run_training
+from accelerate.test_utils.distributed_training import run_token_weighting_example, run_training
 from accelerate.test_utils.testing import (
-    execute_subprocess_async,
-    path_in_accelerate_package,
     require_cuda,
     require_huggingface_suite,
     require_multi_gpu,
@@ -164,40 +159,17 @@ def test_gradient_accumulation_example(tmp_path):
     Exercise the actual example's training loop on two CPU ranks, including in CPU-only CI.
     The example suite separately checks its command-line entry point and collators.
     """
-    output = tmp_path / "token_weighting.json"
-    script = path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_token_weighting.py")
-    command = [
-        sys.executable,
-        "-m",
-        "torch.distributed.run",
-        "--standalone",
-        "--nnodes=1",
-        "--nproc-per-node=2",
-        script,
-        "--example",
-        Path("examples/by_feature/gradient_accumulation_for_autoregressive_models.py").resolve(),
-        "--output",
-        output,
-    ]
-    # torchrun creates two CPU ranks; accelerate launch --cpu starts a single process.
-    env = {
-        **os.environ,
-        "OMP_NUM_THREADS": "1",
-        "CUDA_VISIBLE_DEVICES": "",
-        "HF_HUB_OFFLINE": "1",
-        "TESTING_MOCKED_DATALOADERS": "0",
-    }
-    process = execute_subprocess_async(command, env=env)
-    assert process.returncode == 0, f"DDP launcher failed: {process.stderr}"
-
-    results = [json.loads(output.with_suffix(f".rank{rank}.json").read_text()) for rank in range(2)]
+    results = run_token_weighting_example(
+        tmp_path / "token_weighting.json",
+        example_file=Path("examples/by_feature/gradient_accumulation_for_autoregressive_models.py").resolve(),
+        num_processes=2,
+    )
 
     expected_target_counts = [[3, 7], [12, 6]]
 
     for rank, result in enumerate(results):
         # Did this rank receive the intended targets and take one step?
-        target_counts = [batch["tokens"] for batch in result["batches"]]
-        assert target_counts == expected_target_counts[rank]
+        assert result["target_counts"] == expected_target_counts[rank]
         assert len(result["gradients"]) == 1
 
         # Do the gradients match? AdamW can hide a scaling error in its update.

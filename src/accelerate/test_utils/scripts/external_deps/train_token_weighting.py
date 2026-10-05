@@ -25,12 +25,9 @@ from unittest.mock import patch
 
 import torch
 import torch.nn.functional as F
+from torch.nn.utils import parameters_to_vector
 from torch.utils.data import DataLoader
 from transformers import LlamaConfig, LlamaForCausalLM
-
-
-def flatten_parameters(model):
-    return torch.cat([parameter.detach().flatten() for parameter in model.parameters()])
 
 
 def main():
@@ -62,7 +59,7 @@ def main():
         labels[row, length:] = -100
         attention_mask[row, length:] = 0
     labels[2, 3] = -100  # Also ignore one non-padding target.
-    initial_parameters = flatten_parameters(model).clone()
+    initial_parameters = parameters_to_vector(model.parameters()).detach()
 
     # Independent oracle: one ordinary PyTorch update on the full batch. Compute
     # the shifted mean loss explicitly, not through the example's token scaling.
@@ -73,17 +70,13 @@ def main():
     reference_loss.backward()
     reference_gradients = torch.cat([parameter.grad.detach().flatten() for parameter in reference.parameters()])
     reference_optimizer.step()
-    reference_parameters = flatten_parameters(reference)
+    reference_parameters = parameters_to_vector(reference.parameters()).detach()
 
-    records = []
+    target_counts = []
 
     def observe_batch(module, positional, kwargs):
         if module.training:
-            records.append(
-                {
-                    "tokens": kwargs["labels"][:, 1:].ne(-100).sum().item(),
-                }
-            )
+            target_counts.append(kwargs["labels"][:, 1:].ne(-100).sum().item())
 
     hook = model.register_forward_pre_hook(observe_batch, with_kwargs=True)
     samples = [
@@ -126,10 +119,10 @@ def main():
     args.output.with_suffix(f".rank{os.environ['RANK']}.json").write_text(
         json.dumps(
             {
-                "batches": records,
+                "target_counts": target_counts,
                 "gradients": [gradient.tolist() for gradient in gradients],
                 "reference_gradients": reference_gradients.tolist(),
-                "parameters": flatten_parameters(model).tolist(),
+                "parameters": parameters_to_vector(model.parameters()).detach().tolist(),
                 "reference_parameters": reference_parameters.tolist(),
                 "reference_update_norm": (reference_parameters - initial_parameters).norm().item(),
             },

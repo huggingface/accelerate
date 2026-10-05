@@ -66,3 +66,36 @@ def run_training(
     result = execute_subprocess_async(command, env={**os.environ, "OMP_NUM_THREADS": "1"})
     assert result.returncode == 0, result.stderr
     return json.loads(output.read_text(encoding="utf-8"))
+
+
+def run_token_weighting_example(output, *, example_file, num_processes):
+    """Run the example's controlled CPU experiment and return each rank's measurements."""
+    # torchrun creates CPU ranks; accelerate launch --cpu starts a single process.
+    command = [
+        sys.executable,
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        "--nnodes=1",
+        f"--nproc-per-node={num_processes}",
+        path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_token_weighting.py"),
+        "--example",
+        example_file,
+        "--output",
+        output,
+    ]
+    env = {
+        **os.environ,
+        "OMP_NUM_THREADS": "1",
+        "CUDA_VISIBLE_DEVICES": "",
+        "HF_HUB_OFFLINE": "1",
+        # The example otherwise forces two epochs when this test flag is enabled.
+        "TESTING_MOCKED_DATALOADERS": "0",
+    }
+    run_result = execute_subprocess_async(command, env=env)
+    assert run_result.returncode == 0, f"DDP launcher failed: {run_result.stderr}"
+
+    return [
+        json.loads(output.with_suffix(f".rank{rank}.json").read_text(encoding="utf-8"))
+        for rank in range(num_processes)
+    ]
