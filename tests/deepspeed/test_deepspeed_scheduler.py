@@ -78,6 +78,7 @@ class DeepSpeedSchedulerConfigTest(AccelerateTestCase):
                 lr_scheduler = getattr(deepspeed.runtime.lr_schedules, scheduler_config["type"])(
                     optimizer, **scheduler_config["params"]
                 )
+            model.lr_scheduler = lr_scheduler
             return model, optimizer, None, lr_scheduler
 
         with patch("deepspeed.initialize", side_effect=initialize):
@@ -86,6 +87,9 @@ class DeepSpeedSchedulerConfigTest(AccelerateTestCase):
         scheduler = scheduler.scheduler
         expected_max = {"auto": [0.02, 1e-5], "scalar": [0.003, 0.003], "list": [0.03, 0.0002]}[max_lr_type]
         self.assertEqual(scheduler.max_lrs, expected_max)
+        self.assertEqual([group["lr"] for group in optimizer.param_groups], [0, 0])
+        if max_lr_type == "auto":
+            self.assertIs(model.lr_scheduler, scheduler)
         expected_config = expected_max if max_lr_type == "auto" else max_lr
         self.assertEqual(accelerator.deepspeed_config["scheduler"]["params"]["warmup_max_lr"], expected_config)
         for step in [1, 4, 10]:
@@ -101,3 +105,59 @@ class DeepSpeedSchedulerConfigTest(AccelerateTestCase):
         scheduler.load_state_dict(scheduler_state)
         scheduler.step()
         self.assertEqual(scheduler.get_last_lr(), expected_next)
+
+    @parameterized.expand(["WarmupLR", "WarmupDecayLR"])
+    def test_optimizer_rebuilt_by_zero(self, scheduler_name):
+        from deepspeed.runtime.zero.stage_1_and_2 import DeepSpeedZeroOptimizer
+
+        config = {
+            "train_micro_batch_size_per_gpu": 1,
+            "gradient_accumulation_steps": 1,
+            "zero_optimization": {"stage": 0},
+            "optimizer": {"type": "Adagrad", "params": {"lr": "auto"}},
+            "scheduler": {
+                "type": scheduler_name,
+                "params": {
+                    "warmup_min_lr": "auto",
+                    "warmup_max_lr": "auto",
+                    "warmup_num_steps": "auto",
+                    "warmup_type": "linear",
+                },
+            },
+        }
+        if scheduler_name == "WarmupDecayLR":
+            config["scheduler"]["params"]["total_num_steps"] = "auto"
+        model = torch.nn.Linear(2, 2)
+        optimizer = DummyOptim(model.parameters(), lr=0.02)
+        scheduler = DummyScheduler(optimizer, warmup_num_steps=4, total_num_steps=20)
+        accelerator = Accelerator(cpu=True)
+        accelerator.state.distributed_type = DistributedType.DEEPSPEED
+        accelerator.state.deepspeed_plugins = DeepSpeedPlugin(hf_ds_config=config)
+        accelerator.deepspeed_engine_wrapped = None
+
+        def initialize(model, config_params, model_parameters, lr_scheduler):
+            basic_optimizer = torch.optim.Adagrad(model_parameters, lr=0.02)
+            # Run the real ZeRO state-initialization method: Adagrad must be recreated for the flat parameters.
+            zero_optimizer = object.__new__(DeepSpeedZeroOptimizer)
+            zero_optimizer.optimizer = basic_optimizer
+            zero_optimizer.bit16_groups = [list(model.parameters())]
+            zero_optimizer.single_partition_of_fp32_groups = [torch.nn.Parameter(torch.ones(6))]
+            zero_optimizer.partition_size = [6]
+            zero_optimizer.device = torch.device("cpu")
+            zero_optimizer.cpu_offload = False
+            zero_optimizer.cpu_offload_pin_memory = False
+            zero_optimizer.initialize_optimizer_states()
+            self.assertIsNot(zero_optimizer.optimizer, basic_optimizer)
+            # This is the object DeepSpeed passes to client scheduler factories, before returning its wrapper.
+            scheduler = lr_scheduler(basic_optimizer)
+            model.lr_scheduler = scheduler
+            return model, zero_optimizer, None, scheduler
+
+        with patch("deepspeed.initialize", side_effect=initialize):
+            model, optimizer, scheduler = accelerator._prepare_deepspeed(model, optimizer, scheduler)
+
+        self.assertIs(scheduler.scheduler.optimizer, optimizer.optimizer.optimizer)
+        self.assertIs(model.lr_scheduler, scheduler.scheduler)
+        self.assertEqual([group["lr"] for group in optimizer.param_groups], [0])
+        scheduler.scheduler.step(2)
+        self.assertEqual([group["lr"] for group in optimizer.param_groups], [0.01])
