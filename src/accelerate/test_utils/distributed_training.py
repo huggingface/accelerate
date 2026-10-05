@@ -50,9 +50,9 @@ def run_training(
             main_process_port=get_torch_dist_unique_port(),
         )
     command += [
-        str(path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_causal_lm.py")),
+        path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_causal_lm.py"),
         "--output",
-        str(output),
+        output,
         "--batch-size",
         str(batch_size),
         "--mixed-precision",

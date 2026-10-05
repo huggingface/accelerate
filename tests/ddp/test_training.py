@@ -171,9 +171,9 @@ def test_gradient_accumulation_example(tmp_path):
         "--nproc-per-node=2",
         script,
         "--example",
-        str(Path("examples/by_feature/gradient_accumulation_for_autoregressive_models.py").resolve()),
+        Path("examples/by_feature/gradient_accumulation_for_autoregressive_models.py").resolve(),
         "--output",
-        str(output),
+        output,
     ]
     # torchrun creates two CPU ranks; accelerate launch --cpu starts a single process.
     env = {
