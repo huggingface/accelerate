@@ -192,20 +192,32 @@ def test_gradient_accumulation_example(tmp_path):
 
     results = [json.loads(output.with_suffix(f".rank{rank}.json").read_text()) for rank in range(2)]
 
-    # Unequal microbatches AND ranks, counting actual shifted targets only.
-    assert [[batch["tokens"] for batch in result["batches"]] for result in results] == [[3, 7], [12, 6]]
-    parameters = [torch.tensor(result["parameters"], dtype=torch.float64) for result in results]
+    # Prediction targets in each rank's two microbatches.
+    expected_target_counts = [[3, 7], [12, 6]]
 
-    # AdamW can conceal a uniformly mis-scaled gradient in its adaptive update.
-    # Check the gradients as well as the resulting parameters against the full batch.
-    for result, actual in zip(results, parameters):
+    for rank, result in enumerate(results):
+        target_counts = [batch["tokens"] for batch in result["batches"]]
+        assert target_counts == expected_target_counts[rank]
         assert len(result["gradients"]) == 1
+
+        # AdamW can conceal uniform gradient scaling in its parameter update.
         gradients = torch.tensor(result["gradients"][0], dtype=torch.float64)
         reference_gradients = torch.tensor(result["reference_gradients"], dtype=torch.float64)
-        assert reference_gradients.norm().item() > 0
-        relative_gradient_error = (gradients - reference_gradients).norm().item() / reference_gradients.norm().item()
-        assert relative_gradient_error < 1e-4, f"Token-weighted relative gradient error: {relative_gradient_error:.6%}"
-        reference = torch.tensor(result["reference_parameters"], dtype=torch.float64)
-        assert result["reference_update_norm"] > 0
-        relative_update_error = (actual - reference).norm().item() / result["reference_update_norm"]
-        assert relative_update_error < 1e-4, f"Token-weighted relative update error: {relative_update_error:.6%}"
+        reference_gradient_norm = reference_gradients.norm().item()
+        assert reference_gradient_norm > 0
+
+        relative_gradient_error = (gradients - reference_gradients).norm().item() / reference_gradient_norm
+        assert relative_gradient_error < 1e-4, (
+            f"Rank {rank}: Token-weighted relative gradient error: {relative_gradient_error:.6%}"
+        )
+
+        # Measure parameter differences relative to the reference update's size.
+        parameters = torch.tensor(result["parameters"], dtype=torch.float64)
+        reference_parameters = torch.tensor(result["reference_parameters"], dtype=torch.float64)
+        reference_update_norm = result["reference_update_norm"]
+        assert reference_update_norm > 0
+
+        relative_update_error = (parameters - reference_parameters).norm().item() / reference_update_norm
+        assert relative_update_error < 1e-4, (
+            f"Rank {rank}: Token-weighted relative update error: {relative_update_error:.6%}"
+        )
