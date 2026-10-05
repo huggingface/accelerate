@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 import torch
+from torch.testing import assert_close
 
 from accelerate.test_utils.distributed_training import run_training
 from accelerate.test_utils.testing import (
@@ -61,8 +62,8 @@ def test_training(tmp_path):
     assert distributed["world_size"] == 2
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
 
-    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=max_loss_difference, rtol=0)
-    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=max_loss_difference, rtol=0)
+    assert_close(distributed["losses"], reference["losses"], atol=max_loss_difference, rtol=0)
+    assert_close(distributed["final_loss"], reference["final_loss"], atol=max_loss_difference, rtol=0)
 
     # Agreement alone also accepts two runs that never learn. Require progress on the first batch.
     assert reference["final_loss"] < reference["losses"][0] - min_loss_decrease
@@ -103,8 +104,8 @@ def test_training_mixed_precision(tmp_path, mixed_precision, max_loss_difference
     assert distributed["world_size"] == 2
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
 
-    torch.testing.assert_close(distributed["losses"], reference["losses"], atol=max_loss_difference, rtol=0)
-    torch.testing.assert_close(distributed["final_loss"], reference["final_loss"], atol=max_loss_difference, rtol=0)
+    assert_close(distributed["losses"], reference["losses"], atol=max_loss_difference, rtol=0)
+    assert_close(distributed["final_loss"], reference["final_loss"], atol=max_loss_difference, rtol=0)
 
     # Agreement alone also accepts two runs that never learn. Require progress on the first batch.
     assert reference["final_loss"] < reference["losses"][0] - min_loss_decrease
@@ -141,8 +142,8 @@ def test_training_with_gradient_accumulation(tmp_path):
     assert large_batch["world_size"] == accumulated["world_size"] == 2
     assert len(large_batch["losses"]) == len(accumulated["losses"]) == 10
 
-    torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=max_loss_difference, rtol=0)
-    torch.testing.assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=max_loss_difference, rtol=0)
+    assert_close(accumulated["losses"], large_batch["losses"], atol=max_loss_difference, rtol=0)
+    assert_close(accumulated["final_loss"], large_batch["final_loss"], atol=max_loss_difference, rtol=0)
 
     # Agreement alone also accepts two runs that never learn. Require progress on the first batch.
     assert large_batch["final_loss"] < large_batch["losses"][0] - min_loss_decrease
