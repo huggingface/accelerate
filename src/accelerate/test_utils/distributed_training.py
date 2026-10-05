@@ -18,7 +18,12 @@ import json
 import os
 import sys
 
-from .testing import execute_subprocess_async, get_torch_dist_unique_port, path_in_accelerate_package
+from .testing import (
+    execute_subprocess_async,
+    get_launch_command,
+    get_torch_dist_unique_port,
+    path_in_accelerate_package,
+)
 
 
 def run_training(
@@ -36,16 +41,11 @@ def run_training(
         raise ValueError("The plain-PyTorch reference does not use a launch configuration.")
     command = [sys.executable]
     if not reference:
-        command += [
-            "-m",
-            "accelerate.commands.launch",
-            "--config_file",
-            str(config_file),
-            "--mixed_precision",
-            mixed_precision,
-            "--main_process_port",
-            str(get_torch_dist_unique_port()),
-        ]
+        command = get_launch_command(
+            config_file=config_file,
+            mixed_precision=mixed_precision,
+            main_process_port=get_torch_dist_unique_port(),
+        )
     command += [
         str(path_in_accelerate_package("test_utils", "scripts", "external_deps", "train_causal_lm.py")),
         "--output",

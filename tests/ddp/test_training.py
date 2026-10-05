@@ -37,11 +37,20 @@ def test_training(tmp_path):
     Compare DDP losses with single-GPU training on the same effective batches.
     A plain-PyTorch baseline can expose wrapper bugs that two Accelerate runs could share.
     """
-    reference = run_training(tmp_path / "reference.json", reference=True, batch_size=8)
-    distributed = run_training(tmp_path / "ddp.json", config_file=DDP_CONFIG_FILE, batch_size=4)
+    reference = run_training(
+        tmp_path / "reference.json",
+        reference=True,
+        batch_size=8,
+    )
+    distributed = run_training(
+        tmp_path / "ddp.json",
+        config_file=DDP_CONFIG_FILE,
+        batch_size=4,
+    )
 
     max_loss_difference = 1e-4
     min_loss_decrease = 1e-4
+
     assert reference["world_size"] == 1
     assert distributed["world_size"] == 2
     assert len(reference["losses"]) == len(distributed["losses"]) == 10
@@ -68,10 +77,16 @@ def test_training(tmp_path):
 def test_training_mixed_precision(tmp_path, mixed_precision, max_loss_difference, min_loss_decrease):
     """Compare DDP with single-GPU training at the same requested precision."""
     reference = run_training(
-        tmp_path / "reference.json", reference=True, batch_size=8, mixed_precision=mixed_precision
+        tmp_path / "reference.json",
+        reference=True,
+        batch_size=8,
+        mixed_precision=mixed_precision,
     )
     distributed = run_training(
-        tmp_path / "ddp.json", config_file=DDP_CONFIG_FILE, batch_size=4, mixed_precision=mixed_precision
+        tmp_path / "ddp.json",
+        config_file=DDP_CONFIG_FILE,
+        batch_size=4,
+        mixed_precision=mixed_precision,
     )
 
     assert reference["world_size"] == 1
@@ -92,7 +107,10 @@ def test_training_mixed_precision(tmp_path, mixed_precision, max_loss_difference
 def test_training_with_gradient_accumulation(tmp_path):
     """Keep BF16 and eight blocks per update: 2 ranks * 4 blocks, or 2 ranks * 2 blocks * 2 steps."""
     large_batch = run_training(
-        tmp_path / "large.json", config_file=DDP_CONFIG_FILE, batch_size=4, mixed_precision="bf16"
+        tmp_path / "large.json",
+        config_file=DDP_CONFIG_FILE,
+        batch_size=4,
+        mixed_precision="bf16",
     )
     accumulated = run_training(
         tmp_path / "accumulated.json",
@@ -104,6 +122,7 @@ def test_training_with_gradient_accumulation(tmp_path):
 
     max_loss_difference = 1e-3
     min_loss_decrease = 1e-3
+
     assert large_batch["world_size"] == accumulated["world_size"] == 2
     assert len(large_batch["losses"]) == len(accumulated["losses"]) == 10
     torch.testing.assert_close(accumulated["losses"], large_batch["losses"], atol=max_loss_difference, rtol=0)
