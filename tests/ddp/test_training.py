@@ -48,11 +48,13 @@ def test_training(tmp_path):
         tmp_path / "reference.json",
         reference=True,
         batch_size=8,
+        mixed_precision="no",
     )
     distributed = run_training(
         tmp_path / "ddp.json",
         config_file=DDP_CONFIG_FILE,
         batch_size=4,
+        mixed_precision="no",
     )
 
     max_loss_difference = 1e-4
@@ -127,6 +129,7 @@ def test_training_with_gradient_accumulation(tmp_path):
         config_file=DDP_CONFIG_FILE,
         batch_size=4,
         mixed_precision="bf16",
+        gradient_accumulation_steps=1,
     )
     accumulated = run_training(
         tmp_path / "accumulated.json",
@@ -186,10 +189,13 @@ def test_gradient_accumulation_example(tmp_path):
     }
     process = execute_subprocess_async(command, env=env)
     assert process.returncode == 0, f"DDP launcher failed: {process.stderr}"
+
     results = [json.loads(output.with_suffix(f".rank{rank}.json").read_text()) for rank in range(2)]
+
     # Unequal microbatches AND ranks, counting actual shifted targets only.
     assert [[batch["tokens"] for batch in result["batches"]] for result in results] == [[3, 7], [12, 6]]
     parameters = [torch.tensor(result["parameters"], dtype=torch.float64) for result in results]
+
     # AdamW can conceal a uniformly mis-scaled gradient in its adaptive update.
     # Check the gradients as well as the resulting parameters against the full batch.
     for result, actual in zip(results, parameters):
