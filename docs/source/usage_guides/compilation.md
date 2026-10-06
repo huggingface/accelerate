@@ -14,7 +14,7 @@ The first execution of compiled code typically takes longer as it includes the c
 
 ## Using `torch.compile` with Accelerate
 
-Accelerate provides `TorchDynamoPlugin` for easy and seemless integration of `torch.compile` into your training scripts.
+Accelerate provides `TorchDynamoPlugin` for easy and seamless integration of `torch.compile` into your training scripts.
 
 ```python
 from accelerate import Accelerator
@@ -63,7 +63,7 @@ You could also use the `accelerate.utils.compile_regions` utility directly the s
 
 ### Benefits of Regional Compilation
 
-We have conducted extensive benchmarks comparing full compilation and regional compilation using the `torch.compile` feature in PyTorch. The full results are available in the [accelerate repository](https://github.com/huggingface/accelerate/tree/main/benchmarks/torch.compile/regional_compilation). The key findings from our benchmarks are:
+We have conducted extensive benchmarks comparing full compilation and regional compilation using the `torch.compile` feature in PyTorch. The full results are available in the [accelerate repository](https://github.com/huggingface/accelerate/tree/main/benchmarks/torch.compile). The key findings from our benchmarks are:
 
 1. **Comparable Performance**: Regional compilation delivers performance speedups similar to full compilation, especially for larger models.
 2. **Faster Compilation**: Regional compilation significantly reduces the time taken to compile models, making it a more efficient choice for deployment.

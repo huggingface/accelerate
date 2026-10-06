@@ -57,7 +57,7 @@ def get_basic_setup(accelerator, num_samples=82, batch_size=16):
 
 def get_dataloader(accelerator: Accelerator, use_longest=False):
     tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/mrpc-bert-base-cased")
-    dataset = load_dataset("glue", "mrpc", split="validation")
+    dataset = load_dataset("nyu-mll/glue", "mrpc", split="validation")
 
     def tokenize_function(examples):
         outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)

@@ -132,17 +132,21 @@ def load_and_quantize_model(
         )
         model = replace_with_bnb_layers(model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert)
         # convert param to the right dtype
+        # remove_duplicate=False so tied params (e.g. BLOOM's lm_head.weight tied to
+        # word_embeddings.weight) are visited under every alias — the keep_in_fp32 cast
+        # would otherwise be skipped if the tied alias came first under a different name.
         dtype = bnb_quantization_config.torch_dtype
-        for name, param in model.state_dict().items():
+        for name, param in model.named_parameters(remove_duplicate=False):
             if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
-                param.to(torch.float32)
-                if param.dtype != torch.float32:
-                    name = name.replace(".weight", "").replace(".bias", "")
-                    param = getattr(model, name, None)
-                    if param is not None:
-                        param.to(torch.float32)
+                param.data = param.data.to(torch.float32)
             elif torch.is_floating_point(param):
-                param.to(dtype)
+                param.data = param.data.to(dtype)
+        # Second pass: ensure keep_in_fp32 modules are in fp32 even when their weights are tied
+        # to other modules (named_parameters() deduplicates tied params, so the first pass may miss them)
+        for name, module in model.named_modules():
+            if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                for param in module.parameters(recurse=False):
+                    param.data = param.data.to(torch.float32)
         if model_device.type == "cuda":
             model.cuda(torch.cuda.current_device())
             torch.cuda.empty_cache()
@@ -267,7 +271,7 @@ def get_quantized_model_device_map(
                     )
                 else:
                     logger.info(
-                        "Some modules are are offloaded to the CPU or the disk. Note that these modules will be converted to 8-bit"
+                        "Some modules are offloaded to the CPU or the disk. Note that these modules will be converted to 8-bit"
                     )
         del device_map_without_some_modules
     return device_map

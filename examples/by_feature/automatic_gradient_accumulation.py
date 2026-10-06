@@ -63,7 +63,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
             The batch size for the train and validation DataLoaders.
     """
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    datasets = load_dataset("glue", "mrpc")
+    datasets = load_dataset("nyu-mll/glue", "mrpc")
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
@@ -234,7 +234,7 @@ def main():
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
     # New Code #
-    # We modify the starting batch size to be an observed batch size of 256, to guarentee an initial device OOM
+    # We modify the starting batch size to be an observed batch size of 256, to guarantee an initial device OOM
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 256}
     training_function(config, args)
 

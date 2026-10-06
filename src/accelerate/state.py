@@ -42,6 +42,7 @@ from .utils import (
     is_mlu_available,
     is_mps_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_torch_xla_available,
@@ -402,12 +403,16 @@ class PartialState:
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
-            DistributedType.MULTI_CPU,
             DistributedType.MULTI_HPU,
+            DistributedType.MULTI_NEURON,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
             torch.distributed.barrier(device_ids=[self.local_process_index])
+        elif self.distributed_type == DistributedType.MULTI_CPU:
+            # Don't pass `device_ids` on CPU: torch would then run the barrier on the machine's accelerator
+            # (e.g. MPS on macOS) rather than on the gloo/CPU process group, which fails or is not implemented.
+            torch.distributed.barrier()
         elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
@@ -474,19 +479,22 @@ class PartialState:
 
         def _split_values(inputs, start_index, end_index):
             if isinstance(inputs, (list, tuple, torch.Tensor)):
-                if start_index >= len(inputs):
-                    result = inputs[-1:]
-                else:
-                    result = inputs[start_index:end_index]
+                result = inputs[start_index:end_index]
                 if apply_padding:
                     if isinstance(result, torch.Tensor):
                         from accelerate.utils import pad_across_processes, send_to_device
 
                         # The tensor needs to be on the device before we can pad it
                         tensorized_result = send_to_device(result, self.device)
-                        result = pad_across_processes(tensorized_result, pad_index=inputs[-1])
+                        result = pad_across_processes(
+                            tensorized_result, pad_index=send_to_device(inputs[-1], self.device)
+                        )
                     else:
-                        result += [result[-1]] * (num_samples_per_process + (1 if num_extras > 0 else 0) - len(result))
+                        num_padding = num_samples_per_process + (1 if num_extras > 0 else 0) - len(result)
+                        if isinstance(result, tuple):
+                            result += (inputs[-1],) * num_padding
+                        else:
+                            result += [inputs[-1]] * num_padding
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
@@ -497,13 +505,11 @@ class PartialState:
                     from datasets import Dataset
 
                     if isinstance(inputs, Dataset):
-                        if start_index >= len(inputs):
-                            start_index = len(inputs) - 1
-                        if end_index > len(inputs):
-                            end_index = len(inputs)
-                        result_idcs = list(range(start_index, end_index))
+                        clamped_start = min(start_index, len(inputs))
+                        clamped_end = min(end_index, len(inputs))
+                        result_idcs = list(range(clamped_start, clamped_end))
                         if apply_padding:
-                            result_idcs += [end_index - 1] * (
+                            result_idcs += [len(inputs) - 1] * (
                                 num_samples_per_process + (1 if num_extras > 0 else 0) - len(result_idcs)
                             )
                         return inputs.select(result_idcs)
@@ -726,6 +732,7 @@ class PartialState:
         - MUSA if `is_musa_available()`
         - NPU if `is_npu_available()`
         - HPU if `is_hpu_available()`
+        - NEURON if `is_neuron_available()`
         - CPU otherwise
         """
         if is_mps_available():
@@ -747,6 +754,8 @@ class PartialState:
             return torch.device("cuda")
         elif is_xpu_available():
             return torch.device("xpu")
+        elif is_neuron_available():
+            return torch.device("neuron")
         else:
             return torch.device("cpu")
 
@@ -768,7 +777,7 @@ class PartialState:
             if is_mlu_available():
                 backend = "cncl"
                 distributed_type = DistributedType.MULTI_MLU
-            if is_sdaa_available():
+            elif is_sdaa_available():
                 backend = "tccl"
                 distributed_type = DistributedType.MULTI_SDAA
             elif is_musa_available():
@@ -791,6 +800,9 @@ class PartialState:
                 if backend is None:
                     backend = "xccl"
                 distributed_type = DistributedType.MULTI_XPU
+            elif is_neuron_available():
+                backend = "neuron"
+                distributed_type = DistributedType.MULTI_NEURON
 
         if (
             distributed_type is None
@@ -821,7 +833,7 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa", "neuron"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
@@ -829,6 +841,8 @@ class PartialState:
             self.device = xm.xla_device()
         elif device == "hpu":
             self.device = torch.device("hpu", torch.hpu.current_device())
+        elif device == "neuron":
+            self.device = torch.device("neuron", torch.neuron.current_device())
         else:
             if device == "gpu":
                 device = "cuda"
@@ -984,6 +998,7 @@ class AcceleratorState:
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,
+                DistributedType.MULTI_NEURON,
             ]:
                 # TODO: Siro - remove when axolotl fixes their side
                 if not os.environ.get("ACCELERATE_ALLOW_CP_STANDALONE", "false").lower() == "true":

@@ -82,7 +82,11 @@ def is_repeated_blocks(module: torch.nn.Module) -> bool:
     is useful to determine whether we should apply regional compilation to the module.
     """
 
-    return isinstance(module, torch.nn.ModuleList) and all(isinstance(m, module[0].__class__) for m in module)
+    return (
+        isinstance(module, torch.nn.ModuleList)
+        and len(module) > 0
+        and all(isinstance(m, module[0].__class__) for m in module)
+    )
 
 
 def has_repeated_blocks(module: torch.nn.Module) -> bool:
@@ -154,6 +158,9 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
         elif has_repeated_blocks(module):
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
+            for name, value in list(new_module.__dict__.items()):
+                if hasattr(value, "__func__") and getattr(value, "__self__", None) is module:
+                    new_module.__dict__[name] = MethodType(value.__func__, new_module)
             new_module._modules = {}
             for name, submodule in module.named_children():
                 new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
@@ -195,6 +202,32 @@ def compile_regions_deepspeed(module: torch.nn.Module, **compile_kwargs):
         module.compile(**compile_kwargs)
 
 
+def compile_regions_fsdp2(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
+    """
+    Like `compile_regions`, but uses the in-place `module.compile()` instead of `torch.compile(module)`.
+
+    Needed for the FSDP2 prepare path: `torch.compile(module)` returns an `OptimizedModule` whose `__call__`
+    bypasses `nn.Module._call_impl`, so forward/pre hooks added later by `fully_shard` never fire and per-layer
+    all-gather/reshard is lost. The in-place `module.compile()` keeps `_call_impl` (and its runtime hook check)
+    on the call path, so FSDP hooks installed afterwards still run.
+
+    Args:
+        module (`torch.nn.Module`):
+            The model to compile.
+        **compile_kwargs:
+            Additional keyword arguments to pass to `module.compile()`.
+    """
+    if is_repeated_blocks(module):
+        for submodule in module:
+            submodule.compile(**compile_kwargs)
+    elif has_repeated_blocks(module):
+        for child in module.children():
+            compile_regions_fsdp2(child, **compile_kwargs)
+    else:  # leaf node
+        module.compile(**compile_kwargs)
+    return module
+
+
 def model_has_dtensor(model: torch.nn.Module) -> bool:
     """
     Check if the model has DTensor parameters.
@@ -206,6 +239,9 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
     Returns:
         `bool`: Whether the model has DTensor parameters.
     """
+    if not is_torch_distributed_available():
+        return False
+
     if is_torch_version(">=", "2.5.0"):
         from torch.distributed.tensor import DTensor
     else:
@@ -213,6 +249,29 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
         from torch.distributed._tensor import DTensor
 
     return any(isinstance(p, DTensor) for p in model.parameters())
+
+
+def get_model_tp_size(model: torch.nn.Module) -> Optional[int]:
+    """
+    Get the tensor parallel degree a `transformers` model was sharded with, or `None` if it was not sharded.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to inspect.
+
+    Returns:
+        `Optional[int]`: The model's tensor parallel size.
+    """
+    # `transformers<5` records it on the model itself, while `transformers>=5` moved it to the
+    # `DistributedConfig` held by the model config and left `model.tp_size` behind as a `None` stub.
+    tp_size = getattr(model, "tp_size", None)
+    if tp_size is not None:
+        return tp_size
+
+    distributed_config = getattr(getattr(model, "config", None), "distributed_config", None)
+    if isinstance(distributed_config, dict):
+        return distributed_config.get("tp_size")
+    return getattr(distributed_config, "tp_size", None)
 
 
 def extract_model_from_parallel(
@@ -288,7 +347,9 @@ def extract_model_from_parallel(
                 forward = forward.__wrapped__
                 if forward == original_forward:
                     break
-            model.forward = MethodType(forward, model)
+            # `_original_forward` is already bound to the model (for example the `functools.partial` that an
+            # accelerate hook installs), so binding it again would pass the model twice.
+            model.forward = original_forward if forward == original_forward else MethodType(forward, model)
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
@@ -506,7 +567,10 @@ def check_os_kernel():
     if system != "Linux":
         return
 
-    _, version, *_ = re.split(r"(\d+\.\d+\.\d+)", info.release)
+    match = re.search(r"(\d+\.\d+\.\d+)", info.release)
+    if match is None:
+        return
+    version = match.group()
     min_version = "5.5.0"
     if Version(version) < Version(min_version):
         msg = (

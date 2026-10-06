@@ -26,6 +26,7 @@ from accelerate.utils import (
     offload_state_dict,
     offload_weight,
 )
+from accelerate.utils.versions import is_torch_version
 
 
 class ModelForTest(nn.Module):
@@ -56,8 +57,18 @@ class OffloadTester(unittest.TestCase):
     def test_offload_weight(self):
         dtypes = [torch.float16, torch.float32, torch.bfloat16]
 
+        # NumPy has no FP8 dtypes either, so these go through the same int8-view path as
+        # bfloat16 goes through int16. torch.randn(..., dtype=float8_*) isn't implemented, so
+        # the tensors are produced the way they actually show up in practice: cast down from a
+        # higher-precision tensor.
+        if is_torch_version(">=", "2.1.0"):
+            for name in ("float8_e4m3fn", "float8_e5m2"):
+                if hasattr(torch, name):
+                    dtypes.append(getattr(torch, name))
+
         for dtype in dtypes:
-            weight = torch.randn(2, 3, dtype=dtype)
+            is_fp8 = str(dtype).startswith("torch.float8_")
+            weight = torch.randn(2, 3, dtype=torch.float32).to(dtype) if is_fp8 else torch.randn(2, 3, dtype=dtype)
             with TemporaryDirectory() as tmp_dir:
                 index = offload_weight(weight, "weight", tmp_dir, {})
                 weight_file = os.path.join(tmp_dir, "weight.dat")
@@ -65,7 +76,11 @@ class OffloadTester(unittest.TestCase):
                 assert index == {"weight": {"shape": [2, 3], "dtype": str(dtype).split(".")[1]}}
 
                 new_weight = load_offloaded_weight(weight_file, index["weight"])
-                assert torch.equal(weight, new_weight)
+                assert new_weight.dtype == weight.dtype
+                # Compare on raw bits: FP8/bfloat16 round-trip through an int view, and float
+                # equality can't be trusted to catch a byte-level corruption anyway.
+                int_dtype = {1: torch.int8, 2: torch.int16, 4: torch.int32}[weight.element_size()]
+                assert torch.equal(weight.view(int_dtype), new_weight.view(int_dtype))
 
     def test_offload_weights_loader(self):
         model = ModelForTest()

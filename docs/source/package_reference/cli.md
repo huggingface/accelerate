@@ -218,7 +218,7 @@ The following arguments are only useful when `use_fsdp` is passed or Fully Shard
 * `--fsdp_state_dict_type` (`str`) -- FSDP's state dict type.
 * `--fsdp_forward_prefetch` (`str`) -- FSDP forward prefetch.
 * `--fsdp_use_orig_params` (`str`) -- If True, allows non-uniform `requires_grad` mixed in a FSDP unit.
-* `--fsdp_cpu_ram_efficient_loading` (`str`) -- If true, only the first process loads the pretrained model checkoint while all other processes have empty weights. When using this, `--fsdp_sync_module_states` needs to True.
+* `--fsdp_cpu_ram_efficient_loading` (`str`) -- If true, only the first process loads the pretrained model checkpoint while all other processes have empty weights. When using this, `--fsdp_sync_module_states` needs to True.
 * `--fsdp_sync_module_states` (`str`) -- If true, each individually wrapped FSDP unit will broadcast module parameters from rank 0.
 * `--fsdp_activation_checkpointing` (`bool`) -- Decides Whether intermediate activations are freed during the forward pass, and a checkpoint is left as a placeholder
 

@@ -12,18 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import torch
-from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+from huggingface_hub.utils import GatedRepoError
 
+import accelerate.commands.env as accelerate_env_cmd
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
-from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
+from accelerate.commands.estimate import add_timm_hub_prefix, estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
-from accelerate.commands.to_fsdp2 import to_fsdp2_command, to_fsdp2_command_parser
+from accelerate.commands.to_fsdp2 import (
+    convert_config_to_fsdp2,
+    to_fsdp2_command,
+    to_fsdp2_command_parser,
+)
 from accelerate.commands.tpu import tpu_command_launcher, tpu_command_parser
 from accelerate.test_utils.testing import (
     capture_call_output,
@@ -35,8 +41,18 @@ from accelerate.test_utils.testing import (
     run_command,
     run_first,
 )
-from accelerate.utils import patch_environment
+from accelerate.utils import TorchDynamoPlugin, patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
+
+
+class EnvCommandTester(unittest.TestCase):
+    @patch("accelerate.commands.env.which", return_value=None)
+    def test_executable_not_found(self, _):
+        args = accelerate_env_cmd.env_command_parser().parse_args([])
+
+        info = accelerate_env_cmd.env_command(args)
+
+        self.assertEqual(info["`accelerate` bash location"], "Not found")
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -144,6 +160,40 @@ class AccelerateLauncherTester(unittest.TestCase):
         self.assertEqual(len(python_script_cmd), 3)
         self.assertEqual(python_script_cmd[1], str(self.test_file_path))
         self.assertEqual(python_script_cmd[2], test_file_arg)
+
+    def test_cpu_launch_sets_kmp_env(self):
+        """
+        `accelerate launch --cpu` sets the Intel OpenMP variables, and a launch without it leaves them alone.
+        """
+        with patch.dict(os.environ):
+            os.environ.pop("KMP_AFFINITY", None)
+            os.environ.pop("KMP_BLOCKTIME", None)
+
+            args = self.parser.parse_args(["--cpu", str(self.test_file_path)])
+            args, _, _ = _validate_launch_command(args)
+            _, current_env = prepare_simple_launcher_cmd_env(args)
+            assert current_env["KMP_AFFINITY"] == "granularity=fine,compact,1,0"
+            assert current_env["KMP_BLOCKTIME"] == "1"
+
+            args = self.parser.parse_args([str(self.test_file_path)])
+            args, _, _ = _validate_launch_command(args)
+            _, current_env = prepare_simple_launcher_cmd_env(args)
+            assert "KMP_AFFINITY" not in current_env
+            assert "KMP_BLOCKTIME" not in current_env
+
+    def test_launch_keeps_dynamo_dynamic_unset_by_default(self):
+        """
+        Without `--dynamo_use_dynamic`, the launcher leaves `dynamic` unset so `torch.compile` keeps its default.
+        """
+        with patch.dict(os.environ):
+            os.environ.pop("ACCELERATE_DYNAMO_USE_DYNAMIC", None)
+
+            for flags, expected in (([], None), (["--dynamo_use_dynamic"], True)):
+                args = self.parser.parse_args(["--dynamo_backend", "eager", *flags, str(self.test_file_path)])
+                args, _, _ = _validate_launch_command(args)
+                _, current_env = prepare_simple_launcher_cmd_env(args)
+                with patch.dict(os.environ, current_env, clear=True):
+                    assert TorchDynamoPlugin().dynamic is expected
 
     def test_validate_launch_command(self):
         """Test that the validation function combines args and defaults."""
@@ -438,9 +488,7 @@ class ModelEstimatorTester(unittest.TestCase):
     parser = estimate_command_parser()
 
     def test_invalid_model_name(self):
-        with self.assertRaises(
-            RepositoryNotFoundError, msg="Repo for model `somebrokenname` does not exist on the Hub"
-        ):
+        with self.assertRaises(OSError, msg="Repo for model `somebrokenname` does not exist on the Hub"):
             args = self.parser.parse_args(["somebrokenname"])
             estimate_command(args)
 
@@ -448,6 +496,15 @@ class ModelEstimatorTester(unittest.TestCase):
     def test_invalid_model_name_timm(self):
         with self.assertRaises(RuntimeError, msg="Tried to load `muellerzr/dummy` with `timm` but"):
             args = self.parser.parse_args(["muellerzr/dummy", "--library_name", "timm"])
+            estimate_command(args)
+
+    @require_timm
+    def test_wrong_library_timm(self):
+        # A Hub repo whose `config.json` belongs to another library has no `architecture` key for `timm`
+        with self.assertRaisesRegex(
+            RuntimeError, "Tried to load `hf-internal-testing/tiny-random-bert` with `timm` but"
+        ):
+            args = self.parser.parse_args(["hf-internal-testing/tiny-random-bert", "--library_name", "timm"])
             estimate_command(args)
 
     @require_transformers
@@ -470,7 +527,8 @@ class ModelEstimatorTester(unittest.TestCase):
         ):
             args = self.parser.parse_args(["meta-llama/Llama-2-7b-hf"])
             with patch_environment(hf_hub_disable_implicit_token="1"):
-                estimate_command(args)
+                with patch("accelerate.commands.estimate.verify_on_hub", return_value="gated"):
+                    estimate_command(args)
 
     @require_transformers
     def test_remote_code(self):
@@ -526,13 +584,12 @@ class ModelEstimatorTester(unittest.TestCase):
 
     @require_transformers
     def test_no_split_modules(self):
-        # idefics-80b-instruct has ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
-        args = self.parser.parse_args(["HuggingFaceM4/idefics-80b-instruct", "--dtypes", "float32"])
+        args = self.parser.parse_args(["huggyllama/llama-7b", "--dtypes", "float32"])
         output = gather_data(args)
-        # without factoring in `no_split` modules, the largest layer is 721420288 bytes
-        assert output[0][1] != 721420288, "Largest layer calculation incorrect, did not factor in `no_split` modules."
-        # the real answer is 3240165632 bytes
-        assert output[0][1] == 3240165632
+        # LlamaDecoderLayer: four attention matrices, three MLP matrices and two layer norms, all FP32.
+        # (4 * 4096**2 + 3 * 4096 * 11008 + 2 * 4096) * 4 = 809533440 bytes.
+        # Ignoring no-split layers would instead select the 524288000-byte token embedding.
+        assert output[0][1] == 809533440
 
     @require_timm
     def test_timm_model(self):
@@ -546,6 +603,16 @@ class ModelEstimatorTester(unittest.TestCase):
         assert total_size == output[0][2], (
             f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
         )
+
+    def test_timm_hub_prefix(self):
+        # Bare architecture names come from the `timm` registry and must stay unchanged
+        assert add_timm_hub_prefix("resnet50") == "resnet50"
+        assert add_timm_hub_prefix("resnet50.a1_in1k") == "resnet50.a1_in1k"
+        # Hub repo ids need the `hf-hub:` source prefix that `timm>=1.0.29` requires
+        assert add_timm_hub_prefix("timm/resnet50.a1_in1k") == "hf-hub:timm/resnet50.a1_in1k"
+        # Names that already carry a source prefix must stay unchanged
+        assert add_timm_hub_prefix("hf-hub:timm/resnet50.a1_in1k") == "hf-hub:timm/resnet50.a1_in1k"
+        assert add_timm_hub_prefix("local-dir:/path/to/model") == "local-dir:/path/to/model"
 
 
 class ToFSDP2Tester(unittest.TestCase):
@@ -579,6 +646,36 @@ class ToFSDP2Tester(unittest.TestCase):
         with self.assertRaises(ValueError, msg="If --overwrite is not set, --output_file must be provided"):
             args = self.parser.parse_args(["--config_file", str(self.test_config_path / "latest_fsdp.yaml")])
             to_fsdp2_command(args)
+
+    def test_convert_config_drops_removed_and_unimplemented_keys(self):
+        config = {
+            "fsdp_config": {
+                "fsdp_backward_prefetch": "BACKWARD_PRE",  # REMOVED
+                "fsdp_use_orig_params": True,  # REMOVED
+                "fsdp_sync_module_states": True,  # REMOVED
+                "fsdp_forward_prefetch": True,  # NOT_YET_IMPLEMENTED
+                "fsdp_sharding_strategy": "FULL_SHARD",  # renamed + value-mapped
+                "fsdp_offload_params": True,  # carried over (maps to itself)
+                "some_unknown_key": 5,  # not in the mapping -> carried over
+            }
+        }
+        out = convert_config_to_fsdp2(config)["fsdp_config"]
+
+        # FSDP1-only keys must not leak into the FSDP2 config
+        for removed in (
+            "fsdp_backward_prefetch",
+            "fsdp_use_orig_params",
+            "fsdp_sync_module_states",
+            "fsdp_forward_prefetch",
+        ):
+            self.assertNotIn(removed, out)
+
+        # renamed key + value mapping, pass-through keys, and version bump
+        self.assertEqual(out["fsdp_reshard_after_forward"], True)
+        self.assertNotIn("fsdp_sharding_strategy", out)
+        self.assertEqual(out["fsdp_offload_params"], True)
+        self.assertEqual(out["some_unknown_key"], 5)
+        self.assertEqual(out["fsdp_version"], 2)
 
     @patch("pathlib.Path.exists")
     def test_overwrite_when_output_file_exists(self, mock_exists):

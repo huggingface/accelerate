@@ -15,12 +15,14 @@
 
 import functools
 import os
+import tempfile
 from contextlib import nullcontext
 
 import torch
 from transformers import AutoModel
 
 from accelerate.accelerator import Accelerator
+from accelerate.optimizer import AcceleratedOptimizer
 from accelerate.state import AcceleratorState, DistributedType
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
@@ -33,6 +35,7 @@ from accelerate.test_utils.testing import (
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
+    require_peft,
     run_first,
     slow,
 )
@@ -45,7 +48,14 @@ from accelerate.utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
-from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enable_fsdp_ram_efficient_loading
+from accelerate.utils.fsdp_utils import (
+    _get_model_state_dict,
+    _set_model_state_dict,
+    disable_fsdp_ram_efficient_loading,
+    enable_fsdp_ram_efficient_loading,
+    load_fsdp_optimizer,
+    save_fsdp_optimizer,
+)
 
 
 set_seed(42)
@@ -61,6 +71,106 @@ if is_fp16_available():
     dtypes.append(FP16)
 if is_bf16_available():
     dtypes.append(BF16)
+
+
+@require_fsdp2
+@require_peft
+class FSDP2PeftStateDictTest(AccelerateTestCase):
+    """
+    The FSDP2 adapter-only path must go *through* `sd_options`, not around it.
+
+    Runs single-process on CPU, so it cannot check that each rank's shard survives -- that needs two
+    devices and lives in `peft_checkpointing.py`. What it does lock down is the regression itself: the PEFT
+    branch used to return before the `sd_options` gather, which under FSDP2 meant rank 0's shard was written
+    as if it were the whole tensor.
+    """
+
+    def _peft_model(self):
+        from peft import LoraConfig, get_peft_model
+
+        class Tiny(torch.nn.Module):
+            def __init__(self, dim=32):
+                super().__init__()
+                self.lin1 = torch.nn.Linear(dim, dim)
+                self.lin2 = torch.nn.Linear(dim, dim)
+
+        return get_peft_model(Tiny(), LoraConfig(r=4, target_modules=["lin1", "lin2"]))
+
+    @staticmethod
+    def _fill_adapter(model, value):
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if "lora_" in name:
+                    param.fill_(value)
+
+    def test_adapter_state_dict_is_keyed_by_model_fqns(self):
+        """If the PEFT branch returns early, the adapter name is stripped and these no longer match."""
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+        model = self._peft_model()
+        state_dict = _get_model_state_dict(model, adapter_only=True, sd_options=StateDictOptions(full_state_dict=True))
+        trainable = {name for name, param in model.named_parameters() if param.requires_grad}
+        assert state_dict.keys() == trainable
+
+    def test_adapter_state_dict_round_trip(self):
+        """An adapter-only state dict doesn't cover the frozen base weights, so loading it can't be strict."""
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+        sd_options = StateDictOptions(full_state_dict=True)
+        model = self._peft_model()
+        self._fill_adapter(model, 0.5)
+
+        # a real checkpoint goes through disk; clone to break the aliasing with the live parameters
+        state_dict = {
+            key: value.detach().clone()
+            for key, value in _get_model_state_dict(model, adapter_only=True, sd_options=sd_options).items()
+        }
+        self._fill_adapter(model, 0.0)
+        _set_model_state_dict(model, state_dict, adapter_only=True, sd_options=sd_options)
+
+        restored = {float(param.detach().flatten()[0]) for name, param in model.named_parameters() if "lora_" in name}
+        assert restored == {0.5}
+
+
+@require_fsdp2
+class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
+    """Checkpointing FSDP2 optimizer state must not step the fp16 `GradScaler`."""
+
+    def setUp(self):
+        super().setUp()
+        self.accelerator = Accelerator(cpu=True)
+        self.plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+
+    def _build(self, scaler_state=None):
+        model = torch.nn.Linear(4, 4)
+        scaler = torch.amp.GradScaler("cpu")
+        if scaler_state is not None:
+            scaler.load_state_dict(scaler_state)
+        return model, AcceleratedOptimizer(torch.optim.AdamW(model.parameters()), scaler=scaler), scaler
+
+    def test_save_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(torch.zeros(()))  # an already-used scaler, with the optimizer state still empty
+        expected = scaler.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+
+    def test_load_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(model(torch.randn(2, 4)).sum()).backward()
+        optimizer.step()
+        expected = scaler.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+            model, optimizer, scaler = self._build(expected)  # a fresh process: the scaler is still lazy
+            load_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+        assert optimizer.state
 
 
 @require_non_cpu
@@ -321,7 +431,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
                 plugin = FullyShardedDataParallelPlugin(
-                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, **{extra_arg: dtype}}
+                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, extra_arg: dtype}
                 )
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
@@ -471,6 +581,224 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
 
         AcceleratorState._reset_state(True)
 
+    def test_fsdp2_uniform_dtype_upcast_bf16(self):
+        """Test that fsdp2_prepare_model upcasts mixed-dtype trainable params to fp32 master weights
+        when mixed_precision='bf16'. Many HF models (Llama, Mistral) store norm weights in fp32,
+        and FSDP2 requires uniform orig_dtype among trainable params within each FSDP group."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        # Create model with mixed dtypes: linear=bf16, norm=fp32 (simulates HF Llama)
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.LayerNorm(4),
+        )
+        model[0].to(torch.bfloat16)
+        dtypes_before = {p.dtype for p in model.parameters()}
+        assert dtypes_before == {torch.bfloat16, torch.float32}
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "bf16"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_mp_policy = Mock()
+        mock_mp_policy.param_dtype = torch.bfloat16
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = mock_mp_policy
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard"),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            patch("accelerate.utils.fsdp_utils.logger"),
+        ):
+            result = fsdp2_prepare_model(mock_accelerator, model)
+
+        dtypes_after = {p.dtype for p in result.parameters()}
+        assert dtypes_after == {torch.float32}, f"Expected all fp32 master weights, got {dtypes_after}"
+
+    def test_fsdp2_uniform_dtype_upcast_fp16(self):
+        """Test that fsdp2_prepare_model upcasts mixed-dtype trainable params to fp32 master weights
+        when mixed_precision='fp16'."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.LayerNorm(4),
+        )
+        model[0].to(torch.float16)
+        dtypes_before = {p.dtype for p in model.parameters()}
+        assert dtypes_before == {torch.float16, torch.float32}
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "fp16"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_mp_policy = Mock()
+        mock_mp_policy.param_dtype = torch.float16
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = mock_mp_policy
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard"),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            patch("accelerate.utils.fsdp_utils.logger"),
+        ):
+            result = fsdp2_prepare_model(mock_accelerator, model)
+
+        dtypes_after = {p.dtype for p in result.parameters()}
+        assert dtypes_after == {torch.float32}, f"Expected all fp32 master weights, got {dtypes_after}"
+
+    def test_fsdp2_no_dtype_cast_when_no_mixed_precision(self):
+        """Test that no dtype cast happens when mixed_precision='no', preserving original model dtypes."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.LayerNorm(4),
+        )
+        model[0].to(torch.bfloat16)
+        dtypes_before = {p.dtype for p in model.parameters()}
+        assert dtypes_before == {torch.bfloat16, torch.float32}
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "no"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = None
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard"),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            patch("accelerate.utils.fsdp_utils.logger"),
+        ):
+            result = fsdp2_prepare_model(mock_accelerator, model)
+
+        dtypes_after = {p.dtype for p in result.parameters()}
+        assert dtypes_after == {torch.bfloat16, torch.float32}, f"Expected mixed dtypes preserved, got {dtypes_after}"
+
+    def test_fsdp2_no_dtype_cast_with_params4bit(self):
+        """Test that dtype cast is skipped when model has Params4bit (QLoRA),
+        to avoid destroying quantized weights."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(
+            torch.nn.Linear(4, 4),
+            torch.nn.LayerNorm(4),
+        )
+        model[0].to(torch.bfloat16)
+        dtypes_before = {p.dtype for p in model.parameters()}
+        assert dtypes_before == {torch.bfloat16, torch.float32}
+
+        # Simulate Params4bit by renaming one parameter's class
+        original_class = model[0].weight.__class__
+        model[0].weight.__class__ = type("Params4bit", (torch.nn.Parameter,), {})
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "bf16"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_mp_policy = Mock()
+        mock_mp_policy.param_dtype = torch.bfloat16
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = mock_mp_policy
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        try:
+            with (
+                patch("torch.distributed.fsdp.fully_shard"),
+                patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+                patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+            ):
+                result = fsdp2_prepare_model(mock_accelerator, model)
+
+            dtypes_after = {p.dtype for p in result.parameters()}
+            assert dtypes_after == {torch.bfloat16, torch.float32}, (
+                f"Expected mixed dtypes preserved (Params4bit skip), got {dtypes_after}"
+            )
+        finally:
+            model[0].weight.__class__ = original_class
+
+    def test_compile_regions_fsdp2_preserves_block_class(self):
+        """`compile_regions_fsdp2` must use in-place `module.compile()` so module classes are preserved.
+
+        `fsdp2_prepare_model`'s auto_wrap_policy uses `isinstance(module, transformer_cls_to_wrap)`. If
+        `OptimizedModule`-wrapped blocks were used (as `compile_regions` does), the isinstance check would
+        miss them and only the root model would get FSDP-sharded — losing per-layer all-gather/compute overlap.
+        """
+        from accelerate.utils import compile_regions_fsdp2
+
+        class Block(torch.nn.Module):
+            def __init__(self, dim):
+                super().__init__()
+                self.linear = torch.nn.Linear(dim, dim)
+
+            def forward(self, x):
+                return self.linear(x)
+
+        class Model(torch.nn.Module):
+            def __init__(self, dim, n_blocks):
+                super().__init__()
+                self.layers = torch.nn.ModuleList([Block(dim) for _ in range(n_blocks)])
+                self.head = torch.nn.Linear(dim, dim)
+
+            def forward(self, x):
+                for layer in self.layers:
+                    x = layer(x)
+                return self.head(x)
+
+        model = Model(dim=8, n_blocks=4)
+        block_cls_before = type(model.layers[0])
+
+        result = compile_regions_fsdp2(model, backend="inductor")
+
+        # In-place: same Python object returned, no wrapper
+        assert result is model
+        # Class identity preserved on each repeated block (the FSDP2 auto_wrap invariant)
+        assert all(type(b) is block_cls_before for b in model.layers)
+        assert all(isinstance(b, Block) for b in model.layers)
+        assert not any(isinstance(b, torch._dynamo.eval_frame.OptimizedModule) for b in model.layers)
+        # And each block + non-repeated leaf is compiled in-place
+        assert all(getattr(b, "_compiled_call_impl", None) is not None for b in model.layers)
+        assert getattr(model.head, "_compiled_call_impl", None) is not None
+
 
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
@@ -514,6 +842,32 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
         self.current_fsdp_version = 1
+
+    @require_fsdp2
+    def test_fsdp2_mixed_precision_bf16_with_bf16_model_loaded(self):
+        """FSDP2 + `mixed_precision=bf16` with the model loaded in bf16."""
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+            mixed_precision="bf16",
+        )
+        cmd.extend(
+            [
+                "--fsdp_reshard_after_forward=true",
+                "--fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP",
+                "--fsdp_transformer_layer_cls_to_wrap=BertLayer",
+                "--fsdp_cpu_ram_efficient_loading=true",
+                str(self.test_scripts_folder / "test_performance.py"),
+                f"--output_dir={self.tmpdir}",
+                "--num_epochs=1",
+                "--model_dtype=bfloat16",
+            ]
+        )
+        # If the regression returns, this hangs forever — keep the test bounded.
+        execute_subprocess_async(cmd, timeout=180)
 
     @require_fp16
     def test_performance(self):
@@ -569,6 +923,8 @@ class FSDPIntegrationTest(TempDirTestCase):
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         fsdp_version = self.current_fsdp_version
+        # Regression: checkpoint markers in parent paths must not be mistaken for the DCP shard directories.
+        checkpoint_output_dir = os.path.join(self.tmpdir, "optimizer_pytorch_model_fsdp_path")
         cmd = get_launch_command(
             num_processes=2,
             num_machines=1,
@@ -600,7 +956,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                 cmd_config.extend(
                     [
                         self.test_file_path,
-                        f"--output_dir={self.tmpdir}",
+                        f"--output_dir={checkpoint_output_dir}",
                         "--partial_train_epoch=1",
                     ]
                 )
@@ -608,7 +964,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                     execute_subprocess_async(cmd_config)
 
                 cmd_config = cmd_config[:-1]
-                resume_from_checkpoint = os.path.join(self.tmpdir, "epoch_0")
+                resume_from_checkpoint = os.path.join(checkpoint_output_dir, "epoch_0")
                 cmd_config.extend(
                     [
                         f"--resume_from_checkpoint={resume_from_checkpoint}",
@@ -679,3 +1035,32 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
+
+    @require_fsdp2
+    @require_peft
+    def test_peft_checkpointing(self):
+        """Every rank's shard of the adapter must survive a `save_fsdp_model`/`load_fsdp_model` round-trip."""
+        test_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "peft_checkpointing.py")
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+            fsdp_auto_wrap_policy="TRANSFORMER_BASED_WRAP",
+            fsdp_transformer_layer_cls_to_wrap="Block",
+        )
+        cmd.append("--fsdp_reshard_after_forward=true")
+
+        for state_dict_type in FSDP2_STATE_DICT_TYPE:
+            # `transformers.Trainer` always passes `adapter_only=True`, but the flag is optional for other callers
+            for adapter_only in (True, False):
+                cmd_config = cmd + [
+                    f"--fsdp_state_dict_type={state_dict_type}",
+                    test_file_path,
+                    f"--output_dir={os.path.join(self.tmpdir, state_dict_type, str(adapter_only))}",
+                ]
+                if adapter_only:
+                    cmd_config.append("--adapter_only")
+                with patch_environment(omp_num_threads=1):
+                    execute_subprocess_async(cmd_config)

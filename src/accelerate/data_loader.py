@@ -150,11 +150,6 @@ class BatchSamplerShard(BatchSampler):
         split_batches: bool = False,
         even_batches: bool = True,
     ):
-        if split_batches and batch_sampler.batch_size % num_processes != 0:
-            raise ValueError(
-                f"To use `BatchSamplerShard` in `split_batches` mode, the batch size ({batch_sampler.batch_size}) "
-                f"needs to be a round multiple of the number of processes ({num_processes})."
-            )
         self.batch_sampler = batch_sampler
         self.num_processes = num_processes
         self.process_index = process_index
@@ -162,10 +157,10 @@ class BatchSamplerShard(BatchSampler):
         self.even_batches = even_batches
         self.batch_size = getattr(batch_sampler, "batch_size", None)
         self.drop_last = getattr(batch_sampler, "drop_last", False)
-        if self.batch_size is None and self.even_batches:
+        if split_batches and (self.batch_size is None or self.batch_size % num_processes != 0):
             raise ValueError(
-                "You need to use `even_batches=False` when the batch sampler has no batch size. If you "
-                "are not calling this method directly, set `accelerator.even_batches=False` instead."
+                f"To use `BatchSamplerShard` in `split_batches` mode, the batch size ({self.batch_size}) "
+                f"needs to be a round multiple of the number of processes ({num_processes})."
             )
 
     @property
@@ -217,11 +212,15 @@ class BatchSamplerShard(BatchSampler):
 
     def _iter_with_no_split(self):
         initial_data = []
-        batch_to_yield = []
+        batch_to_yield = None
         for idx, batch in enumerate(self.batch_sampler):
             # We gather the initial indices in case we need to circle back at the end.
             if not self.drop_last and idx < self.num_processes:
-                initial_data += batch
+                if self.batch_size is None:
+                    # If batch size is None, `batch` is considered to be a list of indices with dynamic length.
+                    initial_data.append(batch)
+                else:
+                    initial_data += batch
             # We identify the batch to yield but wait until we ar sure every process gets a full batch before actually
             # yielding it.
             if idx % self.num_processes == self.process_index:
@@ -230,35 +229,44 @@ class BatchSamplerShard(BatchSampler):
                 self.batch_size is None or len(batch) == self.batch_size
             ):
                 yield batch_to_yield
-                batch_to_yield = []
+                batch_to_yield = None
 
         # If drop_last is True, iteration is over, otherwise...
         if not self.drop_last and len(initial_data) > 0:
             if not self.even_batches:
-                if len(batch_to_yield) > 0:
+                if batch_to_yield:
                     yield batch_to_yield
             else:
                 # ... we yield the complete batch we had saved before if it has the proper length
-                if len(batch_to_yield) == self.batch_size:
+                if batch_to_yield and (self.batch_size is None or len(batch_to_yield) == self.batch_size):
                     yield batch_to_yield
 
                 # For degenerate cases where the dataset has less than num_process * batch_size samples
-                while len(initial_data) < self.num_processes * self.batch_size:
+                _min_length_needed = (
+                    self.num_processes * self.batch_size if self.batch_size is not None else self.num_processes
+                )
+                while len(initial_data) < _min_length_needed:
                     initial_data += initial_data
 
                 # If the last batch seen was of the proper size, it has been yielded by its process so we move to the next
-                if len(batch) == self.batch_size:
+                if self.batch_size is None or len(batch) == self.batch_size:
                     batch = []
                     idx += 1
 
                 # Make sure we yield a multiple of self.num_processes batches
                 cycle_index = 0
                 while idx % self.num_processes != 0 or len(batch) > 0:
-                    end_index = cycle_index + self.batch_size - len(batch)
-                    batch += initial_data[cycle_index:end_index]
-                    if idx % self.num_processes == self.process_index:
-                        yield batch
-                    cycle_index = end_index
+                    if self.batch_size is None:
+                        batch = initial_data[cycle_index]
+                        if idx % self.num_processes == self.process_index:
+                            yield batch
+                        cycle_index += 1
+                    else:
+                        end_index = cycle_index + self.batch_size - len(batch)
+                        batch += initial_data[cycle_index:end_index]
+                        if idx % self.num_processes == self.process_index:
+                            yield batch
+                        cycle_index = end_index
                     batch = []
                     idx += 1
 
@@ -472,11 +480,13 @@ class DataLoaderAdapter:
         # so we need to adjust it here
         if PartialState().distributed_type != DistributedType.NO:
             factor = PartialState().num_processes - 1
-            if self.dl_state_dict["_sampler_iter_yielded"] > 0:
+            # When num_workers > 0, StatefulDataLoader uses _MultiProcessingDataLoaderIter
+            # which may not have _sampler_iter_yielded or _num_yielded in its state_dict
+            if "_sampler_iter_yielded" in self.dl_state_dict and self.dl_state_dict["_sampler_iter_yielded"] > 0:
                 self.dl_state_dict["_sampler_iter_yielded"] -= factor
-            if self.dl_state_dict["_num_yielded"] > 0:
+            if "_num_yielded" in self.dl_state_dict and self.dl_state_dict["_num_yielded"] > 0:
                 self.dl_state_dict["_num_yielded"] -= factor
-            if self.dl_state_dict["_index_sampler_state"] is not None:
+            if self.dl_state_dict.get("_index_sampler_state") is not None:
                 if (
                     "samples_yielded" in self.dl_state_dict["_index_sampler_state"]
                     and self.dl_state_dict["_index_sampler_state"]["samples_yielded"] > 0
@@ -543,6 +553,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         _drop_last: bool = False,
         _non_blocking: bool = False,
         torch_device_mesh=None,
+        iteration=0,
         **kwargs,
     ):
         super().__init__(dataset, use_stateful_dataloader=use_stateful_dataloader, **kwargs)
@@ -553,7 +564,16 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         self.gradient_state = GradientState()
         self._drop_last = _drop_last
         self._non_blocking = _non_blocking
-        self.iteration = 0
+        self.torch_device_mesh = torch_device_mesh
+        self.iteration = iteration
+
+    def adjust_state_dict_for_prefetch(self):
+        # DataLoaderShard does not need the DDP prefetch adjustment that DataLoaderDispatcher needs.
+        # In DataLoaderShard, each process has its own sharded base dataloader and the 1-batch
+        # look-ahead is already accounted for by the timing of _update_state_dict() calls
+        # (called before the inner next(), so the captured state already equals the number of
+        # batches yielded to the user).
+        pass
 
     def __iter__(self):
         if self.rng_types is not None:
@@ -622,6 +642,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     @property
     def total_batch_size(self):
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
+        while isinstance(batch_sampler, SkipBatchSampler):
+            batch_sampler = batch_sampler.batch_sampler
         return (
             batch_sampler.batch_size
             if getattr(batch_sampler, "split_batches", False)
@@ -738,6 +760,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         _non_blocking: bool = False,
         slice_fn=None,
         torch_device_mesh=None,
+        iteration=0,
         **kwargs,
     ):
         shuffle = False
@@ -759,7 +782,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         self.torch_device_mesh = torch_device_mesh
 
         self.slice_fn = slice_tensors if slice_fn is None else slice_fn
-        self.iteration = 0
+        self.iteration = iteration
 
         # if a device mesh is provided extract each dimension (dp, fsdp, tp)
         # device mesh may hold any number of dimensions, however,
@@ -1207,7 +1230,7 @@ def prepare_data_loader(
             is_datasets_available()
             and isinstance(new_dataset, DatasetsIterableDataset)
             and not split_batches
-            and new_dataset.n_shards > num_processes
+            and new_dataset.n_shards >= num_processes
         ):
             new_dataset = new_dataset.shard(num_shards=num_processes, index=process_index)
         elif isinstance(new_dataset, IterableDataset):
@@ -1420,6 +1443,10 @@ def skip_first_batches(dataloader, num_batches=0):
             split_batches=dataloader.split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader._drop_last,
+            _non_blocking=dataloader._non_blocking,
+            slice_fn=dataloader.slice_fn,
+            torch_device_mesh=dataloader.torch_device_mesh,
+            iteration=dataloader.iteration,
             **kwargs,
         )
     elif isinstance(dataloader, DataLoaderShard):
@@ -1436,6 +1463,10 @@ def skip_first_batches(dataloader, num_batches=0):
             device=dataloader.device,
             rng_types=dataloader.rng_types,
             synchronized_generator=dataloader.synchronized_generator,
+            _drop_last=dataloader._drop_last,
+            _non_blocking=dataloader._non_blocking,
+            torch_device_mesh=dataloader.torch_device_mesh,
+            iteration=dataloader.iteration,
             **kwargs,
         )
     else:

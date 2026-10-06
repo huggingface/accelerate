@@ -8,8 +8,11 @@ env:
   TESTING_MOCKED_DATALOADERS: "1"
   IS_GITHUB_CI: "1"
 
+permissions: {}
+
 jobs:
   run_core_tests_single_gpu:
+    permissions: {}
     runs-on:
       group: aws-g6-4xlarge-plus
     env:
@@ -52,7 +55,6 @@ jobs:
         if: always()
         run: |
           source activate accelerate;
-          pip uninstall comet_ml -y;
           make test_examples
 
       - name: Generate Report
@@ -63,6 +65,7 @@ jobs:
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_deepspeed_tests_single_gpu:
+    permissions: {}
     runs-on:
       group: aws-g6-4xlarge-plus
     env:
@@ -103,6 +106,7 @@ jobs:
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_core_tests_multi_gpu:
+    permissions: {}
     runs-on:
       group: aws-g6-12xlarge-plus
     env:
@@ -139,7 +143,6 @@ jobs:
         if: always()
         run: |
           source activate accelerate;
-          pip uninstall comet_ml -y;
           make test_examples
 
       - name: Generate Report
@@ -150,6 +153,7 @@ jobs:
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_deepspeed_tests_multi_gpu:
+    permissions: {}
     runs-on:
       group: aws-g6-12xlarge-plus
     container:

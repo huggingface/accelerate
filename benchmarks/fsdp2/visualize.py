@@ -25,7 +25,7 @@ def parse_args():
         "--memory_threshold",
         type=int,
         default=0,
-        help="Memory threshold to filter data that is below this value (only filters 1st `--filter_partition` of the points which should roughtly correspond to the model loading)",
+        help="Memory threshold to filter data that is below this value (only filters 1st `--filter_partition` of the points which should roughly correspond to the model loading)",
     )
     parser.add_argument(
         "--filter_partition",

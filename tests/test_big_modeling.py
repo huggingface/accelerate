@@ -19,12 +19,15 @@ import os
 import unittest
 from collections import OrderedDict
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest import mock
 
 import torch
 import torch.nn as nn
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate.big_modeling import (
+    _refuse_recurrent_layers_under_sequence_parallelism,
     cpu_offload,
     cpu_offload_with_hook,
     disk_offload,
@@ -45,7 +48,7 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
-from accelerate.utils import is_hpu_available, offload_state_dict
+from accelerate.utils import is_hpu_available, is_xpu_available, offload_state_dict
 from accelerate.utils.memory import clear_device_cache
 from accelerate.utils.versions import is_torch_version
 
@@ -54,7 +57,7 @@ logger = logging.getLogger(__name__)
 torch_device_type = torch_device
 torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 
-if is_hpu_available():
+if is_hpu_available() or is_xpu_available():
     ATOL = 1e-4
     RTOL = 1e-4
 else:
@@ -777,6 +780,33 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    def test_dispatch_model_disk_only(self):
+        model = ModelForTest()
+
+        # note: non-expanded device maps for disk offloading is not supported
+        device_map = {"linear1": "disk", "batchnorm": "disk", "linear2": "disk"}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir)
+            output = model(x)
+            torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
+    def test_dispatch_model_with_accelerator(self):
+        model = ModelForTest()
+        device_map = {"": 0}
+        with (
+            mock.patch("torch.cuda.is_available", return_value=False),
+            mock.patch("torch.accelerator", create=True) as accelerator,
+            mock.patch.object(model, "to") as mock_to,
+        ):
+            accelerator.is_available.return_value = True
+            accelerator.current_accelerator.return_value = SimpleNamespace(type="tpu")
+            dispatch_model(model, device_map)
+            mock_to.assert_called_once_with("tpu:0")
+
     @require_non_cpu
     def test_dispatch_model_force_hooks(self):
         model = ModelForTest()
@@ -1097,3 +1127,25 @@ class BigModelingTester(unittest.TestCase):
 
         assert model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8
         assert model.h[0].self_attention.query_key_value.weight.device.index == 0
+
+
+class RefuseRecurrentLayersTester(unittest.TestCase):
+    """Sequence parallelism must refuse layers that carry a recurrent state along the sequence."""
+
+    @staticmethod
+    def _model(layer_types):
+        config = SimpleNamespace(layer_types=layer_types, get_text_config=lambda: config)
+        return SimpleNamespace(config=config, __class__=type("FakeModel", (), {}))
+
+    def test_refuses_linear_attention(self):
+        model = self._model(["full_attention", "linear_attention"])
+        with self.assertRaises(ValueError) as raised:
+            _refuse_recurrent_layers_under_sequence_parallelism(model)
+        assert "linear_attention" in str(raised.exception)
+
+    def test_allows_full_attention(self):
+        _refuse_recurrent_layers_under_sequence_parallelism(self._model(["full_attention"]))
+
+    def test_allows_models_without_layer_types(self):
+        config = SimpleNamespace(get_text_config=lambda: config)
+        _refuse_recurrent_layers_under_sequence_parallelism(SimpleNamespace(config=config))

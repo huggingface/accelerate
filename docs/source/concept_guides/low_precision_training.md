@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 # Low precision training methods
 
 The release of new kinds of hardware led to the emergence of new training paradigms that better utilize them. Currently, this is in the form of training
-in 8-bit precision using packages such as [TransformersEngine](https://github.com/NVIDIA/TransformerEngine) (TE) or [MS-AMP](https://github.com/Azure/MS-AMP/tree/main).
+in 8-bit precision using packages such as [TransformersEngine](https://github.com/NVIDIA/TransformerEngine) (TE), [torchao](https://github.com/pytorch/ao) (native PyTorch FP8), or the legacy [MS-AMP](https://github.com/Azure/MS-AMP/tree/main) (no longer maintained, see warning below).
 
 For an introduction to the topics discussed today, we recommend reviewing the [low-precision usage guide](../usage_guides/low_precision_training) as this documentation will reference it regularly. 
 
@@ -63,7 +63,7 @@ If we notice in the chart mentioned earlier, TE simply casts the computation lay
 
 <Tip warning={true}>
 
-MS-AMP is no longer actively maintained and has known compatibility issues with newer CUDA versions (12.x+) and PyTorch builds. We recommend using `TransformersEngine` or `torchao` instead for FP8 training.
+**⚠️ Deprecated / Unmaintained:** MS-AMP is no longer actively maintained by Microsoft. The repository has not seen updates since 2023 and has known compatibility issues with CUDA 12.x+, modern NCCL versions, and recent PyTorch releases (2.2+). **We strongly recommend using `TransformersEngine` or `torchao` instead.** See the [usage guide](../usage_guides/low_precision_training) for migration instructions.
 
 </Tip>
 
@@ -76,5 +76,11 @@ MS-AMP takes a different approach to `TransformersEngine` by providing three dif
 * Finally, MS-AMP has a third optimization level (`O3`) which helps during DDP scenarios such as DeepSpeed. The weights of the model in memory are fully cast to FP8, and the master weights are now stored in FP16. This fully reduces memory by the highest factor as now not only is almost everything in FP8, only two states are left in FP16. Currently, only DeepSpeed versions up through 0.9.2 are supported, so this capability is not included in the Accelerate integration
 
 ## Combining the two
+
+<Tip warning={true}>
+
+Since MS-AMP is no longer maintained, this combination is not recommended for new projects.
+
+</Tip>
 
 More experiments need to be performed but it's been noted that combining both MS-AMP and TransformersEngine can lead to the highest throughput by relying on NVIDIA's optimized FP8 operators and utilizing how MS-AMP reduces the memory overhead.

@@ -114,7 +114,7 @@ def parse_args():
         "--save_memory_snapshot",
         action="store_true",
         default=False,
-        help="If True, `torch.cuda.memory._dump_snapshot` will be used to additionaly save the memory trace.",
+        help="If True, `torch.cuda.memory._dump_snapshot` will be used to additionally save the memory trace.",
     )
     ######################
     # Training arguments #
@@ -189,7 +189,7 @@ def prepare_dataloader(tokenizer, args, accelerator: Accelerator) -> DataLoader:
 
 
 def get_model(model_name: str):
-    # We reguire model to be loaded in fp32, otherwise benchmarks don't match as accelerate does upcasting of parameters to fp32
+    # We require model to be loaded in fp32, otherwise benchmarks don't match as accelerate does upcasting of parameters to fp32
     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True, torch_dtype=torch.float32)
     model = AutoModelForCausalLM.from_config(config)
     return model

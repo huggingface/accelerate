@@ -75,6 +75,7 @@ class LocalSGD:
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
+            DistributedType.MULTI_NEURON,
         ]:
             raise NotImplementedError("LocalSGD is supported only for CPUs and GPUs (no DeepSpeed or MegatronLM)")
         self.enabled = enabled and accelerator.distributed_type != DistributedType.NO

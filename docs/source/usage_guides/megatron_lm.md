@@ -125,7 +125,7 @@ pip install --no-use-pep517 -e .
 ```
 
 ## Prepare Megaton-LM checkpoint
-If you want to fine-tune a model, make sure you have a torch dist format checkpoint ready. If you only have access to the huggingface model, please consider converting it to a torch dist format checkpoint acceptable to Megatron. One examle can be using slime's script, take GLM models as an example:
+If you want to fine-tune a model, make sure you have a torch dist format checkpoint ready. If you only have access to the huggingface model, please consider converting it to a torch dist format checkpoint acceptable to Megatron. One example can be using slime's script, take GLM models as an example:
 ```
 source /your/path/to/slime/scripts/models/glm4.5-355B-A32B.sh
 srun torchrun --nproc-per-node 8 \
@@ -387,7 +387,7 @@ flexible and extensible Accelerate is. The changes required are as follows.
 
 a. For Megatron-LM indexed datasets, we need to use `MegatronLMDummyDataLoader` 
 and pass the required dataset args to it such as `data_path`, `seq_length` etc. 
-See [here](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/arguments.py#L804) for the list of available args. 
+See [here](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/training/arguments.py) for the list of available args. 
     
 ```python
 from accelerate.utils import MegatronLMDummyDataLoader
@@ -596,15 +596,15 @@ setting is synonymous with gradient accumulation.
 8. Below are the mapping from Megatron-LM model architectures to the equivalent transformers model architectures.
 Only these transformers model architectures are supported.
 
-a. Megatron-LM [BertModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/bert_model.py) : 
+a. Megatron-LM [BertModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/models/bert/bert_model.py) : 
 transformers models with `megatron-bert` in config's model type, e.g., 
 [MegatronBERT](https://huggingface.co/docs/transformers/model_doc/megatron-bert)
     
-b. Megatron-LM [GPTModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py) : 
+b. Megatron-LM [GPTModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/models/gpt/gpt_model.py) : 
 transformers models with `gpt2` in config's model type, e.g., 
 [OpenAI GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
    
-c. Megatron-LM [T5Model](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/t5_model.py) : 
+c. Megatron-LM [T5Model](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/models/T5/t5_model.py) : 
 transformers models with `t5` in  config's model type, e.g., 
 [T5](https://huggingface.co/docs/transformers/model_doc/t5) and 
 [MT5](https://huggingface.co/docs/transformers/model_doc/mt5)

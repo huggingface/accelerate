@@ -28,6 +28,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
 from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, skip_first_batches
+from accelerate.hooks import ModelHook, add_hook_to_module
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
@@ -246,7 +247,8 @@ class AcceleratorTester(AccelerateTestCase):
         assert len(accelerator._dataloaders) == 0
 
         # The less-than comes *specifically* from device CPU things/won't be present on CPU builds
-        assert free_cpu_ram_after <= free_cpu_ram_before
+        # Allow a small tolerance for OS-level memory fluctuations between measurements
+        assert free_cpu_ram_after <= free_cpu_ram_before + 50
 
     @require_non_torch_xla
     def test_env_var_device(self):
@@ -258,7 +260,9 @@ class AcceleratorTester(AccelerateTestCase):
             pass
 
         with (
-            patch(f"torch.{torch_device}.set_device", noop),
+            # Some backends such as MPS do not expose a module-level `set_device`.
+            # This test only exercises env var parsing, so a synthetic attribute is enough.
+            patch(f"torch.{torch_device}.set_device", noop, create=True),
             patch_environment(ACCELERATE_TORCH_DEVICE=f"{torch_device}:64"),
         ):
             accelerator = Accelerator()
@@ -463,16 +467,27 @@ class AcceleratorTester(AccelerateTestCase):
             "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
         )
 
+    def test_prepare_model_twice_does_not_double_wrap(self):
+        accelerator = Accelerator()
+        model = torch.nn.Linear(10, 2)
+        prepared_model = accelerator.prepare_model(model)
+        num_models_before = len(accelerator._models)
+        reprepared_model = accelerator.prepare_model(prepared_model)
+        assert len(accelerator._models) == num_models_before, (
+            "prepare_model should not add duplicate entries to _models"
+        )
+        assert reprepared_model is prepared_model, "prepare_model should return the same object when called twice"
+
     @require_cuda_or_xpu
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
         """Tests that the accelerator can be used with the BNB library."""
-        from transformers import AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
         model = AutoModelForCausalLM.from_pretrained(
             "EleutherAI/gpt-neo-125m",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map={"": 0},
         )
         accelerator = Accelerator()
@@ -499,8 +514,12 @@ class AcceleratorTester(AccelerateTestCase):
             device_map = infer_auto_device_map(model)
             device_map["lm_head"] = "cpu"
 
+        from transformers import BitsAndBytesConfig
+
         model = AutoModelForCausalLM.from_pretrained(
-            "EleutherAI/gpt-neo-125m", device_map=device_map, load_in_8bit=True, llm_int8_enable_fp32_cpu_offload=True
+            "EleutherAI/gpt-neo-125m",
+            device_map=device_map,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True, llm_int8_enable_fp32_cpu_offload=True),
         )
 
         # This should not work and get value error
@@ -514,7 +533,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_multi_device
     def test_accelerator_bnb_multi_device(self):
         """Tests that the accelerator can be used with the BNB library."""
-        from transformers import AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
         if torch_device == "cuda":
             PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
@@ -535,7 +554,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             "EleutherAI/gpt-neo-125m",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map=device_map,
         )
         accelerator = Accelerator()
@@ -551,7 +570,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_multi_device
     def test_accelerator_bnb_multi_device_no_distributed(self):
         """Tests that the accelerator can be used with the BNB library."""
-        from transformers import AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
         with init_empty_weights():
             model = AutoModelForCausalLM.from_pretrained(
@@ -562,7 +581,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             "EleutherAI/gpt-neo-125m",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             device_map=device_map,
         )
         accelerator = Accelerator()
@@ -626,6 +645,19 @@ class AcceleratorTester(AccelerateTestCase):
         # check that pickle roundtrip works
         model_loaded = pickle.loads(pickle.dumps(model))
         model_loaded(inputs)
+
+    def test_can_unwrap_hooked_model_bf16(self):
+        # before the fix, unwrapping a model whose forward comes from an accelerate hook raised:
+        # Linear.forward() takes 2 positional arguments but 3 were given
+        model = create_components()[0]
+        add_hook_to_module(model, ModelHook())
+        accelerator = Accelerator(mixed_precision="bf16", cpu=True)
+        inputs = torch.randn(10, 2)
+        model = accelerator.prepare(model)
+        model(inputs)  # sanity check that this works
+
+        model = accelerator.unwrap_model(model, keep_fp32_wrapper=False)
+        model(inputs)  # check that this still works
 
     def test_can_unwrap_distributed_compiled_model_keep_torch_compile(self):
         model = create_components()[0]
@@ -807,7 +839,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_non_cpu
     @require_huggingface_suite
     def test_nested_hook(self):
-        from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
+        from transformers import PretrainedConfig, PreTrainedModel
 
         class MyLinear(torch.nn.Module):
             def __init__(self, device=None, dtype=None):

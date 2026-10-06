@@ -115,7 +115,7 @@ If you have early stopping conditionals, use the `set_trigger` and `check_trigge
 are ended correctly.
 
 ```py
-# Assume `should_do_breakpoint` is a custom defined function that returns a conditional, 
+# Assume `should_do_breakpoint` is a custom-defined function that returns a conditional, 
 # and that conditional might be true only on process 1
 if should_do_breakpoint(loss):
     accelerator.set_trigger()
@@ -133,7 +133,7 @@ On Linux with kernel version < 5.5, hanging processes have been reported. To avo
 
 If your distributed CPU training job using MPI is hanging, ensure that you have
 [passwordless SSH](https://www.open-mpi.org/faq/?category=rsh#ssh-keys) setup (using keys) between the nodes. This means
-that for all nodes in your hostfile, you should to be able to SSH from one node to another without being prompted for a password.
+that for all nodes in your hostfile, you should be able to SSH from one node to another without being prompted for a password.
 
 Next, try to run the `mpirun` command as a sanity check. For example, the command below should print out the
 hostnames for each of the nodes.

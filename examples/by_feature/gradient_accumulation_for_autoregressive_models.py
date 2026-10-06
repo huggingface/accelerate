@@ -116,6 +116,8 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, max_training
 
         batch["labels"] = batch["input_ids"][:, 1:]
         batch["input_ids"] = batch["input_ids"][:, :-1]
+        if "attention_mask" in batch:
+            batch["attention_mask"] = batch["attention_mask"][:, :-1]
 
         batch["labels"] = torch.where(batch["labels"] == tokenizer.pad_token_id, -100, batch["labels"])
 

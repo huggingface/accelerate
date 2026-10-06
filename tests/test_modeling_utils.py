@@ -41,9 +41,11 @@ from accelerate.utils.modeling import (
     compute_module_sizes,
     compute_module_total_buffer_size,
     convert_file_size_to_int,
+    dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
     get_module_size_with_ties,
+    get_non_persistent_buffers,
     get_state_dict_offloaded_model,
     infer_auto_device_map,
     load_checkpoint_in_model,
@@ -94,6 +96,29 @@ class LinearWithNonPersistentBuffers(nn.Module):
         return torch.nn.functional.linear(input, self.weight, self.bias)
 
 
+class SubmoduleWithNonPersistentBuffer(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("np_buf", torch.rand(4), persistent=False)
+
+
+class RootWithNonPersistentSubmodule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("persistent_buf", torch.rand(4))
+        self.sub = SubmoduleWithNonPersistentBuffer()
+
+
+class RootWithCollidingBufferName(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # Persistent buffer on the root that shares its name with a
+        # non-persistent buffer deeper in the module tree.
+        self.register_buffer("mask", torch.rand(4))
+        self.sub = nn.Module()
+        self.sub.register_buffer("mask", torch.rand(4), persistent=False)
+
+
 class ModelSeveralDtypes(nn.Module):
     def __init__(self):
         super().__init__()
@@ -110,6 +135,29 @@ def sequential_model(num_layers):
 
 
 class ModelingUtilsTester(unittest.TestCase):
+    def test_dtype_byte_size(self):
+        self.assertEqual(dtype_byte_size(torch.bool), 1 / 8)
+        self.assertEqual(dtype_byte_size(torch.float16), 2)
+        self.assertEqual(dtype_byte_size(torch.bfloat16), 2)
+        self.assertEqual(dtype_byte_size(torch.float32), 4)
+        self.assertEqual(dtype_byte_size(torch.float64), 8)
+        # All 1-byte FP8 dtypes available in this torch should report 1 byte.
+        # Previously only e4m3fn/e5m2 were handled; the *fnuz and e8m0fnu
+        # variants fell through to a regex with no trailing digit and raised.
+        for name in (
+            "float8_e4m3fn",
+            "float8_e5m2",
+            "float8_e4m3fnuz",
+            "float8_e5m2fnuz",
+            "float8_e8m0fnu",
+        ):
+            if hasattr(torch, name):
+                self.assertEqual(dtype_byte_size(getattr(torch, name)), 1, msg=name)
+        # Sub-byte and packed dtypes still occupy one byte per element in storage.
+        for name in ("uint4", "float4_e2m1fn_x2"):
+            if hasattr(torch, name):
+                self.assertEqual(dtype_byte_size(getattr(torch, name)), 1, msg=name)
+
     def check_set_module_tensor_for_device(self, model, device1, device2):
         assert model.linear1.weight.device == torch.device(device1)
 
@@ -252,6 +300,30 @@ class ModelingUtilsTester(unittest.TestCase):
 
         named_tensors = named_module_tensors(model, include_buffers=True, remove_non_persistent=True)
         assert [name for name, _ in named_tensors] == ["weight"]
+
+    def test_get_non_persistent_buffers_does_not_mutate_module(self):
+        model = RootWithNonPersistentSubmodule()
+        # The root module itself has no non-persistent buffer, so its private set starts empty.
+        assert model._non_persistent_buffers_set == set()
+
+        # recurse=True must collect the submodule's non-persistent buffer without mutating the module,
+        # and must return a copy rather than aliasing a module's private set.
+        result = get_non_persistent_buffers(model, recurse=True)
+        assert result == {"np_buf"}
+        assert result is not model.sub._non_persistent_buffers_set
+        assert model._non_persistent_buffers_set == set()
+        assert model.sub._non_persistent_buffers_set == {"np_buf"}
+
+    def test_named_module_tensors_does_not_corrupt_state_dict(self):
+        model = RootWithCollidingBufferName()
+        assert "mask" in model.state_dict()
+
+        # This is exactly the call AlignDevicesHook makes when offloading a model.
+        list(named_module_tensors(model, recurse=True, remove_non_persistent=True))
+
+        # The root's private set must be untouched, so its persistent "mask" buffer must survive.
+        assert model._non_persistent_buffers_set == set()
+        assert "mask" in model.state_dict()
 
     def test_find_tied_parameters(self):
         model = sequential_model(4)
@@ -470,6 +542,32 @@ class ModelingUtilsTester(unittest.TestCase):
         assert model.batchnorm.running_mean.device == torch.device("meta")
         assert model.linear2.weight.device == torch.device("cpu")
 
+    def test_load_checkpoint_in_model_disk_offload_loads_buffers(self):
+        device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
+        model = ModelForTest()
+        with torch.no_grad():
+            model.batchnorm.running_mean.fill_(0.5)
+            model.batchnorm.running_var.fill_(2.0)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), fname)
+            new_model = ModelForTest()
+            load_checkpoint_in_model(new_model, fname, device_map=device_map, offload_folder=tmp_dir)
+        # Buffers are not offloaded by default, so they are loaded with the checkpoint values
+        assert new_model.batchnorm.running_mean.device == torch.device("cpu")
+        torch.testing.assert_close(new_model.batchnorm.running_mean, model.batchnorm.running_mean)
+        torch.testing.assert_close(new_model.batchnorm.running_var, model.batchnorm.running_var)
+
+    def test_load_checkpoint_in_model_all_disk_safetensors(self):
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "model.safetensors")
+            save_file(model.state_dict(), fname, metadata={"format": "pt"})
+            new_model = ModelForTest()
+            load_checkpoint_in_model(new_model, fname, device_map={"": "disk"}, offload_folder=tmp_dir)
+            assert new_model.linear1.weight.device == torch.device("meta")
+            assert os.path.isfile(os.path.join(tmp_dir, "linear1.weight.dat"))
+
     @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_load_checkpoint_in_model_two_gpu(self):
@@ -670,6 +768,47 @@ class ModelingUtilsTester(unittest.TestCase):
 
         device_memory = {0: 4, "cpu": 96000}  # Low memory device, just to force splitting and trigger the error
         infer_auto_device_map(model, device_memory)
+
+    def test_infer_auto_device_map_tied_weights_partner_module_split(self):
+        # A tied parameter whose partner module gets split must not crash the map computation.
+        # When `b` is split, its direct parameters (e.g. `b.w`, tied to `a.p`) become top-level
+        # entries of the module list, so the tied-module lookup must also match them by exact
+        # name instead of only by prefix.
+        class Sub(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.p = nn.Parameter(torch.empty(64, dtype=torch.bfloat16))
+
+        class A(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.p = nn.Parameter(torch.empty(256, dtype=torch.bfloat16))
+
+        class B(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.w = nn.Parameter(torch.empty(256, dtype=torch.bfloat16))
+                self.p2 = nn.Parameter(torch.empty(4096, dtype=torch.bfloat16))
+                self.sub = Sub()
+
+        class Model(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.a = A()
+                self.b = B()
+
+        model = Model()
+        with torch.no_grad():
+            model.b.w = model.a.p  # tie b.w to a.p
+
+        # 4KB fits `a` (and the tied `b.w`) but not `b` as a whole: `b` is split, which used to
+        # raise an IndexError when the tied parameter was looked up afterwards.
+        device_map = infer_auto_device_map(model, max_memory={0: 4096}, no_split_module_classes=[])
+
+        assert set(device_map) == {"a", "b.w", "b.p2", "b.sub"}
+        assert device_map["a"] == 0
+        # Tied parameters must be co-located with the parameter they share storage with.
+        assert device_map["b.w"] == device_map["a"]
 
     @require_huggingface_suite
     def test_infer_auto_device_map_on_t0pp(self):
@@ -905,6 +1044,56 @@ class ModelingUtilsTester(unittest.TestCase):
         # If we set a device to 0, it's not counted.
         max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
         assert {0: 0, "cpu": 100} == max_memory
+
+    @require_non_cpu
+    def test_get_balanced_memory_low_zero(self):
+        model = ModelForTest()
+        # model has size 236: linear1 64, batchnorm 72, linear2 100
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 300}, low_zero=True)
+        assert {0: 0, 1: 300} == max_memory
+
+        # The other devices are looked up by id, so a non-contiguous sub-set works here too.
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 2: 300}, low_zero=True)
+        assert {0: 0, 2: 300} == max_memory
+
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 3: 300}, low_zero=True)
+        assert {0: 0, 3: 300} == max_memory
+
+        # If we set a device to 0, it's not counted, and device 0 stays empty.
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 0, 2: 300}, low_zero=True)
+        assert {0: 0, 1: 0, 2: 300} == max_memory
+
+        # Device 0 only takes what does not fit on the others.
+        max_memory = get_balanced_memory(model, max_memory={0: 200, 2: 200}, low_zero=True)
+        assert {0: 36, 2: 200} == max_memory
+
+    def test_get_balanced_memory_no_split_module_classes_set(self):
+        """Regression test: no_split_module_classes should accept a set without raising TypeError.
+
+        In accelerate<=1.5.0, passing a set caused:
+            TypeError: unhashable type: 'set'
+        because the code did `set(no_split_module_classes)` without first
+        normalizing set inputs to a list.  Fixed in #2345.
+        """
+        model = ModelForTest()
+        # Pass no_split_module_classes as a set (not list/tuple)
+        # This should not raise "TypeError: unhashable type: 'set'"
+        max_memory = get_balanced_memory(
+            model,
+            max_memory={0: 300, 1: 300},
+            no_split_module_classes={"Linear"},
+        )
+        assert isinstance(max_memory, dict)
+
+        # Also verify infer_auto_device_map handles set input
+        from accelerate import infer_auto_device_map
+
+        device_map = infer_auto_device_map(
+            model,
+            max_memory={0: 300, 1: 300},
+            no_split_module_classes={"Linear"},
+        )
+        assert isinstance(device_map, dict)
 
     # Tests that get_module_size_with_ties returns the correct tied modules in
     # models with tied parameters whose parent modules share the same name prefix

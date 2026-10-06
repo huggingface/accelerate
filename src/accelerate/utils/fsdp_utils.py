@@ -20,6 +20,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import nullcontext
+from dataclasses import replace
 from pathlib import Path
 from typing import Callable, Union
 
@@ -55,6 +56,11 @@ def disable_fsdp_ram_efficient_loading():
 
 def _get_model_state_dict(model, adapter_only=False, sd_options=None):
     if adapter_only and is_peft_model(model):
+        if sd_options is not None and sd_options.full_state_dict:
+            from torch.distributed.checkpoint.state_dict import get_model_state_dict
+
+            return get_model_state_dict(model, options=replace(sd_options, ignore_frozen_params=True))
+
         from peft import get_peft_model_state_dict
 
         return get_peft_model_state_dict(model, adapter_name=model.active_adapter)
@@ -70,6 +76,11 @@ def _get_model_state_dict(model, adapter_only=False, sd_options=None):
 
 def _set_model_state_dict(model, state_dict, adapter_only=False, sd_options=None):
     if adapter_only and is_peft_model(model):
+        if sd_options is not None and sd_options.full_state_dict:
+            from torch.distributed.checkpoint.state_dict import set_model_state_dict
+
+            return set_model_state_dict(model, state_dict, options=replace(sd_options, strict=False))
+
         from peft import set_peft_model_state_dict
 
         return set_peft_model_state_dict(model, state_dict, adapter_name=model.active_adapter)
@@ -100,10 +111,24 @@ def _prepare_sd_options(fsdp_plugin):
     return sd_options
 
 
-def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False):
+def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False, use_dcp=True):
+    """
+    Save an FSDP model checkpoint.
+
+    When ``state_dict_type`` is ``SHARDED_STATE_DICT``, the ``use_dcp`` parameter controls the saving strategy:
+
+    - ``use_dcp=True`` (default): Uses ``torch.distributed.checkpoint`` (DCP) to save sharded model state.
+      This is the standard approach and works well for typical training setups.
+    - ``use_dcp=False``: Uses per-rank ``torch.save`` instead of DCP. Each rank saves its own shard
+      independently to a separate file, avoiding cross-rank communication entirely. This is significantly
+      faster at large scale (e.g., 2800+ GPUs) where DCP's all-gather-based saving can cause timeouts
+      due to TCP congestion from Gloo-based collective communication.
+
+    .. note::
+        Checkpoints saved with ``use_dcp=False`` are saved as per-rank files
+        (``{prefix}_rank{local_rank}.bin``) and must be loaded with ``use_dcp=False`` as well.
+    """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
-    import torch.distributed.checkpoint as dist_cp
-    from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -145,23 +170,45 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, 
             torch.save(state_dict, output_model_file)
             logger.info(f"Model saved to {output_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT:
-            ckpt_dir = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{model_index}")
-            os.makedirs(ckpt_dir, exist_ok=True)
-            logger.info(f"Saving model to {ckpt_dir}")
-            state_dict = {"model": state_dict}
+            if use_dcp:
+                import torch.distributed.checkpoint as dist_cp
+                from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
 
-            dist_cp.save(
-                state_dict=state_dict,
-                storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
-                planner=DefaultSavePlanner(),
-            )
-            logger.info(f"Model saved to {ckpt_dir}")
+                ckpt_dir = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{model_index}")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                logger.info(f"Saving model to {ckpt_dir}")
+                dist_cp.save(
+                    state_dict={"model": state_dict},
+                    storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
+                    planner=DefaultSavePlanner(),
+                )
+                logger.info(f"Model saved to {ckpt_dir}")
+            else:
+                weights_name = f"{FSDP_MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
+                output_model_file = os.path.join(output_dir, weights_name)
+                logger.info(f"Saving model to {output_model_file}")
+                torch.save(state_dict, output_model_file)
+                logger.info(f"Model saved to {output_model_file}")
 
 
-def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False):
+def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False, use_dcp=True):
+    """
+    Load an FSDP model checkpoint.
+
+    When ``state_dict_type`` is ``SHARDED_STATE_DICT``, the ``use_dcp`` parameter controls the loading strategy:
+
+    - ``use_dcp=True`` (default): Uses ``torch.distributed.checkpoint`` (DCP) to load sharded model state.
+      This is the standard approach and works well for typical training setups.
+    - ``use_dcp=False``: Uses per-rank ``torch.load`` instead of DCP. Each rank loads its own shard
+      independently from a separate file, avoiding cross-rank communication entirely. This is significantly
+      faster at large scale (e.g., 2800+ GPUs) where DCP's broadcast-based loading can cause timeouts
+      due to TCP congestion from Gloo-based collective communication.
+
+    .. note::
+        Checkpoints saved with ``use_dcp=False`` must be loaded with ``use_dcp=False`` as well, since the
+        file format differs (per-rank ``.bin`` files vs. DCP's sharded directory format).
+    """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
-    import torch.distributed.checkpoint as dist_cp
-    from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -211,29 +258,65 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
             state_dict = torch.load(input_model_file, weights_only=True)
             logger.info(f"Model loaded from {input_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT:
-            ckpt_dir = (
-                os.path.join(input_dir, f"{FSDP_MODEL_NAME}_{model_index}")
-                if f"{FSDP_MODEL_NAME}" not in input_dir
-                else input_dir
-            )
-            logger.info(f"Loading model from {ckpt_dir}")
-            state_dict = {"model": _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)}
-            dist_cp.load(
-                state_dict=state_dict,
-                storage_reader=dist_cp.FileSystemReader(ckpt_dir),
-                planner=DefaultLoadPlanner(),
-            )
-            state_dict = state_dict["model"]
-            logger.info(f"Model loaded from {ckpt_dir}")
+            if use_dcp:
+                import torch.distributed.checkpoint as dist_cp
+                from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
+
+                ckpt_dir = (
+                    Path(input_dir) / f"{FSDP_MODEL_NAME}_{model_index}"
+                    if Path(input_dir).name != f"{FSDP_MODEL_NAME}_{model_index}"
+                    else Path(input_dir)
+                )
+                logger.info(f"Loading model from {ckpt_dir}")
+                state_dict = {"model": _get_model_state_dict(model, adapter_only=adapter_only, sd_options=sd_options)}
+                dist_cp.load(
+                    state_dict=state_dict,
+                    storage_reader=dist_cp.FileSystemReader(ckpt_dir),
+                    planner=DefaultLoadPlanner(),
+                )
+                state_dict = state_dict["model"]
+                logger.info(f"Model loaded from {ckpt_dir}")
+            else:
+                weights_name = f"{FSDP_MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
+                input_model_file = os.path.join(input_dir, weights_name)
+                logger.info(f"Loading model from {input_model_file}")
+                state_dict = torch.load(input_model_file, weights_only=True)
+                logger.info(f"Model loaded from {input_model_file}")
 
         load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only, sd_options=sd_options)
+    accelerator.wait_for_everyone()
     return load_result
 
 
-def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0):
+def _unwrap_optimizer(optimizer):
+    """Return the plain `torch.optim.Optimizer` underneath accelerate's wrapper.
+
+    Needed by FSDP2: torch's `get/set_optimizer_state_dict` calls `optimizer.step()`
+    to initialize an empty state, which also steps the fp16 `GradScaler` in the wrapper.
+    """
+    from ..optimizer import AcceleratedOptimizer
+
+    while isinstance(optimizer, AcceleratedOptimizer):
+        optimizer = optimizer.optimizer
+    return optimizer
+
+
+def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0, use_dcp=True):
+    """
+    Save an FSDP optimizer state checkpoint.
+
+    When ``state_dict_type`` is not ``FULL_STATE_DICT``, the ``use_dcp`` parameter controls the saving strategy:
+
+    - ``use_dcp=True`` (default): Uses ``torch.distributed.checkpoint`` (DCP) to save the optimizer state.
+    - ``use_dcp=False``: Uses per-rank ``torch.save`` instead of DCP, avoiding cross-rank communication.
+      This is useful at large scale (e.g., 2800+ GPUs) where DCP can cause timeouts due to TCP congestion
+      from Gloo-based collective communication.
+
+    .. note::
+        Checkpoints saved with ``use_dcp=False`` are saved as per-rank files
+        (``{prefix}_rank{local_rank}.bin``) and must be loaded with ``use_dcp=False`` as well.
+    """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
-    import torch.distributed.checkpoint as dist_cp
-    from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -253,7 +336,7 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
         if fsdp_plugin.fsdp_version == 2:
             from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
 
-            optim_state = get_optimizer_state_dict(model, optimizer, options=sd_options)
+            optim_state = get_optimizer_state_dict(model, _unwrap_optimizer(optimizer), options=sd_options)
         else:
             optim_state = FSDP.optim_state_dict(model, optimizer)
 
@@ -267,20 +350,45 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
                 torch.save(optim_state, output_optimizer_file)
                 logger.info(f"Optimizer state saved in {output_optimizer_file}")
         else:
-            ckpt_dir = os.path.join(output_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
-            os.makedirs(ckpt_dir, exist_ok=True)
-            logger.info(f"Saving Optimizer state to {ckpt_dir}")
-            dist_cp.save(
-                state_dict={"optimizer": optim_state},
-                storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
-                planner=DefaultSavePlanner(),
-            )
-            logger.info(f"Optimizer state saved in {ckpt_dir}")
+            if use_dcp:
+                import torch.distributed.checkpoint as dist_cp
+                from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
+
+                ckpt_dir = os.path.join(output_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                logger.info(f"Saving Optimizer state to {ckpt_dir}")
+                dist_cp.save(
+                    state_dict={"optimizer": optim_state},
+                    storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
+                    planner=DefaultSavePlanner(),
+                )
+                logger.info(f"Optimizer state saved in {ckpt_dir}")
+            else:
+                optim_state_name = f"{OPTIMIZER_NAME}_{optimizer_index}_rank{accelerator.process_index}.bin"
+                output_optimizer_file = os.path.join(output_dir, optim_state_name)
+                logger.info(f"Saving Optimizer state to {output_optimizer_file}")
+                torch.save(optim_state, output_optimizer_file)
+                logger.info(f"Optimizer state saved in {output_optimizer_file}")
 
 
-def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False):
+def load_fsdp_optimizer(
+    fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False, use_dcp=True
+):
+    """
+    Load an FSDP optimizer state checkpoint.
+
+    When ``state_dict_type`` is not ``FULL_STATE_DICT``, the ``use_dcp`` parameter controls the loading strategy:
+
+    - ``use_dcp=True`` (default): Uses ``torch.distributed.checkpoint`` (DCP) to load the optimizer state.
+    - ``use_dcp=False``: Uses per-rank ``torch.load`` instead of DCP, avoiding cross-rank communication.
+      This is useful at large scale (e.g., 2800+ GPUs) where DCP can cause timeouts due to TCP congestion
+      from Gloo-based collective communication.
+
+    .. note::
+        Checkpoints saved with ``use_dcp=False`` must be loaded with ``use_dcp=False`` as well, since the
+        file format differs (per-rank ``.bin`` files vs. DCP's sharded directory format).
+    """
     # Note: We import here to reduce import time from general modules, and isolate outside dependencies
-    import torch.distributed.checkpoint as dist_cp
     from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
     from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -305,26 +413,36 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
                 optim_state = torch.load(input_optimizer_file, weights_only=True)
                 logger.info(f"Optimizer state loaded from {input_optimizer_file}")
         else:
-            ckpt_dir = (
-                os.path.join(input_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
-                if f"{OPTIMIZER_NAME}" not in input_dir
-                else input_dir
-            )
-            logger.info(f"Loading Optimizer from {ckpt_dir}")
-            if fsdp_plugin.fsdp_version == 2:
-                from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+            if use_dcp:
+                import torch.distributed.checkpoint as dist_cp
+                from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
 
-                optim_state = get_optimizer_state_dict(model, optimizer, options=sd_options)
+                ckpt_dir = (
+                    Path(input_dir) / f"{OPTIMIZER_NAME}_{optimizer_index}"
+                    if Path(input_dir).name != f"{OPTIMIZER_NAME}_{optimizer_index}"
+                    else Path(input_dir)
+                )
+                logger.info(f"Loading Optimizer from {ckpt_dir}")
+                if fsdp_plugin.fsdp_version == 2:
+                    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+
+                    optim_state = get_optimizer_state_dict(model, _unwrap_optimizer(optimizer), options=sd_options)
+                else:
+                    optim_state = FSDP.optim_state_dict(model, optimizer)
+                optim_state = {"optimizer": optim_state}
+                dist_cp.load(
+                    state_dict=optim_state,
+                    storage_reader=dist_cp.FileSystemReader(ckpt_dir),
+                    planner=DefaultLoadPlanner(),
+                )
+                optim_state = optim_state["optimizer"]
+                logger.info(f"Optimizer loaded from {ckpt_dir}")
             else:
-                optim_state = FSDP.optim_state_dict(model, optimizer)
-            optim_state = {"optimizer": optim_state}
-            dist_cp.load(
-                optim_state,
-                checkpoint_id=ckpt_dir,
-                storage_reader=dist_cp.FileSystemReader(ckpt_dir),
-            )
-            optim_state = optim_state["optimizer"]
-            logger.info(f"Optimizer loaded from {ckpt_dir}")
+                optimizer_name = f"{OPTIMIZER_NAME}_{optimizer_index}_rank{accelerator.process_index}.bin"
+                input_optimizer_file = os.path.join(input_dir, optimizer_name)
+                logger.info(f"Loading Optimizer from {input_optimizer_file}")
+                optim_state = torch.load(input_optimizer_file, weights_only=True)
+                logger.info(f"Optimizer loaded from {input_optimizer_file}")
 
         if fsdp_plugin.fsdp_version == 1:
             flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
@@ -332,7 +450,9 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
         else:
             from torch.distributed.checkpoint.state_dict import set_optimizer_state_dict
 
-            set_optimizer_state_dict(model, optimizer, optim_state, options=sd_options)
+            set_optimizer_state_dict(model, _unwrap_optimizer(optimizer), optim_state, options=sd_options)
+
+    accelerator.wait_for_everyone()
 
 
 def _distributed_checkpoint_to_merged_weights(checkpoint_dir: str, save_path: str, safe_serialization: bool = True):
@@ -511,7 +631,13 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         return tensor
 
     if accelerator.is_main_process:
-        for (param_name, full_param), sharded_param in zip(full_sd.items(), meta_sharded_sd.values()):
+        for param_name, sharded_param in meta_sharded_sd.items():
+            if param_name not in full_sd:
+                raise KeyError(
+                    f"Parameter '{param_name}' found in sharded model state dict but missing from full state dict. "
+                    f"Full state dict has {len(full_sd)} keys, sharded has {len(meta_sharded_sd)} keys."
+                )
+            full_param = full_sd[param_name]
             device_mesh = sharded_param.device_mesh
             full_param = full_param.detach().to(device_mesh.device_type)
             if isinstance(full_param, DTensor):
@@ -599,23 +725,40 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
 
     from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
         checkpoint_wrapper,
+        offload_wrapper,
     )
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(accelerator.state.fsdp_plugin, model)
 
     for layer_name, layer in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
-        if len(layer_name.split(".")) > 1:
-            parent_name, child_name = layer_name.rsplit(".", 1)
-        else:
-            parent_name = None
-            child_name = layer_name
-
-        parent_module = model.get_submodule(parent_name) if parent_name else model
-        if auto_wrap_policy_func(parent_module):
-            layer = checkpoint_wrapper(layer, preserve_rng_state=False)
-            parent_module.register_module(child_name, layer)
+        if auto_wrap_policy_func(layer):
+            wrapped = checkpoint_wrapper(layer, preserve_rng_state=False)
+            if accelerator.state.fsdp_plugin.activation_checkpointing_offload:
+                # `offload_wrapper` puts `save_on_cpu` around the checkpoint, so what moves to host
+                # is the input the checkpoint saved for its recompute: `layers x seq x hidden` bytes,
+                # the activation that dominates at long sequence lengths.
+                wrapped = offload_wrapper(wrapped)
+            model.set_submodule(layer_name, wrapped)
 
     return model
+
+
+def _find_final_norm(model: torch.nn.Module) -> torch.nn.Module | None:
+    """Find the final normalization layer before the output head.
+
+    The final norm is conventionally a direct child of the base model (e.g. `model.norm`
+    for Llama, `transformer.ln_f` for GPT-2), so we only scan the base model's direct
+    children. Returns the last norm found there, or None.
+    """
+    base_prefix = getattr(model, "base_model_prefix", "")
+    base_model = getattr(model, base_prefix, None) if base_prefix else model
+    if not isinstance(base_model, torch.nn.Module):
+        return None
+    final_norm = None
+    for _, module in base_model.named_children():
+        if "Norm" in type(module).__name__:
+            final_norm = module
+    return final_norm
 
 
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
@@ -640,33 +783,47 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     fsdp2_plugin.set_auto_wrap_policy(model)
 
-    original_sd = model.state_dict()
     mesh = getattr(accelerator, "torch_device_mesh", None)
 
     fsdp2_kwargs = {
         "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
         "offload_policy": fsdp2_plugin.cpu_offload,
-        # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
+        # `fully_shard` does not accept `None` in case of `MixedPrecisionPolicy`
         "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
         "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
-        "ignored_params": get_parameters_from_modules(fsdp2_plugin.ignored_modules, model, accelerator.device),
     }
 
+    # `ignored_params` is only supported in torch >= 2.7.0
+    if is_torch_version(">=", "2.7.0") and fsdp2_plugin.ignored_modules is not None:
+        fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(
+            fsdp2_plugin.ignored_modules, model, accelerator.device
+        )
+
     model_has_params4bit = False
+    incompatible_params4bit = set()
     for name, param in model.named_parameters():
         # this is a temporary fix whereby loading models with bnb params cannot be moved from
         # GPU to a meta device due with FSDP2 because torch operations don't return the original class type
         # bypassing the move to meta will still cause the VRAM spike, but at least it still will load
         if param.__class__.__name__ == "Params4bit":
             model_has_params4bit = True
-            break
+            # Exclude non-floating frozen Params4bit from FSDP sharding.
+            # Default uint8 quant_storage cannot survive fully_shard's DTensor conversion.
+            if (not param.requires_grad) and (not param.is_floating_point()) and (not param.is_complex()):
+                incompatible_params4bit.add(param)
+
+    if incompatible_params4bit and is_torch_version(">=", "2.7.0"):
+        ignored = set(fsdp2_kwargs.get("ignored_params", set()))
+        fsdp2_kwargs["ignored_params"] = ignored | incompatible_params4bit
+        if accelerator.is_main_process:
+            warnings.warn(
+                f"Found {len(incompatible_params4bit)} non-floating frozen Params4bit. "
+                "Excluding from FSDP2 sharding to prevent quant_state corruption."
+                "To enable memory-efficient sharding of 4-bit weights, set"
+                "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
+            )
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
-        # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
-        # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
-        # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.empty`), `fully_shard` would move it to GPU
-        # Afterwards, when we call `fsdp2_load_full_state_dict`, us creating the state_dict would result into briefly having two copies of model state_dict on the GPU -> VRAM spike
-
         # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
         # Also, these buffers aren't getting sharded by default
         # We get the FQNs of all non-persistent buffers, to re-register them after
@@ -674,6 +831,35 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         original_non_persistent_buffers = copy.deepcopy(
             {k: v for k, v in model.named_buffers() if k in non_persistent_buffer_fqns}
         )
+        # Non-main ranks only need the shapes: their weights are replaced by the main process' in
+        # `fsdp2_load_full_state_dict`. Moving them to `meta` before the upcast below avoids writing a full fp32 copy of
+        # every trainable parameter into host memory on every rank.
+        if not accelerator.is_main_process:
+            model = model.to(torch.device("meta"))
+
+    # FSDP2 requires uniform orig_dtype among trainable params in each group.
+    # Upcast to fp32 master weights; MixedPrecisionPolicy.param_dtype handles compute cast.
+    if accelerator.mixed_precision != "no" and not model_has_params4bit:
+        upcasted_params = []
+        for name, param in model.named_parameters():
+            if param.requires_grad and param.dtype != torch.float32:
+                upcasted_params.append(name)
+                param.data = param.data.to(torch.float32)
+        if accelerator.is_main_process and upcasted_params:
+            logger.info(
+                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints. "
+                f"This effects {len(upcasted_params)} parameters: {upcasted_params}..."
+            )
+
+    # Capture after upcast so dtypes match what `fully_shard` will produce.
+    original_sd = model.state_dict()
+
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
+        # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
+        # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
+        # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.empty`), `fully_shard` would move it to GPU
+        # Afterwards, when we call `fsdp2_load_full_state_dict`, us creating the state_dict would result into briefly having two copies of model state_dict on the GPU -> VRAM spike
+
         # We move the model to meta device, as then sharding happens on meta device
         model = model.to(torch.device("meta"))
         # We need to re-tie the weights, not exactly sure why, but if we don't do this, reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
@@ -688,14 +874,45 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
                 fully_shard(module, **fsdp2_kwargs)
 
-    if not isinstance(model, FSDPModule):
-        fully_shard(model, **fsdp2_kwargs)
+    # Carve embed + tail=[final_norm, lm_head] into their own units. Tail gets `False`
+    # (forward-end / backward-start uses cluster, re-gather would be unhideable).
+    input_embed = getattr(model, "get_input_embeddings", lambda: None)()
+    output_embed = getattr(model, "get_output_embeddings", lambda: None)()
+    input_weight = getattr(input_embed, "weight", None)
+    output_weight = getattr(output_embed, "weight", None)
+    is_weights_tied = input_weight is not None and input_weight is output_weight
 
-    if fsdp2_plugin.cpu_ram_efficient_loading:
+    if not is_weights_tied and input_embed is not None and not isinstance(input_embed, FSDPModule):
+        fully_shard(input_embed, **fsdp2_kwargs)
+
+    final_norm = _find_final_norm(model)
+    # Tied case puts `input_embed` first so the pre-forward hook fires at forward-start
+    # (embed's use of the shared tensor), not at forward-end with `output_embed`.
+    # `output_embed` must still be in the same group: torch >= 2.13 raises if a shared
+    # parameter is visible to two FSDP groups (here: the tail group and the root).
+    if is_weights_tied:
+        tail_modules = (final_norm, input_embed, output_embed)
+    else:
+        tail_modules = (final_norm, output_embed)
+    tail = [m for m in tail_modules if m is not None and not isinstance(m, FSDPModule)]
+    if tail:
+        fully_shard(tail, **{**fsdp2_kwargs, "reshard_after_forward": False})
+
+    if not isinstance(model, FSDPModule):
+        # Defer to PyTorch's `reshard_after_forward=None` heuristic, which resolves to `False`
+        # for the root. Avoids an unhideable pre-backward all-gather of the root's leftovers.
+        root_kwargs = {k: v for k, v in fsdp2_kwargs.items() if k != "reshard_after_forward"}
+        fully_shard(model, **root_kwargs)
+
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
         # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
         # When CPU offloading is enabled, parameters need to stay on CPU after distribution
-        fsdp2_load_full_state_dict(accelerator, model, original_sd, cpu_offload=bool(fsdp2_plugin.cpu_offload))
+        from torch.distributed.fsdp import CPUOffloadPolicy
+
+        fsdp2_load_full_state_dict(
+            accelerator, model, original_sd, cpu_offload=isinstance(fsdp2_plugin.cpu_offload, CPUOffloadPolicy)
+        )
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # We re-register the buffers, as they may not be in the state_dict
@@ -718,39 +935,21 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
-    # There is no `dtype` attribution for nn.Module
-    # Set it to None if it doesn't exist and do the upcast always
-    model_dtype = getattr(model, "dtype", None)
-    if accelerator.mixed_precision != "no" and (model_dtype is None or model_dtype != torch.float32):
-        # We upcast the trainable parameters according to `deepspeed`'s implementation
-        # More info about this can be found in `accelerator.py:prepare_model`s FSDP1 section
-        upcasted_params = []
-        for name, param in model.named_parameters():
-            if param.requires_grad and param.dtype != torch.float32:
-                upcasted_params.append(name)
-                param = param.to(torch.float32)
-        if accelerator.is_main_process and upcasted_params:
-            warnings.warn(
-                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints. "
-                f"This effects {len(upcasted_params)} parameters: {upcasted_params}..."
-            )
     return model
 
 
-def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool]:
+def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Callable[[torch.nn.Module], bool] | None:
     """Prepares the auto wrap policy based on its type, done to mimic the behaviour of FSDP1 auto wrap policy.
 
     Args:
         fsdp2_plugin (`FullyShardedDataParallelPlugin`):
             Instance of `FullyShardedDataParallelPlugin` containing the configuration options
-        auto_wrap_policy_type (`str`):
-            Either `transformer` or `size`
         model (`torch.nn.Module`):
             The model to wrap
 
     Returns:
-        `Callable[[torch.nn.Module], bool]`:
-            The auto wrap policy function to be applied to the model
+        `Callable[[torch.nn.Module], bool] | None`:
+            The auto wrap policy function to be applied to the model or `None`
     """
     from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
@@ -775,8 +974,11 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
             transformer_cls_to_wrap.add(transformer_cls)
 
         def policy(module: torch.nn.Module) -> bool:
-            if fsdp2_plugin.transformer_cls_names_to_wrap is None:
+            if not transformer_cls_to_wrap:
                 return False
+            # Activation checkpointing (applied before sharding) wraps matched layers in
+            # `CheckpointWrapper`; look through it so such layers still get their own FSDP group.
+            module = getattr(module, "_checkpoint_wrapped_module", module)
             return isinstance(module, tuple(transformer_cls_to_wrap))
 
     elif fn is size_based_auto_wrap_policy:

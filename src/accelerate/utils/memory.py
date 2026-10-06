@@ -30,13 +30,14 @@ from .imports import (
     is_mlu_available,
     is_mps_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_xpu_available,
 )
 
 
-def clear_device_cache(garbage_collection=False):
+def clear_device_cache(garbage_collection: bool = False) -> None:
     """
     Clears the device cache by calling `torch.{backend}.empty_cache`. Can also run `gc.collect()`, but do note that
     this is a *considerable* slowdown and should be used sparingly.
@@ -61,9 +62,12 @@ def clear_device_cache(garbage_collection=False):
     elif is_hpu_available():
         # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
         pass
+    elif is_neuron_available():
+        # Not sure it actually does something, but adding for consistency with other backends
+        torch.neuron.empty_cache()
 
 
-def release_memory(*objects):
+def release_memory(*objects) -> list:
     """
     Releases memory from `objects` by setting them to `None` and calls `gc.collect()` and `torch.cuda.empty_cache()`.
     Returned objects should be reassigned to the same variables.
@@ -95,7 +99,7 @@ def release_memory(*objects):
 
 def should_reduce_batch_size(exception: Exception) -> bool:
     """
-    Checks if `exception` relates to CUDA out-of-memory, XPU out-of-memory, CUDNN not supported, or CPU out-of-memory
+    Checks if `exception` relates to CUDA, XPU, MPS or CPU out-of-memory, or CUDNN not supported
 
     Args:
         exception (`Exception`):
@@ -103,6 +107,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
     """
     _statements = [
         " out of memory.",  # OOM for CUDA, HIP, XPU
+        "MPS backend out of memory",  # MPS OOM
         "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",  # CUDNN SNAFU
         "DefaultCPUAllocator: can't allocate memory",  # CPU OOM
         "FATAL ERROR :: MODULE:PT_DEVMEM Allocation failed",  # HPU OOM
@@ -128,6 +133,10 @@ def find_executable_batch_size(
             A function to wrap
         starting_batch_size (`int`, *optional*):
             The batch size to try and fit into memory
+        reduce_batch_size_fn (`callable`, *optional*):
+            A function to determine the new batch size after an out-of-memory error. If not
+            provided, the batch size is multiplied by 0.9 on each failure. The function takes
+            no arguments and should return the new (reduced) batch size as an `int`.
 
     Example:
 
@@ -144,7 +153,11 @@ def find_executable_batch_size(
     ```
     """
     if function is None:
-        return functools.partial(find_executable_batch_size, starting_batch_size=starting_batch_size)
+        return functools.partial(
+            find_executable_batch_size,
+            starting_batch_size=starting_batch_size,
+            reduce_batch_size_fn=reduce_batch_size_fn,
+        )
 
     batch_size = starting_batch_size
     if reduce_batch_size_fn is None:

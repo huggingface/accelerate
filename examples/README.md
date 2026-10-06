@@ -52,7 +52,7 @@ To run it in each of these various modes, use the following commands:
     python ./nlp_example.py  # from a server with a GPU
     ```
 - with fp16 (mixed-precision)
-    * from any server by passing `mixed_precison=fp16` to the `Accelerator`.
+    * from any server by passing `mixed_precision=fp16` to the `Accelerator`.
         ```bash
         python ./nlp_example.py --mixed_precision fp16
         ```
@@ -109,7 +109,7 @@ To run it in each of these various modes, use the following commands:
 
 ## Simple vision example
 
-The [cv_example.py](./cv_example.py) script is a simple example to fine-tune a ResNet-50 on a classification task ([Ofxord-IIT Pet Dataset](https://www.robots.ox.ac.uk/~vgg/data/pets/)).
+The [cv_example.py](./cv_example.py) script is a simple example to fine-tune a ResNet-50 on a classification task ([Oxford-IIT Pet Dataset](https://www.robots.ox.ac.uk/~vgg/data/pets/)).
 
 The same script can be run in any of the following configurations:
 - single CPU or single GPU
@@ -150,13 +150,13 @@ To run it in each of these various modes, use the following commands:
     python ./cv_example.py  # from a server with a GPU
     ```
 - with fp16 (mixed-precision)
-    * from any server by passing `mixed_precison=fp16` to the `Accelerator`.
+    * from any server by passing `mixed_precision=fp16` to the `Accelerator`.
         ```bash
-        python ./cv_example.py --data_dir path_to_data --mixed_precison fp16
+        python ./cv_example.py --data_dir path_to_data --mixed_precision fp16
         ```
     * from any server with Accelerate launcher
         ```bash
-        accelerate launch --mixed_precison fp16 ./cv_example.py --data_dir path_to_data
+        accelerate launch --mixed_precision fp16 ./cv_example.py --data_dir path_to_data
 - multi CPUs (requires Open MPI, Intel MPI, or MVAPICH)
     * With Accelerate config and launcher, run the following from node 0:
         ```bash

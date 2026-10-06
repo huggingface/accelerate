@@ -32,7 +32,7 @@ import torch
 
 import accelerate
 
-from ..state import AcceleratorState
+from ..state import AcceleratorState, GradientState
 from ..utils import (
     check_cuda_fp8_capability,
     compare_versions,
@@ -55,8 +55,10 @@ from ..utils import (
     is_mlu_available,
     is_mps_available,
     is_musa_available,
+    is_neuron_available,
     is_npu_available,
     is_pandas_available,
+    is_peft_available,
     is_pippy_available,
     is_pytest_available,
     is_schedulefree_available,
@@ -78,6 +80,7 @@ from ..utils import (
     is_xpu_available,
     str_to_bool,
 )
+from ..utils.constants import FSDP2_PYTORCH_VERSION
 
 
 def get_backend():
@@ -101,6 +104,8 @@ def get_backend():
         return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
     elif is_hpu_available():
         return "hpu", torch.hpu.device_count(), torch.hpu.memory_allocated
+    elif is_neuron_available():
+        return "neuron", torch.neuron.device_count(), torch.neuron.memory_allocated
     else:
         return "cpu", 1, lambda: 0
 
@@ -253,7 +258,16 @@ def require_fp8(test_case):
 
 
 def require_fsdp2(test_case):
-    return unittest.skipUnless(is_torch_version(">=", "2.5.0"), "test requires FSDP2 (torch >= 2.5.0)")(test_case)
+    return unittest.skipUnless(
+        is_torch_version(">=", FSDP2_PYTORCH_VERSION), f"test requires FSDP2 (torch >= {FSDP2_PYTORCH_VERSION})"
+    )(test_case)
+
+
+def require_peft(test_case):
+    """
+    Decorator marking a test that requires PEFT. These tests are skipped when PEFT isn't installed.
+    """
+    return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
 
 
 def require_mlu(test_case):
@@ -284,6 +298,13 @@ def require_npu(test_case):
     return unittest.skipUnless(is_npu_available(), "test require a NPU")(test_case)
 
 
+def require_neuron(test_case):
+    """
+    Decorator marking a test that requires Neuron. These tests are skipped when there are no Neuron Cores available.
+    """
+    return unittest.skipUnless(is_neuron_available(), "test require Neuron Cores")(test_case)
+
+
 def require_mps(test_case):
     """
     Decorator marking a test that requires MPS backend. These tests are skipped when torch doesn't support `mps`
@@ -300,6 +321,13 @@ def require_huggingface_suite(test_case):
         is_transformers_available() and is_datasets_available(),
         "test requires the Hugging Face suite",
     )(test_case)
+
+
+def require_datasets(test_case):
+    """
+    Decorator marking a test that requires datasets. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_datasets_available(), "test requires the datasets library")(test_case)
 
 
 def require_transformers(test_case):
@@ -658,6 +686,9 @@ class AccelerateTestCase(unittest.TestCase):
         super().tearDown()
         # Reset the state of the AcceleratorState singleton.
         AcceleratorState._reset_state(True)
+        # `GradientState` keeps weakrefs to dataloaders that were never exhausted, which leaks into
+        # later tests (e.g. making an `AcceleratedOptimizer` unpicklable).
+        GradientState._reset_state()
 
 
 class MockingTestCase(unittest.TestCase):

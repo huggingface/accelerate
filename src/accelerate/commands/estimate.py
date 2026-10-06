@@ -17,7 +17,7 @@ from typing import Optional
 
 import torch
 from huggingface_hub import model_info
-from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+from huggingface_hub.utils import EntryNotFoundError, GatedRepoError, RepositoryNotFoundError
 
 from accelerate import init_empty_weights
 from accelerate.commands.utils import CustomArgumentParser
@@ -51,16 +51,31 @@ def check_has_model(error):
     """
     Checks what library spawned `error` when a model is not found
     """
-    if is_timm_available() and isinstance(error, RuntimeError) and "Unknown model" in error.args[0]:
+    message = str(error)
+    if is_timm_available() and (
+        (isinstance(error, RuntimeError) and "Unknown model" in message)
+        or isinstance(error, EntryNotFoundError)
+        or (isinstance(error, KeyError) and "architecture" in message)
+    ):
         return "timm"
     elif (
         is_transformers_available()
-        and isinstance(error, OSError)
-        and "does not appear to have a file named" in error.args[0]
+        and isinstance(error, (OSError, ValueError))
+        and ("does not appear to have a file named" in message or "Unrecognized model in" in message)
     ):
         return "transformers"
     else:
         return "unknown"
+
+
+def add_timm_hub_prefix(model_name: str) -> str:
+    """
+    Adds the `hf-hub:` prefix that `timm.create_model` needs for Hub repo ids. Bare architecture names and names that
+    already have a source prefix are returned unchanged.
+    """
+    if ":" in model_name or "/" not in model_name:
+        return model_name
+    return f"hf-hub:{model_name}"
 
 
 def create_empty_model(
@@ -90,11 +105,11 @@ def create_empty_model(
     model_info = verify_on_hub(model_name, access_token)
     # Simplified errors
     if model_info == "gated":
-        raise GatedRepoError(
+        raise OSError(
             f"Repo for model `{model_name}` is gated. You must be authenticated to access it. Please run `huggingface-cli login`."
         )
     elif model_info == "repo":
-        raise RepositoryNotFoundError(
+        raise OSError(
             f"Repo for model `{model_name}` does not exist on the Hub. If you are trying to access a private repo,"
             " make sure you are authenticated via `huggingface-cli login` and have access."
         )
@@ -135,7 +150,7 @@ def create_empty_model(
             )
         print(f"Loading pretrained config for `{model_name}` from `timm`...")
         with init_empty_weights():
-            model = timm.create_model(model_name, pretrained=False)
+            model = timm.create_model(add_timm_hub_prefix(model_name), pretrained=False)
     else:
         raise ValueError(
             f"Library `{library_name}` is not supported yet, please open an issue on GitHub for us to add support."
@@ -262,7 +277,7 @@ def gather_data(args):
         model = create_empty_model(
             args.model_name, library_name=args.library_name, trust_remote_code=args.trust_remote_code
         )
-    except (RuntimeError, OSError) as e:
+    except (RuntimeError, OSError, ValueError, KeyError) as e:
         library = check_has_model(e)
         if library != "unknown":
             raise RuntimeError(

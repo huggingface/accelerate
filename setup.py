@@ -24,6 +24,7 @@ extras["test_dev"] = [
     "datasets",
     "diffusers",
     "evaluate",
+    "peft",
     "torchdata>=0.8.0",
     "torchpippy>=0.2.0",
     "transformers",
@@ -40,7 +41,6 @@ extras["rich"] = ["rich"]
 extras["test_fp8"] = ["torchao"]  # note: TE for now needs to be done via pulling down the docker image directly
 extras["test_trackers"] = [
     "wandb",
-    "comet-ml",
     "tensorboard",
     "dvclive",
     # "mlflow", too many deps that lead to download a very old version of the lib
@@ -56,7 +56,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="1.13.0.dev0",
+    version="1.16.0.dev0",
     description="Accelerate",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

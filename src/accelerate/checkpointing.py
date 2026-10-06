@@ -35,6 +35,7 @@ from .utils import (
     is_hpu_available,
     is_mlu_available,
     is_musa_available,
+    is_neuron_available,
     is_sdaa_available,
     is_torch_version,
     is_torch_xla_available,
@@ -70,7 +71,7 @@ def save_accelerator_state(
     scaler: Optional[GradScaler] = None,
     save_on_each_node: bool = False,
     safe_serialization: bool = True,
-):
+) -> Path:
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
 
@@ -167,6 +168,8 @@ def save_accelerator_state(
         states["torch_musa_manual_seed"] = torch.musa.get_rng_state_all()
     if is_hpu_available():
         states["torch_hpu_manual_seed"] = torch.hpu.get_rng_state_all()
+    if is_neuron_available():
+        states["torch_neuron_manual_seed"] = torch.neuron.get_rng_state_all()
     if is_cuda_available():
         states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
     if is_torch_xla_available():
@@ -178,17 +181,17 @@ def save_accelerator_state(
 
 
 def load_accelerator_state(
-    input_dir,
-    models,
-    optimizers,
-    schedulers,
-    dataloaders,
-    process_index,
-    scaler=None,
+    input_dir: str,
+    models: list,
+    optimizers: list,
+    schedulers: list,
+    dataloaders: list,
+    process_index: int,
+    scaler: Optional[GradScaler] = None,
     map_location=None,
-    load_kwargs=None,
+    load_kwargs: Optional[dict] = None,
     **load_model_func_kwargs,
-):
+) -> dict:
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
 
@@ -201,6 +204,8 @@ def load_accelerator_state(
             A list of optimizer instances
         schedulers (`List[torch.optim.lr_scheduler._LRScheduler]`):
             A list of learning rate schedulers
+        dataloaders (`List[torch.utils.data.DataLoader]`):
+            A list of dataloader instances used in your program
         process_index (`int`):
             The current process index in the Accelerator state
         scaler (`torch.amp.GradScaler`, *optional*):
@@ -300,7 +305,11 @@ def load_accelerator_state(
             torch.sdaa.set_rng_state_all(states["torch_sdaa_manual_seed"])
         elif is_musa_available():
             torch.musa.set_rng_state_all(states["torch_musa_manual_seed"])
-        else:
+        if is_hpu_available():
+            torch.hpu.set_rng_state_all(states["torch_hpu_manual_seed"])
+        if is_neuron_available():
+            torch.neuron.set_rng_state_all(states["torch_neuron_manual_seed"])
+        if is_cuda_available():
             torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
         if is_torch_xla_available():
             xm.set_rng_state(states["xm_seed"])
@@ -311,7 +320,7 @@ def load_accelerator_state(
     return override_attributes
 
 
-def save_custom_state(obj, path, index: int = 0, save_on_each_node: bool = False):
+def save_custom_state(obj, path: str, index: int = 0, save_on_each_node: bool = False) -> None:
     """
     Saves the state of `obj` to `{path}/custom_checkpoint_{index}.pkl`
     """
@@ -321,7 +330,7 @@ def save_custom_state(obj, path, index: int = 0, save_on_each_node: bool = False
     save(obj.state_dict(), save_location, save_on_each_node=save_on_each_node)
 
 
-def load_custom_state(obj, path, index: int = 0):
+def load_custom_state(obj, path: str, index: int = 0) -> None:
     """
     Loads the state of `obj` at `{path}/custom_checkpoint_{index}.pkl`. Will always set `weights_only=False` when
     loading the state.

@@ -97,9 +97,11 @@ def convert_config_to_fsdp2(config: dict) -> dict:
 
     for key, value in fsdp_config.items():
         conversion_status = ARGUMENT_KEY_MAPPING.get(key, None)
-        if isinstance(conversion_status, ConversionStatus) or conversion_status is None:
-            conversion_status = key
-            new_fsdp_config[conversion_status] = value
+        # Key not in the mapping at all: carry it over unchanged. (ConversionStatus
+        # values must fall through to the REMOVED / NOT_YET_IMPLEMENTED handling
+        # below, otherwise those FSDP1-only keys would leak into the FSDP2 config.)
+        if conversion_status is None:
+            new_fsdp_config[key] = value
             continue
 
         if conversion_status == ConversionStatus.REMOVED:

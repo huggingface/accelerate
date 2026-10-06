@@ -102,7 +102,7 @@ class ParallelismConfig:
 
         _non_serializable_fields = ["device_mesh"]
 
-        copy.deepcopy(
+        return copy.deepcopy(
             {
                 k: copy.deepcopy(v.__dict__) if hasattr(v, "__dict__") else v
                 for k, v in self.__dict__.items()
@@ -248,7 +248,7 @@ class ParallelismConfig:
             if device_type is not None:
                 self.device_mesh = self.build_device_mesh(device_type)
             else:
-                raise ("You need to pass a device_type e.g cuda to build the device mesh")
+                raise ValueError("You need to pass a device_type e.g cuda to build the device mesh")
         else:
             if device_type is not None:
                 if self.device_mesh.device_type != device_type:
@@ -362,11 +362,29 @@ class ParallelismConfig:
         if self.total_size == 1:
             self._set_size("dp_replicate", accelerator.num_processes)
 
-        if self.total_size != accelerator.num_processes:
+        # For DeepSpeed SP, DeepSpeed handles global process groups internally.
+        # Skip the total_size == num_processes validation since:
+        # 1. DeepSpeed manages SP groups globally via initialize_sequence_parallel()
+        # 2. num_processes is per-node in multi-node, but total_size is local parallelism config
+        # 3. The actual global parallelism (SP × DP) is handled by DeepSpeed's process groups
+        if self.sp_backend == "deepspeed" and self.sp_size > 1:
+            pass
+        elif self.total_size != accelerator.num_processes:
             raise ValueError(
                 f"ParallelismConfig total_size ({self.total_size}) does not match "
                 f"num_processes ({accelerator.num_processes}). Please adjust dp_replicate_size/ "
                 f"dp_shard_size/tp_size/cp_size/sp_size."
+            )
+
+        # FSDP shards across the joint `dp_shard_cp` mesh dimension, which only exists when `dp_shard` or `cp` is
+        # enabled; with neither, preparation fails later with an opaque `KeyError` from `device_mesh`.
+        if accelerator.is_fsdp2 and not self.dp_shard_enabled and not self.cp_enabled:
+            raise ValueError(
+                "FSDP is enabled but the parallelism config has no dimension for FSDP to shard across (both "
+                "`dp_shard_size` and `cp_size` are 1). This usually means a model that is already parallelized "
+                "another way -- e.g. loaded with `DistributedConfig(tp_size=N)` or `enable_expert_parallel=True`, "
+                "which makes the whole world size tensor/expert parallel -- was launched under an FSDP config. "
+                "Either launch it without the FSDP config, or leave ranks for FSDP to use by lowering `tp_size`."
             )
 
         if self.total_size > 1 and not (

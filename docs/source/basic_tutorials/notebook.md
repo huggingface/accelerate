@@ -15,8 +15,8 @@ rendered properly in your Markdown viewer.
 
 # Launching distributed training from Jupyter Notebooks
 
-This tutorial teaches you how to fine tune a computer vision model with 🤗 Accelerate from a Jupyter Notebook on a distributed system.
-You will also learn how to setup a few requirements needed for ensuring your environment is configured properly, your data has been prepared properly, and finally how to launch training.
+This tutorial teaches you how to fine-tune a computer vision model with 🤗 Accelerate from a Jupyter Notebook on a distributed system.
+You will also learn how to set up a few requirements needed for ensuring your environment is configured properly, your data has been prepared properly, and finally how to launch training.
 
 <Tip>
 

@@ -18,6 +18,7 @@
 import json
 import os
 import time
+import warnings
 from functools import wraps
 from typing import Any, Optional, Union
 
@@ -39,6 +40,7 @@ from .utils import (
     is_trackio_available,
     is_wandb_available,
     listify,
+    str_to_bool,
 )
 
 
@@ -144,7 +146,6 @@ class GeneralTracker:
         Lazy initialization of the tracker inside Accelerator to avoid initializing PartialState before
         InitProcessGroupKwargs.
         """
-        pass
 
     def store_init_configuration(self, values: dict):
         """
@@ -156,9 +157,8 @@ class GeneralTracker:
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
-        pass
 
-    def log(self, values: dict, step: Optional[int], **kwargs):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run. Base `log` implementations of a tracking API should go in here, along with
         special behavior for the `step parameter.
@@ -169,14 +169,12 @@ class GeneralTracker:
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
-        pass
 
     def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just don't
         overwrite that method.
         """
-        pass
 
 
 class TensorBoardTracker(GeneralTracker):
@@ -269,7 +267,7 @@ class TensorBoardTracker(GeneralTracker):
         logger.debug("Successfully logged to TensorBoard")
 
     @on_main_process
-    def log_images(self, values: dict, step: Optional[int], **kwargs):
+    def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `images` to the current run.
 
@@ -484,7 +482,7 @@ class TrackioTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to the `trackio.log` method.
         """
-        self.run.log(values, **kwargs)
+        self.run.log(values, step=step, **kwargs)
         logger.debug("Successfully logged to trackio")
 
     @on_main_process
@@ -637,7 +635,7 @@ class AimTracker(GeneralTracker):
         self.writer["hparams"] = values
 
     @on_main_process
-    def log(self, values: dict, step: Optional[int], **kwargs):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
 
@@ -741,6 +739,8 @@ class MLflowTracker(GeneralTracker):
             tags = json.loads(tags)
 
         nested_run = os.environ.get("MLFLOW_NESTED_RUN", nested_run)
+        if isinstance(nested_run, str):
+            nested_run = str_to_bool(nested_run) == 1
 
         self.experiment_name = experiment_name
         self.logging_dir = logging_dir
@@ -795,16 +795,16 @@ class MLflowTracker(GeneralTracker):
         """
         import mlflow
 
-        for name, value in list(values.items()):
+        values_list = []
+        for name, value in values.items():
             # internally, all values are converted to str in MLflow
             if len(str(value)) > mlflow.utils.validation.MAX_PARAM_VAL_LENGTH:
                 logger.warning_once(
                     f'Accelerate is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
                     f" log_param() only accepts values no longer than {mlflow.utils.validation.MAX_PARAM_VAL_LENGTH} characters so we dropped this attribute."
                 )
-                del values[name]
-
-        values_list = list(values.items())
+            else:
+                values_list.append((name, value))
 
         # MLflow cannot log more than 100 values in one go, so we have to split it
         for i in range(0, len(values_list), mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH):
@@ -813,7 +813,7 @@ class MLflowTracker(GeneralTracker):
         logger.debug("Stored initial configuration hyperparameters to MLflow")
 
     @on_main_process
-    def log(self, values: dict, step: Optional[int]):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
 
@@ -822,6 +822,8 @@ class MLflowTracker(GeneralTracker):
                 Values to be logged as key-value pairs.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `mlflow.log_metrics` method.
         """
         metrics = {}
         for k, v in values.items():
@@ -834,7 +836,7 @@ class MLflowTracker(GeneralTracker):
                 )
         import mlflow
 
-        mlflow.log_metrics(metrics, step=step)
+        mlflow.log_metrics(metrics, step=step, **kwargs)
         logger.debug("Successfully logged to mlflow")
 
     @on_main_process
@@ -843,13 +845,13 @@ class MLflowTracker(GeneralTracker):
         Logs an figure to the current run.
 
         Args:
-            figure (Any):
-            The figure to be logged.
+            figure (`Any`):
+                The figure to be logged.
             artifact_file (`str`, *optional*):
-            The run-relative artifact file path in posixpath format to which the image is saved.
-            If not provided, the image is saved to a default location.
-            **kwargs:
-            Additional keyword arguments passed to the underlying mlflow.log_image function.
+                The run-relative artifact file path in posixpath format to which the image is saved. If not
+                provided, the image is saved to a default location.
+            **save_kwargs:
+                Additional keyword arguments passed to the underlying `mlflow.log_figure` function.
         """
         import mlflow
 
@@ -1202,15 +1204,15 @@ class SwanLabTracker(GeneralTracker):
         Logs `values` to the current run.
 
         Args:
-        data : Dict[str, DataType]
-            Data must be a dict. The key must be a string with 0-9, a-z, A-Z, " ", "_", "-", "/". The value must be a
-            `float`, `float convertible object`, `int` or `swanlab.data.BaseType`.
-        step : int, optional
-            The step number of the current data, if not provided, it will be automatically incremented.
-        If step is duplicated, the data will be ignored.
+            values (`Dict[str, DataType]`):
+                Values to be logged as key-value pairs. The key must be a string with 0-9, a-z, A-Z, " ", "_", "-",
+                "/". The value must be a `float`, `float convertible object`, `int` or `swanlab.data.BaseType`.
+            step (`int`, *optional*):
+                The step number of the current data, if not provided, it will be automatically incremented. If step
+                is duplicated, the data will be ignored.
             kwargs:
                 Additional key word arguments passed along to the `swanlab.log` method. Likes:
-                    print_to_console : bool, optional
+                    print_to_console (`bool`, *optional*):
                         Whether to print the data to the console, the default is False.
         """
         self.run.log(values, step=step, **kwargs)
@@ -1259,6 +1261,56 @@ LOGGER_TYPE_TO_CLASS = {
 }
 
 
+def register_tracker_class(tracker_class: type[GeneralTracker]):
+    """
+    Registers a custom [`GeneralTracker`] subclass so it can be referenced by its `name` in the `log_with` argument of
+    [`Accelerator`], the same way as the built-in trackers.
+
+    The tracker must be registered before instantiating the [`Accelerator`] that uses it.
+
+    Args:
+        tracker_class (subclass of [`GeneralTracker`]):
+            The tracker class to register. It must subclass [`GeneralTracker`] and define a non-empty `name` class
+            attribute and a `requires_logging_directory` class attribute. The class is instantiated with the
+            `project_name` passed to [`Accelerator.init_trackers`] as the first positional argument. When
+            `requires_logging_directory` is `True`, the logging directory is passed as the second positional argument
+            (matching the built-in tracker convention). Tracker-specific keyword arguments from `init_kwargs` are
+            forwarded as `**kwargs`.
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.tracking import GeneralTracker, register_tracker_class
+
+
+    class MyTracker(GeneralTracker):
+        name = "my_tracker"
+        requires_logging_directory = False
+        # ... implement the rest of the `GeneralTracker` interface
+
+
+    register_tracker_class(MyTracker)
+    accelerator = Accelerator(log_with="my_tracker")
+    ```
+    """
+    if not (isinstance(tracker_class, type) and issubclass(tracker_class, GeneralTracker)):
+        raise ValueError(f"`tracker_class` must be a subclass of `GeneralTracker`, but got {tracker_class}.")
+    if not getattr(tracker_class, "name", None):
+        raise ValueError("The tracker class to register must define a non-empty `name` attribute.")
+    if not hasattr(tracker_class, "requires_logging_directory"):
+        raise ValueError(
+            "The tracker class to register must define a `requires_logging_directory` class attribute. "
+            "Set it to `True` if the tracker needs a logging directory, or `False` otherwise."
+        )
+    if tracker_class.name in LOGGER_TYPE_TO_CLASS:
+        warnings.warn(
+            f"A tracker with the name '{tracker_class.name}' is already registered and will be overwritten by "
+            f"{tracker_class}. This is especially significant when shadowing a built-in tracker."
+        )
+    LOGGER_TYPE_TO_CLASS[tracker_class.name] = tracker_class
+
+
 def filter_trackers(
     log_with: list[Union[str, LoggerType, GeneralTracker]],
     logging_dir: Optional[Union[str, os.PathLike]] = None,
@@ -1296,11 +1348,15 @@ def filter_trackers(
             loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
         else:
             for log_type in log_with:
-                if log_type not in LoggerType and not issubclass(type(log_type), GeneralTracker):
+                if (
+                    log_type not in LoggerType
+                    and not issubclass(type(log_type), GeneralTracker)
+                    and str(log_type) not in LOGGER_TYPE_TO_CLASS
+                ):
                     raise ValueError(f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}")
                 if issubclass(type(log_type), GeneralTracker):
                     loggers.append(log_type)
-                else:
+                elif log_type in LoggerType:
                     log_type = LoggerType(log_type)
                     if log_type not in loggers:
                         if log_type in get_available_trackers():
@@ -1313,5 +1369,12 @@ def filter_trackers(
                             loggers.append(log_type)
                         else:
                             logger.debug(f"Tried adding logger {log_type}, but package is unavailable in the system.")
+                else:
+                    # Custom tracker class registered via `register_tracker_class`
+                    if log_type not in loggers:
+                        tracker_init = LOGGER_TYPE_TO_CLASS[str(log_type)]
+                        if tracker_init.requires_logging_directory and logging_dir is None:
+                            raise ValueError(f"Logging with `{log_type}` requires a `logging_dir` to be passed in.")
+                        loggers.append(log_type)
 
     return loggers

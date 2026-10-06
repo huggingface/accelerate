@@ -27,13 +27,14 @@ from accelerate.data_loader import (
     DataLoaderShard,
     DataLoaderStateMixin,
     IterableDatasetShard,
+    SeedableRandomSampler,
     SkipBatchSampler,
     SkipDataLoader,
     prepare_data_loader,
     skip_first_batches,
 )
 from accelerate.state import GradientState
-from accelerate.test_utils.testing import AccelerateTestCase, require_torchdata_stateful_dataloader
+from accelerate.test_utils.testing import AccelerateTestCase, require_datasets, require_torchdata_stateful_dataloader
 from accelerate.utils import is_torchdata_stateful_dataloader_available, set_seed
 
 
@@ -358,6 +359,107 @@ class DataLoaderTester(AccelerateTestCase):
         assert list(batch_sampler_shards[0]) == [[0, 1, 2], [5, 6, 7, 8], [12, 13]]
         assert list(batch_sampler_shards[1]) == [[3, 4], [9, 10, 11]]
 
+    def test_batch_sampler_varying_batch_size_even_batches(self):
+        """
+        Tests for the new dynamic batch size + even_batches=True support in BatchSamplerShard.
+        This covers the modifications to _iter_with_no_split when batch_size is None.
+        """
+        # --- Case 1: even number of batches, no padding needed ---
+        # 4 batches total, 2 processes -> each process sees 2 batches
+        batch_sampler = [[0, 1, 2], [3, 4], [5, 6, 7, 8], [9, 10, 11]]
+        shards = [BatchSamplerShard(batch_sampler, 2, i, even_batches=True) for i in range(2)]
+        assert list(shards[0]) == [[0, 1, 2], [5, 6, 7, 8]]
+        assert list(shards[1]) == [[3, 4], [9, 10, 11]]
+
+        # --- Case 2: odd number of batches -> process 1 needs padding from initial_data ---
+        # 5 batches, 2 processes: P0 gets batches 0,2,4; P1 gets 1,3 then is padded.
+        # Padding cycles initial_data (first num_processes batches = [[0,1,2],[3,4]]) from index 0,
+        # so P1's pad batch is initial_data[0] = [0,1,2].
+        batch_sampler = [[0, 1, 2], [3, 4], [5, 6, 7, 8], [9, 10, 11], [12, 13]]
+        shards = [BatchSamplerShard(batch_sampler, 2, i, even_batches=True) for i in range(2)]
+        assert list(shards[0]) == [[0, 1, 2], [5, 6, 7, 8], [12, 13]]
+        assert list(shards[1]) == [[3, 4], [9, 10, 11], [0, 1, 2]]
+
+        # --- Case 3: single batch (degenerate, dataset smaller than num_processes) ---
+        # 1 batch, 2 processes: initial_data=[B0], needs to double to length 2.
+        # P0 gets B0; P1 gets padding = initial_data[0] = B0.
+        batch_sampler = [[0, 1, 2]]
+        shards = [BatchSamplerShard(batch_sampler, 2, i, even_batches=True) for i in range(2)]
+        assert list(shards[0]) == [[0, 1, 2]]
+        assert list(shards[1]) == [[0, 1, 2]]
+
+        # --- Case 3b: 1 batch, 3 processes (cycle_index must reach beyond initial length after doubling) ---
+        # initial_data=[B0], doubled to [B0, B0]; P0 gets B0, P1 pads B0, P2 pads B0.
+        batch_sampler = [[0, 1, 2]]
+        shards = [BatchSamplerShard(batch_sampler, 3, i, even_batches=True) for i in range(3)]
+        assert list(shards[0]) == [[0, 1, 2]]
+        assert list(shards[1]) == [[0, 1, 2]]
+        assert list(shards[2]) == [[0, 1, 2]]
+
+        # --- Case 4: drop_last=True with dynamic batch size ---
+        # The last incomplete "round" of num_processes batches is dropped
+        batch_sampler = [[0, 1, 2], [3, 4], [5, 6, 7, 8], [9, 10, 11], [12, 13]]
+        # This is a raw list sampler; we need to set drop_last on the shard itself.
+        # drop_last is read via getattr(batch_sampler, "drop_last", False), defaults to False for a plain list.
+        # We test by wrapping in an object with drop_last=True.
+
+        class DropLastBatchSampler:
+            drop_last = True
+
+            def __init__(self, data):
+                self.data = data
+
+            def __iter__(self):
+                return iter(self.data)
+
+            def __len__(self):
+                return len(self.data)
+
+        dl = DropLastBatchSampler(batch_sampler)
+        shards = [BatchSamplerShard(dl, 2, i, even_batches=True) for i in range(2)]
+        # drop_last=True means the tail batch ([12, 13]) and its round are dropped entirely
+        assert list(shards[0]) == [[0, 1, 2], [5, 6, 7, 8]]
+        assert list(shards[1]) == [[3, 4], [9, 10, 11]]
+
+    def test_batch_sampler_varying_batch_size_many_processes(self):
+        """
+        Tests dynamic batch size sharding with num_processes > 2.
+        """
+        # 6 batches, 3 processes -> each gets 2 batches, no padding needed
+        batch_sampler = [[0], [1, 2], [3, 4, 5], [6], [7, 8], [9, 10, 11]]
+        shards = [BatchSamplerShard(batch_sampler, 3, i, even_batches=True) for i in range(3)]
+        assert list(shards[0]) == [[0], [6]]
+        assert list(shards[1]) == [[1, 2], [7, 8]]
+        assert list(shards[2]) == [[3, 4, 5], [9, 10, 11]]
+
+        # 7 batches, 3 processes -> needs padding to reach 9 total (3 rounds)
+        batch_sampler = [[0], [1, 2], [3, 4, 5], [6], [7, 8], [9, 10, 11], [12, 13]]
+        shards = [BatchSamplerShard(batch_sampler, 3, i, even_batches=True) for i in range(3)]
+        # batch indices: 0->p0, 1->p1, 2->p2, 3->p0, 4->p1, 5->p2, 6->p0(batch_to_yield=[12,13])
+        # After main loop with batch_to_yield not yielded: cycle padding fills rest of round 3
+        # cycle_index starts at 0: idx=7->p1 gets initial_data[0]=[0]; idx=8->p2 gets initial_data[1]=[1,2]
+        assert list(shards[0]) == [[0], [6], [12, 13]]
+        assert list(shards[1]) == [[1, 2], [7, 8], [0]]
+        assert list(shards[2]) == [[3, 4, 5], [9, 10, 11], [1, 2]]
+
+    def test_split_batches_validates_dynamic_batch_size(self):
+        """
+        Tests that split_batches=True raises ValueError when batch_size is None.
+        This validates the new combined validation in __init__.
+        """
+        # A plain list has no .batch_size attribute -> batch_size will be None
+        batch_sampler = [[0, 1, 2, 3], [4, 5, 6, 7]]
+        with pytest.raises(ValueError, match="split_batches"):
+            BatchSamplerShard(batch_sampler, 2, 0, split_batches=True, even_batches=True)
+
+    def test_split_batches_validates_non_divisible_batch_size(self):
+        """
+        Tests that split_batches=True raises ValueError when batch_size is not divisible by num_processes.
+        """
+        batch_sampler = BatchSampler(range(20), batch_size=3, drop_last=False)
+        with pytest.raises(ValueError, match="round multiple"):
+            BatchSamplerShard(batch_sampler, 2, 0, split_batches=True)
+
     def check_iterable_dataset_shards(
         self, dataset, seed, batch_size, drop_last=False, num_processes=2, split_batches=False
     ):
@@ -512,6 +614,23 @@ class DataLoaderTester(AccelerateTestCase):
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
         assert [t.tolist() for t in new_dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
+    def test_skip_first_batches_preserves_batch_metadata(self):
+        dataloader = prepare_data_loader(DataLoader(range(10), batch_size=2), num_processes=2, process_index=0)
+        resumed = skip_first_batches(dataloader, num_batches=1)
+
+        assert resumed.total_batch_size == 4
+        assert [batch.tolist() for batch in resumed] == [[4, 5], [8, 9]]
+        assert resumed.remainder == 2
+
+    def test_skip_first_batches_preserves_drop_last(self):
+        dataloader = prepare_data_loader(
+            DataLoader(range(10), batch_size=2, drop_last=True), num_processes=2, process_index=0
+        )
+        resumed = skip_first_batches(dataloader, num_batches=1)
+
+        assert [batch.tolist() for batch in resumed] == [[4, 5]]
+        assert resumed.remainder == -1
+
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
         for idx, _ in enumerate(dataloader):
@@ -543,6 +662,65 @@ class DataLoaderTester(AccelerateTestCase):
         assert batch_sampler.epoch == 0
         dataloader.set_epoch(1)
         assert batch_sampler.epoch == 1
+
+    def test_skip_first_batches_preserves_iteration(self):
+        # Regression test: skip_first_batches must carry the DataLoaderShard's iteration
+        # forward so that __iter__ does not reset the sampler epoch to 0 on resume.
+        def test_iteration(dataloader_cls):
+            dataset = list(range(16))
+            generator = torch.Generator()
+            batch_sampler = SimpleBatchSampler(dataset, batch_size=4, drop_last=False, generator=generator, seed=42)
+            dataloader = dataloader_cls(dataset, batch_sampler=batch_sampler)
+
+            dataloader.set_epoch(1)
+            assert dataloader.iteration == 1
+
+            new_dataloader = skip_first_batches(dataloader, num_batches=2)
+            # The new DataLoaderShard must inherit iteration=1, not default to 0.
+            assert new_dataloader.iteration == 1
+
+        test_iteration(DataLoaderShard)
+        test_iteration(DataLoaderDispatcher)
+
+    def test_skip_first_batches_does_not_reset_sampler_epoch(self):
+        # Regression test: skip_first_batches must preserve the original dataloader.batch_sampler.sampler's iteration.
+        def test_sampler_epoch(dataloader_cls):
+            dataset = list(range(16))
+            generator = torch.Generator()
+            sampler = SeedableRandomSampler(dataset)
+            batch_sampler = SimpleBatchSampler(sampler, batch_size=4, drop_last=False, generator=generator, seed=42)
+            dataloader = dataloader_cls(dataset, batch_sampler=batch_sampler)
+
+            dataloader.set_epoch(1)
+            new_dataloader = skip_first_batches(dataloader, num_batches=2)
+            next(iter(new_dataloader))
+
+            assert sampler.epoch == 1
+
+        test_sampler_epoch(DataLoaderShard)
+        test_sampler_epoch(DataLoaderDispatcher)
+
+    def test_skip_first_batches_preserves_configuration(self):
+        dataset = list(range(16))
+        for dataloader_cls in (DataLoaderShard, DataLoaderDispatcher):
+            dataloader = dataloader_cls(dataset, batch_size=4, _drop_last=True, _non_blocking=True)
+            new_dataloader = skip_first_batches(dataloader, num_batches=1)
+            assert new_dataloader._drop_last is True
+            assert new_dataloader._non_blocking is True
+
+    @require_datasets
+    def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):
+        """When n_shards == num_processes, native HF dataset sharding should be used."""
+        from datasets import Dataset
+
+        ds = Dataset.from_dict({"x": list(range(10))}).to_iterable_dataset(num_shards=2)
+        assert ds.n_shards == 2
+
+        dataloader = DataLoader(ds, batch_size=4)
+        result = prepare_data_loader(dataloader, num_processes=2, process_index=0, dispatch_batches=False)
+
+        # n_shards (2) == num_processes (2): should use native sharding, not IterableDatasetShard
+        assert not isinstance(result.dataset, IterableDatasetShard)
 
     def test_ensure_dataloader_gets_cleaned_up(self):
         # Ensure that the dataloader gets cleaned up properly
