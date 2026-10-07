@@ -120,6 +120,8 @@ def run_case(args):
     peak_reserved = torch.cuda.max_memory_reserved()
     if not torch.isfinite(torch.stack(losses)).all():
         raise RuntimeError(f"Non-finite training loss in {args.case}.")
+    # Timed memory stats are already captured. Release gradients before the untimed held-out evaluation.
+    optimizer.zero_grad(set_to_none=True)
     after = evaluate_quality()
     underlying_optimizer = getattr(optimizer, "optimizer", optimizer)
     result = {
