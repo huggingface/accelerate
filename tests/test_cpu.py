@@ -14,8 +14,13 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from accelerate import debug_launcher
 from accelerate.test_utils import require_cpu, test_ops, test_script
+from accelerate.test_utils.scripts.test_distributed_data_loop import (
+    test_dispatcher_small_datasets as dispatcher_small_datasets_test,
+)
 
 
 @require_cpu
@@ -25,3 +30,7 @@ class MultiCPUTester(unittest.TestCase):
 
     def test_ops(self):
         debug_launcher(test_ops.main)
+
+    @parameterized.expand([(2,), (4,)])
+    def test_dispatcher_small_datasets(self, num_processes):
+        debug_launcher(dispatcher_small_datasets_test, num_processes=num_processes)

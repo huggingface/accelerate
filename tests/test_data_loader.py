@@ -649,6 +649,32 @@ class DataLoaderTester(AccelerateTestCase):
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
 
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    def test_dispatcher_empty_dataset(self, split_batches, drop_last):
+        for size in (0, 1) if drop_last else (0,):
+            dataloader = DataLoaderDispatcher(
+                range(size), batch_size=4, split_batches=split_batches, drop_last=drop_last, _drop_last=drop_last
+            )
+            assert list(dataloader) == []
+            assert dataloader.iteration == 1
+            assert dataloader.end_of_dataloader
+            assert not dataloader.gradient_state.in_dataloader
+            assert list(dataloader) == []
+            assert dataloader.iteration == 2
+
+    def test_dispatcher_advances_empty_epoch(self):
+        class EmptyFirstEpoch(IterableDataset):
+            def set_epoch(self, epoch):
+                self.epoch = epoch
+
+            def __iter__(self):
+                yield from range(self.epoch)
+
+        dataloader = DataLoaderDispatcher(EmptyFirstEpoch(), batch_size=4)
+        assert list(dataloader) == []
+        assert [batch.tolist() for batch in dataloader] == [[0]]
+        assert dataloader.iteration == 2
+
     def test_set_epoch_in_batch_sampler(self):
         # Ensure that set_epoch gets propagated to custom batch samplers that accept it
         dataset = list(range(16))

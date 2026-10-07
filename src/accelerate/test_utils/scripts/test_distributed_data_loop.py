@@ -379,11 +379,44 @@ def test_skip_first_batches_preserves_metric_samples(accelerator):
     assert gathered == list(range(4, 10))
 
 
+def test_dispatcher_small_datasets():
+    accelerator = Accelerator(dataloader_config=DataLoaderConfiguration(dispatch_batches=True))
+    world_size = accelerator.num_processes
+    batch_size = world_size * 2
+    for split_batches in (False, True):
+        accelerator.dataloader_config.split_batches = split_batches
+        global_batch_size = batch_size if split_batches else batch_size * world_size
+        for drop_last in (False, True):
+            for size in (1, 0, world_size - 1, global_batch_size, global_batch_size + 1):
+                # Exercise nested tensor structures as well as tensor batches.
+                for nested in (False, True):
+                    values = [
+                        {"index": torch.tensor(i), "nested": [torch.tensor(i + 1)]} if nested else torch.tensor(i)
+                        for i in range(size)
+                    ]
+                    dataloader = accelerator.prepare(
+                        DataLoader(DummyIterableDataset(values), batch_size=batch_size, drop_last=drop_last)
+                    )
+                    gathered = []
+                    for batch in dataloader:
+                        indices = batch["index"] if nested else batch
+                        sizes = accelerator.gather(torch.tensor([len(indices)], device=accelerator.device))
+                        assert (sizes > 0).all(), sizes
+                        assert (sizes == sizes[0]).all(), sizes
+                        if nested:
+                            assert torch.equal(batch["nested"][0], indices + 1)
+                        gathered.extend(accelerator.gather_for_metrics(indices).tolist())
+                    expected_size = size // global_batch_size * global_batch_size if drop_last else size
+                    assert gathered == list(range(expected_size)), (split_batches, drop_last, size, gathered)
+                    assert not accelerator.gradient_state.in_dataloader
+
+
 def main():
     accelerator = create_accelerator()
     torch.manual_seed(accelerator.process_index)
 
     test_skip_first_batches_preserves_metric_samples(accelerator)
+    test_dispatcher_small_datasets()
 
     accelerator.print("Test that even_batches variable ensures uniform batches across processes")
     test_default_ensures_even_batch_sizes()

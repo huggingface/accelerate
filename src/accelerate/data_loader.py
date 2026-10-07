@@ -887,6 +887,12 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         self._stop_iteration = False
         first_batch = None
         next_batch, next_batch_info = self._fetch_batches(main_iterator)
+        if next_batch_info[0] is None and next_batch_info[1]:
+            self.end_of_dataloader = True
+            self._update_state_dict()
+            self.iteration += 1
+            self.end()
+            return
         batch_index = 0
         while not stop_iteration:
             batch, batch_info = next_batch, next_batch_info
@@ -925,10 +931,11 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
                     stop_iteration = True
 
             if not self._drop_last and stop_iteration and observed_batch_size % self.state.num_processes != 0:
-                # If the last batch is not complete, let's add the first batch to it.
-                batch = concatenate([batch, first_batch], dim=0)
-                # Batch size computation above is wrong, it's off by 1 so we fix it.
+                # Repeat the prefix if the entire dataset is smaller than the number of processes.
                 batch_size += 1
+                while observed_batch_size + find_batch_size(first_batch) < batch_size * self.state.num_processes:
+                    first_batch = concatenate([first_batch, first_batch], dim=0)
+                batch = concatenate([batch, first_batch], dim=0)
 
             data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
             batch = self.slice_fn(
