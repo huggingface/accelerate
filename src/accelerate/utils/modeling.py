@@ -1672,11 +1672,12 @@ def load_state_dict(checkpoint_file, device_map=None):
     weights can be fast-loaded directly on the GPU.
 
     Args:
-        checkpoint_file (`str`): The path to the checkpoint to load.
+        checkpoint_file (`str` or `os.PathLike`): The path to the checkpoint to load.
         device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
             A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
             name, once a given module name is inside, every submodule of it will be sent to the same device.
     """
+    checkpoint_file = os.fspath(checkpoint_file)
     if checkpoint_file.endswith(".safetensors"):
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
@@ -1699,6 +1700,12 @@ def load_state_dict(checkpoint_file, device_map=None):
         if device_map is None:
             return safe_load_file(checkpoint_file)
         else:
+            # Safetensors accepts device strings and indices, but not torch.device objects.
+            # Normalize before grouping so equivalent string/object entries share one load.
+            device_map = {
+                name: str(device) if isinstance(device, torch.device) else device
+                for name, device in device_map.items()
+            }
             # if we only have one device we can load everything directly
             if len(set(device_map.values())) == 1:
                 device = list(device_map.values())[0]

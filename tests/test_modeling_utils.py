@@ -18,6 +18,7 @@ import tempfile
 import unittest
 import warnings
 from collections import OrderedDict
+from pathlib import Path
 from typing import Optional
 
 import torch
@@ -26,7 +27,7 @@ from parameterized import parameterized
 from safetensors.torch import save_file
 
 from accelerate import init_empty_weights
-from accelerate.big_modeling import cpu_offload
+from accelerate.big_modeling import cpu_offload, load_checkpoint_and_dispatch
 from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_device,
@@ -481,6 +482,69 @@ class ModelingUtilsTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             self.shard_test_model(model, tmp_dir)
             load_checkpoint_in_model(model, tmp_dir)
+
+    @parameterized.expand([("bin",), ("safetensors",)])
+    def test_load_checkpoint_pathlike_file(self, extension):
+        class CheckpointPath(os.PathLike):
+            def __init__(self, path):
+                self.path = path
+
+            def __fspath__(self):
+                return self.path
+
+        source = ModelForTest().state_dict()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            filename = os.path.join(tmp_dir, f"model.{extension}")
+            if extension == "safetensors":
+                save_file(source, filename, metadata={"format": "pt"})
+            else:
+                torch.save(source, filename)
+            for path_type in (str, Path, CheckpointPath):
+                path = path_type(filename)
+                with self.subTest(path_type=path_type):
+                    actual = load_state_dict(path)
+                    for key in source:
+                        torch.testing.assert_close(actual[key], source[key])
+                    for loader in (load_checkpoint_in_model, load_checkpoint_and_dispatch):
+                        model = ModelForTest()
+                        loader(model, path, device_map={"": "cpu"})
+                        for key, value in model.state_dict().items():
+                            torch.testing.assert_close(value, source[key])
+
+    def test_load_checkpoint_pathlike_shards(self):
+        source = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.shard_test_model(source, tmp_dir)
+            for path in (Path(tmp_dir), Path(tmp_dir) / "weight_map.index.json"):
+                with self.subTest(path=path):
+                    model = ModelForTest()
+                    load_checkpoint_and_dispatch(model, path, device_map={"": "cpu"})
+                    for key, value in model.state_dict().items():
+                        torch.testing.assert_close(value, source.state_dict()[key])
+
+    def test_load_safetensors_torch_device_map(self):
+        source = nn.Sequential(nn.Linear(2, 2), nn.Linear(2, 2)).state_dict()
+        device_maps = (
+            {"": torch.device("cpu")},
+            {"0": torch.device("cpu"), "1": "cpu"},
+            {"0": torch.device("cpu"), "1": "disk"},
+            {"": "disk"},
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            filename = os.path.join(tmp_dir, "model.safetensors")
+            save_file(source, filename, metadata={"format": "pt"})
+            for device_map in device_maps:
+                original_map = device_map.copy()
+                with self.subTest(device_map=device_map):
+                    actual = load_state_dict(filename, device_map=device_map)
+                    for key in source:
+                        torch.testing.assert_close(actual[key], source[key])
+                    self.assertEqual(device_map, original_map)
+
+            model = nn.Sequential(nn.Linear(2, 2), nn.Linear(2, 2))
+            load_checkpoint_and_dispatch(model, filename, device_map={"": torch.device("cpu")})
+            for key, value in model.state_dict().items():
+                torch.testing.assert_close(value, source[key])
 
     @require_non_cpu
     def test_load_checkpoint_in_model_one_gpu(self):
