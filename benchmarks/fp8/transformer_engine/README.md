@@ -9,15 +9,53 @@ This repo provides scripts which compare native TransformerEngine model training
 * Single GPU training (`non_distributed.py`)
 * Multi-GPU training via DistributedDataParallelism (`ddp.py`)
 * Fully Sharded Data Parallelism (`fsdp.py`)
-* DeepSpeed ZeRO 1-3 (`deepspeed.py`)
+* DeepSpeed ZeRO 1-3 (`distrib_deepspeed.py`)
 
-To run them, it's recommended to use a docker image (see the attached `Dockerfile`) and not install `TransformerEngine` manually.
+The parity scripts compare native TE FP8 training with Accelerate TE FP8 training. They check that both paths produce
+the same accuracy and F1, rather than requiring FP8 to improve accuracy over an untrained model.
+
+`performance.py` separately measures single-GPU training with PyTorch BF16, native TE BF16, native TE FP8, and
+Accelerate TE FP8. It reports synchronized step time, samples/second, padded tokens/second, and peak allocated/reserved
+CUDA memory. Each case runs in a fresh process with the same seed, data, optimizer, and step budget. Warmup steps,
+model/data downloads, initialization, and evaluation are excluded from timing. The default is three repetitions;
+the JSON report contains every run and the median performance for each case.
+
+Accuracy and F1 are evaluated in BF16 on all 408 MRPC validation examples before and after the training steps.
+The report includes each case's metric differences from BF16. These are short training runs from a base BERT model,
+not a convergence study. FP8 should preserve model quality within a tolerance established by recipe validation;
+the reported deltas help identify regressions but do not establish that tolerance or prove quality preservation.
+Unchanged accuracy is not a performance failure. FP8 speedups also depend on model and GPU size, so the benchmark
+does not require FP8 to be faster.
+
+Use the attached Dockerfile, which defaults to NVIDIA's `26.09-py3` PyTorch container and upgrades TE to `2.20.2`. Build it
+from the repository root so the image tests your checked-out Accelerate source:
+
+```bash
+docker build -f benchmarks/fp8/transformer_engine/Dockerfile -t accelerate-te-benchmarks .
+docker run --gpus all --ipc=host --rm -it accelerate-te-benchmarks
+```
+
+For the single-GPU performance benchmark, expose exactly one FP8-capable GPU (for example, an L4). Driver
+requirements follow the selected NVIDIA container. The base image can be overridden with the `BASE_YEAR` and
+`BASE_MONTH` build arguments. `TE_VERSION` selects the TE release. The PyTorch extension is built with two workers;
+the build requires CUDA development headers and enough host RAM for compilation.
 
 ## Running:
 
-There are official Docker images located at `huggingface/accelerate:gpu-fp8-transformerengine-nightly` which can be used.
+Inside the image, the working directory is `benchmarks/fp8/transformer_engine`.
 
-You can run all scripts using the core `accelerate launch` command without any `accelerate config` being needed.
+Run the performance comparison and save its JSON report:
+
+```bash
+python performance.py --warmup-steps 10 --steps 100 --repeats 3 --output performance.json
+```
+
+Use `--model-name` and `--batch-size` to change the workload. Tokens/second includes padding because the GEMMs process
+the padded sequences. `speedup_vs_bf16` compares each case to PyTorch BF16; `speedup_vs_te_bf16` isolates the effect of
+FP8 on native TE layers.
+
+The distributed parity scripts require suitable launch configurations and multiple GPUs. They do not measure
+distributed throughput or communication performance.
 
 For single GPU, run it via `python`:
 
@@ -28,5 +66,7 @@ python non_distributed.py
 For the rest, run it via `accelerate launch`:
 
 ```bash
-accelerate launch ddp.py # or distrib_deepspeed.py, ddp.py
+accelerate launch --multi_gpu --num_processes 2 ddp.py
+accelerate launch --use_fsdp --num_processes 2 fsdp.py
+accelerate launch --use_deepspeed --num_processes 2 distrib_deepspeed.py
 ```

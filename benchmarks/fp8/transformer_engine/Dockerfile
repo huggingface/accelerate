@@ -1,15 +1,17 @@
-ARG BASE_YEAR=25
-ARG BASE_MONTH=03
+ARG BASE_YEAR=26
+ARG BASE_MONTH=09
 
 FROM nvcr.io/nvidia/pytorch:${BASE_YEAR}.${BASE_MONTH}-py3
 
-RUN pip install transformers evaluate datasets
-RUN git clone https://github.com/huggingface/accelerate.git
+ARG TE_VERSION=2.20.2
+RUN PIP_CONSTRAINT= MAX_JOBS=2 NVTE_BUILD_THREADS_PER_JOB=1 \
+    pip install --no-cache-dir --no-build-isolation --upgrade "transformer_engine[pytorch,core_cu13]==${TE_VERSION}"
 
-RUN cd accelerate && \
-    pip install -e .[deepspeed] && \
-    cd benchmarks/fp8
+RUN pip install --no-cache-dir transformers evaluate datasets scikit-learn
 
-RUN /bin/bash
+WORKDIR /workspace/accelerate
+COPY . .
+RUN pip install --no-cache-dir -e .[deepspeed]
 
-
+WORKDIR /workspace/accelerate/benchmarks/fp8/transformer_engine
+CMD ["/bin/bash"]
