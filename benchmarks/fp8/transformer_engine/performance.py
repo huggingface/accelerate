@@ -128,7 +128,7 @@ def run_case(args):
         "case": args.case,
         "task": args.task,
         "model_name": args.model_name,
-        "model_revision": getattr(model.config, "_commit_hash", None),
+        "model_revision": getattr(model.config, "_benchmark_revision", getattr(model.config, "_commit_hash", None)),
         "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
         "parameter_dtypes": sorted({str(parameter.dtype) for parameter in model.parameters()}),
         "te_linear_layers": sum(isinstance(module, te.Linear) for module in model.modules()),

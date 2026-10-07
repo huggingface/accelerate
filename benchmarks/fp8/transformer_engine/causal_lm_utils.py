@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from pathlib import Path
 
 import torch
 
@@ -40,11 +41,14 @@ class PackedDataset(torch.utils.data.Dataset):
 
 def get_training_utilities(args, accelerator):
     from datasets import load_dataset
+    from huggingface_hub import hf_hub_download
     from torch.optim import AdamW
     from torch.utils.data import DataLoader
     from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    # Resolve the checkpoint once and use that exact commit for both tokenizer and model weights.
+    revision = Path(hf_hub_download(args.model_name, "config.json")).parent.name
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name, revision=revision)
     corpus = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
 
     def packed_split(split):
@@ -65,7 +69,10 @@ def get_training_utilities(args, accelerator):
     )
     # Fixed evaluation batch size makes the quality comparison independent of the training batch sweep.
     eval_loader = DataLoader(PackedDataset(eval_tokens), batch_size=1)
-    model = AutoModelForCausalLM.from_pretrained(args.model_name, dtype=torch.float32, attn_implementation="sdpa")
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name, revision=revision, dtype=torch.float32, attn_implementation="sdpa"
+    )
+    model.config._benchmark_revision = revision
     model.config.use_cache = False
     # Fused AdamW avoids foreach's extra parameter-sized intermediates; all cases retain FP32 moments.
     optimizer = AdamW(model.parameters(), lr=args.learning_rate, fused=True)
