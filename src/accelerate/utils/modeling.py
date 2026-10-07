@@ -1964,60 +1964,79 @@ def load_checkpoint_in_model(
         checkpoint_files = sorted(list(set(index.values())))
         checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
 
-    # Logic for missing/unexpected keys goes here.
-
     offload_index = {}
     if offload_state_dict:
         state_dict_folder = tempfile.mkdtemp()
         state_dict_index = {}
 
     unexpected_keys = set()
+    loaded_keys = set()
     model_keys = set(model.state_dict().keys())
     buffer_names = [name for name, _ in model.named_buffers()]
     model_devices = {t.device for t in model.state_dict().values() if isinstance(t, torch.Tensor)}
     model_physical_devices = model_devices - {torch.device("meta")}
-    for checkpoint_file in checkpoint_files:
-        if device_map is None:
-            # exception for multi-device loading was made for the meta device in torch v2.7.0
-            # https://github.com/pytorch/pytorch/blob/v2.6.0/torch/distributed/checkpoint/state_dict.py#L557-L563
-            # https://github.com/pytorch/pytorch/blob/v2.7.0-rc2/torch/distributed/checkpoint/state_dict.py#L575-L587
-            if is_torch_version(">=", "2.2.0") and (
-                (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1
-            ):
-                from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
+    # PyTorch >= 2.7 also supports models combining meta tensors with one physical device.
+    use_distributed_checkpoint = (
+        device_map is None
+        and is_torch_version(">=", "2.2.0")
+        and ((is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1)
+    )
+    broadcast_from_rank0 = broadcast_from_rank0 and use_distributed_checkpoint and is_torch_version(">=", "2.4.0")
+    if use_distributed_checkpoint:
+        from torch.distributed.checkpoint.state_dict import (
+            StateDictOptions,
+            get_model_state_dict,
+            set_model_state_dict,
+        )
 
-                broadcast_from_rank0 &= is_torch_version(">=", "2.4.0")
-                loaded_checkpoint = (
-                    load_state_dict(checkpoint_file, device_map=device_map)
-                    if not broadcast_from_rank0 or dist.get_rank() == 0
-                    else {}
-                )
+        if strict:
+            # Use the same canonical names as the loader (e.g. without DDP/compiler prefixes).
+            # A sharded state dict avoids gathering full parameters just to inspect its keys.
+            model_keys = set(get_model_state_dict(model, options=StateDictOptions(full_state_dict=False)))
+
+    for checkpoint_file in checkpoint_files:
+        loaded_checkpoint = (
+            load_state_dict(checkpoint_file, device_map=device_map)
+            if not broadcast_from_rank0 or dist.get_rank() == 0
+            else {}
+        )
+        checkpoint_keys = set(loaded_checkpoint)
+        if strict:
+            if broadcast_from_rank0:
+                # Non-source ranks receive tensors through PyTorch, but still need their original keys.
+                key_list = [checkpoint_keys if dist.get_rank() == 0 else None]
+                dist.broadcast_object_list(key_list, src=0)
+                checkpoint_keys = key_list[0]
+            loaded_keys.update(checkpoint_keys)
+        if strict or device_map is not None:
+            unexpected_keys.update(
+                name for name in checkpoint_keys - model_keys if device_map is None or "SCB" not in name
+            )
+        if device_map is None:
+            if use_distributed_checkpoint:
                 set_model_state_dict(
                     model,
                     loaded_checkpoint,
                     options=StateDictOptions(
                         full_state_dict=full_state_dict,
-                        strict=strict,
+                        # Individual shards are incomplete; validate their union after loading.
+                        strict=False,
                         **({"broadcast_from_rank0": broadcast_from_rank0} if is_torch_version(">=", "2.4.0") else {}),
                     ),
                 )
             else:
-                loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
-                model.load_state_dict(loaded_checkpoint, strict=strict)
-
-            unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
+                model.load_state_dict(loaded_checkpoint, strict=False)
+            if not strict:
+                # The distributed loader may rewrite canonical keys to wrapper-prefixed names.
+                unexpected_keys.update(set(loaded_checkpoint) - model_keys)
         else:
-            loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
-
             for param_name, param in loaded_checkpoint.items():
                 # skip SCB parameter (for 8-bit serialization)
                 if "SCB" in param_name:
                     continue
 
                 if param_name not in model_keys:
-                    unexpected_keys.add(param_name)
-                    if not strict:
-                        continue  # Skip loading this parameter.
+                    continue  # Report unexpected keys after all shards have been loaded.
 
                 module_name = param_name
 
@@ -2097,6 +2116,18 @@ def load_checkpoint_in_model(
         shutil.rmtree(state_dict_folder)
 
     retie_parameters(model, tied_params)
+
+    if strict:
+        missing_keys = model_keys - loaded_keys
+        errors = []
+        if missing_keys:
+            errors.append(f"Missing key(s) in state_dict: {', '.join(sorted(missing_keys))}.")
+        if unexpected_keys:
+            errors.append(f"Unexpected key(s) in state_dict: {', '.join(sorted(unexpected_keys))}.")
+        if errors:
+            raise RuntimeError(
+                f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t" + "\n\t".join(errors)
+            )
 
 
 def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwargs: AutocastKwargs = None):
