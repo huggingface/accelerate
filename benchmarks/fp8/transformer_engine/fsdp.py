@@ -34,7 +34,7 @@ from transformers.models.bert import BertLayer
 from accelerate import Accelerator
 from accelerate import FullyShardedDataParallelPlugin as FSDPPlugin
 from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, set_seed
+from accelerate.utils import TERecipeKwargs, set_seed
 from accelerate.utils.transformer_engine import convert_model
 
 
@@ -79,7 +79,7 @@ def train_baseline():
 
     for _ in range(2):
         for batch in train_dataloader:
-            with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
+            with te.autocast(enabled=True, recipe=fp8_recipe):
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                     batch = batch.to(device)
                     outputs = model(**batch)
@@ -103,7 +103,7 @@ def train_baseline():
 
 def train_integration():
     FP8_RECIPE_KWARGS = {"fp8_format": "HYBRID", "amax_history_len": 32, "amax_compute_algo": "max"}
-    kwargs_handlers = [FP8RecipeKwargs(backend="TE", **FP8_RECIPE_KWARGS)]
+    kwargs_handlers = [TERecipeKwargs(**FP8_RECIPE_KWARGS)]
     AcceleratorState()._reset_state(True)
     fsdp_plugin = FSDPPlugin(
         auto_wrap_policy=FSDP_WRAP_POLICY,

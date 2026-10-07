@@ -106,9 +106,9 @@ def is_transformer_engine_available():
 
 def is_transformer_engine_mxfp8_available():
     if _is_package_available("transformer_engine", "transformer-engine"):
-        from transformer_engine.pytorch.fp8 import check_mxfp8_support
+        from transformer_engine.pytorch import is_mxfp8_available
 
-        return check_mxfp8_support()[0]
+        return is_mxfp8_available()
     return False
 
 
