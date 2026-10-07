@@ -622,6 +622,56 @@ class DataLoaderTester(AccelerateTestCase):
         assert [batch.tolist() for batch in resumed] == [[4, 5], [8, 9]]
         assert resumed.remainder == 2
 
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    def test_iterable_shard_global_metadata(self, split_batches, drop_last):
+        for num_processes in (2, 4):
+            batch_size = 8
+            total_batch_size = batch_size if split_batches else batch_size * num_processes
+            size = total_batch_size + 3
+            dataloader = prepare_data_loader(
+                DataLoader(SimpleIterableDataset(size), batch_size=batch_size, drop_last=drop_last),
+                num_processes=num_processes,
+                process_index=0,
+                split_batches=split_batches,
+                dispatch_batches=False,
+            )
+            assert dataloader.total_batch_size == total_batch_size
+            assert dataloader.total_dataset_length == size
+            for _ in dataloader:
+                assert dataloader.remainder == (-1 if drop_last else 3)
+            resumed = skip_first_batches(dataloader, num_batches=1)
+            assert resumed.total_batch_size == total_batch_size
+            assert resumed.total_dataset_length == size
+            for _ in resumed:
+                assert resumed.remainder == (-1 if drop_last else 3)
+
+    def test_iterable_shard_unsized_metadata(self):
+        dataloader = prepare_data_loader(
+            DataLoader(RandomIterableDataset(p_stop=0, max_length=5), batch_size=4),
+            num_processes=2,
+            process_index=0,
+            dispatch_batches=False,
+        )
+        assert dataloader.total_batch_size == 8
+        with pytest.raises(TypeError):
+            _ = dataloader.total_dataset_length
+        for _ in dataloader:
+            assert dataloader.remainder == -1
+
+    def test_dataloader_metadata_does_not_eagerly_read_length(self):
+        class MetadataIterableDataset(IterableDataset):
+            total_dataset_length = 5
+
+            def __iter__(self):
+                yield from range(5)
+
+            def __len__(self):
+                raise AssertionError("Explicit global length must take precedence")
+
+        dataloader = DataLoaderShard(MetadataIterableDataset(), batch_size=4)
+        for _ in dataloader:
+            assert dataloader.remainder == 1
+
     def test_skip_first_batches_preserves_drop_last(self):
         dataloader = prepare_data_loader(
             DataLoader(range(10), batch_size=2, drop_last=True), num_processes=2, process_index=0

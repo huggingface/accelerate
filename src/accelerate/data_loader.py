@@ -404,7 +404,9 @@ class DataLoaderStateMixin:
         self.reset()
         with suppress(Exception):
             if not self._drop_last:
-                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+                length = getattr(self.dataset, "total_dataset_length", None)
+                if length is None:
+                    length = self.total_dataset_length
                 self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 
@@ -641,6 +643,12 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
     @property
     def total_batch_size(self):
+        if isinstance(self.dataset, IterableDatasetShard):
+            return (
+                self.dataset.batch_size
+                if self.dataset.split_batches
+                else self.dataset.batch_size * self.dataset.num_processes
+            )
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
         while isinstance(batch_sampler, SkipBatchSampler):
             batch_sampler = batch_sampler.batch_sampler
@@ -652,10 +660,12 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
     @property
     def total_dataset_length(self):
-        if hasattr(self.dataset, "total_length"):
-            return self.dataset.total_length
-        else:
-            return len(self.dataset)
+        dataset = self.dataset.dataset if isinstance(self.dataset, IterableDatasetShard) else self.dataset
+        if hasattr(dataset, "total_dataset_length"):
+            return dataset.total_dataset_length
+        if hasattr(dataset, "total_length"):
+            return dataset.total_length
+        return len(dataset)
 
     def get_sampler(self):
         return get_sampler(self)

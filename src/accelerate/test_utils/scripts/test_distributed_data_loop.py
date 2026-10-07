@@ -379,11 +379,38 @@ def test_skip_first_batches_preserves_metric_samples(accelerator):
     assert gathered == list(range(4, 10))
 
 
+def test_iterable_shard_metric_samples():
+    class SizedIterableDataset(DummyIterableDataset):
+        def __len__(self):
+            return len(self.data)
+
+    accelerator = Accelerator(dataloader_config=DataLoaderConfiguration(dispatch_batches=False))
+    batch_size = accelerator.num_processes * 2
+    for split_batches in (False, True):
+        accelerator.dataloader_config.split_batches = split_batches
+        global_batch_size = batch_size if split_batches else batch_size * accelerator.num_processes
+        for size in (1, global_batch_size, global_batch_size + 3):
+            for skip_batches in (0, 1):
+                dataloader = accelerator.prepare(DataLoader(SizedIterableDataset(range(size)), batch_size=batch_size))
+                if skip_batches:
+                    dataloader = accelerator.skip_first_batches(dataloader, num_batches=skip_batches)
+                gathered = []
+                for batch in dataloader:
+                    gathered.extend(accelerator.gather_for_metrics(batch).tolist())
+                assert gathered == list(range(min(global_batch_size * skip_batches, size), size)), (
+                    split_batches,
+                    size,
+                    skip_batches,
+                    gathered,
+                )
+
+
 def main():
     accelerator = create_accelerator()
     torch.manual_seed(accelerator.process_index)
 
     test_skip_first_batches_preserves_metric_samples(accelerator)
+    test_iterable_shard_metric_samples()
 
     accelerator.print("Test that even_batches variable ensures uniform batches across processes")
     test_default_ensures_even_batch_sizes()
