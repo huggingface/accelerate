@@ -576,6 +576,10 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
         current_env["ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
     if args.offload_param_device is not None:
         current_env["ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
+    if args.offload_optimizer_nvme_path is not None:
+        current_env["ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_NVME_PATH"] = str(args.offload_optimizer_nvme_path)
+    if args.offload_param_nvme_path is not None:
+        current_env["ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH"] = str(args.offload_param_nvme_path)
     if args.zero3_init_flag is not None:
         current_env["ACCELERATE_DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
     if args.zero3_save_16bit_model is not None:

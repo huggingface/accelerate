@@ -18,15 +18,18 @@ import subprocess
 import unittest
 
 import pytest
+import yaml
 
 from accelerate.commands.launch import (
     CHILD_STDERR_CHUNK_SIZE,
     CHILD_STDERR_TAIL_CHUNKS,
+    _validate_launch_command,
     launch_command_parser,
     simple_launcher,
 )
 from accelerate.launchers import notebook_launcher
-from accelerate.utils.launch import prepare_multi_gpu_env
+from accelerate.utils import DeepSpeedPlugin
+from accelerate.utils.launch import prepare_deepspeed_cmd_env, prepare_multi_gpu_env
 
 
 class TestPrepareMultiGpuEnv(unittest.TestCase):
@@ -146,3 +149,77 @@ def test_notebook_launcher_sets_accelerate_mixed_precision(monkeypatch):
 def test_notebook_launcher_invalid_precision_error():
     with pytest.raises(ValueError, match="Unknown mixed_precision mode"):
         notebook_launcher(lambda: None, num_processes=1, mixed_precision="bogus")
+
+
+@pytest.mark.parametrize("source", ["cli", "config", "cli_override"])
+@pytest.mark.parametrize("num_machines, launcher", [(1, "pdsh"), (2, "standard"), (2, "pdsh")])
+def test_deepspeed_nvme_paths_reach_plugin(tmp_path, monkeypatch, source, num_machines, launcher):
+    optimizer_path = "/mnt/Fast SSD/Optimizer"
+    parameter_path = "/mnt/Fast SSD/Parameters"
+    config = {
+        "distributed_type": "DEEPSPEED",
+        "mixed_precision": "no",
+        "num_processes": 2,
+        "deepspeed_config": {
+            "zero_stage": 3,
+            "zero3_init_flag": False,
+            "offload_optimizer_device": "nvme",
+            "offload_param_device": "nvme",
+        },
+    }
+    if source != "cli":
+        config["deepspeed_config"].update(
+            offload_optimizer_nvme_path=optimizer_path,
+            offload_param_nvme_path=parameter_path,
+        )
+    config_file = tmp_path / "accelerate.yaml"
+    config_file.write_text(yaml.safe_dump(config))
+    argv = [
+        "--config_file",
+        str(config_file),
+        "--num_machines",
+        str(num_machines),
+        "--machine_rank",
+        "0",
+        "--main_process_ip",
+        "127.0.0.1",
+        "--deepspeed_multinode_launcher",
+        launcher,
+    ]
+    if source == "cli_override":
+        optimizer_path += "/Override"
+        parameter_path += "/Override"
+    if source != "config":
+        argv += [
+            "--offload_optimizer_nvme_path",
+            optimizer_path,
+            "--offload_param_nvme_path",
+            parameter_path,
+        ]
+    monkeypatch.setattr("accelerate.utils.launch.is_port_in_use", lambda port: False)
+    monkeypatch.setenv("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_NVME_PATH", "/inherited/optimizer")
+    monkeypatch.setenv("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH", "/inherited/parameters")
+    monkeypatch.delenv("ACCELERATE_DEEPSPEED_CONFIG_FILE", raising=False)
+    args, defaults, _ = _validate_launch_command(launch_command_parser().parse_args([*argv, "train.py"]))
+    args.deepspeed_fields_from_accelerate_config = list(defaults.deepspeed_config)
+    _, env = prepare_deepspeed_cmd_env(args)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    zero_config = DeepSpeedPlugin().deepspeed_config["zero_optimization"]
+    assert zero_config["offload_optimizer"]["nvme_path"] == optimizer_path
+    assert zero_config["offload_param"]["nvme_path"] == parameter_path
+
+
+def test_deepspeed_unspecified_nvme_paths_preserve_environment(monkeypatch):
+    monkeypatch.setattr("accelerate.utils.launch.is_port_in_use", lambda port: False)
+    args = launch_command_parser().parse_args(
+        ["--num_processes", "2", "--num_machines", "1", "--mixed_precision", "no", "train.py"]
+    )
+    args.deepspeed_fields_from_accelerate_config = []
+    optimizer_var = "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_NVME_PATH"
+    parameter_var = "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH"
+    monkeypatch.setenv(optimizer_var, "/inherited/Optimizer")
+    monkeypatch.delenv(parameter_var, raising=False)
+    _, env = prepare_deepspeed_cmd_env(args)
+    assert env[optimizer_var] == "/inherited/Optimizer"
+    assert parameter_var not in env
