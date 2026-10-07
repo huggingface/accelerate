@@ -121,6 +121,7 @@ def run_case(args):
     if not torch.isfinite(torch.stack(losses)).all():
         raise RuntimeError(f"Non-finite training loss in {args.case}.")
     after = evaluate_quality()
+    underlying_optimizer = getattr(optimizer, "optimizer", optimizer)
     result = {
         "case": args.case,
         "task": args.task,
@@ -129,6 +130,15 @@ def run_case(args):
         "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
         "parameter_dtypes": sorted({str(parameter.dtype) for parameter in model.parameters()}),
         "te_linear_layers": sum(isinstance(module, te.Linear) for module in model.modules()),
+        "optimizer": type(underlying_optimizer).__name__,
+        "optimizer_state_dtypes": sorted(
+            {
+                str(value.dtype)
+                for state in underlying_optimizer.state.values()
+                for value in state.values()
+                if torch.is_tensor(value)
+            }
+        ),
         "batch_size": args.batch_size,
         "sequence_length": args.sequence_length if args.task == "causal-lm" else None,
         "warmup_steps": args.warmup_steps,
@@ -235,6 +245,9 @@ def main():
         for run, reference in zip(result["runs"], results["bf16"]["runs"]):
             if (run["samples"], run["padded_tokens"]) != (reference["samples"], reference["padded_tokens"]):
                 raise RuntimeError(f"Measured workloads differ between {case} and BF16.")
+            for key in ("model_revision", "parameter_count", "parameter_dtypes", "optimizer_state_dtypes"):
+                if run[key] != reference[key]:
+                    raise RuntimeError(f"{key} differs between {case} and BF16.")
         result["speedup_vs_bf16"] = results["bf16"]["median"]["step_ms"] / result["median"]["step_ms"]
         result["metric_deltas_vs_bf16"] = {
             metric: [
