@@ -14,7 +14,7 @@ This repo provides scripts which compare native TransformerEngine model training
 The parity scripts compare native TE FP8 training with Accelerate TE FP8 training. They check that both paths produce
 the same accuracy and F1, rather than requiring FP8 to improve accuracy over an untrained model.
 
-`performance.py` separately measures single-GPU training with PyTorch BF16, native TE BF16, native TE FP8, and
+`performance.py` separately measures single-GPU training with PyTorch BF16, Accelerate BF16, native TE BF16, native TE FP8, and
 Accelerate TE FP8. It reports synchronized step time, samples/second, padded tokens/second, and peak allocated/reserved
 CUDA memory. Each case runs in a fresh process with the same seed, data, optimizer, and step budget. Warmup steps,
 model/data downloads, initialization, and evaluation are excluded from timing. The default is three repetitions;
@@ -53,6 +53,7 @@ python performance.py --warmup-steps 10 --steps 100 --repeats 3 --output perform
 Use `--model-name` and `--batch-size` to change the workload. Tokens/second includes padding because the GEMMs process
 the padded sequences. `speedup_vs_bf16` compares each case to PyTorch BF16; `speedup_vs_te_bf16` isolates the effect of
 FP8 on native TE layers.
+`speedup_vs_accelerate_bf16` compares Accelerate FP8 with Accelerate BF16, including the same output conversion wrapper.
 
 For a causal-LM workload such as Qwen2.5-7B, use packed WikiText sequences:
 

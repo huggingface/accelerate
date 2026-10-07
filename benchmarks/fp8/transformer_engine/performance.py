@@ -26,7 +26,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 
-CASES = ("bf16", "te_bf16", "te_fp8", "accelerate_fp8")
+CASES = ("bf16", "accelerate_bf16", "te_bf16", "te_fp8", "accelerate_fp8")
 
 
 def run_case(args):
@@ -77,7 +77,7 @@ def run_case(args):
         mapping = {param: new_params[name] for name, param in old_params.items()}
         for group in optimizer.param_groups:
             group["params"] = [mapping[param] for param in group["params"]]
-    if args.case == "accelerate_fp8":
+    if args.case in ("accelerate_bf16", "accelerate_fp8"):
         model, optimizer = accelerator.prepare(model, optimizer)
     else:
         model.to(accelerator.device)
@@ -125,6 +125,10 @@ def run_case(args):
         "case": args.case,
         "task": args.task,
         "model_name": args.model_name,
+        "model_revision": getattr(model.config, "_commit_hash", None),
+        "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
+        "parameter_dtypes": sorted({str(parameter.dtype) for parameter in model.parameters()}),
+        "te_linear_layers": sum(isinstance(module, te.Linear) for module in model.modules()),
         "batch_size": args.batch_size,
         "sequence_length": args.sequence_length if args.task == "causal-lm" else None,
         "warmup_steps": args.warmup_steps,
@@ -241,6 +245,9 @@ def main():
         }
     results["te_fp8"]["speedup_vs_te_bf16"] = (
         results["te_bf16"]["median"]["step_ms"] / results["te_fp8"]["median"]["step_ms"]
+    )
+    results["accelerate_fp8"]["speedup_vs_accelerate_bf16"] = (
+        results["accelerate_bf16"]["median"]["step_ms"] / results["accelerate_fp8"]["median"]["step_ms"]
     )
     serialized = json.dumps(results, indent=2) + "\n"
     if args.output is not None:
