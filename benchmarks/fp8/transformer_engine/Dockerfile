@@ -8,7 +8,7 @@ RUN PIP_CONSTRAINT= MAX_JOBS=2 NVTE_BUILD_THREADS_PER_JOB=1 \
     pip install --no-cache-dir --no-build-isolation --upgrade "transformer_engine[pytorch,core_cu13]==${TE_VERSION}"
 
 # The container pins Datasets 4.7, whose VideoReader import is incompatible with its newer TorchVision.
-RUN PIP_CONSTRAINT= pip install --no-cache-dir transformers evaluate "datasets>=4.8.5" scikit-learn
+RUN PIP_CONSTRAINT= pip install --no-cache-dir transformers evaluate "datasets>=5.1.0" scikit-learn
 
 WORKDIR /workspace/accelerate
 COPY . .
