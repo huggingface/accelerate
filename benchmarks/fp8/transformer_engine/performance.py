@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Measure single-GPU BF16/FP8 training performance and report MRPC quality separately."""
+"""Measure single-GPU BF16/FP8 training performance and report held-out quality separately."""
 
 import argparse
 import json
@@ -51,9 +51,24 @@ def run_case(args):
         mixed_precision="fp8" if args.case == "accelerate_fp8" else "bf16",
         kwargs_handlers=[TERecipeKwargs(**recipe_kwargs)] if args.case == "accelerate_fp8" else [],
     )
-    model, optimizer, train_loader, eval_loader, scheduler = get_training_utilities(
-        args.model_name, batch_size=args.batch_size, accelerator=accelerator
-    )
+    if args.task == "causal-lm":
+        from causal_lm_utils import evaluate_model as evaluate_causal_lm
+        from causal_lm_utils import get_training_utilities as get_causal_lm_utilities
+
+        model, optimizer, train_loader, eval_loader, scheduler = get_causal_lm_utilities(args, accelerator)
+
+        def evaluate_quality():
+            return evaluate_causal_lm(model, eval_loader)
+
+    else:
+        model, optimizer, train_loader, eval_loader, scheduler = get_training_utilities(
+            args.model_name, batch_size=args.batch_size, accelerator=accelerator
+        )
+        metric = evaluate.load("glue", "mrpc")
+
+        def evaluate_quality():
+            return evaluate_model(model, eval_loader, metric)
+
     if args.case in ("te_bf16", "te_fp8"):
         old_params = get_named_parameters(model)
         with torch.no_grad():
@@ -67,8 +82,7 @@ def run_case(args):
     else:
         model.to(accelerator.device)
 
-    metric = evaluate.load("glue", "mrpc")
-    before = evaluate_model(model, eval_loader, metric)
+    before = evaluate_quality()
     recipe = DelayedScaling(fp8_format=Format.HYBRID, amax_history_len=32, amax_compute_algo="max")
     # Reset after initialization so dropout and shuffled batches start from the same seed in every case.
     set_seed(42)
@@ -98,7 +112,7 @@ def run_case(args):
         scheduler.step()
         losses.append(loss.detach())
         if step >= args.warmup_steps:
-            samples += batch["labels"].numel()
+            samples += batch["input_ids"].shape[0]
             tokens += batch["input_ids"].numel()
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - started
@@ -106,11 +120,13 @@ def run_case(args):
     peak_reserved = torch.cuda.max_memory_reserved()
     if not torch.isfinite(torch.stack(losses)).all():
         raise RuntimeError(f"Non-finite training loss in {args.case}.")
-    after = evaluate_model(model, eval_loader, metric)
+    after = evaluate_quality()
     result = {
         "case": args.case,
+        "task": args.task,
         "model_name": args.model_name,
         "batch_size": args.batch_size,
+        "sequence_length": args.sequence_length if args.task == "causal-lm" else None,
         "warmup_steps": args.warmup_steps,
         "steps": args.steps,
         "samples": samples,
@@ -139,16 +155,24 @@ def run_case(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model-name", default="bert-base-cased")
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--task", choices=("mrpc", "causal-lm"), default="mrpc")
+    parser.add_argument("--model-name")
+    parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--sequence-length", type=int, default=1024)
+    parser.add_argument("--eval-sequences", type=int, default=8)
+    parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--warmup-steps", type=int, default=10)
     parser.add_argument("--steps", type=int, default=100)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--case", choices=CASES, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    args.model_name = args.model_name or ("Qwen/Qwen2.5-7B" if args.task == "causal-lm" else "bert-base-cased")
+    args.batch_size = args.batch_size if args.batch_size is not None else (1 if args.task == "causal-lm" else 16)
     if min(args.batch_size, args.steps, args.repeats) < 1 or args.warmup_steps < 1:
         parser.error("Batch size, steps, repeats, and warmup steps must be positive.")
+    if args.sequence_length < 2 or args.sequence_length % 16 or args.eval_sequences < 1 or args.learning_rate <= 0:
+        parser.error("Sequence length must be a positive multiple of 16; evaluation count and learning rate positive.")
     if args.case:
         if args.output is None:
             parser.error("A worker case requires --output.")
@@ -170,6 +194,14 @@ def main():
                         case,
                         "--model-name",
                         args.model_name,
+                        "--task",
+                        args.task,
+                        "--sequence-length",
+                        str(args.sequence_length),
+                        "--eval-sequences",
+                        str(args.eval_sequences),
+                        "--learning-rate",
+                        str(args.learning_rate),
                         "--batch-size",
                         str(args.batch_size),
                         "--warmup-steps",
@@ -205,7 +237,7 @@ def main():
                 run["trained_metrics"][metric] - reference["trained_metrics"][metric]
                 for run, reference in zip(result["runs"], results["bf16"]["runs"])
             ]
-            for metric in ("accuracy", "f1")
+            for metric in results["bf16"]["runs"][0]["trained_metrics"]
         }
     results["te_fp8"]["speedup_vs_te_bf16"] = (
         results["te_bf16"]["median"]["step_ms"] / results["te_fp8"]["median"]["step_ms"]

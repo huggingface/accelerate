@@ -54,6 +54,25 @@ Use `--model-name` and `--batch-size` to change the workload. Tokens/second incl
 the padded sequences. `speedup_vs_bf16` compares each case to PyTorch BF16; `speedup_vs_te_bf16` isolates the effect of
 FP8 on native TE layers.
 
+For a causal-LM workload such as Qwen2.5-7B, use packed WikiText sequences:
+
+```bash
+python performance.py --task causal-lm --model-name Qwen/Qwen2.5-7B \
+  --batch-size 1 --sequence-length 1024 --warmup-steps 10 --steps 50 \
+  --repeats 3 --output qwen7b-performance.json
+```
+
+This mode trains all parameters with FP32 weights/gradients and fused AdamW with FP32 moments, while matrix
+multiplications use BF16 or TE FP8. It reports held-out loss, perplexity, and next-token accuracy before/after training
+on eight fixed validation sequences, evaluated in BF16. All cases use the same packed batches, SDPA attention,
+learning rate (default `1e-5`), and optimizer. `--eval-sequences`, `--sequence-length`, and `--learning-rate` are configurable.
+No attention fusion or optimizer precision changes are added only to FP8 cases.
+
+Qwen2.5-7B's 7.61B parameters require approximately 122 GB for FP32 parameters, gradients, and AdamW moments alone;
+activations, quantization buffers, and CUDA workspaces need additional memory. Start with batch size 1 on an H200
+141 GB and check measured memory before increasing the batch or sequence length. A single H100 80 GB cannot hold
+this full optimizer setup. The short-run quality report is a smoke check, not convergence validation.
+
 The distributed parity scripts require suitable launch configurations and multiple GPUs. They do not measure
 distributed throughput or communication performance.
 
