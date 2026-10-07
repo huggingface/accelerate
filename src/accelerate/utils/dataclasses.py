@@ -1835,15 +1835,22 @@ class FullyShardedDataParallelPlugin:
                 raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
 
         if self.sharding_strategy is not None:
-            # We cannot properly detect all of the cases, as by default `args.fsdp_sharding_strategy` is set to `fully_shard`
-            # Therefore we issue a warning only if the user has explicitly set it inside their plugin
+            # Warn when the deprecated strategy is explicitly supplied to the plugin.
             _fsdp2_warnings.add(
                 "sharding_strategy is deprecated in favor of reshard_after_forward. "
                 "This will be removed in a future version of Accelerate."
             )
         if self.fsdp_version == 1:
             if self.sharding_strategy is None:
-                self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY", "FULL_SHARD")
+                self.sharding_strategy = os.environ.get(env_prefix + "SHARDING_STRATEGY")
+            # Apply the legacy default only when neither setting was supplied. Otherwise it
+            # would mask `reshard_after_forward` when Accelerator constructs the FSDP wrapper.
+            if (
+                self.sharding_strategy is None
+                and self.reshard_after_forward is None
+                and env_prefix + "RESHARD_AFTER_FORWARD" not in os.environ
+            ):
+                self.sharding_strategy = "FULL_SHARD"
             if isinstance(self.sharding_strategy, str):
                 if self.sharding_strategy.upper() in FSDP_SHARDING_STRATEGY:
                     self.sharding_strategy = FSDP_SHARDING_STRATEGY.index(self.sharding_strategy.upper()) + 1

@@ -17,6 +17,7 @@ import functools
 import os
 import tempfile
 from contextlib import nullcontext
+from unittest.mock import patch
 
 import torch
 from transformers import AutoModel
@@ -171,6 +172,54 @@ class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
 
         assert scaler.state_dict() == expected
         assert optimizer.state
+
+
+class FSDP1ShardingStrategyTest(AccelerateTestCase):
+    def setUp(self):
+        super().setUp()
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        for key in list(os.environ):
+            if key.startswith("FSDP_"):
+                del os.environ[key]
+
+    def test_replacement_strategy_reaches_fsdp_wrapper(self):
+        from torch.distributed.fsdp import ShardingStrategy
+
+        captured = {}
+
+        class RecordingFSDP(torch.nn.Module):
+            def __init__(self, module, **kwargs):
+                super().__init__()
+                self.module = module
+                captured.update(kwargs)
+
+        accelerator = Accelerator(cpu=True)
+        plugin = FullyShardedDataParallelPlugin(
+            fsdp_version=1,
+            reshard_after_forward="SHARD_GRAD_OP",
+            sync_module_states=False,
+            cpu_ram_efficient_loading=False,
+        )
+        with (
+            patch.object(accelerator.state, "distributed_type", DistributedType.FSDP),
+            patch.object(accelerator.state, "fsdp_plugin", plugin, create=True),
+            patch("torch.distributed.fsdp.fully_sharded_data_parallel.FullyShardedDataParallel", RecordingFSDP),
+        ):
+            accelerator.prepare_model(torch.nn.Linear(2, 2))
+        assert captured["sharding_strategy"] == ShardingStrategy.SHARD_GRAD_OP
+
+    def test_default_strategy_is_full_shard(self):
+        from torch.distributed.fsdp import ShardingStrategy
+
+        plugin = FullyShardedDataParallelPlugin(fsdp_version=1)
+        assert plugin.sharding_strategy == ShardingStrategy.FULL_SHARD
+
+    @require_fsdp2
+    def test_fsdp2_default_still_reshards(self):
+        plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+        assert plugin.reshard_after_forward is True
 
 
 @require_non_cpu

@@ -539,14 +539,14 @@ def launch_command_parser(subparsers=None):
     fsdp_args.add_argument(
         "--fsdp_sharding_strategy",
         type=str,
-        default="FULL_SHARD",
+        default=None,
         help="FSDP's sharding strategy. (useful only when `use_fsdp` flag is passed and `fsdp_version=1`).",
     )
     fsdp_args.add_argument(
         "--fsdp_reshard_after_forward",
         type=str,
-        default="true",
-        help="FSDP's Reshard After Forward Strategy. (useful only when `use_fsdp` flag is passed). Supports either boolean (FSDP2) or `FULL_SHARD | SHARD_GRAD_OP | NO_RESHARD` (FSDP1).",
+        default=None,
+        help="FSDP's Reshard After Forward Strategy. (useful only when `use_fsdp` flag is passed). Supports either boolean (FSDP2) or `FULL_SHARD | SHARD_GRAD_OP | NO_SHARD` (FSDP1). Defaults to `FULL_SHARD` for FSDP1 and `true` for FSDP2.",
     )
     fsdp_args.add_argument(
         "--fsdp_auto_wrap_policy",
