@@ -658,6 +658,20 @@ class DataLoaderTester(AccelerateTestCase):
         for _ in dataloader:
             assert dataloader.remainder == -1
 
+    def test_custom_dataloader_state_mixin_without_global_length(self):
+        class CustomDataLoader(DataLoaderStateMixin):
+            def __init__(self):
+                self.dataset = range(5)
+                self.total_batch_size = 4
+                self._drop_last = False
+                self.gradient_state = GradientState()
+
+        dataloader = CustomDataLoader()
+        dataloader.begin()
+        assert dataloader.remainder == 1
+        dataloader.end()
+        assert not dataloader.gradient_state.in_dataloader
+
     def test_dataloader_metadata_does_not_eagerly_read_length(self):
         class MetadataIterableDataset(IterableDataset):
             total_dataset_length = 5

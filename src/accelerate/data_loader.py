@@ -406,7 +406,9 @@ class DataLoaderStateMixin:
             if not self._drop_last:
                 length = getattr(self.dataset, "total_dataset_length", None)
                 if length is None:
-                    length = self.total_dataset_length
+                    length = getattr(self, "total_dataset_length", None)
+                if length is None:
+                    length = len(self.dataset)
                 self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 
