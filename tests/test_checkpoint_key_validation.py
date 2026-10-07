@@ -28,6 +28,7 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 
 from accelerate.state import PartialState
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import is_torch_version
 from accelerate.utils.modeling import load_checkpoint_in_model
 
@@ -85,7 +86,7 @@ def broadcast_checkpoint_worker(rank, directory):
         dist.destroy_process_group()
 
 
-class CheckpointKeyValidationTest(unittest.TestCase):
+class CheckpointKeyValidationTest(AccelerateTestCase):
     def setUp(self):
         PartialState(cpu=True)
 
