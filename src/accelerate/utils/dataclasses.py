@@ -408,10 +408,7 @@ class TERecipeKwargs(KwargsHandler):
     def __post_init__(self):
         env_prefix = "ACCELERATE_FP8_"
         if not is_transformer_engine_available():
-            raise ImportError(
-                "TransformerEngine is not available. Please install NVIDIA Transformer Engine >= 2.9.0 "
-                "(or Intel Transformer Engine on HPU), or use a different backend."
-            )
+            raise ImportError("Please install a supported TransformerEngine version or use a different backend.")
         if self.use_autocast_during_eval is None:
             self.use_autocast_during_eval = parse_flag_from_env(env_prefix + "USE_AUTOCAST_DURING_EVAL")
         if self.margin is None:

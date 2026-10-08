@@ -66,7 +66,7 @@ class TestTransformerEngineAvailability(unittest.TestCase):
                     if not expected:
                         # Unsupported versions must never import TE's GPU extension.
                         self.assertFalse(imports.is_transformer_engine_mxfp8_available())
-                        with self.assertRaisesRegex(ImportError, r">= 2\.9\.0"):
+                        with self.assertRaisesRegex(ImportError, "supported TransformerEngine version"):
                             TERecipeKwargs()
         with (
             patch.object(imports, "is_hpu_available", return_value=False),
