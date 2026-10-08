@@ -320,10 +320,16 @@ class FeatureExamplesTests(TempDirTestCase):
                 for dataloader in (train_dataloader, eval_dataloader):
                     # Models shift these labels internally; the collator must not.
                     batches = list(dataloader)
-                    rows = [row for batch in batches for row in batch["input_ids"].tolist()]
+                    input_ids = [row for batch in batches for row in batch["input_ids"].tolist()]
                     labels = [row for batch in batches for row in batch["labels"].tolist()]
-                    assert [row[:length] for row, length in zip(rows, (3, 2))] == [[1, 2, 3], [1, 2]]
-                    assert labels == [[token if token != 0 else -100 for token in row] for row in rows]
+
+                    unpadded_input_ids = [
+                        [token for token in row if token != tokenizer.pad_token_id] for row in input_ids
+                    ]
+                    assert unpadded_input_ids == [[1, 2, 3], [1, 2]]
+                    assert labels == [
+                        [token if token != tokenizer.pad_token_id else -100 for token in row] for row in input_ids
+                    ]
 
     def test_local_sgd(self):
         testargs = ["examples/by_feature/local_sgd.py"]

@@ -190,9 +190,9 @@ def test_checkpoint_resume(tmp_path):
     assert len(uninterrupted["losses"]) == 10
     assert len(partial["losses"]) == len(resumed["losses"]) == 5
 
-    expected_ids = [list(range(start, start + 8)) for start in range(0, 80, 8)]
-    assert uninterrupted["sample_ids"] == expected_ids
-    assert partial["sample_ids"] + resumed["sample_ids"] == expected_ids
+    expected_sample_ids = [list(range(start, start + 8)) for start in range(0, 80, 8)]
+    assert uninterrupted["sample_ids"] == expected_sample_ids
+    assert partial["sample_ids"] + resumed["sample_ids"] == expected_sample_ids
 
     # Did the learning-rate schedule continue from the saved point?
     assert partial["learning_rates"] + resumed["learning_rates"] == uninterrupted["learning_rates"]

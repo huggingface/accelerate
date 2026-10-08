@@ -69,11 +69,11 @@ def main():
     if args.resume_from_checkpoint:
         accelerator.load_state(args.resume_from_checkpoint)
         # Each saved update consumed this many local microbatches.
-        resume_batch = checkpoint_update * args.gradient_accumulation_steps
-        dataloader = accelerator.skip_first_batches(dataloader, resume_batch)
+        num_batches_to_skip = checkpoint_update * args.gradient_accumulation_steps
+        dataloader = accelerator.skip_first_batches(dataloader, num_batches_to_skip)
 
     losses, learning_rates, sample_ids = [], [], []
-    window_losses, window_ids = [], []
+    window_losses, window_sample_ids = [], []
 
     for batch, batch_sample_ids in dataloader:
         with accelerator.accumulate(model):
@@ -85,14 +85,14 @@ def main():
             optimizer.zero_grad()
 
             window_losses.append(loss.detach())
-            window_ids.append(batch_sample_ids)
+            window_sample_ids.append(batch_sample_ids)
             if accelerator.sync_gradients:
                 window_loss = torch.stack(window_losses).mean()
                 losses.append(accelerator.reduce(window_loss, reduction="mean").item())
                 learning_rates.append(learning_rate)
-                sample_ids.append(sorted(accelerator.gather(torch.cat(window_ids)).cpu().tolist()))
+                sample_ids.append(sorted(accelerator.gather(torch.cat(window_sample_ids)).cpu().tolist()))
                 window_losses.clear()
-                window_ids.clear()
+                window_sample_ids.clear()
 
                 if args.save_checkpoint and len(losses) == checkpoint_update:
                     accelerator.save_state(args.save_checkpoint)
