@@ -14,7 +14,7 @@
 
 import sys
 import unittest
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -23,7 +23,38 @@ import torch
 from accelerate.utils import TERecipeKwargs, imports, transformer_engine
 
 
+@contextmanager
+def mock_modules(modules):
+    # Restoring all of sys.modules can discard lazy imports while leaving their
+    # native PyTorch operators registered, causing duplicate registration later.
+    missing = object()
+    originals = {name: sys.modules.get(name, missing) for name in modules}
+    sys.modules.update(modules)
+    try:
+        yield
+    finally:
+        for name, original in originals.items():
+            if original is missing:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
 class TestTransformerEngineAvailability(unittest.TestCase):
+    def test_mock_cleanup_preserves_unrelated_imports(self):
+        names = ("_accelerate_te_existing", "_accelerate_te_missing", "_accelerate_te_lazy")
+        existing, mocked, lazy = (ModuleType(name) for name in names)
+        for name in names:
+            self.addCleanup(sys.modules.pop, name, None)
+        sys.modules[names[0]] = existing
+        with mock_modules({names[0]: mocked, names[1]: mocked}):
+            self.assertIs(sys.modules[names[0]], mocked)
+            self.assertIs(sys.modules[names[1]], mocked)
+            sys.modules[names[2]] = lazy
+        self.assertIs(sys.modules[names[0]], existing)
+        self.assertNotIn(names[1], sys.modules)
+        self.assertIs(sys.modules[names[2]], lazy)
+
     def test_nvidia_minimum_version(self):
         with (
             patch.object(imports, "is_hpu_available", return_value=False),
@@ -78,9 +109,10 @@ class TestTransformerEnginePublicAPI(unittest.TestCase):
         common.recipe = recipe
         self.te = pytorch
         self.recipe = recipe
-        for patcher in [
-            patch.dict(
-                sys.modules,
+        stack = ExitStack()
+        self.addCleanup(stack.close)
+        for context in [
+            mock_modules(
                 {
                     "transformer_engine": te,
                     "transformer_engine.pytorch": pytorch,
@@ -92,8 +124,7 @@ class TestTransformerEnginePublicAPI(unittest.TestCase):
             patch.object(transformer_engine, "is_transformer_engine_available", return_value=True),
             patch("accelerate.utils.dataclasses.is_transformer_engine_available", return_value=True),
         ]:
-            patcher.start()
-            self.addCleanup(patcher.stop)
+            stack.enter_context(context)
 
     def test_train_eval_autocast_and_recipe(self):
         for use_during_eval in [False, True]:
