@@ -39,6 +39,9 @@ def offload_weight(weight, weight_name, offload_folder, index=None):
         if dtype is None:
             dtype = str(array.dtype)
         index[weight_name] = {"dtype": dtype, "shape": list(array.shape)}
+    if array.size == 0:
+        array.tofile(tensor_file)
+        return index
     if array.ndim == 0:
         array = array[None]
     file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
@@ -61,11 +64,17 @@ def load_offloaded_weight(weight_file, weight_info):
         # NumPy does not support any FP8 dtype either, so this was saved as an int8
         dtype = "int8"
 
-    weight = np.memmap(weight_file, dtype=dtype, shape=shape, mode="r")
+    if 0 in shape:
+        weight = np.fromfile(weight_file, dtype=dtype, count=0).reshape(shape)
+    else:
+        weight = np.memmap(weight_file, dtype=dtype, shape=shape, mode="r")
 
     if len(weight_info["shape"]) == 0:
         weight = weight[0]
     weight = torch.tensor(weight)
+    if 0 in shape:
+        # Empty NumPy arrays can have a zero innermost stride, which breaks dtype views.
+        weight = weight.new_empty(shape)
     if weight_info["dtype"] == "bfloat16":
         weight = weight.view(torch.bfloat16)
     elif weight_info["dtype"].startswith("float8_"):
