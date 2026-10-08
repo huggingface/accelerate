@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Compare uninterrupted FP32 training with saving and restarting after five updates."""
+"""Train a causal LM in FP32, optionally saving or resuming after five updates."""
 
 import argparse
 import json
@@ -60,7 +60,8 @@ def main():
     # Momentum makes loading model weights alone insufficient for correct continuation.
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
 
-    # Future learning rates depend on restoring the scheduler's position, not just the optimizer's rate.
+    # With two ranks, Accelerate takes two scheduler steps per update; step_size=4 decays every two updates.
+    # Restoring only the optimizer's learning rate cannot preserve this schedule.
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4)
     model, optimizer, dataloader, scheduler = accelerator.prepare(model, optimizer, dataloader, scheduler)
 
