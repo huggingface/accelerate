@@ -26,7 +26,7 @@ from accelerate.commands.launch import (
     simple_launcher,
 )
 from accelerate.launchers import notebook_launcher
-from accelerate.utils.launch import prepare_multi_gpu_env
+from accelerate.utils.launch import env_var_path_add, prepare_multi_gpu_env
 
 
 class TestPrepareMultiGpuEnv(unittest.TestCase):
@@ -146,3 +146,12 @@ def test_notebook_launcher_sets_accelerate_mixed_precision(monkeypatch):
 def test_notebook_launcher_invalid_precision_error():
     with pytest.raises(ValueError, match="Unknown mixed_precision mode"):
         notebook_launcher(lambda: None, num_processes=1, mixed_precision="bogus")
+
+
+def test_env_var_path_add_uses_platform_separator(monkeypatch):
+    monkeypatch.setattr(os, "pathsep", ";")
+    monkeypatch.setenv("PYTHONPATH", r"C:\existing;D:\second")
+
+    result = env_var_path_add("PYTHONPATH", r"E:\project")
+
+    assert result == r"C:\existing;D:\second;E:\project"
