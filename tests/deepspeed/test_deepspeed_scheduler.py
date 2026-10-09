@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
+import os
+import sys
+import tempfile
 from copy import deepcopy
 from unittest.mock import patch
 
@@ -19,13 +22,43 @@ import torch
 from parameterized import parameterized
 
 from accelerate import Accelerator
-from accelerate.test_utils.testing import AccelerateTestCase, require_deepspeed
+from accelerate.test_utils.testing import (
+    AccelerateTestCase,
+    execute_subprocess_async,
+    get_torch_dist_unique_port,
+    path_in_accelerate_package,
+    require_deepspeed,
+)
 from accelerate.utils import DeepSpeedPlugin, DistributedType
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
 @require_deepspeed
 class DeepSpeedSchedulerConfigTest(AccelerateTestCase):
+    def test_checkpoint_with_new_engine(self):
+        script = path_in_accelerate_package(
+            "test_utils", "scripts", "external_deps", "test_ds_scheduler_checkpoint.py"
+        )
+        env = os.environ.copy()
+        env.setdefault("DS_ACCELERATOR", "cuda" if torch.cuda.is_available() else "cpu")
+        env.update(
+            MASTER_ADDR="127.0.0.1",
+            MASTER_PORT=str(get_torch_dist_unique_port()),
+            RANK="0",
+            LOCAL_RANK="0",
+            WORLD_SIZE="1",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            command = [
+                sys.executable,
+                script,
+                "--checkpoint_dir",
+                directory,
+            ]
+            self.assertEqual(execute_subprocess_async(command, env=env).returncode, 0)
+            # A separate worker reconstructs the optimizer and scheduler before loading the checkpoint.
+            self.assertEqual(execute_subprocess_async(command + ["--resume"], env=env).returncode, 0)
+
     @parameterized.expand(
         list(itertools.product(["WarmupLR", "WarmupDecayLR"], ["dummy", "custom"], ["auto", "scalar", "list"]))
     )
