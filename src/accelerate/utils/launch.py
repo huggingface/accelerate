@@ -779,9 +779,9 @@ def env_var_path_add(env_var_name, path_to_add):
     Extends a path-based environment variable's value with a new path and returns the updated value. It's up to the
     caller to set it in os.environ.
     """
-    paths = [p for p in os.environ.get(env_var_name, "").split(":") if len(p) > 0]
+    paths = [p for p in os.environ.get(env_var_name, "").split(os.pathsep) if len(p) > 0]
     paths.append(str(path_to_add))
-    return ":".join(paths)
+    return os.pathsep.join(paths)
 
 
 class PrepareForLaunch:
