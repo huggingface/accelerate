@@ -20,7 +20,9 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 from parameterized import parameterized_class
@@ -28,6 +30,8 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
+from accelerate.checkpointing import load_accelerator_state, save_accelerator_state
+from accelerate.state import PartialState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
@@ -36,7 +40,7 @@ from accelerate.test_utils import (
     run_first,
 )
 from accelerate.test_utils.testing import AccelerateTestCase
-from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
+from accelerate.utils import RNG_STATE_NAME, DistributedType, ProjectConfiguration, patch_environment, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -442,3 +446,59 @@ if __name__ == "__main__":
     if accelerator.process_index == 0:
         shutil.rmtree(savedir)
     accelerator.wait_for_everyone()
+
+
+class RandomStateRestoreTest(AccelerateTestCase):
+    """
+    A checkpoint whose random states cannot be restored must not resume silently, see
+    https://github.com/huggingface/accelerate/issues/4283
+    """
+
+    def _write_checkpoint(self, tmpdir, process_index=0, step=42):
+        PartialState(cpu=True)
+        save_accelerator_state(tmpdir, [], [], [], [], process_index=process_index, step=step)
+        return Path(tmpdir) / f"{RNG_STATE_NAME}_{process_index}.pkl"
+
+    def test_unreadable_rng_state_warns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rng_file = self._write_checkpoint(tmpdir)
+            rng_file.write_bytes(b"CORRUPTED")
+
+            with self.assertLogs("accelerate.checkpointing", level="WARNING") as logs:
+                attributes = load_accelerator_state(tmpdir, [], [], [], [], 0)
+
+            # Resuming from a partially written checkpoint still works, it is only reported now.
+            self.assertEqual(attributes, {})
+            self.assertEqual(len(logs.records), 1)
+            self.assertEqual(logs.records[0].levelno, logging.WARNING)
+            self.assertIn(str(rng_file), logs.records[0].getMessage())
+
+    def test_missing_rng_state_warns(self):
+        PartialState(cpu=True)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rng_file = Path(tmpdir) / f"{RNG_STATE_NAME}_0.pkl"
+
+            with self.assertLogs("accelerate.checkpointing", level="WARNING") as logs:
+                attributes = load_accelerator_state(tmpdir, [], [], [], [], 0)
+
+            self.assertEqual(attributes, {})
+            self.assertEqual(len(logs.records), 1)
+            self.assertIn(str(rng_file), logs.records[0].getMessage())
+
+    def test_readable_rng_state_restores_without_warning(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_checkpoint(tmpdir)
+            expected = (random.random(), np.random.random(), torch.rand(2))
+
+            random.seed(999)
+            np.random.seed(999)
+            torch.manual_seed(999)
+
+            with self.assertNoLogs("accelerate.checkpointing", level="WARNING"):
+                attributes = load_accelerator_state(tmpdir, [], [], [], [], 0)
+
+            # The step is part of the same file, and all three RNGs are back where they were.
+            self.assertEqual(attributes, {"step": 42})
+            self.assertEqual(random.random(), expected[0])
+            self.assertEqual(np.random.random(), expected[1])
+            self.assertTrue(torch.equal(torch.rand(2), expected[2]))
