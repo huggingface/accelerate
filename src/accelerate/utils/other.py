@@ -379,7 +379,8 @@ def wait_for_everyone():
 
 def clean_state_dict_for_safetensors(state_dict: dict):
     """
-    Cleans the state dictionary from a model and removes tensor aliasing if present.
+    Cleans the state dictionary from a model and removes tensor aliasing if present. Empty tensors are retained since
+    they do not share any data.
 
     Args:
         state_dict (`dict`):
@@ -388,7 +389,7 @@ def clean_state_dict_for_safetensors(state_dict: dict):
     ptrs = collections.defaultdict(list)
     # When bnb serialization is used, weights in state dict can be strings
     for name, tensor in state_dict.items():
-        if not isinstance(tensor, str):
+        if not isinstance(tensor, str) and tensor.numel() > 0:
             ptrs[id_tensor_storage(tensor)].append(name)
 
     # These are all pointers of tensors with shared memory
