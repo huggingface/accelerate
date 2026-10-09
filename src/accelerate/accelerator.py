@@ -2288,7 +2288,7 @@ class Accelerator:
         if model is not None:
             # If we are using FP8, we need to apply the autowrap now
             if self.fp8_backend == FP8BackendType.TE:
-                model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
+                model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
             # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
             deepspeed_plugin.set_moe_leaf_modules(model)
             # deal with config keys that use `auto` value and rely on model's hidden_size

@@ -11,11 +11,17 @@ This repo provides scripts which compare native TransformerEngine model training
 * Fully Sharded Data Parallelism (`fsdp.py`)
 * DeepSpeed ZeRO 1-3 (`deepspeed.py`)
 
-To run them, it's recommended to use a docker image (see the attached `Dockerfile`) and not install `TransformerEngine` manually.
+NVIDIA Transformer Engine >= 2.9.0 is required. The attached `Dockerfile` defaults to NVIDIA PyTorch `26.09-py3`
+and TE `2.20.2`, and installs your checked-out Accelerate source. Build it from the repository root:
+
+```bash
+docker build -f benchmarks/fp8/transformer_engine/Dockerfile -t accelerate-te-benchmarks .
+docker run --gpus all --ipc=host --rm -it accelerate-te-benchmarks
+```
 
 ## Running:
 
-There are official Docker images located at `huggingface/accelerate:gpu-fp8-transformerengine-nightly` which can be used.
+Inside the image, the working directory is `benchmarks/fp8/transformer_engine`.
 
 You can run all scripts using the core `accelerate launch` command without any `accelerate config` being needed.
 

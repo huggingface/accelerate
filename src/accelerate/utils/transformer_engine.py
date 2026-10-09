@@ -124,13 +124,17 @@ def contextual_fp8_autocast(model_forward, fp8_recipe, use_during_eval=False):
         raise ImportError("Using `contextual_fp8_autocast` requires transformer_engine to be installed.")
 
     if is_hpu_available():
-        from intel_transformer_engine import fp8_autocast
+        from intel_transformer_engine import fp8_autocast as autocast
+
+        autocast_kwargs = {"fp8_recipe": fp8_recipe}
     else:
-        from transformer_engine.pytorch import fp8_autocast
+        from transformer_engine.pytorch import autocast
+
+        autocast_kwargs = {"recipe": fp8_recipe}
 
     def forward(self, *args, **kwargs):
         enabled = use_during_eval or self.training
-        with fp8_autocast(enabled=enabled, fp8_recipe=fp8_recipe):
+        with autocast(enabled=enabled, **autocast_kwargs):
             return model_forward(*args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
@@ -154,9 +158,9 @@ def apply_fp8_autowrap(model, fp8_recipe_handler):
 
     else:
         import transformer_engine.common.recipe as te_recipe
-        from transformer_engine.pytorch.fp8 import check_mxfp8_support
+        from transformer_engine.pytorch import is_mxfp8_available
 
-        is_fp8_block_scaling_available, message = check_mxfp8_support()
+        is_fp8_block_scaling_available, message = is_mxfp8_available(return_reason=True)
 
     kwargs = fp8_recipe_handler.to_kwargs() if fp8_recipe_handler is not None else {}
     if "fp8_format" in kwargs:
