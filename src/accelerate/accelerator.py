@@ -3545,24 +3545,29 @@ class Accelerator:
         )
 
         # Clean the folder from a previous save
+        index_name = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
-            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
-            # in distributed settings to avoid race conditions.
-            weights_no_suffix = weights_name.replace(".bin", "")
+            # If we have a file of a previous save that is not going to be replaced, we delete it, but only from the
+            # main process in distributed settings to avoid race conditions.
+            weights_no_suffix = weights_name.replace(".bin", "").replace(".safetensors", "")
 
             # make sure that file to be deleted matches format of sharded file, e.g. pytorch_model-00001-of-00005
-            filename_no_suffix = filename.replace(".bin", "")
+            filename_no_suffix = filename.replace(".bin", "").replace(".safetensors", "")
             reg = re.compile(r"(.*?)-\d{5}-of-\d{5}")
 
-            if (
-                filename.startswith(weights_no_suffix)
-                and os.path.isfile(full_filename)
+            is_stale_shard = (
+                filename.startswith(f"{weights_no_suffix}-")
                 and filename not in state_dict_split.filename_to_tensors.keys()
                 and reg.fullmatch(filename_no_suffix) is not None
-                and PartialState().is_main_process
-            ):
-                os.remove(full_filename)
+            )
+            # `load_checkpoint_in_model` prefers a whole checkpoint file over an index, so the file of the other
+            # layout would shadow (whole file) or mislead (index) the checkpoint that is saved here.
+            is_stale_other_layout = filename == weights_name if state_dict_split.is_sharded else filename == index_name
+
+            if (is_stale_shard or is_stale_other_layout) and os.path.isfile(full_filename):
+                if PartialState().is_main_process:
+                    os.remove(full_filename)
 
         # Save the model
         for filename, tensors in state_dict_split.filename_to_tensors.items():
