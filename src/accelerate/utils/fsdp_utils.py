@@ -962,7 +962,11 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
         no_split_modules = getattr(model, "_no_split_modules", None)
         if no_split_modules is None:
             no_split_modules = []
-        transformer_cls_names_to_wrap = list(no_split_modules)
+        # `_no_split_modules` can name classes this model doesn't instantiate (e.g. the ESMFold blocks of an
+        # `EsmModel`, or the audio layers of a Gemma 4 checkpoint without audio tower)
+        transformer_cls_names_to_wrap = [
+            name for name in no_split_modules if get_module_class_from_name(model, name) is not None
+        ]
         if fsdp2_plugin.transformer_cls_names_to_wrap is not None:
             transformer_cls_names_to_wrap = fsdp2_plugin.transformer_cls_names_to_wrap
         transformer_cls_to_wrap = set()

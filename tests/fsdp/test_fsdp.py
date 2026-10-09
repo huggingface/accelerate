@@ -53,6 +53,7 @@ from accelerate.utils.fsdp_utils import (
     _set_model_state_dict,
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
+    fsdp2_prepare_auto_wrap_policy,
     load_fsdp_optimizer,
     save_fsdp_optimizer,
 )
@@ -63,6 +64,7 @@ set_seed(42)
 
 BERT_BASE_CASED = "bert-base-cased"
 LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+ESM_TESTING = "hf-internal-testing/tiny-random-EsmModel"
 FP16 = "fp16"
 BF16 = "bf16"
 
@@ -397,6 +399,21 @@ class FSDPPluginIntegration(AccelerateTestCase):
             )
         fsdp_plugin.set_auto_wrap_policy(model)
         assert fsdp_plugin.auto_wrap_policy is None
+
+    def test_auto_wrap_policy_skips_absent_no_split_modules(self):
+        # `EsmModel` lists `EsmFoldTriangularSelfAttentionBlock` in `_no_split_modules`, but only `EsmForProteinFolding`
+        # contains it
+        model = AutoModel.from_pretrained(ESM_TESTING)
+        env = self.fsdp_envs[self.current_fsdp_version].copy()
+        with patch_environment(**env):
+            fsdp_plugin = FullyShardedDataParallelPlugin(auto_wrap_policy="TRANSFORMER_BASED_WRAP")
+        if self.current_fsdp_version == 1:
+            fsdp_plugin.set_auto_wrap_policy(model)
+            assert fsdp_plugin.transformer_cls_names_to_wrap == ["EsmLayer", "EsmEmbeddings"]
+        else:
+            policy = fsdp2_prepare_auto_wrap_policy(fsdp_plugin, model)
+            assert policy(model.encoder.layer[0])
+            assert policy(model.embeddings)
 
     def test_mixed_precision(self):
         fsdp_version = self.current_fsdp_version
