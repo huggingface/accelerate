@@ -2087,7 +2087,13 @@ class FullyShardedDataParallelPlugin:
         default_transformer_cls_names_to_wrap = list(no_split_modules) if no_split_modules is not None else []
         if self.auto_wrap_policy == transformer_auto_wrap_policy:
             if self.transformer_cls_names_to_wrap is None:
-                self.transformer_cls_names_to_wrap = default_transformer_cls_names_to_wrap
+                # `_no_split_modules` can name classes this model doesn't instantiate (e.g. the ESMFold blocks of an
+                # `EsmModel`, or the audio layers of a Gemma 4 checkpoint without audio tower)
+                self.transformer_cls_names_to_wrap = [
+                    name
+                    for name in default_transformer_cls_names_to_wrap
+                    if get_module_class_from_name(model, name) is not None
+                ]
             transformer_cls_to_wrap = set()
             for layer_class in self.transformer_cls_names_to_wrap:
                 transformer_cls = get_module_class_from_name(model, layer_class)
