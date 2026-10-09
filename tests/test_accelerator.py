@@ -133,6 +133,25 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    @parameterized.expand([0, 1])
+    def test_split_between_processes_preserves_dictionary_inputs(self, process_index):
+        state = PartialState(cpu=True)
+        values = list(range(8))
+        labels = tuple(range(8))
+        tensor = torch.arange(8)
+        data = {"values": values, "labels": labels, "tensor": tensor}
+        expected = slice(process_index * 4, (process_index + 1) * 4)
+
+        with patch.object(state, "num_processes", 2), patch.object(state, "process_index", process_index):
+            for _ in range(2):
+                with state.split_between_processes(data) as result:
+                    self.assertEqual(result["values"], values[expected])
+                    self.assertEqual(result["labels"], labels[expected])
+                    torch.testing.assert_close(result["tensor"], tensor[expected])
+                self.assertIs(data["values"], values)
+                self.assertIs(data["labels"], labels)
+                self.assertIs(data["tensor"], tensor)
+
     def test_partial_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to
