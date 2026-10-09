@@ -2329,6 +2329,11 @@ class Accelerator:
                 config_kwargs.update(
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
                 )
+            auto_warmup_max_lr = (
+                isinstance(scheduler, DummyScheduler)
+                and scheduler.lr_scheduler_callable is None
+                and deepspeed_plugin.is_auto("scheduler.params.warmup_max_lr")
+            )
             if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is None:
                 max_lr = (
                     getattr(scheduler.optimizer, "lr", None)
@@ -2384,6 +2389,11 @@ class Accelerator:
                     if scheduler is not None:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
+
+            if auto_warmup_max_lr:
+                # Defer construction until the final optimizer is available. DeepSpeed's callable API receives
+                # basic_optimizer, which can be replaced inside ZeRO (e.g. when initializing Adagrad's state).
+                kwargs["lr_scheduler"] = lambda optimizer: None
 
             if self.device.type == "hpu":
                 # This env variable is initialized here to make sure it is set to "true"
@@ -2447,6 +2457,14 @@ class Accelerator:
                             )
 
             engine, optimizer, _, lr_scheduler = ds_initialize(**kwargs)
+
+            if auto_warmup_max_lr:
+                scheduler_config = self.deepspeed_config["scheduler"]
+                # Use an explicit list: older DeepSpeed versions resolve None from only the first group.
+                scheduler_config["params"]["warmup_max_lr"] = [group["lr"] for group in optimizer.param_groups]
+                scheduler_class = getattr(deepspeed.runtime.lr_schedules, scheduler_config["type"])
+                lr_scheduler = scheduler_class(optimizer, **scheduler_config["params"])
+                engine.lr_scheduler = lr_scheduler
 
             if compare_versions("deepspeed", ">=", "0.14.4") and self.state.dynamo_plugin.backend != DynamoBackend.NO:
                 compile_kwargs = self.state.dynamo_plugin.to_kwargs()
