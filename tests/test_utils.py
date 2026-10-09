@@ -25,6 +25,8 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 import torch
+from parameterized import parameterized
+from safetensors.torch import load_file
 from torch import nn
 
 from accelerate.big_modeling import cpu_offload_with_hook
@@ -333,6 +335,31 @@ class UtilsTester(unittest.TestCase):
                 save(model.state_dict(), save_path, safe_serialization=True)
                 assert len(log.records) == 1
                 assert "Removed shared tensor" in log.output[0]
+
+    @parameterized.expand(
+        [(dtype, empty_view) for dtype in [torch.float32, torch.int64, torch.bfloat16] for empty_view in [False, True]]
+    )
+    def test_save_safetensor_empty_tensors(self, dtype, empty_view):
+        model = nn.Module()
+        dense = torch.tensor([1, 2, 3], dtype=dtype)
+        model.register_buffer("dense", dense)
+        model.register_buffer("empty_flat", torch.empty(0, dtype=dtype))
+        model.register_buffer("empty_matrix", torch.empty(2, 0, 3, dtype=dtype))
+        if empty_view:
+            model.register_buffer("empty_view", dense[:0])
+        state_dict = model.state_dict()
+        expected = dict(state_dict)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "model.safetensors")
+            save(state_dict, save_path, safe_serialization=True)
+            restored = load_file(save_path)
+
+        assert restored.keys() == expected.keys()
+        for name, tensor in expected.items():
+            assert restored[name].shape == tensor.shape
+            assert restored[name].dtype == tensor.dtype
+            assert torch.equal(restored[name], tensor)
 
     @require_torch_min_version(version="1.12")
     def test_pad_across_processes(self):
