@@ -127,10 +127,10 @@ class PrefixedDataset(Mapping):
         return self.dataset[f"{self.prefix}{key}"]
 
     def __iter__(self):
-        return iter([key for key in self.dataset if key.startswith(self.prefix)])
+        return (key[len(self.prefix) :] for key in self.dataset if key.startswith(self.prefix))
 
     def __len__(self):
-        return len(self.dataset)
+        return sum(1 for _ in self)
 
 
 class OffloadedWeightsLoader(Mapping):
