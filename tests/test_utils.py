@@ -18,6 +18,7 @@ import tempfile
 import unittest
 import warnings
 from collections import UserDict, namedtuple
+from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
 from unittest.mock import Mock, patch
@@ -25,6 +26,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 import torch
+from parameterized import parameterized
 from torch import nn
 
 from accelerate.big_modeling import cpu_offload_with_hook
@@ -172,6 +174,22 @@ class UtilsTester(unittest.TestCase):
             assert os.environ[key] == os.getenv(key) == new_value  # noqa: TID251
             raise RuntimeError("Oopsy daisy!")
         assert os.environ[key] == os.getenv(key) == orig_value  # noqa: TID251
+
+    @parameterized.expand([(value, raises) for value in [None, "", "original"] for raises in [False, True]])
+    def test_patch_environment_case_aliases(self, original_value, raises):
+        key = "ACCELERATE_TEST_CASE_ALIAS"
+        with patch.dict(os.environ):
+            os.environ.pop(key, None)
+            if original_value is not None:
+                os.environ[key] = original_value
+
+            with pytest.raises(RuntimeError) if raises else nullcontext():
+                with patch_environment(**{key.lower(): 1, key: 2}):
+                    assert os.environ[key] == "2"
+                    if raises:
+                        raise RuntimeError("Context body failed")
+
+            assert os.environ.get(key) == original_value
 
     def test_clear_environment(self):
         key, value = os.environ.copy().popitem()

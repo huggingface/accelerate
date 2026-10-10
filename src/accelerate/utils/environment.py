@@ -418,7 +418,8 @@ def patch_environment(**kwargs):
     """
     A context manager that will add each keyword argument passed to `os.environ` and remove them when exiting.
 
-    Will convert the values in `kwargs` to strings and upper-case all the keys.
+    Will convert the values in `kwargs` to strings and upper-case all the keys. If multiple keys have the same upper-case
+    form, the last value is used.
 
     Example:
 
@@ -431,9 +432,9 @@ def patch_environment(**kwargs):
     >>> print(os.environ["FOO"])  # raises KeyError
     ```
     """
+    kwargs = {key.upper(): value for key, value in kwargs.items()}
     existing_vars = {}
     for key, value in kwargs.items():
-        key = key.upper()
         if key in os.environ:
             existing_vars[key] = os.environ[key]
         os.environ[key] = str(value)
@@ -442,7 +443,6 @@ def patch_environment(**kwargs):
         yield
     finally:
         for key in kwargs:
-            key = key.upper()
             if key in existing_vars:
                 # restore previous value
                 os.environ[key] = existing_vars[key]
