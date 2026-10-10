@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import unittest
 from types import MethodType
 from unittest import skip
@@ -207,3 +208,65 @@ class RegionalCompilationRebindTester(unittest.TestCase):
 
         assert not hasattr(model, "trace")
         assert compiled_model.trace == ("twin", "OptimizedModule")
+
+
+class RegionalCompilationAliasedModel(RegionalCompilationModel):
+    def __init__(self):
+        super().__init__()
+        self.blocks_alias = self.blocks
+        self.register_module("optional_block", None)
+
+    def forward(self, x):
+        for block in self.blocks_alias:
+            x = block(x)
+        return x
+
+
+class RegionalCompilationSharedModuleTester(unittest.TestCase):
+    def _check_output_and_gradients(self, model, compiled_model):
+        reference = copy.deepcopy(model)
+        inputs = torch.ones(1, 4, requires_grad=True)
+        reference_inputs = inputs.detach().clone().requires_grad_()
+        expected = reference(reference_inputs)
+        actual = compiled_model(inputs)
+        torch.testing.assert_close(actual, expected)
+        expected.sum().backward()
+        actual.sum().backward()
+        torch.testing.assert_close(inputs.grad, reference_inputs.grad)
+        parameters = list(compiled_model.parameters())
+        reference_parameters = list(reference.parameters())
+        assert len(parameters) == len(reference_parameters)
+        for parameter, reference_parameter in zip(parameters, reference_parameters):
+            torch.testing.assert_close(parameter.grad, reference_parameter.grad)
+
+    def test_shared_child_registrations_are_preserved(self):
+        model = RegionalCompilationAliasedModel()
+        compiled_model = compile_regions(model, backend="eager")
+
+        assert compiled_model.blocks_alias is compiled_model.blocks
+        assert model.blocks_alias is model.blocks
+        assert compiled_model.blocks is not model.blocks
+        assert "optional_block" in compiled_model._modules
+        assert compiled_model.optional_block is None
+        self._check_output_and_gradients(model, compiled_model)
+
+    def test_shared_blocks_use_the_same_compiled_module(self):
+        model = RegionalCompilationModel()
+        model.blocks[1] = model.blocks[0]
+        compiled_model = compile_regions(model, backend="eager")
+
+        assert compiled_model.blocks[0] is compiled_model.blocks[1]
+        assert isinstance(compiled_model.blocks[0], torch._dynamo.eval_frame.OptimizedModule)
+        assert model.blocks[0] is model.blocks[1]
+        self._check_output_and_gradients(model, compiled_model)
+
+    def test_shared_modules_across_parents_are_preserved(self):
+        first = RegionalCompilationModel()
+        second = RegionalCompilationModel()
+        second.blocks = first.blocks
+        model = torch.nn.Sequential(first, second)
+        compiled_model = compile_regions(model, backend="eager")
+
+        assert compiled_model[0].blocks is compiled_model[1].blocks
+        assert model[0].blocks is model[1].blocks
+        self._check_output_and_gradients(model, compiled_model)
