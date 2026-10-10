@@ -11,17 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
+from types import SimpleNamespace
+
 import torch
+from parameterized import parameterized
 from torch import nn
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper, offload_wrapper
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    CheckpointWrapper,
+    checkpoint_wrapper,
+    offload_wrapper,
+)
 
 from accelerate.test_utils import require_cuda
-from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate.test_utils.testing import AccelerateTestCase, require_fsdp2
+from accelerate.utils import FullyShardedDataParallelPlugin
+from accelerate.utils.fsdp_utils import fsdp2_apply_ac
 
 
 def offloaded(module):
-    """What `fsdp2_apply_ac` builds when `activation_checkpointing_offload` is on."""
-    return offload_wrapper(checkpoint_wrapper(module, preserve_rng_state=False))
+    """What `fsdp2_apply_ac` builds when `activation_checkpointing_offload` is on"""
+    return offload_wrapper(checkpoint_wrapper(module))
 
 
 class Block(nn.Module):
@@ -42,6 +52,54 @@ class CapturingBlock(Block):
         if capture_list is not None:
             capture_list.append(inner)
         return hidden_states + self.down(torch.nn.functional.silu(inner))
+
+
+class DropoutBlock(nn.Module):
+    def __init__(self, dropout):
+        super().__init__()
+        self.up = nn.Linear(8, 16)
+        self.dropout = nn.Dropout(dropout)
+        self.down = nn.Linear(16, 8)
+
+    def forward(self, hidden_states):
+        return hidden_states + self.down(self.dropout(torch.relu(self.up(hidden_states))))
+
+
+@require_fsdp2
+class FSDP2ActivationCheckpointingRNGTest(AccelerateTestCase):
+    @parameterized.expand([(False, 0.0), (True, 0.0), (False, 0.1), (True, 0.1)])
+    def test_matches_uncheckpointed_training(self, offload, dropout):
+        torch.manual_seed(42)
+        reference = nn.Sequential(DropoutBlock(dropout), DropoutBlock(dropout))
+        checkpointed = copy.deepcopy(reference)
+        plugin = FullyShardedDataParallelPlugin(
+            fsdp_version=2,
+            cpu_ram_efficient_loading=False,
+            activation_checkpointing=True,
+            activation_checkpointing_offload=offload,
+            auto_wrap_policy="TRANSFORMER_BASED_WRAP",
+            transformer_cls_names_to_wrap=["DropoutBlock"],
+        )
+        plugin.set_auto_wrap_policy(checkpointed)
+        fsdp2_apply_ac(SimpleNamespace(state=SimpleNamespace(fsdp_plugin=plugin)), checkpointed)
+        self.assertEqual(sum(isinstance(m, CheckpointWrapper) for m in checkpointed.modules()), 2)
+        inputs = torch.randn(4, 8)
+
+        def forward_backward(model):
+            x = inputs.detach().clone().requires_grad_()
+            torch.manual_seed(1234)
+            outputs = model(x)
+            outputs.square().mean().backward()
+            return outputs, [p.grad for p in model.parameters()], x.grad, torch.get_rng_state()
+
+        expected_outputs, expected_grads, expected_input_grad, expected_rng = forward_backward(reference)
+        outputs, grads, input_grad, rng = forward_backward(checkpointed)
+        torch.testing.assert_close(outputs, expected_outputs)
+        self.assertEqual(len(grads), len(expected_grads))
+        for grad, expected in zip(grads, expected_grads):
+            torch.testing.assert_close(grad, expected)
+        torch.testing.assert_close(input_grad, expected_input_grad)
+        self.assertTrue(torch.equal(rng, expected_rng))
 
 
 @require_cuda
@@ -84,7 +142,7 @@ class ActivationCheckpointingOffloadTester(AccelerateTestCase):
             return held
 
         with_offload = held_after_forward(offloaded)
-        without = held_after_forward(lambda m: checkpoint_wrapper(m, preserve_rng_state=False))
+        without = held_after_forward(lambda m: checkpoint_wrapper(m))
         assert with_offload < without, f"offload held {with_offload} bytes, plain held {without}"
 
     def test_caller_can_still_read_the_input(self):
