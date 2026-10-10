@@ -528,6 +528,22 @@ class FSDPPluginIntegration(AccelerateTestCase):
             assert fsdp_plugin.cpu_ram_efficient_loading is False
             assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
 
+    def test_clip_grad_value(self):
+        env = self.fsdp_envs[self.current_fsdp_version].copy()
+        with patch_environment(**env):
+            accelerator = Accelerator()
+            model = torch.nn.Linear(4, 4)
+            optimizer = torch.optim.AdamW(model.parameters())
+            model, optimizer = accelerator.prepare(model, optimizer)
+            # every gradient entry is 2
+            accelerator.backward(model(torch.ones(2, 4, device=accelerator.device)).sum())
+            if self.current_fsdp_version == 1:
+                with self.assertRaisesRegex(Exception, "do not support `clip_grad_value_`"):
+                    accelerator.clip_grad_value_(model.parameters(), 1.0)
+            else:
+                accelerator.clip_grad_value_(model.parameters(), 1.0)
+                assert all(p.grad.full_tensor().eq(1.0).all() for p in model.parameters())
+
     def test_ignored_modules_regex(self):
         # Check that FSDP's ignored_modules can be a string, in which case it is treated as a regex
         env = self.fsdp_envs[1].copy()
