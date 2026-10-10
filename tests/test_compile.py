@@ -212,4 +212,4 @@ class RegionalCompilationRebindTester(unittest.TestCase):
         model = RegionalCompilationModel()
         model.embedders = torch.nn.ModuleDict({"a": torch.nn.Linear(4, 4)})
         compiled_model = compile_regions(model, backend="eager")
-        assert isinstance(compiled_model.embedders, torch.nn.ModuleDict)
+        assert isinstance(compiled_model.embedders["a"], torch._dynamo.eval_frame.OptimizedModule)
