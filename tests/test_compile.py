@@ -207,3 +207,9 @@ class RegionalCompilationRebindTester(unittest.TestCase):
 
         assert not hasattr(model, "trace")
         assert compiled_model.trace == ("twin", "OptimizedModule")
+
+    def test_containers_are_not_compiled(self):
+        model = RegionalCompilationModel()
+        model.embedders = torch.nn.ModuleDict({"a": torch.nn.Linear(4, 4)})
+        compiled_model = compile_regions(model, backend="eager")
+        assert isinstance(compiled_model.embedders["a"], torch._dynamo.eval_frame.OptimizedModule)
