@@ -35,7 +35,7 @@ The following articles go into a very detailed explanation of the differences be
 - https://huggingface.co/blog/exploding-gradients/ulysses-ring-attention
 
 A quick summary adapting from one of the articles:
-- Ulysses SP has a relatively low communication overhead, but is limited by the number of Attention Heads and thus it has certain requirements for network topology (number of attention heads has has to be divisible by the number of participating gpus for a single replica). All-to-all communication is sensitive to latency and it requires Deepspeed.
+- Ulysses SP has a relatively low communication overhead, but is limited by the number of Attention Heads and thus it has certain requirements for network topology (number of attention heads has has to be divisible by the number of participating gpus for a single replica). All-to-all communication is sensitive to latency.
 - FSDP CP Ring-Attention's P2P ring communication has no aforementioned divisibilty requirements, but has a higher communication volume.
 
 Finally it should be possible to combine SP + CP as explained in the paper [USP: A Unified Sequence Parallelism Approach for Long Context Generative AI](https://arxiv.org/abs/2405.07719) to support an even longer sequence length, albeit this is not yet integrated into 🤗`accelerate`.
@@ -43,7 +43,12 @@ Finally it should be possible to combine SP + CP as explained in the paper [USP:
 
 ## Supported sequence parallelism backends
 
-Currently the only sequence parallelism backend is `deepspeed`, which comes from the modernized Ulysses SP which is part of the [Arctic Long Sequence Training technology](https://arxiv.org/abs/2506.13996). There is also a [tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/) should you want to integrate it into your own code directly.
+Two backends implement Ulysses sequence parallelism, selected with `sp_backend` (if unset, `deepspeed` when training with DeepSpeed and `torch` otherwise):
+
+- `deepspeed`: the modernized Ulysses SP which is part of the [Arctic Long Sequence Training technology](https://arxiv.org/abs/2506.13996). DeepSpeed owns the process groups and drives data parallelism with ZeRO. There is also a [tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/) should you want to integrate it into your own code directly.
+- `torch`: Ulysses on plain PyTorch, composed with FSDP2. `sp` becomes a dimension of the device mesh, DeepSpeed is not needed, and the model's own attention implementation (SDPA, FlashAttention 2/3 or a hub flash kernel) is kept, so packed sequences work. See [the torch backend section](#torch-sp-backend-ulysses-on-fsdp2) below.
+
+Both shard the sequence across `sp_size` ranks and run attention with `num_heads / sp_size` heads per rank, so `sp_size` has to divide the number of attention heads (and of key/value heads for the `torch` backend).
 
 ## How to use sequence parallelism?
 
@@ -213,3 +218,46 @@ For an example of an Accelerate training loop with enabled ALST/UlyssesSP see [e
 
 Since this is a Deepspeed backend the usual Deepspeed configuration applies, so you can combine sequence parallelism with optimizer states and/or weights offloading as well to liberate more gpu memory and enable an even longer sequence length. This technology has been tested to work with DeepSpeed ZeRO stage 2 and 3.
 
+## torch SP backend: Ulysses on FSDP2
+
+`sp_backend="torch"` runs Ulysses without DeepSpeed. Like [context parallelism](./context_parallelism.md) it requires FSDP2 and composes with it: `sp` is a device mesh dimension (order `dp_replicate, dp_shard, cp, sp, tp`), folded into the mesh FSDP2 shards over, so FSDP2's reduce-scatter sums the partial gradients of the sequence parallel ranks. `dp_replicate_size × dp_shard_size × sp_size` must equal the number of processes.
+
+```python
+# 8 GPUs: FSDP2 over 4 ranks x Ulysses over 2 ranks. The model is sharded across all 8.
+parallelism_config = ParallelismConfig(dp_shard_size=4, sp_size=2, sp_backend="torch")
+fsdp_plugin = FullyShardedDataParallelPlugin(fsdp_version=2, auto_wrap_policy="transformer_based_wrap")
+accelerator = Accelerator(parallelism_config=parallelism_config, fsdp_plugin=fsdp_plugin)
+
+model = AutoModelForCausalLM.from_pretrained(model_name, attn_implementation="flash_attention_2", dtype=torch.bfloat16)
+model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+```
+
+Or `accelerate launch --use_fsdp --fsdp_version 2 --use_parallelism_config --parallelism_config_dp_shard_size 4 --parallelism_config_sp_size 2 ...`. The backend wraps whatever attention implementation the model was loaded with: `sdpa`, `flash_attention_2`, `flash_attention_3` or a hub flash kernel. `TorchSequenceParallelConfig` is the matching `sp_handler` and has no options yet.
+
+### Training loop
+
+The dataloader is sharded across data parallel ranks only, so every rank of the `sp` group gets the same batch and you shard the sequence with [`Accelerator.maybe_context_parallel`], exactly as for context parallelism:
+
+```python
+for batch in dataloader:
+    # Pre-shifted labels: shifting inside a shard would drop the token that sits on the next rank.
+    batch["shift_labels"] = torch.nn.functional.pad(batch["labels"][:, 1:], (0, 1), value=-100)
+    buffers = [batch["input_ids"], batch["labels"], batch["shift_labels"], batch["position_ids"]]
+    with accelerator.maybe_context_parallel(buffers=buffers, buffer_seq_dims=[1, 1, 1, 1], no_restore_buffers=set(buffers)):
+        outputs = model(**batch)
+        loss = outputs.loss
+        ...
+```
+
+The sequence length must be a multiple of `sp_size`. `position_ids` tell attention where each token sits in the gathered sequence and where packed documents start; if the batch has none, `prepare` fills in the global positions of the shard. Padding masks are not applied: right-pad, or pack with `position_ids` (with flash attention, since `sdpa` materializes a full mask for packed batches). Aggregate the loss over the `sp` group with the token-weighted differentiable `all_gather` shown above for the DeepSpeed backend, using `accelerator.torch_device_mesh["sp"].get_group()`.
+
+### Where the all-to-all hooks in
+
+`transformers` models fetch their attention function from `ALL_ATTENTION_FUNCTIONS[config._attn_implementation]` at every forward. `prepare` registers `accelerate.utils.sequence_parallel.UlyssesAttention` under the model's own key, wrapping the original function: it all-to-alls `query`, `key` and `value` from `[batch, heads, local_seq, head_dim]` to `[batch, heads / sp_size, seq, head_dim]`, reads the `position_ids` of the whole sequence (gathered once per forward by a hook on the model, not once per layer), drops the local-shard mask (flash attention reads document boundaries from `position_ids`; `sdpa` gets a block-causal mask rebuilt from them when packed, `is_causal` otherwise), calls the original attention unchanged, and all-to-alls the output back. The wrapper only acts on modules of prepared models, so a reference model in the same process keeps plain attention. The DeepSpeed backend hooks in at the same point.
+
+### Limitations
+
+- `sp_size` must divide the number of attention heads and of key/value heads.
+- Sliding-window layers need a flash attention implementation; with `sdpa` they are refused. Layers that mix tokens along the sequence outside of attention (chunked attention, linear attention, Mamba, LFM2 convolutions) are refused, as are `eager`, `flex_attention` and paged attention.
+- Context parallelism and sequence parallelism are mutually exclusive.
+- Vision-language models work on text-only batches. Models that ignore the `shift_labels` kwarg (Qwen3-VL, Gemma3ForConditionalGeneration, see [transformers#48491](https://github.com/huggingface/transformers/issues/48491)) need the loss computed from the logits and `shift_labels` by hand.
