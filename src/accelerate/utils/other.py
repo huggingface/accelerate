@@ -103,9 +103,14 @@ def has_repeated_blocks(module: torch.nn.Module) -> bool:
     return False
 
 
-# Containers have no `forward`: wrapping one in `OptimizedModule` only hides its `__getitem__`/`__iter__`, so
-# regional compilation descends into their children instead of treating them as a region.
-_CONTAINER_MODULES = (torch.nn.ModuleList, torch.nn.ModuleDict, torch.nn.ParameterList, torch.nn.ParameterDict)
+def is_container_module(module: torch.nn.Module) -> bool:
+    """
+    Check whether the module is a container (`ModuleList`, `ModuleDict`, `ParameterList`, `ParameterDict`). Containers
+    have no `forward`, and compiling one only hides its `__getitem__`/`__iter__` behind an `OptimizedModule`.
+    """
+    return isinstance(
+        module, (torch.nn.ModuleList, torch.nn.ModuleDict, torch.nn.ParameterList, torch.nn.ParameterDict)
+    )
 
 
 def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
@@ -161,7 +166,7 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
             new_module = torch.nn.ModuleList()
             for submodule in module:
                 new_module.append(torch.compile(submodule, **compile_kwargs))
-        elif has_repeated_blocks(module) or isinstance(module, _CONTAINER_MODULES):
+        elif has_repeated_blocks(module) or is_container_module(module):
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
             for name, value in list(new_module.__dict__.items()):
@@ -201,7 +206,7 @@ def compile_regions_deepspeed(module: torch.nn.Module, **compile_kwargs):
     if is_repeated_blocks(module):
         for submodule in module:
             submodule.compile(**compile_kwargs)
-    elif has_repeated_blocks(module) or isinstance(module, _CONTAINER_MODULES):
+    elif has_repeated_blocks(module) or is_container_module(module):
         for child in module.children():
             compile_regions_deepspeed(child, **compile_kwargs)
     else:  # leaf node
@@ -226,7 +231,7 @@ def compile_regions_fsdp2(module: torch.nn.Module, **compile_kwargs) -> torch.nn
     if is_repeated_blocks(module):
         for submodule in module:
             submodule.compile(**compile_kwargs)
-    elif has_repeated_blocks(module) or isinstance(module, _CONTAINER_MODULES):
+    elif has_repeated_blocks(module) or is_container_module(module):
         for child in module.children():
             compile_regions_fsdp2(child, **compile_kwargs)
     else:  # leaf node
