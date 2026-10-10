@@ -109,17 +109,13 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, max_training
         batch = tokenizer.pad(
             examples,
             padding="max_length",
-            max_length=max_length + 1,
+            max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors="pt",
         )
 
-        batch["labels"] = batch["input_ids"][:, 1:]
-        batch["input_ids"] = batch["input_ids"][:, :-1]
-        if "attention_mask" in batch:
-            batch["attention_mask"] = batch["attention_mask"][:, :-1]
-
-        batch["labels"] = torch.where(batch["labels"] == tokenizer.pad_token_id, -100, batch["labels"])
+        # Causal language models shift labels internally to predict the next token.
+        batch["labels"] = torch.where(batch["input_ids"] == tokenizer.pad_token_id, -100, batch["input_ids"])
 
         return batch
 
@@ -224,8 +220,8 @@ def training_function(config, args):
             )
             for _ in range(num_batches_in_step):
                 batch_samples += [next(training_iterator)]
-            # get local num items in batch
-            local_num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
+            # The first label has no preceding prediction and is excluded by the model's loss.
+            local_num_items_in_batch = sum(batch["labels"][..., 1:].ne(-100).sum() for batch in batch_samples)
 
             # to compute it correctly in a multi-device DDP training, we need to gather the total number of items in the full batch.
             num_items_in_batch = accelerator.gather(local_num_items_in_batch).sum().item()
