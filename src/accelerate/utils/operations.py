@@ -561,27 +561,36 @@ TENSOR_INT_TO_DTYPE = {v: k for k, v in TENSOR_TYPE_TO_INT.items()}
 
 def gather_tensor_shape(tensor):
     """
-    Grabs the shape of `tensor` only available on one process and returns a tensor of its shape
+    Grabs the shape of `tensor` only available on one process and returns a tuple of its shape and its dtype code.
     """
-    # Allocate 80 bytes to store the shape
-    max_tensor_dimension = 2**20
+    # Standard PyTorch supports up to 64 dimensions. We allocate 66 elements:
+    # index 0: num_dims + 1 (encoded dimension count)
+    # index 1..num_dims: tensor shape dimensions
+    # index 1 + num_dims: coded dtype
+    max_tensor_dimension = 66
     state = PartialState()
-    base_tensor = torch.empty(max_tensor_dimension, dtype=torch.int, device=state.device)
+    base_tensor = torch.zeros(max_tensor_dimension, dtype=torch.long, device=state.device)
 
     # Since PyTorch can't just send a tensor to another GPU without
     # knowing its size, we store the size of the tensor with data
     # in an allocation
     if tensor is not None:
         shape = tensor.shape
+        num_dims = len(shape)
         tensor_dtype = TENSOR_TYPE_TO_INT[tensor.dtype]
-        base_tensor[: len(shape) + 1] = torch.tensor(list(shape) + [tensor_dtype], dtype=int)
+        base_tensor[0] = num_dims + 1
+        if num_dims > 0:
+            base_tensor[1 : 1 + num_dims] = torch.tensor(list(shape), dtype=torch.long, device=state.device)
+        base_tensor[1 + num_dims] = tensor_dtype
+
     # Perform a reduction to copy the size data onto all GPUs
     base_tensor = reduce(base_tensor, reduction="sum")
-    base_tensor = base_tensor[base_tensor.nonzero()]
-    # The last non-zero data contains the coded dtype the source tensor is
-    dtype = int(base_tensor[-1:][0])
-    base_tensor = base_tensor[:-1]
-    return base_tensor, dtype
+    num_dims = int(base_tensor[0]) - 1
+    if num_dims < 0:
+        return (), None
+    shape = tuple(int(x) for x in base_tensor[1 : 1 + num_dims])
+    dtype = int(base_tensor[1 + num_dims])
+    return shape, dtype
 
 
 def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
