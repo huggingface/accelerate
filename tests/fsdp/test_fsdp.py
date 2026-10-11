@@ -53,6 +53,7 @@ from accelerate.utils.fsdp_utils import (
     _set_model_state_dict,
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
+    fsdp2_load_full_state_dict,
     fsdp2_prepare_auto_wrap_policy,
     load_fsdp_optimizer,
     save_fsdp_optimizer,
@@ -546,6 +547,89 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
 
 @require_fsdp2
+class FSDP2LoadFullStateDictUnitTest(AccelerateTestCase):
+    """CPU-safe unit coverage for fsdp2_load_full_state_dict buffer handling (#4382)."""
+
+    def test_fsdp2_load_full_state_dict_handles_persistent_buffers(self):
+        """Persistent buffers stay plain Tensors after FSDP2 wrap; loading must not assume DTensor."""
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        class FakeDTensor:
+            """Stand-in for torch.distributed.tensor.DTensor used only for isinstance checks."""
+
+            def __init__(self, size, dtype=torch.float32, device_type="cpu"):
+                self._size = torch.Size(size)
+                self.dtype = dtype
+                self.device_mesh = SimpleNamespace(device_type=device_type)
+                self.placements = (SimpleNamespace(),)
+
+            def size(self):
+                return self._size
+
+        dtensor_param = FakeDTensor([2, 2])
+        buffer_tensor = torch.tensor([1.25], dtype=torch.float32)
+
+        meta_sharded_sd = {
+            "linear.weight": dtensor_param,
+            "scale": buffer_tensor,
+        }
+        full_sd = {
+            "linear.weight": torch.ones(2, 2),
+            "scale": torch.tensor([1.25]),
+        }
+
+        mock_model = Mock(spec=torch.nn.Module)
+        mock_model.state_dict.return_value = meta_sharded_sd
+        mock_model.load_state_dict = Mock()
+        mock_model.get_parameter_or_buffer = Mock(side_effect=lambda name: full_sd[name])
+
+        mock_accelerator = Mock()
+        mock_accelerator.is_main_process = True
+        mock_accelerator.device = torch.device("cpu")
+
+        distributed = torch.ones(2, 2)
+
+        with (
+            patch("torch.distributed.broadcast") as mock_broadcast,
+            patch("torch.distributed.tensor.distribute_tensor", return_value=distributed) as mock_distribute,
+            patch("torch.distributed.tensor.DTensor", FakeDTensor),
+        ):
+            result = fsdp2_load_full_state_dict(mock_accelerator, mock_model, full_sd, cpu_offload=False)
+
+        self.assertIs(result, mock_model)
+        mock_distribute.assert_called_once()
+        self.assertEqual(mock_broadcast.call_count, 2)
+        loaded = mock_model.load_state_dict.call_args[0][0]
+        self.assertIn("linear.weight", loaded)
+        self.assertIn("scale", loaded)
+        self.assertIsInstance(loaded["scale"], torch.Tensor)
+        self.assertFalse(isinstance(loaded["scale"], FakeDTensor))
+        torch.testing.assert_close(loaded["scale"], torch.tensor([1.25]))
+
+        # Non-main rank buffer path: receive broadcast without touching .device_mesh
+        mock_model.load_state_dict.reset_mock()
+        mock_broadcast.reset_mock()
+        mock_distribute.reset_mock()
+        mock_accelerator.is_main_process = False
+
+        with (
+            patch("torch.distributed.broadcast") as mock_broadcast,
+            patch("torch.distributed.tensor.distribute_tensor", return_value=distributed) as mock_distribute,
+            patch("torch.distributed.tensor.DTensor", FakeDTensor),
+        ):
+            fsdp2_load_full_state_dict(mock_accelerator, mock_model, full_sd, cpu_offload=False)
+
+        mock_distribute.assert_called_once()
+        self.assertEqual(mock_broadcast.call_count, 2)
+        loaded = mock_model.load_state_dict.call_args[0][0]
+        self.assertIsInstance(loaded["scale"], torch.Tensor)
+        self.assertEqual(tuple(loaded["scale"].shape), (1,))
+
+        AcceleratorState._reset_state(True)
+
+
+@require_fsdp2
 @require_non_cpu
 @require_non_torch_xla
 class FSDP2PluginIntegration(FSDPPluginIntegration):
@@ -859,6 +943,22 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
         self.current_fsdp_version = 1
+
+    @require_fsdp2
+    def test_fsdp2_cpu_ram_efficient_loading_with_persistent_buffer(self):
+        """FSDP2 + cpu_ram_efficient_loading must load models that register_buffer (issue #4382)."""
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+            fsdp_cpu_ram_efficient_loading=True,
+            mixed_precision="no",
+        )
+        script = path_in_accelerate_package("test_utils", "scripts", "test_fsdp2_buffer_loading.py")
+        cmd.append(str(script))
+        execute_subprocess_async(cmd, timeout=180)
 
     @require_fsdp2
     def test_fsdp2_mixed_precision_bf16_with_bf16_model_loaded(self):
