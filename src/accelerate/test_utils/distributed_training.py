@@ -18,6 +18,8 @@ import json
 import os
 import sys
 
+import torch
+
 from .testing import (
     execute_subprocess_async,
     get_launch_command,
@@ -89,18 +91,14 @@ def run_token_weighting_example(output, *, example_file, num_processes):
         "--output",
         output,
     ]
-    # This fixture uses local model/data on CPU, regardless of the parent test environment.
+    # Keep the CPU fixture independent of the parent test environment.
     env = {
         **os.environ,
         "CUDA_VISIBLE_DEVICES": "",
-        "HF_HUB_OFFLINE": "1",
         # The example otherwise forces two epochs when this test flag is enabled.
         "TESTING_MOCKED_DATALOADERS": "0",
     }
     run_result = execute_subprocess_async(command, env=env)
     assert run_result.returncode == 0, f"DDP launcher failed: {run_result.stderr}"
 
-    return [
-        json.loads(output.with_suffix(f".rank{rank}.json").read_text(encoding="utf-8"))
-        for rank in range(num_processes)
-    ]
+    return [torch.load(output.with_suffix(f".rank{rank}.pt"), weights_only=True) for rank in range(num_processes)]

@@ -220,7 +220,7 @@ def test_gradient_accumulation_example(tmp_path):
     The example suite separately checks its command-line entry point and collators.
     """
     results = run_token_weighting_example(
-        tmp_path / "token_weighting.json",
+        tmp_path / "token_weighting.pt",
         example_file=Path("examples/by_feature/gradient_accumulation_for_autoregressive_models.py").resolve(),
         num_processes=2,
     )
@@ -233,8 +233,8 @@ def test_gradient_accumulation_example(tmp_path):
         assert len(result["gradients"]) == 1
 
         # Do the gradients match? AdamW can hide a scaling error in its update.
-        gradients = torch.tensor(result["gradients"][0], dtype=torch.float64)
-        reference_gradients = torch.tensor(result["reference_gradients"], dtype=torch.float64)
+        gradients = result["gradients"][0].to(torch.float64)
+        reference_gradients = result["reference_gradients"].to(torch.float64)
         reference_gradient_norm = reference_gradients.norm().item()
         assert reference_gradient_norm > 0
 
@@ -244,8 +244,8 @@ def test_gradient_accumulation_example(tmp_path):
         )
 
         # Do the updates match relative to the size of the reference update?
-        parameters = torch.tensor(result["parameters"], dtype=torch.float64)
-        reference_parameters = torch.tensor(result["reference_parameters"], dtype=torch.float64)
+        parameters = result["parameters"].to(torch.float64)
+        reference_parameters = result["reference_parameters"].to(torch.float64)
         reference_update_norm = result["reference_update_norm"]
         assert reference_update_norm > 0
 
