@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Check the autoregressive accumulation example against a full-batch update."""
+"""Run the accumulation example and record gradients and parameters for comparison."""
 
 import argparse
 import copy
@@ -63,22 +63,27 @@ def main():
 
     # Independent oracle: one ordinary PyTorch update on the full batch. Compute
     # the shifted mean loss explicitly, not through the example's token scaling.
-    reference = copy.deepcopy(model)
-    reference_optimizer = torch.optim.AdamW(reference.parameters(), lr=0.01)
-    logits = reference(input_ids=input_ids, attention_mask=attention_mask).logits
-    reference_loss = F.cross_entropy(logits[:, :-1].reshape(-1, 11), labels[:, 1:].reshape(-1), ignore_index=-100)
+    reference_model = copy.deepcopy(model)
+    reference_optimizer = torch.optim.AdamW(reference_model.parameters(), lr=0.01)
+    logits = reference_model(input_ids=input_ids, attention_mask=attention_mask).logits
+    reference_loss = F.cross_entropy(
+        logits[:, :-1].reshape(-1, 11),
+        labels[:, 1:].reshape(-1),
+        ignore_index=-100,
+    )
     reference_loss.backward()
-    reference_gradients = torch.cat([parameter.grad.detach().flatten() for parameter in reference.parameters()])
+    reference_gradients = torch.cat([parameter.grad.detach().flatten() for parameter in reference_model.parameters()])
     reference_optimizer.step()
-    reference_parameters = parameters_to_vector(reference.parameters()).detach()
+    reference_parameters = parameters_to_vector(reference_model.parameters()).detach()
 
     target_counts = []
 
-    def observe_batch(module, positional, kwargs):
+    def observe_batch(module, args, kwargs):
         if module.training:
             target_counts.append(kwargs["labels"][:, 1:].ne(-100).sum().item())
 
-    hook = model.register_forward_pre_hook(observe_batch, with_kwargs=True)
+    target_count_hook = model.register_forward_pre_hook(observe_batch, with_kwargs=True)
+
     samples = [
         dict(input_ids=ids, labels=targets, attention_mask=mask)
         for ids, targets, mask in zip(input_ids, labels, attention_mask)
@@ -90,17 +95,19 @@ def main():
     spec = importlib.util.spec_from_file_location("autoregressive_example", args.example)
     example = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(example)
+
     gradients = []
-    adamw = example.AdamW
+    original_adamw = example.AdamW
 
     def observe_gradients(optimizer, args, kwargs):
         gradients.append(torch.cat([parameter.grad.detach().flatten() for parameter in model.parameters()]))
 
     def make_optimizer(*args, **kwargs):
-        optimizer = adamw(*args, **kwargs)
+        optimizer = original_adamw(*args, **kwargs)
         optimizer.register_step_pre_hook(observe_gradients)
         return optimizer
 
+    # Leave gradients unclipped, matching the full-batch reference.
     config = {"lr": 0.01, "num_epochs": 1, "seed": 42, "batch_size": 2, "max_grad_norm": float("inf")}
     training_args = SimpleNamespace(
         cpu=True, mixed_precision="no", gradient_accumulation_steps=2, with_wandb_tracking=False
@@ -114,21 +121,18 @@ def main():
         patch.object(example, "AdamW", make_optimizer),
     ):
         example.training_function(config, training_args)
-    hook.remove()
+    target_count_hook.remove()
 
-    args.output.with_suffix(f".rank{os.environ['RANK']}.json").write_text(
-        json.dumps(
-            {
-                "target_counts": target_counts,
-                "gradients": [gradient.tolist() for gradient in gradients],
-                "reference_gradients": reference_gradients.tolist(),
-                "parameters": parameters_to_vector(model.parameters()).detach().tolist(),
-                "reference_parameters": reference_parameters.tolist(),
-                "reference_update_norm": (reference_parameters - initial_parameters).norm().item(),
-            },
-            allow_nan=False,
-        )
-    )
+    result = {
+        "target_counts": target_counts,
+        "gradients": [gradient.tolist() for gradient in gradients],
+        "reference_gradients": reference_gradients.tolist(),
+        "parameters": parameters_to_vector(model.parameters()).detach().tolist(),
+        "reference_parameters": reference_parameters.tolist(),
+        "reference_update_norm": (reference_parameters - initial_parameters).norm().item(),
+    }
+    output_file = args.output.with_suffix(f".rank{os.environ['RANK']}.json")
+    output_file.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

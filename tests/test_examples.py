@@ -297,6 +297,7 @@ class FeatureExamplesTests(TempDirTestCase):
         accelerator = mock.Mock(distributed_type=DistributedType.NO, mixed_precision="no")
         accelerator.main_process_first = contextlib.nullcontext
         accelerator.local_main_process_first = contextlib.nullcontext
+
         for loader, dataset_module, columns, kwargs in (
             (example.get_dataloaders, example, {"text": ["a b c", "a b"]}, {"max_training_samples": 2}),
             (
@@ -317,6 +318,7 @@ class FeatureExamplesTests(TempDirTestCase):
                     ),
                 ):
                     train_dataloader, eval_dataloader = loader(accelerator, batch_size=2, **kwargs)
+
                 for dataloader in (train_dataloader, eval_dataloader):
                     # Models shift these labels internally; the collator must not.
                     batches = list(dataloader)
@@ -324,11 +326,12 @@ class FeatureExamplesTests(TempDirTestCase):
                     labels = [row for batch in batches for row in batch["labels"].tolist()]
 
                     unpadded_input_ids = [
-                        [token for token in row if token != tokenizer.pad_token_id] for row in input_ids
+                        [token_id for token_id in row if token_id != tokenizer.pad_token_id] for row in input_ids
                     ]
                     assert unpadded_input_ids == [[1, 2, 3], [1, 2]]
                     assert labels == [
-                        [token if token != tokenizer.pad_token_id else -100 for token in row] for row in input_ids
+                        [token_id if token_id != tokenizer.pad_token_id else -100 for token_id in row]
+                        for row in input_ids
                     ]
 
     def test_local_sgd(self):

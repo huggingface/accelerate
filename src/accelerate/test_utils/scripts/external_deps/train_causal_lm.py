@@ -76,6 +76,7 @@ def train_with_accelerate(model, optimizer, dataloader, accelerator):
             optimizer.zero_grad()
 
             window_losses.append(loss.detach())
+
             if accelerator.sync_gradients:
                 # Each microbatch has the same number of next-token targets.
                 # Average within this accumulation window, then across processes.
@@ -137,12 +138,12 @@ def main():
     # This measures progress on training data, not performance on unseen text.
     first_global_batch = input_ids[:8].to(device)
     # Accelerate's prepared model handles autocast inside forward; only the reference needs it here.
-    context = (
+    autocast_context = (
         torch.autocast("cuda", dtype=mixed_precision_dtype)
         if args.reference and mixed_precision_dtype is not None
         else nullcontext()
     )
-    with torch.no_grad(), context:
+    with torch.no_grad(), autocast_context:
         final_loss = model(input_ids=first_global_batch, labels=first_global_batch).loss.item()
 
     if args.reference or accelerator.is_main_process:
@@ -153,7 +154,7 @@ def main():
         }
         args.output.write_text(json.dumps(results, indent=2, allow_nan=False) + "\n", encoding="utf-8")
 
-    if accelerator:
+    if accelerator is not None:
         accelerator.end_training()
 
 

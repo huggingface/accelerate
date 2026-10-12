@@ -34,8 +34,8 @@ DDP_CONFIG_FILE = Path(__file__).parent / "ddp.yaml"
 @require_multi_gpu
 @require_huggingface_suite
 def test_training(tmp_path):
-    """
-    Train on eight examples per update: one GPU with eight, or two GPUs with four each.
+    """Train on eight examples per update: one GPU with eight, or two GPUs with four each.
+
     Compare the losses and require both runs to improve on the first batch.
     A plain-PyTorch reference can expose wrapper bugs that two Accelerate runs could share.
     """
@@ -72,7 +72,11 @@ def test_training(tmp_path):
     [
         pytest.param("fp16", 1e-4, 1e-4, id="fp16"),
         pytest.param(
-            "bf16", 1e-3, 1e-3, id="bf16", marks=pytest.mark.skipif(not is_bf16_available(), reason="Requires BF16")
+            "bf16",
+            1e-3,
+            1e-3,
+            id="bf16",
+            marks=pytest.mark.skipif(not is_bf16_available(), reason="Requires BF16"),
         ),
     ],
 )
