@@ -23,7 +23,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
-from accelerate.test_utils.causal_lm import load_model_and_data
+from accelerate.test_utils.training import load_causal_lm_and_data
 from accelerate.utils import set_seed
 
 
@@ -111,7 +111,7 @@ def main():
     # Explicitly use full FP32 matmul precision for this comparison.
     torch.set_float32_matmul_precision("highest")
 
-    model, input_ids = load_model_and_data()
+    model, input_ids = load_causal_lm_and_data()
 
     mixed_precision_dtype = {
         "no": None,

@@ -22,7 +22,7 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.test_utils.causal_lm import load_model_and_data
+from accelerate.test_utils.training import load_causal_lm_and_data
 from accelerate.utils import set_seed
 
 
@@ -53,7 +53,8 @@ def main():
     # Use full FP32 matrix multiplication precision for the loss comparison.
     torch.set_float32_matmul_precision("highest")
 
-    model, input_ids = load_model_and_data()
+    model, input_ids = load_causal_lm_and_data()
+    # Track sample IDs to detect repeated or skipped data after resuming.
     dataset = TensorDataset(input_ids, torch.arange(len(input_ids)))
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
 

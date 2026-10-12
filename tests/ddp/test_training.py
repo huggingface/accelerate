@@ -202,6 +202,7 @@ def test_checkpoint_resume(tmp_path):
     assert_close(partial["losses"] + resumed["losses"], uninterrupted["losses"], atol=max_loss_difference, rtol=0)
     assert_close(resumed["final_loss"], uninterrupted["final_loss"], atol=max_loss_difference, rtol=0)
 
+    # Agreement also accepts two runs that never learn; require progress on the first batch.
     min_loss_decrease = 1e-4
     assert uninterrupted["final_loss"] < uninterrupted["losses"][0] - min_loss_decrease
 

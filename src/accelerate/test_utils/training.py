@@ -144,3 +144,29 @@ def mocked_dataloaders_for_autoregressive_models(accelerator, batch_size: int = 
     eval_dataloader = DataLoader(tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=1)
 
     return train_dataloader, eval_dataloader
+
+
+def load_causal_lm_and_data():
+    """Load the tiny checkpoint and 80 equal-length text blocks in a fixed order."""
+    from datasets import load_dataset
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    checkpoint = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+    # Training does not reuse the attention cache used for generation.
+    model = AutoModelForCausalLM.from_pretrained(
+        checkpoint,
+        dtype=torch.float32,
+        use_cache=False,
+    )
+    model.train()
+
+    dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:100]")
+    text = "\n\n".join(dataset["text"])
+    token_ids = tokenizer(text, return_attention_mask=False)["input_ids"]
+
+    block_size, num_blocks = 32, 80
+    # Each block has 31 next-token targets, so equally sized microbatch losses
+    # can be averaged without reweighting. Eight blocks per update give ten complete updates.
+    input_ids = torch.tensor(token_ids[: num_blocks * block_size]).reshape(num_blocks, block_size)
+    return model, input_ids
