@@ -147,7 +147,10 @@ def mocked_dataloaders_for_autoregressive_models(accelerator, batch_size: int = 
 
 
 def load_causal_lm_and_data():
-    """Load the tiny checkpoint and 80 equal-length text blocks in a fixed order."""
+    """Load the shared fixture for causal-LM training and resume tests.
+
+    Use tiny Qwen2 and 80 WikiText blocks of 32 tokens in a fixed order.
+    """
     from datasets import load_dataset
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
