@@ -61,15 +61,15 @@ def main():
     # Momentum makes loading model weights alone insufficient for correct continuation.
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
 
-    # With two ranks, Accelerate takes two scheduler steps per update; step_size=4 decays every two updates.
-    # Restoring only the optimizer's learning rate cannot preserve this schedule.
+    # In this setup, Accelerate takes two scheduler steps per update; step_size=4 decays every two updates.
+    # Restoring the current learning rate alone does not restore when the next reduction is due.
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4)
     model, optimizer, dataloader, scheduler = accelerator.prepare(model, optimizer, dataloader, scheduler)
 
     checkpoint_update = 5
     if args.resume_from_checkpoint:
         accelerator.load_state(args.resume_from_checkpoint)
-        # Each saved update consumed this many local microbatches.
+        # Skip the local batches already consumed before the checkpoint.
         num_batches_to_skip = checkpoint_update * args.gradient_accumulation_steps
         dataloader = accelerator.skip_first_batches(dataloader, num_batches_to_skip)
 
@@ -87,11 +87,13 @@ def main():
 
             window_losses.append(loss.detach())
             window_sample_ids.append(batch_sample_ids)
+
             if accelerator.sync_gradients:
                 window_loss = torch.stack(window_losses).mean()
                 losses.append(accelerator.reduce(window_loss, reduction="mean").item())
                 learning_rates.append(learning_rate)
-                sample_ids.append(sorted(accelerator.gather(torch.cat(window_sample_ids)).cpu().tolist()))
+                update_sample_ids = accelerator.gather(torch.cat(window_sample_ids))
+                sample_ids.append(sorted(update_sample_ids.tolist()))
                 window_losses.clear()
                 window_sample_ids.clear()
 
