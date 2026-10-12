@@ -41,7 +41,7 @@ from accelerate.test_utils.testing import (
     run_command,
     run_first,
 )
-from accelerate.utils import patch_environment
+from accelerate.utils import TorchDynamoPlugin, patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
 
 
@@ -180,6 +180,20 @@ class AccelerateLauncherTester(unittest.TestCase):
             _, current_env = prepare_simple_launcher_cmd_env(args)
             assert "KMP_AFFINITY" not in current_env
             assert "KMP_BLOCKTIME" not in current_env
+
+    def test_launch_keeps_dynamo_dynamic_unset_by_default(self):
+        """
+        Without `--dynamo_use_dynamic`, the launcher leaves `dynamic` unset so `torch.compile` keeps its default.
+        """
+        with patch.dict(os.environ):
+            os.environ.pop("ACCELERATE_DYNAMO_USE_DYNAMIC", None)
+
+            for flags, expected in (([], None), (["--dynamo_use_dynamic"], True)):
+                args = self.parser.parse_args(["--dynamo_backend", "eager", *flags, str(self.test_file_path)])
+                args, _, _ = _validate_launch_command(args)
+                _, current_env = prepare_simple_launcher_cmd_env(args)
+                with patch.dict(os.environ, current_env, clear=True):
+                    assert TorchDynamoPlugin().dynamic is expected
 
     def test_validate_launch_command(self):
         """Test that the validation function combines args and defaults."""

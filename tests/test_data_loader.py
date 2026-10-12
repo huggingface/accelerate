@@ -614,6 +614,23 @@ class DataLoaderTester(AccelerateTestCase):
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
         assert [t.tolist() for t in new_dataloader] == [[8, 9, 10, 11], [12, 13, 14, 15]]
 
+    def test_skip_first_batches_preserves_batch_metadata(self):
+        dataloader = prepare_data_loader(DataLoader(range(10), batch_size=2), num_processes=2, process_index=0)
+        resumed = skip_first_batches(dataloader, num_batches=1)
+
+        assert resumed.total_batch_size == 4
+        assert [batch.tolist() for batch in resumed] == [[4, 5], [8, 9]]
+        assert resumed.remainder == 2
+
+    def test_skip_first_batches_preserves_drop_last(self):
+        dataloader = prepare_data_loader(
+            DataLoader(range(10), batch_size=2, drop_last=True), num_processes=2, process_index=0
+        )
+        resumed = skip_first_batches(dataloader, num_batches=1)
+
+        assert [batch.tolist() for batch in resumed] == [[4, 5]]
+        assert resumed.remainder == -1
+
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
         for idx, _ in enumerate(dataloader):
@@ -682,6 +699,14 @@ class DataLoaderTester(AccelerateTestCase):
 
         test_sampler_epoch(DataLoaderShard)
         test_sampler_epoch(DataLoaderDispatcher)
+
+    def test_skip_first_batches_preserves_configuration(self):
+        dataset = list(range(16))
+        for dataloader_cls in (DataLoaderShard, DataLoaderDispatcher):
+            dataloader = dataloader_cls(dataset, batch_size=4, _drop_last=True, _non_blocking=True)
+            new_dataloader = skip_first_batches(dataloader, num_batches=1)
+            assert new_dataloader._drop_last is True
+            assert new_dataloader._non_blocking is True
 
     @require_datasets
     def test_iterable_dataset_native_sharding_when_n_shards_equals_num_processes(self):

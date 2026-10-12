@@ -288,6 +288,19 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, a
     return load_result
 
 
+def _unwrap_optimizer(optimizer):
+    """Return the plain `torch.optim.Optimizer` underneath accelerate's wrapper.
+
+    Needed by FSDP2: torch's `get/set_optimizer_state_dict` calls `optimizer.step()`
+    to initialize an empty state, which also steps the fp16 `GradScaler` in the wrapper.
+    """
+    from ..optimizer import AcceleratedOptimizer
+
+    while isinstance(optimizer, AcceleratedOptimizer):
+        optimizer = optimizer.optimizer
+    return optimizer
+
+
 def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0, use_dcp=True):
     """
     Save an FSDP optimizer state checkpoint.
@@ -323,7 +336,7 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
         if fsdp_plugin.fsdp_version == 2:
             from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
 
-            optim_state = get_optimizer_state_dict(model, optimizer, options=sd_options)
+            optim_state = get_optimizer_state_dict(model, _unwrap_optimizer(optimizer), options=sd_options)
         else:
             optim_state = FSDP.optim_state_dict(model, optimizer)
 
@@ -413,7 +426,7 @@ def load_fsdp_optimizer(
                 if fsdp_plugin.fsdp_version == 2:
                     from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
 
-                    optim_state = get_optimizer_state_dict(model, optimizer, options=sd_options)
+                    optim_state = get_optimizer_state_dict(model, _unwrap_optimizer(optimizer), options=sd_options)
                 else:
                     optim_state = FSDP.optim_state_dict(model, optimizer)
                 optim_state = {"optimizer": optim_state}
@@ -437,7 +450,7 @@ def load_fsdp_optimizer(
         else:
             from torch.distributed.checkpoint.state_dict import set_optimizer_state_dict
 
-            set_optimizer_state_dict(model, optimizer, optim_state, options=sd_options)
+            set_optimizer_state_dict(model, _unwrap_optimizer(optimizer), optim_state, options=sd_options)
 
     accelerator.wait_for_everyone()
 
@@ -810,6 +823,20 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
             )
 
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
+        # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
+        # Also, these buffers aren't getting sharded by default
+        # We get the FQNs of all non-persistent buffers, to re-register them after
+        non_persistent_buffer_fqns = get_non_persistent_buffers(model, recurse=True, fqns=True)
+        original_non_persistent_buffers = copy.deepcopy(
+            {k: v for k, v in model.named_buffers() if k in non_persistent_buffer_fqns}
+        )
+        # Non-main ranks only need the shapes: their weights are replaced by the main process' in
+        # `fsdp2_load_full_state_dict`. Moving them to `meta` before the upcast below avoids writing a full fp32 copy of
+        # every trainable parameter into host memory on every rank.
+        if not accelerator.is_main_process:
+            model = model.to(torch.device("meta"))
+
     # FSDP2 requires uniform orig_dtype among trainable params in each group.
     # Upcast to fp32 master weights; MixedPrecisionPolicy.param_dtype handles compute cast.
     if accelerator.mixed_precision != "no" and not model_has_params4bit:
@@ -833,13 +860,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.empty`), `fully_shard` would move it to GPU
         # Afterwards, when we call `fsdp2_load_full_state_dict`, us creating the state_dict would result into briefly having two copies of model state_dict on the GPU -> VRAM spike
 
-        # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
-        # Also, these buffers aren't getting sharded by default
-        # We get the FQNs of all non-persistent buffers, to re-register them after
-        non_persistent_buffer_fqns = get_non_persistent_buffers(model, recurse=True, fqns=True)
-        original_non_persistent_buffers = copy.deepcopy(
-            {k: v for k, v in model.named_buffers() if k in non_persistent_buffer_fqns}
-        )
         # We move the model to meta device, as then sharding happens on meta device
         model = model.to(torch.device("meta"))
         # We need to re-tie the weights, not exactly sure why, but if we don't do this, reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
@@ -942,7 +962,11 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
         no_split_modules = getattr(model, "_no_split_modules", None)
         if no_split_modules is None:
             no_split_modules = []
-        transformer_cls_names_to_wrap = list(no_split_modules)
+        # `_no_split_modules` can name classes this model doesn't instantiate (e.g. the ESMFold blocks of an
+        # `EsmModel`, or the audio layers of a Gemma 4 checkpoint without audio tower)
+        transformer_cls_names_to_wrap = [
+            name for name in no_split_modules if get_module_class_from_name(model, name) is not None
+        ]
         if fsdp2_plugin.transformer_cls_names_to_wrap is not None:
             transformer_cls_names_to_wrap = fsdp2_plugin.transformer_cls_names_to_wrap
         transformer_cls_to_wrap = set()
