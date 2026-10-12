@@ -67,6 +67,7 @@ def run_training(
         command.append("--reference")
 
     result = execute_subprocess_async(command)
+    # Also reject signal termination; the shared helper only rejects positive exit codes.
     assert result.returncode == 0, result.stderr
     return json.loads(output.read_text(encoding="utf-8"))
 
