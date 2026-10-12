@@ -155,6 +155,20 @@ class ExampleDifferenceTests(unittest.TestCase):
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
 
 
+def make_word_level_tokenizer(vocab):
+    """Build a real tokenizer with explicit token IDs for the loader checks."""
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+    from transformers import PreTrainedTokenizerFast
+
+    tokenizer = Tokenizer(WordLevel(vocab, unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = Whitespace()
+    return PreTrainedTokenizerFast(
+        tokenizer_object=tokenizer, eos_token="[EOS]", unk_token="[UNK]", model_max_length=8
+    )
+
+
 @mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "1"})
 @require_huggingface_suite
 @run_first
@@ -275,10 +289,6 @@ class FeatureExamplesTests(TempDirTestCase):
     def test_autoregressive_dataloaders_preserve_labels(self):
         """Does preparing a batch preserve the correct answers for next-token prediction?"""
         import datasets
-        from tokenizers import Tokenizer
-        from tokenizers.models import WordLevel
-        from tokenizers.pre_tokenizers import Whitespace
-        from transformers import PreTrainedTokenizerFast
 
         spec = importlib.util.spec_from_file_location(
             "autoregressive_example", "examples/by_feature/gradient_accumulation_for_autoregressive_models.py"
@@ -289,11 +299,7 @@ class FeatureExamplesTests(TempDirTestCase):
             spec.loader.exec_module(example)
 
         # Unequal text lengths exercise padding; known token IDs make label shifts visible.
-        tokenizer = Tokenizer(WordLevel({"[EOS]": 0, "a": 1, "b": 2, "c": 3, "[UNK]": 4}, unk_token="[UNK]"))
-        tokenizer.pre_tokenizer = Whitespace()
-        tokenizer = PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer, eos_token="[EOS]", unk_token="[UNK]", model_max_length=8
-        )
+        tokenizer = make_word_level_tokenizer({"[EOS]": 0, "a": 1, "b": 2, "c": 3, "[UNK]": 4})
 
         accelerator = mock.Mock(distributed_type=DistributedType.NO, mixed_precision="no")
         accelerator.main_process_first = contextlib.nullcontext
