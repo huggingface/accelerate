@@ -72,6 +72,63 @@ EXCLUDE_EXAMPLES = [
 ]
 
 
+def make_word_level_tokenizer(vocab):
+    """Use known token IDs to make label alignment and padding errors easy to inspect."""
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+    from transformers import PreTrainedTokenizerFast
+
+    tokenizer = Tokenizer(WordLevel(vocab, unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = Whitespace()
+    return PreTrainedTokenizerFast(
+        tokenizer_object=tokenizer, eos_token="[EOS]", unk_token="[UNK]", model_max_length=8
+    )
+
+
+def make_autoregressive_dataloaders(loader_name, *, texts, tokenizer, batch_size):
+    """Run either loader with supplied texts and tokenizer instead of downloads."""
+    import datasets
+    from transformers import AutoTokenizer
+
+    accelerator = mock.Mock(distributed_type=DistributedType.NO, mixed_precision="no")
+    accelerator.main_process_first = contextlib.nullcontext
+    accelerator.local_main_process_first = contextlib.nullcontext
+
+    if loader_name == "example":
+        spec = importlib.util.spec_from_file_location(
+            "autoregressive_example", "examples/by_feature/gradient_accumulation_for_autoregressive_models.py"
+        )
+        example = importlib.util.module_from_spec(spec)
+        # Import the real loader rather than the example suite's replacement.
+        with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
+            spec.loader.exec_module(example)
+
+        get_dataloaders = example.get_dataloaders
+        dataset_module = example
+        dataset = datasets.Dataset.from_dict({"text": texts})
+        loader_kwargs = {"max_training_samples": len(texts)}
+    else:
+        get_dataloaders = mocked_dataloaders_for_autoregressive_models
+        dataset_module = datasets
+        dataset = datasets.Dataset.from_dict(
+            {"sentence1": texts, "sentence2": [""] * len(texts), "label": [0] * len(texts)}
+        )
+        loader_kwargs = {}
+
+    # These loaders fetch their own data and tokenizer. Substitute those inputs
+    # to guarantee a padded batch with known labels while testing the real collators.
+    with (
+        mock.patch.object(AutoTokenizer, "from_pretrained", return_value=tokenizer),
+        mock.patch.object(
+            dataset_module,
+            "load_dataset",
+            return_value=datasets.DatasetDict(train=dataset, validation=dataset),
+        ),
+    ):
+        return get_dataloaders(accelerator, batch_size=batch_size, **loader_kwargs)
+
+
 class ExampleDifferenceTests(unittest.TestCase):
     """
     This TestCase checks that all of the `complete_*` scripts contain all of the
@@ -155,63 +212,6 @@ class ExampleDifferenceTests(unittest.TestCase):
         ]
         self.one_complete_example("complete_cv_example.py", True, cv_path, special_strings)
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
-
-
-def make_word_level_tokenizer(vocab):
-    """Use known token IDs to make label alignment and padding errors easy to inspect."""
-    from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
-    from tokenizers.pre_tokenizers import Whitespace
-    from transformers import PreTrainedTokenizerFast
-
-    tokenizer = Tokenizer(WordLevel(vocab, unk_token="[UNK]"))
-    tokenizer.pre_tokenizer = Whitespace()
-    return PreTrainedTokenizerFast(
-        tokenizer_object=tokenizer, eos_token="[EOS]", unk_token="[UNK]", model_max_length=8
-    )
-
-
-def make_autoregressive_dataloaders(loader_name, *, texts, tokenizer, batch_size):
-    """Run either loader with supplied texts and tokenizer instead of downloads."""
-    import datasets
-    from transformers import AutoTokenizer
-
-    accelerator = mock.Mock(distributed_type=DistributedType.NO, mixed_precision="no")
-    accelerator.main_process_first = contextlib.nullcontext
-    accelerator.local_main_process_first = contextlib.nullcontext
-
-    if loader_name == "example":
-        spec = importlib.util.spec_from_file_location(
-            "autoregressive_example", "examples/by_feature/gradient_accumulation_for_autoregressive_models.py"
-        )
-        example = importlib.util.module_from_spec(spec)
-        # Import the real loader rather than the example suite's replacement.
-        with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
-            spec.loader.exec_module(example)
-
-        get_dataloaders = example.get_dataloaders
-        dataset_module = example
-        dataset = datasets.Dataset.from_dict({"text": texts})
-        loader_kwargs = {"max_training_samples": len(texts)}
-    else:
-        get_dataloaders = mocked_dataloaders_for_autoregressive_models
-        dataset_module = datasets
-        dataset = datasets.Dataset.from_dict(
-            {"sentence1": texts, "sentence2": [""] * len(texts), "label": [0] * len(texts)}
-        )
-        loader_kwargs = {}
-
-    # These loaders fetch their own data and tokenizer. Substitute those inputs
-    # to guarantee a padded batch with known labels while testing the real collators.
-    with (
-        mock.patch.object(AutoTokenizer, "from_pretrained", return_value=tokenizer),
-        mock.patch.object(
-            dataset_module,
-            "load_dataset",
-            return_value=datasets.DatasetDict(train=dataset, validation=dataset),
-        ),
-    ):
-        return get_dataloaders(accelerator, batch_size=batch_size, **loader_kwargs)
 
 
 @mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "1"})
