@@ -273,6 +273,7 @@ class FeatureExamplesTests(TempDirTestCase):
         run_command(self.launch_args + testargs)
 
     def test_autoregressive_dataloaders_preserve_labels(self):
+        """Does preparing a batch preserve the correct answers for next-token prediction?"""
         import datasets
         from tokenizers import Tokenizer
         from tokenizers.models import WordLevel
@@ -292,6 +293,7 @@ class FeatureExamplesTests(TempDirTestCase):
         tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer, eos_token="[EOS]", unk_token="[UNK]", model_max_length=8
         )
+
         accelerator = mock.Mock(distributed_type=DistributedType.NO, mixed_precision="no")
         accelerator.main_process_first = contextlib.nullcontext
         accelerator.local_main_process_first = contextlib.nullcontext
