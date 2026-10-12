@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import ast
+import contextlib
+import importlib.util
 import os
 import re
 import shutil
@@ -40,7 +42,8 @@ from accelerate.test_utils.testing import (
     run_first,
     slow,
 )
-from accelerate.utils import write_basic_config
+from accelerate.test_utils.training import mocked_dataloaders_for_autoregressive_models
+from accelerate.utils import DistributedType, write_basic_config
 
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
@@ -270,22 +273,17 @@ class FeatureExamplesTests(TempDirTestCase):
         run_command(self.launch_args + testargs)
 
     def test_autoregressive_dataloaders_preserve_labels(self):
-        import contextlib
-        import importlib.util
-
         import datasets
         from tokenizers import Tokenizer
         from tokenizers.models import WordLevel
         from tokenizers.pre_tokenizers import Whitespace
         from transformers import PreTrainedTokenizerFast
 
-        from accelerate.test_utils.training import mocked_dataloaders_for_autoregressive_models
-        from accelerate.utils import DistributedType
-
         spec = importlib.util.spec_from_file_location(
             "autoregressive_example", "examples/by_feature/gradient_accumulation_for_autoregressive_models.py"
         )
         example = importlib.util.module_from_spec(spec)
+        # Import the real loader rather than the example suite's replacement.
         with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
             spec.loader.exec_module(example)
 
