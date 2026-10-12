@@ -73,7 +73,8 @@ def run_training(
 
 def run_token_weighting_example(output, *, example_file, num_processes):
     """Run the example's controlled CPU experiment and return each rank's measurements."""
-    # torchrun creates CPU ranks; accelerate launch --cpu starts a single process.
+    # Use this interpreter's torchrun to start communicating CPU processes.
+    # Plain accelerate launch --cpu starts only one process.
     command = [
         sys.executable,
         "-m",
