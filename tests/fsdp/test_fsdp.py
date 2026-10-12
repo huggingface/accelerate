@@ -546,6 +546,35 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert model._ignored_params == params_to_ignore
 
 
+def _fsdp2_load_buffer_worker(rank, world_size, init_file, result_dir):
+    """Loads a non-contiguous persistent buffer through `fsdp2_load_full_state_dict` with a real (gloo) broadcast."""
+    from types import SimpleNamespace
+
+    import torch.distributed as dist
+
+    dist.init_process_group("gloo", init_method=f"file://{init_file}", rank=rank, world_size=world_size)
+    try:
+
+        class Sub(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.register_buffer("table", torch.zeros(3, 2))
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = Sub()
+
+        with torch.device("meta"):
+            model = Model()
+        full_sd = {"sub.table": torch.arange(6.0).reshape(2, 3).t()} if rank == 0 else {}
+        accelerator = SimpleNamespace(is_main_process=rank == 0, device=torch.device("cpu"))
+        fsdp2_load_full_state_dict(accelerator, model, full_sd)
+        torch.save(model.sub.table, os.path.join(result_dir, f"rank{rank}.pt"))
+    finally:
+        dist.destroy_process_group()
+
+
 @require_fsdp2
 class FSDP2LoadFullStateDictUnitTest(AccelerateTestCase):
     """CPU-safe unit coverage for fsdp2_load_full_state_dict buffer handling (#4382)."""
@@ -625,6 +654,37 @@ class FSDP2LoadFullStateDictUnitTest(AccelerateTestCase):
         loaded = mock_model.load_state_dict.call_args[0][0]
         self.assertIsInstance(loaded["scale"], torch.Tensor)
         self.assertEqual(tuple(loaded["scale"].shape), (1,))
+
+        AcceleratorState._reset_state(True)
+
+    def test_fsdp2_load_full_state_dict_non_contiguous_buffer(self):
+        """A non-contiguous buffer must arrive with the same values on every rank."""
+        import torch.multiprocessing as mp
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            init_file = os.path.join(tmpdir, "init")
+            mp.spawn(_fsdp2_load_buffer_worker, args=(2, init_file, tmpdir), nprocs=2, join=True)
+            expected = torch.arange(6.0).reshape(2, 3).t()
+            for rank in range(2):
+                torch.testing.assert_close(torch.load(os.path.join(tmpdir, f"rank{rank}.pt")), expected)
+
+    def test_fsdp2_load_full_state_dict_keeps_buffers_on_device_with_cpu_offload(self):
+        """FSDP2 CPU offloading only manages parameters, so buffers must stay on the compute device."""
+        from unittest.mock import Mock, patch
+
+        full_sd = {"scale": torch.tensor([1.25])}
+        mock_model = Mock(spec=torch.nn.Module)
+        mock_model.state_dict.return_value = {"scale": torch.tensor([0.0])}
+        mock_model.get_parameter_or_buffer = Mock(side_effect=lambda name: full_sd[name])
+        # `meta` stands in for an accelerator device: the test fails if the buffer gets moved to CPU.
+        compute_device = torch.device("meta")
+
+        for is_main_process in (True, False):
+            mock_accelerator = Mock(is_main_process=is_main_process, device=compute_device)
+            with patch("torch.distributed.broadcast"):
+                fsdp2_load_full_state_dict(mock_accelerator, mock_model, full_sd, cpu_offload=True)
+            loaded = mock_model.load_state_dict.call_args[0][0]
+            self.assertEqual(loaded["scale"].device, compute_device)
 
         AcceleratorState._reset_state(True)
 

@@ -600,6 +600,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         full_sd (`dict`): The full state dict to load, can only be on rank 0
         cpu_offload (`bool`, defaults to `False`):
             If True, move sharded parameters to CPU after distribution. Required when FSDP CPU offloading is enabled.
+            Buffers are not offloaded by FSDP2 and always stay on `accelerator.device`.
     """
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, distribute_tensor
@@ -653,6 +654,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                     # dist.broadcast() only supports torch.Tensor.
                     # After prepare_tp(), model parameters may become DTensor.
                     full_param = full_param.to_local()
+                # Receiving ranks allocate a contiguous tensor, so the sender must use the same layout.
+                full_param = full_param.contiguous()
                 dist.broadcast(full_param, src=0, group=dist.group.WORLD)
                 sharded_tensor = distribute_tensor(full_param, device_mesh, sharded_param.placements)
                 to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, full_param)
@@ -665,11 +668,12 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                 full_param = full_param.to(accelerator.device)
                 if isinstance(full_param, DTensor):
                     full_param = full_param.to_local()
+                full_param = full_param.contiguous()
                 dist.broadcast(full_param, src=0, group=dist.group.WORLD)
                 to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, full_param)
                 full_param = _cast_and_contiguous(full_param, to_contiguous, casting_dtype)
-                if cpu_offload:
-                    full_param = full_param.to("cpu")
+                # Buffers are not managed by FSDP2's CPU offloading, so they stay on the compute device even
+                # when `cpu_offload` is enabled.
                 sharded_sd[param_name] = full_param
     # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
     else:
@@ -696,8 +700,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                 dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
                 to_contiguous, casting_dtype = _infer_parameter_dtype(model, param_name, full_tensor)
                 full_tensor = _cast_and_contiguous(full_tensor, to_contiguous, casting_dtype)
-                if cpu_offload:
-                    full_tensor = full_tensor.to("cpu")
+                # Buffers stay on the compute device, see the main process branch above.
                 sharded_sd[param_name] = full_tensor
 
     # we set `assign=True` because our params are on meta device
