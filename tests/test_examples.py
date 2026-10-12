@@ -25,6 +25,7 @@ from typing import Optional
 from unittest import mock, skip
 
 import torch
+from parameterized import parameterized
 
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
@@ -286,17 +287,11 @@ class FeatureExamplesTests(TempDirTestCase):
         ]
         run_command(self.launch_args + testargs)
 
-    def test_autoregressive_dataloaders_preserve_labels(self):
+    @parameterized.expand(["example", "cli_test_helper"])
+    def test_autoregressive_dataloaders_preserve_labels(self, loader_name):
         """Does preparing a batch preserve the correct answers for next-token prediction?"""
         import datasets
-
-        spec = importlib.util.spec_from_file_location(
-            "autoregressive_example", "examples/by_feature/gradient_accumulation_for_autoregressive_models.py"
-        )
-        example = importlib.util.module_from_spec(spec)
-        # Import the real loader rather than the example suite's replacement.
-        with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
-            spec.loader.exec_module(example)
+        from transformers import AutoTokenizer
 
         # Unequal text lengths exercise padding; known token IDs make label shifts visible.
         tokenizer = make_word_level_tokenizer({"[EOS]": 0, "a": 1, "b": 2, "c": 3, "[UNK]": 4})
@@ -305,44 +300,52 @@ class FeatureExamplesTests(TempDirTestCase):
         accelerator.main_process_first = contextlib.nullcontext
         accelerator.local_main_process_first = contextlib.nullcontext
 
-        # Check both the actual example loader and the replacement used by CLI tests.
-        for get_dataloaders, dataset_module, dataset_columns, loader_kwargs in (
-            (example.get_dataloaders, example, {"text": ["a b c", "a b"]}, {"max_training_samples": 2}),
-            (
-                mocked_dataloaders_for_autoregressive_models,
-                datasets,
-                {"sentence1": ["a b c", "a b"], "sentence2": ["", ""], "label": [0, 1]},
-                {},
+        if loader_name == "example":
+            spec = importlib.util.spec_from_file_location(
+                "autoregressive_example", "examples/by_feature/gradient_accumulation_for_autoregressive_models.py"
+            )
+            example = importlib.util.module_from_spec(spec)
+            # Import the real loader rather than the example suite's replacement.
+            with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
+                spec.loader.exec_module(example)
+
+            get_dataloaders = example.get_dataloaders
+            dataset_module = example
+            dataset = datasets.Dataset.from_dict({"text": ["a b c", "a b"]})
+            loader_kwargs = {"max_training_samples": 2}
+        else:
+            get_dataloaders = mocked_dataloaders_for_autoregressive_models
+            dataset_module = datasets
+            dataset = datasets.Dataset.from_dict(
+                {"sentence1": ["a b c", "a b"], "sentence2": ["", ""], "label": [0, 1]}
+            )
+            loader_kwargs = {}
+
+        # Supply known texts and token IDs; run the real tokenization and collation.
+        with (
+            mock.patch.object(AutoTokenizer, "from_pretrained", return_value=tokenizer),
+            mock.patch.object(
+                dataset_module,
+                "load_dataset",
+                return_value=datasets.DatasetDict(train=dataset, validation=dataset),
             ),
         ):
-            with self.subTest(loader=get_dataloaders.__name__):
-                dataset = datasets.Dataset.from_dict(dataset_columns)
+            train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size=2, **loader_kwargs)
 
-                with (
-                    mock.patch.object(example.AutoTokenizer, "from_pretrained", return_value=tokenizer),
-                    mock.patch.object(
-                        dataset_module,
-                        "load_dataset",
-                        return_value=datasets.DatasetDict(train=dataset, validation=dataset),
-                    ),
-                ):
-                    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size=2, **loader_kwargs)
+        for dataloader in (train_dataloader, eval_dataloader):
+            batches = list(dataloader)
+            input_ids = [row for batch in batches for row in batch["input_ids"].tolist()]
+            labels = [row for batch in batches for row in batch["labels"].tolist()]
 
-                for dataloader in (train_dataloader, eval_dataloader):
-                    batches = list(dataloader)
-                    input_ids = [row for batch in batches for row in batch["input_ids"].tolist()]
-                    labels = [row for batch in batches for row in batch["labels"].tolist()]
+            unpadded_input_ids = [
+                [token_id for token_id in row if token_id != tokenizer.pad_token_id] for row in input_ids
+            ]
+            assert unpadded_input_ids == [[1, 2, 3], [1, 2]]
 
-                    unpadded_input_ids = [
-                        [token_id for token_id in row if token_id != tokenizer.pad_token_id] for row in input_ids
-                    ]
-                    assert unpadded_input_ids == [[1, 2, 3], [1, 2]]
-
-                    # Models shift labels internally: preserve token positions and ignore only padding.
-                    assert labels == [
-                        [token_id if token_id != tokenizer.pad_token_id else -100 for token_id in row]
-                        for row in input_ids
-                    ]
+            # Models shift labels internally: preserve token positions and ignore only padding.
+            assert labels == [
+                [token_id if token_id != tokenizer.pad_token_id else -100 for token_id in row] for row in input_ids
+            ]
 
     def test_local_sgd(self):
         testargs = ["examples/by_feature/local_sgd.py"]
