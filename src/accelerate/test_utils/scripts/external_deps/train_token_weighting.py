@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run the accumulation example and record gradients and parameters for comparison."""
+"""Measure the autoregressive example's token-weighted gradients against a full-batch reference."""
 
 import argparse
 import copy
