@@ -333,19 +333,17 @@ class FeatureExamplesTests(TempDirTestCase):
             train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size=2, **loader_kwargs)
 
         for dataloader in (train_dataloader, eval_dataloader):
-            batches = list(dataloader)
-            input_ids = [row for batch in batches for row in batch["input_ids"].tolist()]
-            labels = [row for batch in batches for row in batch["labels"].tolist()]
+            unpadded_input_ids = []
+            for batch in dataloader:
+                input_ids = batch["input_ids"]
 
-            unpadded_input_ids = [
-                [token_id for token_id in row if token_id != tokenizer.pad_token_id] for row in input_ids
-            ]
+                # Models shift labels internally: preserve token positions and ignore only padding.
+                expected_labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
+                torch.testing.assert_close(batch["labels"], expected_labels)
+
+                unpadded_input_ids.extend(row[row != tokenizer.pad_token_id].tolist() for row in input_ids)
+
             assert unpadded_input_ids == [[1, 2, 3], [1, 2]]
-
-            # Models shift labels internally: preserve token positions and ignore only padding.
-            assert labels == [
-                [token_id if token_id != tokenizer.pad_token_id else -100 for token_id in row] for row in input_ids
-            ]
 
     def test_local_sgd(self):
         testargs = ["examples/by_feature/local_sgd.py"]
