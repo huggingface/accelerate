@@ -288,6 +288,7 @@ class FeatureExamplesTests(TempDirTestCase):
         with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
             spec.loader.exec_module(example)
 
+        # Unequal text lengths exercise padding; known token IDs make label shifts visible.
         tokenizer = Tokenizer(WordLevel({"[EOS]": 0, "a": 1, "b": 2, "c": 3, "[UNK]": 4}, unk_token="[UNK]"))
         tokenizer.pre_tokenizer = Whitespace()
         tokenizer = PreTrainedTokenizerFast(
@@ -298,7 +299,8 @@ class FeatureExamplesTests(TempDirTestCase):
         accelerator.main_process_first = contextlib.nullcontext
         accelerator.local_main_process_first = contextlib.nullcontext
 
-        for loader, dataset_module, columns, kwargs in (
+        # Check both the actual example loader and the replacement used by CLI tests.
+        for get_dataloaders, dataset_module, dataset_columns, loader_kwargs in (
             (example.get_dataloaders, example, {"text": ["a b c", "a b"]}, {"max_training_samples": 2}),
             (
                 mocked_dataloaders_for_autoregressive_models,
@@ -307,8 +309,9 @@ class FeatureExamplesTests(TempDirTestCase):
                 {},
             ),
         ):
-            with self.subTest(loader=loader.__name__):
-                dataset = datasets.Dataset.from_dict(columns)
+            with self.subTest(loader=get_dataloaders.__name__):
+                dataset = datasets.Dataset.from_dict(dataset_columns)
+
                 with (
                     mock.patch.object(example.AutoTokenizer, "from_pretrained", return_value=tokenizer),
                     mock.patch.object(
@@ -317,10 +320,9 @@ class FeatureExamplesTests(TempDirTestCase):
                         return_value=datasets.DatasetDict(train=dataset, validation=dataset),
                     ),
                 ):
-                    train_dataloader, eval_dataloader = loader(accelerator, batch_size=2, **kwargs)
+                    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size=2, **loader_kwargs)
 
                 for dataloader in (train_dataloader, eval_dataloader):
-                    # Models shift these labels internally; the collator must not.
                     batches = list(dataloader)
                     input_ids = [row for batch in batches for row in batch["input_ids"].tolist()]
                     labels = [row for batch in batches for row in batch["labels"].tolist()]
@@ -329,6 +331,8 @@ class FeatureExamplesTests(TempDirTestCase):
                         [token_id for token_id in row if token_id != tokenizer.pad_token_id] for row in input_ids
                     ]
                     assert unpadded_input_ids == [[1, 2, 3], [1, 2]]
+
+                    # Models shift labels internally: preserve token positions and ignore only padding.
                     assert labels == [
                         [token_id if token_id != tokenizer.pad_token_id else -100 for token_id in row]
                         for row in input_ids
