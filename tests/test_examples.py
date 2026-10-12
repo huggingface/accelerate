@@ -26,6 +26,7 @@ from unittest import mock, skip
 
 import torch
 from parameterized import parameterized
+from torch.testing import assert_close
 
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
@@ -157,7 +158,7 @@ class ExampleDifferenceTests(unittest.TestCase):
 
 
 def make_word_level_tokenizer(vocab):
-    """Build a real tokenizer with explicit token IDs for the loader checks."""
+    """Use known token IDs to make label alignment and padding errors easy to inspect."""
     from tokenizers import Tokenizer
     from tokenizers.models import WordLevel
     from tokenizers.pre_tokenizers import Whitespace
@@ -339,7 +340,7 @@ class FeatureExamplesTests(TempDirTestCase):
 
                 # Models shift labels internally: preserve token positions and ignore only padding.
                 expected_labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
-                torch.testing.assert_close(batch["labels"], expected_labels)
+                assert_close(batch["labels"], expected_labels)
 
                 unpadded_input_ids.extend(row[row != tokenizer.pad_token_id].tolist() for row in input_ids)
 
