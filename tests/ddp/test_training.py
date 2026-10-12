@@ -215,7 +215,8 @@ def test_gradient_accumulation_example(tmp_path):
     """Starting from the same model and the same examples, does dividing training into smaller batches
     with unequal numbers of prediction targets produce the expected update?
 
-    Exercise the actual example's training loop on two CPU ranks, including in CPU-only CI.
+    Two CPU processes exercise global target counting and gradient averaging.
+    No GPU-specific behavior is needed for this normalization check.
     The example suite separately checks its command-line entry point and collators.
     """
     results = run_token_weighting_example(

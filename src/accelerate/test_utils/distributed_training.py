@@ -89,6 +89,7 @@ def run_token_weighting_example(output, *, example_file, num_processes):
         "--output",
         output,
     ]
+    # This fixture uses local model/data on CPU, regardless of the parent test environment.
     env = {
         **os.environ,
         "CUDA_VISIBLE_DEVICES": "",
