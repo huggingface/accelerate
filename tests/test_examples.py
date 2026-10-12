@@ -293,7 +293,6 @@ class FeatureExamplesTests(TempDirTestCase):
         import datasets
         from transformers import AutoTokenizer
 
-        # Unequal text lengths exercise padding; known token IDs make label shifts visible.
         tokenizer = make_word_level_tokenizer({"[EOS]": 0, "a": 1, "b": 2, "c": 3, "[UNK]": 4})
 
         accelerator = mock.Mock(distributed_type=DistributedType.NO, mixed_precision="no")
@@ -321,7 +320,8 @@ class FeatureExamplesTests(TempDirTestCase):
             )
             loader_kwargs = {}
 
-        # Supply known texts and token IDs; run the real tokenization and collation.
+        # These loaders fetch their own data and tokenizer. Substitute those inputs
+        # to guarantee a padded batch with known labels while testing the real collators.
         with (
             mock.patch.object(AutoTokenizer, "from_pretrained", return_value=tokenizer),
             mock.patch.object(
