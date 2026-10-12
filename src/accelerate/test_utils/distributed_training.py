@@ -61,7 +61,7 @@ def run_training(
         mixed_precision,
         "--gradient-accumulation-steps",
         str(gradient_accumulation_steps),
-        *map(str, script_args),
+        *script_args,
     ]
     if reference:
         command.append("--reference")
