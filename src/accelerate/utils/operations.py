@@ -152,7 +152,15 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-    if is_torch_tensor(tensor) or hasattr(tensor, "to"):
+    if isinstance(skip_keys, str):
+        skip_keys = [skip_keys]
+    elif skip_keys is None:
+        skip_keys = []
+
+    # A `Mapping` that also implements `.to()` (e.g. `transformers.BatchEncoding`) must supports `skip_keys`
+    mapping_with_skipped_keys = isinstance(tensor, Mapping) and any(k in tensor for k in skip_keys)
+
+    if (is_torch_tensor(tensor) or hasattr(tensor, "to")) and not mapping_with_skipped_keys:
         # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
         if device == "npu":
             device = "npu:0"
@@ -177,10 +185,6 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             tensor, (send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys) for t in tensor)
         )
     elif isinstance(tensor, Mapping):
-        if isinstance(skip_keys, str):
-            skip_keys = [skip_keys]
-        elif skip_keys is None:
-            skip_keys = []
         return type(tensor)(
             {
                 k: t if k in skip_keys else send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys)
