@@ -19,14 +19,62 @@ import copy
 import importlib.util
 import os
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import patch
 
 import torch
 import torch.nn.functional as F
 from torch.nn.utils import parameters_to_vector
 from torch.utils.data import DataLoader
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, get_constant_schedule, set_seed
+
+from accelerate import Accelerator
+
+
+def run_example(example_file, model, samples, *, learning_rate, batch_size, gradient_accumulation_steps):
+    """Run the real example and record its target counts, gradients and updated parameters."""
+    spec = importlib.util.spec_from_file_location("autoregressive_example", example_file)
+    example = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(example)
+
+    target_counts = []
+    gradients = []
+
+    def observe_batch(module, args, kwargs):
+        if module.training:
+            target_counts.append(kwargs["labels"][:, 1:].ne(-100).sum().item())
+
+    def observe_gradients(optimizer, args, kwargs):
+        gradients.append(torch.cat([parameter.grad.detach().flatten() for parameter in model.parameters()]))
+
+    target_count_hook = model.register_forward_pre_hook(observe_batch, with_kwargs=True)
+
+    accelerator = Accelerator(cpu=True, mixed_precision="no", gradient_accumulation_steps=gradient_accumulation_steps)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    # Observe gradients before AdamW, whose adaptive update can hide a scaling error.
+    optimizer.register_step_pre_hook(observe_gradients)
+    lr_scheduler = get_constant_schedule(optimizer)
+    train_dataloader = DataLoader(samples, batch_size=batch_size)
+    eval_dataloader = DataLoader(samples, batch_size=2)
+
+    set_seed(1337)
+    example.train(
+        accelerator,
+        model,
+        optimizer,
+        train_dataloader,
+        eval_dataloader,
+        lr_scheduler,
+        num_epochs=1,
+        # Leave gradients unclipped, matching the full-batch reference.
+        max_grad_norm=float("inf"),
+    )
+    accelerator.end_training()
+    target_count_hook.remove()
+
+    return {
+        "target_counts": target_counts,
+        "gradients": gradients,
+        "parameters": parameters_to_vector(model.parameters()).detach(),
+    }
 
 
 def main():
@@ -55,15 +103,13 @@ def main():
         for ids, targets, mask in zip(input_ids, labels, attention_mask)
     ]
 
-    def get_dataloaders(accelerator, batch_size):
-        return DataLoader(samples, batch_size=batch_size), DataLoader(samples, batch_size=2)
-
     initial_parameters = parameters_to_vector(model.parameters()).detach()
 
     # Independent oracle: one ordinary PyTorch update on the full batch. Compute
     # the shifted mean loss explicitly, not through the example's token scaling.
     reference_model = copy.deepcopy(model)
-    reference_optimizer = torch.optim.AdamW(reference_model.parameters(), lr=0.01)
+    learning_rate = 0.01
+    reference_optimizer = torch.optim.AdamW(reference_model.parameters(), lr=learning_rate)
     logits = reference_model(input_ids=input_ids, attention_mask=attention_mask).logits
     reference_loss = F.cross_entropy(
         logits[:, :-1].reshape(-1, model.config.vocab_size),
@@ -75,50 +121,18 @@ def main():
     reference_optimizer.step()
     reference_parameters = parameters_to_vector(reference_model.parameters()).detach()
 
-    spec = importlib.util.spec_from_file_location("autoregressive_example", args.example)
-    example = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(example)
-
-    target_counts = []
-    gradients = []
-
-    def observe_batch(module, args, kwargs):
-        if module.training:
-            target_counts.append(kwargs["labels"][:, 1:].ne(-100).sum().item())
-
-    def observe_gradients(optimizer, args, kwargs):
-        gradients.append(torch.cat([parameter.grad.detach().flatten() for parameter in model.parameters()]))
-
-    target_count_hook = model.register_forward_pre_hook(observe_batch, with_kwargs=True)
-
-    original_adamw = example.AdamW
-
-    def make_optimizer(*args, **kwargs):
-        optimizer = original_adamw(*args, **kwargs)
-        optimizer.register_step_pre_hook(observe_gradients)
-        return optimizer
-
-    # Leave gradients unclipped, matching the full-batch reference.
-    config = {"lr": 0.01, "num_epochs": 1, "seed": 1337, "batch_size": 2, "max_grad_norm": float("inf")}
-    training_args = SimpleNamespace(
-        cpu=True, mixed_precision="no", gradient_accumulation_steps=2, with_wandb_tracking=False
+    observations = run_example(
+        args.example,
+        model,
+        samples,
+        learning_rate=learning_rate,
+        batch_size=2,
+        gradient_accumulation_steps=2,
     )
-    # Keep the actual example's prepare/gather/no_sync/backward/optimizer loop.
-    # Controlled target counts make normalization errors measurable.
-    # Observe gradients before AdamW, whose adaptive update can hide a scaling error.
-    with (
-        patch.object(example, "get_dataloaders", get_dataloaders),
-        patch.object(example.AutoModelForCausalLM, "from_pretrained", return_value=model),
-        patch.object(example, "AdamW", make_optimizer),
-    ):
-        example.training_function(config, training_args)
-    target_count_hook.remove()
 
     result = {
-        "target_counts": target_counts,
-        "gradients": gradients,
+        **observations,
         "reference_gradients": reference_gradients,
-        "parameters": parameters_to_vector(model.parameters()).detach(),
         "reference_parameters": reference_parameters,
         "reference_update_norm": (reference_parameters - initial_parameters).norm().item(),
     }

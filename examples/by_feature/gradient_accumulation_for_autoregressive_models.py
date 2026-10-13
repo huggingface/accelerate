@@ -194,6 +194,34 @@ def training_function(config, args):
         optimizer=optimizer,
     )
 
+    train(
+        accelerator,
+        model,
+        optimizer,
+        train_dataloader,
+        eval_dataloader,
+        lr_scheduler,
+        num_epochs=num_epochs,
+        max_grad_norm=max_grad_norm,
+        with_wandb_tracking=args.with_wandb_tracking,
+    )
+    accelerator.end_training()
+
+
+def train(
+    accelerator,
+    model,
+    optimizer,
+    train_dataloader,
+    eval_dataloader,
+    lr_scheduler,
+    *,
+    num_epochs,
+    max_grad_norm,
+    with_wandb_tracking=False,
+):
+    """Prepare the training objects, then train and evaluate for each epoch."""
+    gradient_accumulation_steps = accelerator.gradient_accumulation_steps
     # Prepare everything
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
     # prepare method.
@@ -261,7 +289,7 @@ def training_function(config, args):
             accelerator.print(
                 f"epoch {epoch} - update step {update_step}:: grad norm: {grad_norm} ::train loss: {losses}"
             )
-            if args.with_wandb_tracking:
+            if with_wandb_tracking:
                 accelerator.log(
                     {
                         "train/grad_norm": grad_norm,
@@ -287,7 +315,7 @@ def training_function(config, args):
 
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:: eval perplexity: {perplexity} eval_loss: {eval_loss}")
-        if args.with_wandb_tracking:
+        if with_wandb_tracking:
             accelerator.log(
                 {
                     "eval/perplexity": perplexity,
@@ -296,7 +324,6 @@ def training_function(config, args):
                 },
                 step=update_step + total_gradient_updates * epoch,
             )
-    accelerator.end_training()
 
 
 def main():
