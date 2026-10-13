@@ -109,7 +109,7 @@ fp8_config:
 
 ## Configuring TransformersEngine
 
-TransformersEngine has many options for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
+TransformersEngine has many options for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
 
 Accelerate tries to set sensible defaults, but exploring and tweaking the various parameters yourself can lead to better performance potentially.
 
@@ -213,6 +213,6 @@ Find out more [here](https://github.com/huggingface/accelerate/tree/main/benchma
 To learn more about training in FP8 please check out the following resources:
 
 * [Our concept guide](../concept_guides/low_precision_training) detailing into more about TransformersEngine, torchao, and MS-AMP
-* [The `transformers-engine` documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html)
+* [The `transformers-engine` documentation](https://docs.nvidia.com/deeplearning/transformer-engine/api/common.html)
 * [The `torchao` documentation](https://github.com/pytorch/ao/tree/main/torchao/float8)
-* [The `MS-AMP` documentation](https://azure.github.io/MS-AMP/docs/) (⚠️ no longer maintained)
+* [The `MS-AMP` documentation](https://azure.github.io/MS-AMP/) (⚠️ no longer maintained)

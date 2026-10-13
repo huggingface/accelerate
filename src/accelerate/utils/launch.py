@@ -40,7 +40,7 @@ from ..utils import (
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from ..utils.other import get_free_port, is_port_in_use, merge_dicts
 from ..utils.versions import compare_versions
-from . import parse_flag_from_env
+from . import str_to_bool
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
@@ -161,7 +161,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     if (num_processes is not None and num_processes > 1) or num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
         current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
-    if parse_flag_from_env(current_env["ACCELERATE_USE_CPU"], False):
+    if str_to_bool(current_env["ACCELERATE_USE_CPU"]):
         current_env["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
         current_env["KMP_BLOCKTIME"] = str(1)
 
@@ -189,7 +189,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
-    current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
+    if args.dynamo_use_dynamic is not None:
+        current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
     current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
@@ -298,7 +299,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
-    current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
+    if args.dynamo_use_dynamic is not None:
+        current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
     current_env["ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION"] = str(args.dynamo_use_regional_compilation)
 
     if args.use_fsdp:
@@ -702,10 +704,11 @@ def prepare_sagemager_args_inputs(
         "ACCELERATE_DYNAMO_BACKEND": dynamo_backend.value,
         "ACCELERATE_DYNAMO_MODE": args.dynamo_mode,
         "ACCELERATE_DYNAMO_USE_FULLGRAPH": str(args.dynamo_use_fullgraph),
-        "ACCELERATE_DYNAMO_USE_DYNAMIC": str(args.dynamo_use_dynamic),
         "ACCELERATE_DYNAMO_USE_REGIONAL_COMPILATION": str(args.dynamo_use_regional_compilation),
         "ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
+    if args.dynamo_use_dynamic is not None:
+        environment["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(

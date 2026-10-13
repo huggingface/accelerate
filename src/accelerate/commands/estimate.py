@@ -17,7 +17,7 @@ from typing import Optional
 
 import torch
 from huggingface_hub import model_info
-from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+from huggingface_hub.utils import EntryNotFoundError, GatedRepoError, RepositoryNotFoundError
 
 from accelerate import init_empty_weights
 from accelerate.commands.utils import CustomArgumentParser
@@ -52,7 +52,11 @@ def check_has_model(error):
     Checks what library spawned `error` when a model is not found
     """
     message = str(error)
-    if is_timm_available() and isinstance(error, RuntimeError) and "Unknown model" in message:
+    if is_timm_available() and (
+        (isinstance(error, RuntimeError) and "Unknown model" in message)
+        or isinstance(error, EntryNotFoundError)
+        or (isinstance(error, KeyError) and "architecture" in message)
+    ):
         return "timm"
     elif (
         is_transformers_available()
@@ -62,6 +66,16 @@ def check_has_model(error):
         return "transformers"
     else:
         return "unknown"
+
+
+def add_timm_hub_prefix(model_name: str) -> str:
+    """
+    Adds the `hf-hub:` prefix that `timm.create_model` needs for Hub repo ids. Bare architecture names and names that
+    already have a source prefix are returned unchanged.
+    """
+    if ":" in model_name or "/" not in model_name:
+        return model_name
+    return f"hf-hub:{model_name}"
 
 
 def create_empty_model(
@@ -136,7 +150,7 @@ def create_empty_model(
             )
         print(f"Loading pretrained config for `{model_name}` from `timm`...")
         with init_empty_weights():
-            model = timm.create_model(model_name, pretrained=False)
+            model = timm.create_model(add_timm_hub_prefix(model_name), pretrained=False)
     else:
         raise ValueError(
             f"Library `{library_name}` is not supported yet, please open an issue on GitHub for us to add support."
@@ -263,7 +277,7 @@ def gather_data(args):
         model = create_empty_model(
             args.model_name, library_name=args.library_name, trust_remote_code=args.trust_remote_code
         )
-    except (RuntimeError, OSError, ValueError) as e:
+    except (RuntimeError, OSError, ValueError, KeyError) as e:
         library = check_has_model(e)
         if library != "unknown":
             raise RuntimeError(

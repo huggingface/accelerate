@@ -24,6 +24,7 @@ extras["test_dev"] = [
     "datasets",
     "diffusers",
     "evaluate",
+    "peft",
     "torchdata>=0.8.0",
     "torchpippy>=0.2.0",
     "transformers",
@@ -55,7 +56,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="1.15.0.dev0",
+    version="1.16.0.dev0",
     description="Accelerate",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

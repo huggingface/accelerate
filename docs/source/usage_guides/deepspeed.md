@@ -69,7 +69,7 @@ Inference:
 
 1. DeepSpeed ZeRO Inference supports ZeRO stage 3 with ZeRO-Infinity. It uses the same ZeRO protocol as training, but
    it doesn't use an optimizer and a lr scheduler and only stage 3 is relevant. For more details see:
-   [deepspeed-zero-inference](#deepspeed-zero-inference).
+   [ZeRO Inference](#zero-inference).
 
 
 ## How it works?

@@ -701,6 +701,31 @@ def test_split_between_processes_list():
         assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
+def test_split_between_processes_tuple():
+    state = AcceleratorState()
+    even_data = tuple(range(0, (2 * state.num_processes)))
+    odd_data = tuple(range(0, (2 * state.num_processes) - 1))
+    for data in [even_data, odd_data]:
+        expected_output = list(data)
+
+        with state.split_between_processes(data, apply_padding=True) as results:
+            num_samples_per_device = math.ceil(len(data) / state.num_processes)
+            assert isinstance(results, tuple), (
+                f"Splitting a tuple should return a tuple. Process index: {state.process_index}; Type: {type(results)}"
+            )
+            assert len(results) == num_samples_per_device, (
+                f"Process {state.device} did not get the correct number of item(s). Process index: {state.process_index}; Length: {len(results)}"
+            )
+            results_per_process = list(results)
+
+        state.wait_for_everyone()
+
+        gathered_results = gather_object(results_per_process)
+        output = gathered_results[: len(data)]
+
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
+
+
 def test_split_between_processes_nested_dict():
     state = AcceleratorState()
     a = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -846,6 +871,10 @@ def main():
         if state.process_index == 0:
             print("\n**Test split between processes as a list**")
         test_split_between_processes_list()
+
+        if state.process_index == 0:
+            print("\n**Test split between processes as a tuple**")
+        test_split_between_processes_tuple()
 
         if state.process_index == 0:
             print("\n**Test split between processes as a dict**")

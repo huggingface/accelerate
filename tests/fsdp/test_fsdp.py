@@ -15,12 +15,14 @@
 
 import functools
 import os
+import tempfile
 from contextlib import nullcontext
 
 import torch
 from transformers import AutoModel
 
 from accelerate.accelerator import Accelerator
+from accelerate.optimizer import AcceleratedOptimizer
 from accelerate.state import AcceleratorState, DistributedType
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
@@ -33,6 +35,7 @@ from accelerate.test_utils.testing import (
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
+    require_peft,
     run_first,
     slow,
 )
@@ -45,7 +48,15 @@ from accelerate.utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
-from accelerate.utils.fsdp_utils import disable_fsdp_ram_efficient_loading, enable_fsdp_ram_efficient_loading
+from accelerate.utils.fsdp_utils import (
+    _get_model_state_dict,
+    _set_model_state_dict,
+    disable_fsdp_ram_efficient_loading,
+    enable_fsdp_ram_efficient_loading,
+    fsdp2_prepare_auto_wrap_policy,
+    load_fsdp_optimizer,
+    save_fsdp_optimizer,
+)
 
 
 set_seed(42)
@@ -53,6 +64,7 @@ set_seed(42)
 
 BERT_BASE_CASED = "bert-base-cased"
 LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+ESM_TESTING = "hf-internal-testing/tiny-random-EsmModel"
 FP16 = "fp16"
 BF16 = "bf16"
 
@@ -61,6 +73,106 @@ if is_fp16_available():
     dtypes.append(FP16)
 if is_bf16_available():
     dtypes.append(BF16)
+
+
+@require_fsdp2
+@require_peft
+class FSDP2PeftStateDictTest(AccelerateTestCase):
+    """
+    The FSDP2 adapter-only path must go *through* `sd_options`, not around it.
+
+    Runs single-process on CPU, so it cannot check that each rank's shard survives -- that needs two
+    devices and lives in `peft_checkpointing.py`. What it does lock down is the regression itself: the PEFT
+    branch used to return before the `sd_options` gather, which under FSDP2 meant rank 0's shard was written
+    as if it were the whole tensor.
+    """
+
+    def _peft_model(self):
+        from peft import LoraConfig, get_peft_model
+
+        class Tiny(torch.nn.Module):
+            def __init__(self, dim=32):
+                super().__init__()
+                self.lin1 = torch.nn.Linear(dim, dim)
+                self.lin2 = torch.nn.Linear(dim, dim)
+
+        return get_peft_model(Tiny(), LoraConfig(r=4, target_modules=["lin1", "lin2"]))
+
+    @staticmethod
+    def _fill_adapter(model, value):
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if "lora_" in name:
+                    param.fill_(value)
+
+    def test_adapter_state_dict_is_keyed_by_model_fqns(self):
+        """If the PEFT branch returns early, the adapter name is stripped and these no longer match."""
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+        model = self._peft_model()
+        state_dict = _get_model_state_dict(model, adapter_only=True, sd_options=StateDictOptions(full_state_dict=True))
+        trainable = {name for name, param in model.named_parameters() if param.requires_grad}
+        assert state_dict.keys() == trainable
+
+    def test_adapter_state_dict_round_trip(self):
+        """An adapter-only state dict doesn't cover the frozen base weights, so loading it can't be strict."""
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+        sd_options = StateDictOptions(full_state_dict=True)
+        model = self._peft_model()
+        self._fill_adapter(model, 0.5)
+
+        # a real checkpoint goes through disk; clone to break the aliasing with the live parameters
+        state_dict = {
+            key: value.detach().clone()
+            for key, value in _get_model_state_dict(model, adapter_only=True, sd_options=sd_options).items()
+        }
+        self._fill_adapter(model, 0.0)
+        _set_model_state_dict(model, state_dict, adapter_only=True, sd_options=sd_options)
+
+        restored = {float(param.detach().flatten()[0]) for name, param in model.named_parameters() if "lora_" in name}
+        assert restored == {0.5}
+
+
+@require_fsdp2
+class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
+    """Checkpointing FSDP2 optimizer state must not step the fp16 `GradScaler`."""
+
+    def setUp(self):
+        super().setUp()
+        self.accelerator = Accelerator(cpu=True)
+        self.plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+
+    def _build(self, scaler_state=None):
+        model = torch.nn.Linear(4, 4)
+        scaler = torch.amp.GradScaler("cpu")
+        if scaler_state is not None:
+            scaler.load_state_dict(scaler_state)
+        return model, AcceleratedOptimizer(torch.optim.AdamW(model.parameters()), scaler=scaler), scaler
+
+    def test_save_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(torch.zeros(()))  # an already-used scaler, with the optimizer state still empty
+        expected = scaler.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+
+    def test_load_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(model(torch.randn(2, 4)).sum()).backward()
+        optimizer.step()
+        expected = scaler.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+            model, optimizer, scaler = self._build(expected)  # a fresh process: the scaler is still lazy
+            load_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+        assert optimizer.state
 
 
 @require_non_cpu
@@ -287,6 +399,21 @@ class FSDPPluginIntegration(AccelerateTestCase):
             )
         fsdp_plugin.set_auto_wrap_policy(model)
         assert fsdp_plugin.auto_wrap_policy is None
+
+    def test_auto_wrap_policy_skips_absent_no_split_modules(self):
+        # `EsmModel` lists `EsmFoldTriangularSelfAttentionBlock` in `_no_split_modules`, but only `EsmForProteinFolding`
+        # contains it
+        model = AutoModel.from_pretrained(ESM_TESTING)
+        env = self.fsdp_envs[self.current_fsdp_version].copy()
+        with patch_environment(**env):
+            fsdp_plugin = FullyShardedDataParallelPlugin(auto_wrap_policy="TRANSFORMER_BASED_WRAP")
+        if self.current_fsdp_version == 1:
+            fsdp_plugin.set_auto_wrap_policy(model)
+            assert fsdp_plugin.transformer_cls_names_to_wrap == ["EsmLayer", "EsmEmbeddings"]
+        else:
+            policy = fsdp2_prepare_auto_wrap_policy(fsdp_plugin, model)
+            assert policy(model.encoder.layer[0])
+            assert policy(model.embeddings)
 
     def test_mixed_precision(self):
         fsdp_version = self.current_fsdp_version
@@ -925,3 +1052,32 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
+
+    @require_fsdp2
+    @require_peft
+    def test_peft_checkpointing(self):
+        """Every rank's shard of the adapter must survive a `save_fsdp_model`/`load_fsdp_model` round-trip."""
+        test_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "peft_checkpointing.py")
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            fsdp_version=2,
+            fsdp_auto_wrap_policy="TRANSFORMER_BASED_WRAP",
+            fsdp_transformer_layer_cls_to_wrap="Block",
+        )
+        cmd.append("--fsdp_reshard_after_forward=true")
+
+        for state_dict_type in FSDP2_STATE_DICT_TYPE:
+            # `transformers.Trainer` always passes `adapter_only=True`, but the flag is optional for other callers
+            for adapter_only in (True, False):
+                cmd_config = cmd + [
+                    f"--fsdp_state_dict_type={state_dict_type}",
+                    test_file_path,
+                    f"--output_dir={os.path.join(self.tmpdir, state_dict_type, str(adapter_only))}",
+                ]
+                if adapter_only:
+                    cmd_config.append("--adapter_only")
+                with patch_environment(omp_num_threads=1):
+                    execute_subprocess_async(cmd_config)
