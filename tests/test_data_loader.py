@@ -349,6 +349,30 @@ class DataLoaderTester(AccelerateTestCase):
         expected = [[], []]
         self.check_batch_sampler_shards(batch_sampler, expected, split_batches=True, even_batches=False)
 
+    def test_batch_sampler_shard_length_with_split_and_no_even_batches(self):
+        for num_samples, expected_lengths in [(2, [1, 0]), (21, [6, 5]), (23, [6, 6])]:
+            batch_sampler = BatchSampler(range(num_samples), batch_size=4, drop_last=False)
+            shards = [
+                BatchSamplerShard(batch_sampler, 2, process_index, split_batches=True, even_batches=False)
+                for process_index in range(2)
+            ]
+
+            assert [len(shard) for shard in shards] == expected_lengths
+            assert [len(list(shard)) for shard in shards] == expected_lengths
+
+    def test_batch_sampler_shard_length_keeps_custom_batch_sampler_len(self):
+        class CustomBatchSampler(BatchSampler):
+            def __len__(self):
+                return 1
+
+        batch_sampler = CustomBatchSampler(iter(range(2)), batch_size=4, drop_last=False)
+        shards = [
+            BatchSamplerShard(batch_sampler, 2, process_index, split_batches=True, even_batches=False)
+            for process_index in range(2)
+        ]
+
+        assert [len(shard) for shard in shards] == [1, 1]
+
     def test_batch_sampler_with_varying_batch_size(self):
         batch_sampler = [[0, 1, 2], [3, 4], [5, 6, 7, 8], [9, 10, 11], [12, 13]]
         batch_sampler_shards = [BatchSamplerShard(batch_sampler, 2, i, even_batches=False) for i in range(2)]
