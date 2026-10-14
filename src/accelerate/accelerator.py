@@ -3068,8 +3068,10 @@ class Accelerator:
         ...     optimizer.step()
         ```
         """
-        if self.distributed_type in [DistributedType.DEEPSPEED, DistributedType.FSDP]:
-            raise Exception("DeepSpeed and FSDP  do not support `clip_grad_value_`. Use `clip_grad_norm_` instead.")
+        if self.distributed_type == DistributedType.DEEPSPEED or (
+            self.distributed_type == DistributedType.FSDP and not self.is_fsdp2
+        ):
+            raise Exception("DeepSpeed and FSDP1 do not support `clip_grad_value_`. Use `clip_grad_norm_` instead.")
         self.unscale_gradients()
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
