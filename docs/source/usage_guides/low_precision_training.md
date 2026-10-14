@@ -109,6 +109,10 @@ fp8_config:
 
 ## Configuring TransformersEngine
 
+NVIDIA Transformer Engine >= 2.9.0 is required for the public `autocast` and `is_mxfp8_available` APIs.
+Use the latest NVIDIA Transformer Engine release; older APIs are not supported. This requirement does not apply to
+Intel Transformer Engine on HPU.
+
 TransformersEngine has many options for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
 
 Accelerate tries to set sensible defaults, but exploring and tweaking the various parameters yourself can lead to better performance potentially.

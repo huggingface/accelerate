@@ -30,7 +30,7 @@ from transformer_engine.common.recipe import DelayedScaling
 
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, set_seed
+from accelerate.utils import TERecipeKwargs, set_seed
 from accelerate.utils.transformer_engine import convert_model
 
 
@@ -101,7 +101,7 @@ def train_baseline(zero_stage: int = 1):
 
     for _ in range(2):
         for batch in train_dataloader:
-            with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
+            with te.autocast(enabled=True, recipe=fp8_recipe):
                 outputs = model(**batch)
                 data.append(batch.to("cpu"))
             model_outputs.append(outputs.logits.to("cpu"))
@@ -126,7 +126,7 @@ def train_baseline(zero_stage: int = 1):
 def train_integration(zero_stage: int = 1):
     set_seed(42)
     FP8_RECIPE_KWARGS = {"fp8_format": "HYBRID", "amax_history_len": 32, "amax_compute_algo": "max"}
-    kwargs_handlers = [FP8RecipeKwargs(backend="TE", **FP8_RECIPE_KWARGS)]
+    kwargs_handlers = [TERecipeKwargs(**FP8_RECIPE_KWARGS)]
     AcceleratorState()._reset_state(True)
     deepspeed_plugin = DeepSpeedPlugin(
         zero_stage=zero_stage,

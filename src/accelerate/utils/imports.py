@@ -101,14 +101,16 @@ def is_transformer_engine_available():
     if is_hpu_available():
         return _is_package_available("intel_transformer_engine", "intel-transformer-engine")
     else:
-        return _is_package_available("transformer_engine", "transformer-engine")
+        return _is_package_available("transformer_engine", "transformer-engine") and compare_versions(
+            "transformer-engine", ">=", "2.9.0"
+        )
 
 
 def is_transformer_engine_mxfp8_available():
-    if _is_package_available("transformer_engine", "transformer-engine"):
-        from transformer_engine.pytorch.fp8 import check_mxfp8_support
+    if not is_hpu_available() and is_transformer_engine_available():
+        from transformer_engine.pytorch import is_mxfp8_available
 
-        return check_mxfp8_support()[0]
+        return is_mxfp8_available()
     return False
 
 

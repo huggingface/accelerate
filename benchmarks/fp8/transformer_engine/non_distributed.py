@@ -27,7 +27,7 @@ from transformer_engine.common.recipe import DelayedScaling
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.utils import FP8RecipeKwargs, set_seed
+from accelerate.utils import TERecipeKwargs, set_seed
 from accelerate.utils.transformer_engine import convert_model
 
 
@@ -58,7 +58,7 @@ def train_baseline():
     model.train()
 
     for batch in train_dataloader:
-        with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe):
+        with te.autocast(enabled=True, recipe=fp8_recipe):
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 batch = batch.to("cuda")
                 outputs = model(**batch)
@@ -82,7 +82,7 @@ def train_baseline():
 
 def train_integration():
     FP8_RECIPE_KWARGS = {"fp8_format": "HYBRID", "amax_history_len": 32, "amax_compute_algo": "max"}
-    kwargs_handlers = [FP8RecipeKwargs(backend="TE", **FP8_RECIPE_KWARGS)]
+    kwargs_handlers = [TERecipeKwargs(**FP8_RECIPE_KWARGS)]
     AcceleratorState()._reset_state(True)
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=kwargs_handlers)
     set_seed(42)
