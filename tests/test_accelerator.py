@@ -11,16 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import gc
 import itertools
 import json
 import os
 import pickle
 import tempfile
-import time
+import weakref
 from unittest import skip
 from unittest.mock import patch
 
-import psutil
 import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
@@ -154,6 +154,13 @@ class AcceleratorTester(AccelerateTestCase):
         state.someotherthing = "MyValue"
         assert state.someotherthing == "MyValue"
 
+    @require_non_cpu
+    def test_partial_state_cpu_from_environment(self):
+        """CPU mode must override an available accelerator without requiring Accelerator initialization."""
+        with patch_environment(accelerate_use_cpu="yes"):
+            state = PartialState()
+        assert state.device.type == "cpu"
+
     def test_accelerator_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to
@@ -223,32 +230,28 @@ class AcceleratorTester(AccelerateTestCase):
 
     @require_non_hpu  # hpu does not support empty_cache
     def test_free_memory_dereferences_prepared_components(self):
+        """Prepared components must be collectible after free_memory releases its references."""
         accelerator = Accelerator()
-        # Free up refs with empty_cache() and gc.collect()
-        accelerator.free_memory()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
-        free_cpu_ram_before = psutil.virtual_memory().available // 1024 // 1024
         model, optimizer, scheduler, train_dl, valid_dl = accelerator.prepare(
             model, optimizer, scheduler, train_dl, valid_dl
         )
 
-        # Short sleep here makes this test more reliable
-        time.sleep(1e-3)
+        component_refs = [weakref.ref(component) for component in (model, optimizer, scheduler, train_dl, valid_dl)]
 
         model, optimizer, scheduler, train_dl, valid_dl = accelerator.free_memory(
             model, optimizer, scheduler, train_dl, valid_dl
         )
-
-        free_cpu_ram_after = psutil.virtual_memory().available // 1024 // 1024
 
         assert len(accelerator._models) == 0
         assert len(accelerator._optimizers) == 0
         assert len(accelerator._schedulers) == 0
         assert len(accelerator._dataloaders) == 0
 
-        # The less-than comes *specifically* from device CPU things/won't be present on CPU builds
-        # Allow a small tolerance for OS-level memory fluctuations between measurements
-        assert free_cpu_ram_after <= free_cpu_ram_before + 50
+        # Collect cycles after the caller's references have also been replaced.
+        gc.collect()
+        for component_ref in component_refs:
+            assert component_ref() is None
 
     @require_non_torch_xla
     def test_env_var_device(self):
