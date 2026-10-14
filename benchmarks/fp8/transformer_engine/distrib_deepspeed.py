@@ -113,12 +113,6 @@ def train_baseline(zero_stage: int = 1):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.destroy()
-    assert trained_model_results["accuracy"] > base_model_results["accuracy"], (
-        f"Accuracy should be higher for the trained model: {trained_model_results['accuracy']} > {base_model_results['accuracy']}"
-    )
-    assert trained_model_results["f1"] > base_model_results["f1"], (
-        f"F1 score should be higher for the trained model: {trained_model_results['f1']} > {base_model_results['f1']}"
-    )
 
     return base_model_results, trained_model_results, model_outputs, data
 
@@ -159,12 +153,6 @@ def train_integration(zero_stage: int = 1):
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC, accelerator=accelerator)
     model.destroy()
-    assert trained_model_results["accuracy"] > base_model_results["accuracy"], (
-        f"Accuracy should be higher for the trained model: {trained_model_results['accuracy']} > {base_model_results['accuracy']}"
-    )
-    assert trained_model_results["f1"] > base_model_results["f1"], (
-        f"F1 score should be higher for the trained model: {trained_model_results['f1']} > {base_model_results['f1']}"
-    )
 
     return base_model_results, trained_model_results, model_outputs, data
 

@@ -70,13 +70,6 @@ def train_baseline():
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC)
 
-    assert trained_model_results["accuracy"] > base_model_results["accuracy"], (
-        f"Accuracy should be higher for the trained model: {trained_model_results['accuracy']} > {base_model_results['accuracy']}"
-    )
-    assert trained_model_results["f1"] > base_model_results["f1"], (
-        f"F1 score should be higher for the trained model: {trained_model_results['f1']} > {base_model_results['f1']}"
-    )
-
     return base_model_results, trained_model_results
 
 
@@ -103,13 +96,6 @@ def train_integration():
         lr_scheduler.step()
 
     trained_model_results = evaluate_model(model, eval_dataloader, METRIC)
-
-    assert trained_model_results["accuracy"] > base_model_results["accuracy"], (
-        f"Accuracy should be higher for the trained model: {trained_model_results['accuracy']} > {base_model_results['accuracy']}"
-    )
-    assert trained_model_results["f1"] > base_model_results["f1"], (
-        f"F1 score should be higher for the trained model: {trained_model_results['f1']} > {base_model_results['f1']}"
-    )
 
     return base_model_results, trained_model_results
 

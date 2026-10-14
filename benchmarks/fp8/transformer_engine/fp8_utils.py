@@ -56,7 +56,7 @@ def get_dataloaders(model_name: str, batch_size: int = 16):
         shuffle=False,
         collate_fn=collate_fn,
         batch_size=16,
-        drop_last=True,
+        drop_last=False,
     )
 
     return train_dataloader, eval_dataloader
@@ -103,14 +103,18 @@ def get_named_parameters(model):
 
 
 def evaluate_model(model, dataloader, metric, accelerator=None):
-    "Turns model to .eval(), runs dataloader, calculates metric, then turns eval back on"
+    """Evaluate in BF16 without FP8 and restore the model's previous training mode."""
+    was_training = model.training
     model.eval()
-    for step, batch in enumerate(dataloader):
-        with torch.no_grad():
-            outputs = model(**batch)
-        predictions = outputs.logits.argmax(dim=-1)
-        references = batch["labels"]
-        if accelerator is not None and accelerator.num_processes > 1:
-            predictions, references = accelerator.gather_for_metrics((predictions, references))
-        metric.add_batch(predictions=predictions, references=references)
-    return metric.compute()
+    try:
+        for batch in dataloader:
+            with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                outputs = model(**batch)
+            predictions = outputs.logits.argmax(dim=-1)
+            references = batch["labels"]
+            if accelerator is not None and accelerator.num_processes > 1:
+                predictions, references = accelerator.gather_for_metrics((predictions, references))
+            metric.add_batch(predictions=predictions, references=references)
+        return metric.compute()
+    finally:
+        model.train(was_training)
