@@ -17,7 +17,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from accelerate.parallelism_config import ParallelismConfig
-from accelerate.utils import patch_environment
+from accelerate.utils import DeepSpeedPlugin, patch_environment
 from accelerate.utils.constants import (
     BETA_CP_AVAILABLE_PYTORCH_VERSION,
     BETA_SP_AVAILABLE_DEEPSPEED_VERSION,
@@ -275,3 +275,12 @@ class TestParallelismConfig:
 
     def test_tp_handler(self):
         assert True, "Tensor parallelism handler doesn't hold any logic yet"
+
+
+class TestDeepSpeedPlugin:
+    @pytest.mark.parametrize("gradient_clipping", [0.0, 1.0, "auto"])
+    def test_gradient_clipping_is_preserved(self, gradient_clipping):
+        # Zero disables clipping; omitting it restores DeepSpeed's default instead.
+        plugin = DeepSpeedPlugin(gradient_clipping=gradient_clipping, zero_stage=2)
+
+        assert plugin.deepspeed_config["gradient_clipping"] == gradient_clipping

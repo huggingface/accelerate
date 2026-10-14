@@ -1318,7 +1318,7 @@ class DeepSpeedPlugin:
                     "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
             }
-            if self.gradient_clipping:
+            if self.gradient_clipping is not None:
                 config["gradient_clipping"] = self.gradient_clipping
             self.hf_ds_config = HfDeepSpeedConfig(config)
 
