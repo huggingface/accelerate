@@ -59,6 +59,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.gradient_state = GradientState()
         self.device_placement = device_placement
         self._is_overflow = False
+        self._amp_found_inf = None
 
         if self.scaler is not None:
             self._accelerate_step_called = False
@@ -168,6 +169,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
         if self.gradient_state.sync_gradients:
             if self.scaler is not None:
+                self._amp_found_inf = None
                 self.optimizer.step = self._optimizer_patched_step_method
 
                 self.scaler.step(self.optimizer, closure)
@@ -194,6 +196,10 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     @property
     def step_was_skipped(self):
         """Whether or not the optimizer step was skipped."""
+        if self._amp_found_inf is not None:
+            # Materialize once, only when the scheduler or user needs a Python bool.
+            self._is_overflow = bool(self._amp_found_inf.item())
+            self._amp_found_inf = None
         return self._is_overflow
 
     def __getstate__(self):
@@ -206,6 +212,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        self._amp_found_inf = state.get("_amp_found_inf")
         if self.scaler is not None:
             self._accelerate_step_called = False
             self._optimizer_original_step_method = self.optimizer.step
@@ -215,6 +222,13 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 def patch_optimizer_step(accelerated_optimizer: AcceleratedOptimizer, method):
     def patched_step(*args, **kwargs):
         accelerated_optimizer._accelerate_step_called = True
+        found_inf = getattr(accelerated_optimizer.optimizer, "found_inf", None)
+        if found_inf is not None:
+            # GradScaler supplies this device scalar to AMP-aware optimizers, whose
+            # kernels may skip an update even though Python step() was called. Capture
+            # its per-step aggregate before GradScaler removes the attribute. Keep
+            # a reference so recording the signal does not launch a device copy.
+            accelerated_optimizer._amp_found_inf = found_inf.detach()
         return method(*args, **kwargs)
 
     return patched_step
