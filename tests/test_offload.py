@@ -18,7 +18,10 @@ from tempfile import TemporaryDirectory
 
 import torch
 import torch.nn as nn
+from parameterized import parameterized
 
+from accelerate import disk_offload
+from accelerate.hooks import remove_hook_from_submodules
 from accelerate.utils import (
     OffloadedWeightsLoader,
     extract_submodules_state_dict,
@@ -41,6 +44,182 @@ class ModelForTest(nn.Module):
 
 
 class OffloadTester(unittest.TestCase):
+    @parameterized.expand(
+        [
+            (shape, dtype)
+            for shape in [(0,), (0, 3), (2, 0), (2, 0, 4)]
+            for dtype in [
+                torch.float16,
+                torch.float32,
+                torch.float64,
+                torch.bfloat16,
+                torch.int8,
+                torch.int16,
+                torch.int32,
+                torch.int64,
+                torch.uint8,
+                torch.bool,
+                torch.complex64,
+                torch.complex128,
+            ]
+            + [getattr(torch, name) for name in ("float8_e4m3fn", "float8_e5m2") if hasattr(torch, name)]
+        ]
+    )
+    def test_offload_empty_weight(self, shape, dtype):
+        weight = torch.empty(shape, dtype=dtype)
+        with TemporaryDirectory() as tmp_dir:
+            index = offload_weight(weight, "weight", tmp_dir, {})
+            weight_file = os.path.join(tmp_dir, "weight.dat")
+
+            assert os.path.isfile(weight_file)
+            assert index == {"weight": {"shape": list(shape), "dtype": str(dtype).split(".")[1]}}
+            restored = load_offloaded_weight(weight_file, index["weight"])
+            assert restored.shape == weight.shape
+            assert restored.dtype == weight.dtype
+            assert restored.device == torch.device("cpu")
+            assert restored.numel() == 0
+            if shape == (0,):
+                view_dtype = torch.uint8 if weight.element_size() != 1 else torch.float32
+                assert restored.view(view_dtype).shape == weight.view(view_dtype).shape
+
+    def test_offload_empty_weight_overwrite(self):
+        weight = torch.arange(6, dtype=torch.float32).reshape(2, 3)
+        with TemporaryDirectory() as tmp_dir:
+            index = offload_weight(weight, "weight", tmp_dir, {})
+            weight_file = os.path.join(tmp_dir, "weight.dat")
+            assert os.path.getsize(weight_file) == 24
+
+            index = offload_weight(torch.empty(2, 0), "weight", tmp_dir, index)
+            assert load_offloaded_weight(weight_file, index["weight"]).shape == (2, 0)
+
+            index = offload_weight(weight, "weight", tmp_dir, index)
+            assert os.path.getsize(weight_file) == 24
+            torch.testing.assert_close(load_offloaded_weight(weight_file, index["weight"]), weight)
+
+    def test_offload_empty_weight_without_index(self):
+        with TemporaryDirectory() as tmp_dir:
+            assert offload_weight(torch.empty(0, 2), "weight", tmp_dir) is None
+            weight_file = os.path.join(tmp_dir, "weight.dat")
+            restored = load_offloaded_weight(weight_file, {"shape": [0, 2], "dtype": "float32"})
+            assert restored.shape == (0, 2)
+            assert restored.dtype == torch.float32
+
+    def test_load_empty_weight_requires_a_file(self):
+        with TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(FileNotFoundError):
+                load_offloaded_weight(os.path.join(tmp_dir, "missing.dat"), {"shape": [0, 2], "dtype": "float32"})
+
+    @parameterized.expand(["float32", "int64", "bfloat16", "bool"])
+    def test_load_existing_zero_byte_empty_weight(self, dtype):
+        with TemporaryDirectory() as tmp_dir:
+            weight_file = os.path.join(tmp_dir, "weight.dat")
+            with open(weight_file, "wb"):
+                pass
+
+            restored = load_offloaded_weight(weight_file, {"shape": [2, 0, 3], "dtype": dtype})
+            assert restored.shape == (2, 0, 3)
+            assert restored.dtype == getattr(torch, dtype)
+            assert restored.numel() == 0
+
+    def test_load_empty_weight_with_legacy_placeholder(self):
+        with TemporaryDirectory() as tmp_dir:
+            weight_file = os.path.join(tmp_dir, "weight.dat")
+            with open(weight_file, "wb") as f:
+                f.write(b"\x00")
+
+            restored = load_offloaded_weight(weight_file, {"shape": [0, 2], "dtype": "float32"})
+            assert restored.shape == (0, 2)
+            assert restored.dtype == torch.float32
+
+    @parameterized.expand(["float32", "int64", "bfloat16", "complex64"])
+    def test_load_empty_weight_supports_dtype_view(self, dtype):
+        with TemporaryDirectory() as tmp_dir:
+            weight_file = os.path.join(tmp_dir, "weight.dat")
+            with open(weight_file, "wb") as f:
+                f.write(b"\x00")
+
+            restored = load_offloaded_weight(weight_file, {"shape": [0], "dtype": dtype})
+            expected = torch.empty(0, dtype=getattr(torch, dtype))
+            assert restored.stride() == expected.stride()
+            assert restored.view(torch.uint8).shape == expected.view(torch.uint8).shape
+
+    def test_load_nonempty_weight_from_empty_file_fails(self):
+        with TemporaryDirectory() as tmp_dir:
+            weight_file = os.path.join(tmp_dir, "weight.dat")
+            with open(weight_file, "wb"):
+                pass
+            with self.assertRaises(ValueError):
+                load_offloaded_weight(weight_file, {"shape": [2, 3], "dtype": "float32"})
+
+    def test_offload_state_dict_with_empty_tensors(self):
+        state_dict = {
+            "weight": torch.empty(2, 0),
+            "bias": torch.tensor([1.0, 2.0]),
+            "empty_buffer": torch.empty(0, 3, dtype=torch.int64),
+            "scalar": torch.tensor(3.0),
+        }
+        with TemporaryDirectory() as tmp_dir:
+            offload_state_dict(tmp_dir, state_dict)
+            restored = OffloadedWeightsLoader(save_folder=tmp_dir)
+
+            assert set(restored) == set(state_dict)
+            for name, weight in state_dict.items():
+                torch.testing.assert_close(restored[name], weight)
+
+    def test_disk_offload_with_empty_weight(self):
+        model = nn.Linear(0, 3)
+        model.bias.data.copy_(torch.tensor([1.0, 2.0, 3.0]))
+        inputs = torch.empty(2, 0)
+        expected = model(inputs)
+        with TemporaryDirectory() as tmp_dir:
+            disk_offload(model, tmp_dir, execution_device="cpu")
+
+            assert model.weight.device == torch.device("meta")
+            torch.testing.assert_close(model(inputs), expected)
+            torch.testing.assert_close(model(inputs), expected)
+            assert model.weight.device == torch.device("meta")
+            remove_hook_from_submodules(model)
+            assert model.weight.shape == (3, 0)
+            torch.testing.assert_close(model(inputs), expected)
+
+    @parameterized.expand(["float32", "int64", "bfloat16", "complex64"])
+    def test_disk_offload_empty_weight_supports_dtype_view(self, dtype):
+        class ModelWithEmptyWeight(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.empty_weight = nn.Parameter(torch.empty(0, dtype=getattr(torch, dtype)), requires_grad=False)
+
+            def forward(self, inputs):
+                return inputs + self.empty_weight.view(torch.uint8).sum()
+
+        model = ModelWithEmptyWeight()
+        inputs = torch.arange(6, dtype=torch.float32).reshape(2, 3)
+        expected = model(inputs)
+        with TemporaryDirectory() as tmp_dir:
+            disk_offload(model, tmp_dir, execution_device="cpu")
+
+            assert model.empty_weight.device == torch.device("meta")
+            torch.testing.assert_close(model(inputs), expected)
+            torch.testing.assert_close(model(inputs), expected)
+            assert model.empty_weight.device == torch.device("meta")
+            remove_hook_from_submodules(model)
+            torch.testing.assert_close(model(inputs), expected)
+
+    def test_disk_offload_with_empty_buffer(self):
+        model = nn.Linear(3, 4)
+        model.register_buffer("empty_buffer", torch.empty(0, 2))
+        inputs = torch.randn(2, 3)
+        expected = model(inputs)
+        with TemporaryDirectory() as tmp_dir:
+            disk_offload(model, tmp_dir, execution_device="cpu", offload_buffers=True)
+
+            assert model.empty_buffer.device == torch.device("meta")
+            torch.testing.assert_close(model(inputs), expected)
+            assert model.empty_buffer.device == torch.device("meta")
+            remove_hook_from_submodules(model)
+            assert model.empty_buffer.shape == (0, 2)
+            torch.testing.assert_close(model(inputs), expected)
+
     def test_offload_state_dict(self):
         model = ModelForTest()
         with TemporaryDirectory() as tmp_dir:
