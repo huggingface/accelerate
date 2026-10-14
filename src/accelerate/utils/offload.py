@@ -164,7 +164,7 @@ class OffloadedWeightsLoader(Mapping):
                 index = json.load(f)
         self.index = {} if index is None else index
         self.all_keys = list(self.state_dict.keys())
-        self.all_keys.extend([key for key in self.index if key not in self.all_keys])
+        self.all_keys.extend([key for key in self.index if key not in self.state_dict])
         self.device = device
 
     def __getitem__(self, key: str):

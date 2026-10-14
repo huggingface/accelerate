@@ -13,8 +13,19 @@
 # limitations under the License.
 
 import argparse
+import os
+import subprocess
 import unittest
 
+import pytest
+
+from accelerate.commands.launch import (
+    CHILD_STDERR_CHUNK_SIZE,
+    CHILD_STDERR_TAIL_CHUNKS,
+    launch_command_parser,
+    simple_launcher,
+)
+from accelerate.launchers import notebook_launcher
 from accelerate.utils.launch import prepare_multi_gpu_env
 
 
@@ -71,3 +82,67 @@ class TestPrepareMultiGpuEnv(unittest.TestCase):
         self.assertIn("master_port", args.__dict__)
         self.assertNotEqual(args.master_port, "0")
         self.assertTrue(args.master_port.isdigit())
+
+
+def _simple_launcher_args(script, quiet=False):
+    # Spelled out rather than relying on the defaults `launch_command` fills in before dispatching.
+    argv = [
+        "--cpu",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        "no",
+        "--dynamo_backend",
+        "no",
+        "--num_cpu_threads_per_process",
+        "1",
+    ]
+    if quiet:
+        argv.append("--quiet")
+    return launch_command_parser().parse_args([*argv, script])
+
+
+class TestSimpleLauncher:
+    def test_child_stderr_is_written_through_and_attached(self, tmp_path, capfd):
+        script = tmp_path / "child.py"
+        # Floods stderr before failing: the case that deadlocks a wait()-then-read launcher and buffers
+        # without limit in one that drains with communicate().
+        script.write_text(
+            "import sys\n"
+            "for _ in range(200_000):\n"
+            "    print('x' * 40, file=sys.stderr)\n"
+            "raise ValueError('the real cause')\n"
+        )
+        with pytest.raises(subprocess.CalledProcessError) as exc_info:
+            simple_launcher(_simple_launcher_args(str(script)))
+
+        # The child's output still reaches the terminal in full, as it did when stderr was inherited.
+        captured = capfd.readouterr().err
+        assert "the real cause" in captured
+        assert len(captured) > CHILD_STDERR_CHUNK_SIZE * CHILD_STDERR_TAIL_CHUNKS
+        # The caller can reach the cause, and what is retained for it stays bounded.
+        assert "the real cause" in exc_info.value.stderr
+        assert len(exc_info.value.stderr) <= CHILD_STDERR_CHUNK_SIZE * CHILD_STDERR_TAIL_CHUNKS
+        assert "the real cause" in str(exc_info.value.__cause__)
+
+
+def test_notebook_launcher_sets_accelerate_mixed_precision(monkeypatch):
+    # notebook_launcher used to set a bare MIXED_PRECISION key, which nothing
+    # in accelerate reads; the workers read ACCELERATE_MIXED_PRECISION.
+    captured = {}
+    monkeypatch.setattr(
+        "torch.distributed.launcher.api.elastic_launch",
+        lambda config, entrypoint: lambda *a: captured.update(
+            accel=os.environ.get("ACCELERATE_MIXED_PRECISION"), bare=os.environ.get("MIXED_PRECISION")
+        ),
+    )
+    notebook_launcher(lambda: None, num_processes=2, mixed_precision="fp16", use_port="29613")
+    assert captured["accel"] == "fp16"
+    assert captured["bare"] is None
+
+
+def test_notebook_launcher_invalid_precision_error():
+    with pytest.raises(ValueError, match="Unknown mixed_precision mode"):
+        notebook_launcher(lambda: None, num_processes=1, mixed_precision="bogus")

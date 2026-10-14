@@ -15,12 +15,14 @@
 
 import functools
 import os
+import tempfile
 from contextlib import nullcontext
 
 import torch
 from transformers import AutoModel
 
 from accelerate.accelerator import Accelerator
+from accelerate.optimizer import AcceleratedOptimizer
 from accelerate.state import AcceleratorState, DistributedType
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
@@ -51,6 +53,9 @@ from accelerate.utils.fsdp_utils import (
     _set_model_state_dict,
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
+    fsdp2_prepare_auto_wrap_policy,
+    load_fsdp_optimizer,
+    save_fsdp_optimizer,
 )
 
 
@@ -59,6 +64,7 @@ set_seed(42)
 
 BERT_BASE_CASED = "bert-base-cased"
 LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+ESM_TESTING = "hf-internal-testing/tiny-random-EsmModel"
 FP16 = "fp16"
 BF16 = "bf16"
 
@@ -126,6 +132,47 @@ class FSDP2PeftStateDictTest(AccelerateTestCase):
 
         restored = {float(param.detach().flatten()[0]) for name, param in model.named_parameters() if "lora_" in name}
         assert restored == {0.5}
+
+
+@require_fsdp2
+class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
+    """Checkpointing FSDP2 optimizer state must not step the fp16 `GradScaler`."""
+
+    def setUp(self):
+        super().setUp()
+        self.accelerator = Accelerator(cpu=True)
+        self.plugin = FullyShardedDataParallelPlugin(fsdp_version=2)
+
+    def _build(self, scaler_state=None):
+        model = torch.nn.Linear(4, 4)
+        scaler = torch.amp.GradScaler("cpu")
+        if scaler_state is not None:
+            scaler.load_state_dict(scaler_state)
+        return model, AcceleratedOptimizer(torch.optim.AdamW(model.parameters()), scaler=scaler), scaler
+
+    def test_save_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(torch.zeros(()))  # an already-used scaler, with the optimizer state still empty
+        expected = scaler.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+
+    def test_load_does_not_step_the_scaler(self):
+        model, optimizer, scaler = self._build()
+        scaler.scale(model(torch.randn(2, 4)).sum()).backward()
+        optimizer.step()
+        expected = scaler.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+            model, optimizer, scaler = self._build(expected)  # a fresh process: the scaler is still lazy
+            load_fsdp_optimizer(self.plugin, self.accelerator, optimizer, model, tmp_dir)
+
+        assert scaler.state_dict() == expected
+        assert optimizer.state
 
 
 @require_non_cpu
@@ -352,6 +399,21 @@ class FSDPPluginIntegration(AccelerateTestCase):
             )
         fsdp_plugin.set_auto_wrap_policy(model)
         assert fsdp_plugin.auto_wrap_policy is None
+
+    def test_auto_wrap_policy_skips_absent_no_split_modules(self):
+        # `EsmModel` lists `EsmFoldTriangularSelfAttentionBlock` in `_no_split_modules`, but only `EsmForProteinFolding`
+        # contains it
+        model = AutoModel.from_pretrained(ESM_TESTING)
+        env = self.fsdp_envs[self.current_fsdp_version].copy()
+        with patch_environment(**env):
+            fsdp_plugin = FullyShardedDataParallelPlugin(auto_wrap_policy="TRANSFORMER_BASED_WRAP")
+        if self.current_fsdp_version == 1:
+            fsdp_plugin.set_auto_wrap_policy(model)
+            assert fsdp_plugin.transformer_cls_names_to_wrap == ["EsmLayer", "EsmEmbeddings"]
+        else:
+            policy = fsdp2_prepare_auto_wrap_policy(fsdp_plugin, model)
+            assert policy(model.encoder.layer[0])
+            assert policy(model.embeddings)
 
     def test_mixed_precision(self):
         fsdp_version = self.current_fsdp_version

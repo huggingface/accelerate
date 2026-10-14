@@ -41,7 +41,7 @@ from accelerate.test_utils.testing import (
     run_command,
     run_first,
 )
-from accelerate.utils import patch_environment
+from accelerate.utils import TorchDynamoPlugin, patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
 
 
@@ -180,6 +180,20 @@ class AccelerateLauncherTester(unittest.TestCase):
             _, current_env = prepare_simple_launcher_cmd_env(args)
             assert "KMP_AFFINITY" not in current_env
             assert "KMP_BLOCKTIME" not in current_env
+
+    def test_launch_keeps_dynamo_dynamic_unset_by_default(self):
+        """
+        Without `--dynamo_use_dynamic`, the launcher leaves `dynamic` unset so `torch.compile` keeps its default.
+        """
+        with patch.dict(os.environ):
+            os.environ.pop("ACCELERATE_DYNAMO_USE_DYNAMIC", None)
+
+            for flags, expected in (([], None), (["--dynamo_use_dynamic"], True)):
+                args = self.parser.parse_args(["--dynamo_backend", "eager", *flags, str(self.test_file_path)])
+                args, _, _ = _validate_launch_command(args)
+                _, current_env = prepare_simple_launcher_cmd_env(args)
+                with patch.dict(os.environ, current_env, clear=True):
+                    assert TorchDynamoPlugin().dynamic is expected
 
     def test_validate_launch_command(self):
         """Test that the validation function combines args and defaults."""
@@ -570,13 +584,12 @@ class ModelEstimatorTester(unittest.TestCase):
 
     @require_transformers
     def test_no_split_modules(self):
-        # idefics-80b-instruct has ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
-        args = self.parser.parse_args(["HuggingFaceM4/idefics-80b-instruct", "--dtypes", "float32"])
+        args = self.parser.parse_args(["huggyllama/llama-7b", "--dtypes", "float32"])
         output = gather_data(args)
-        # without factoring in `no_split` modules, the largest layer is 721420288 bytes
-        assert output[0][1] != 721420288, "Largest layer calculation incorrect, did not factor in `no_split` modules."
-        # the real answer is 3240165632 bytes
-        assert output[0][1] == 3240165632
+        # LlamaDecoderLayer: four attention matrices, three MLP matrices and two layer norms, all FP32.
+        # (4 * 4096**2 + 3 * 4096 * 11008 + 2 * 4096) * 4 = 809533440 bytes.
+        # Ignoring no-split layers would instead select the 524288000-byte token embedding.
+        assert output[0][1] == 809533440
 
     @require_timm
     def test_timm_model(self):

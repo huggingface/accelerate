@@ -500,18 +500,22 @@ def dispatch_model(
     else:
         device = list(devices)[0]
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if is_npu_available() and isinstance(device, int):
-            device = f"npu:{device}"
-        elif is_mlu_available() and isinstance(device, int):
-            device = f"mlu:{device}"
-        elif is_sdaa_available() and isinstance(device, int):
-            device = f"sdaa:{device}"
-        elif is_musa_available() and isinstance(device, int):
-            device = f"musa:{device}"
-        elif is_neuron_available() and isinstance(device, int):
-            device = f"neuron:{device}"
-        else:
-            model.to(device)
+        if isinstance(device, int):
+            if is_npu_available():
+                device = f"npu:{device}"
+            elif is_mlu_available():
+                device = f"mlu:{device}"
+            elif is_sdaa_available():
+                device = f"sdaa:{device}"
+            elif is_musa_available():
+                device = f"musa:{device}"
+            elif is_neuron_available():
+                device = f"neuron:{device}"
+            elif torch.cuda.is_available():
+                pass
+            elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+                device = f"{torch.accelerator.current_accelerator().type}:{device}"
+        model.to(device)
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
     return model
@@ -802,27 +806,15 @@ def _attach_context_parallel_hooks(
 
     """
 
-    # The hook below discards the attention mask and forces `is_causal=True`. That is only
-    # equivalent to the model's own masking for plain causal attention. Models whose layers use
-    # a *stricter* mask (sliding-window or chunked attention) would otherwise be trained with
-    # full causal attention silently, so refuse them up front. Without this hook torch raises a
-    # shape error for such models, so nothing that works today starts failing here.
-    config = getattr(model, "config", None)
-    config = config.get_text_config() if hasattr(config, "get_text_config") else config
-    layer_types = getattr(config, "layer_types", None)
-    if layer_types is not None:
-        non_full = {layer_type for layer_type in layer_types if layer_type != "full_attention"}
-    else:
-        # Models that predate `layer_types` (Mistral, for one) apply a sliding window to every layer
-        # whenever `sliding_window` is set.
-        non_full = {"sliding_attention"} if getattr(config, "sliding_window", None) else set()
-    if non_full:
+    # The hook below drops the attention mask and forces `is_causal=True`; transformers says whether
+    # that substitution is safe. Defaults to allowed, so an older transformers behaves as before.
+    if not getattr(model, "supports_context_parallel", True):
         raise ValueError(
-            f"Context parallelism does not support attention layers of type {sorted(non_full)} "
-            f"(model {model.__class__.__name__}). Context parallelism can only express full causal "
-            "attention: the per-layer mask has to be dropped, so those layers would silently be "
-            "trained with full causal attention instead. Use a full-attention model, or disable "
-            "context parallelism."
+            f"{model.__class__.__name__} does not support context parallelism. Context parallelism can "
+            "only express full causal attention: the per-layer mask has to be dropped, so a layer using "
+            "a stricter mask (sliding-window or chunked) would silently be trained with full causal "
+            "attention instead, and a layer carrying a recurrent state along the sequence never has that "
+            "state exchanged between ranks. Use a full-attention model, or disable context parallelism."
         )
 
     def _self_attn_pre_forward_hook(_module, module_args, module_kwargs):

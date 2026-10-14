@@ -239,6 +239,9 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
     Returns:
         `bool`: Whether the model has DTensor parameters.
     """
+    if not is_torch_distributed_available():
+        return False
+
     if is_torch_version(">=", "2.5.0"):
         from torch.distributed.tensor import DTensor
     else:
@@ -344,7 +347,9 @@ def extract_model_from_parallel(
                 forward = forward.__wrapped__
                 if forward == original_forward:
                     break
-            model.forward = MethodType(forward, model)
+            # `_original_forward` is already bound to the model (for example the `functools.partial` that an
+            # accelerate hook installs), so binding it again would pass the model twice.
+            model.forward = original_forward if forward == original_forward else MethodType(forward, model)
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
@@ -562,7 +567,10 @@ def check_os_kernel():
     if system != "Linux":
         return
 
-    _, version, *_ = re.split(r"(\d+\.\d+\.\d+)", info.release)
+    match = re.search(r"(\d+\.\d+\.\d+)", info.release)
+    if match is None:
+        return
+    version = match.group()
     min_version = "5.5.0"
     if Version(version) < Version(min_version):
         msg = (

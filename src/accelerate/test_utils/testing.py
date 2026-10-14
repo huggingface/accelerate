@@ -80,6 +80,7 @@ from ..utils import (
     is_xpu_available,
     str_to_bool,
 )
+from ..utils.constants import FSDP2_PYTORCH_VERSION
 
 
 def get_backend():
@@ -257,7 +258,9 @@ def require_fp8(test_case):
 
 
 def require_fsdp2(test_case):
-    return unittest.skipUnless(is_torch_version(">=", "2.5.0"), "test requires FSDP2 (torch >= 2.5.0)")(test_case)
+    return unittest.skipUnless(
+        is_torch_version(">=", FSDP2_PYTORCH_VERSION), f"test requires FSDP2 (torch >= {FSDP2_PYTORCH_VERSION})"
+    )(test_case)
 
 
 def require_peft(test_case):

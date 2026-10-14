@@ -13,6 +13,7 @@ env:
 
 jobs:
   run_tests:
+    permissions: {}
     name: run_tests_${{ matrix.test_type }}
     strategy:
       fail-fast: false
