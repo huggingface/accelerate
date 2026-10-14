@@ -280,7 +280,7 @@ class TestParallelismConfig:
 class TestDeepSpeedPlugin:
     @pytest.mark.parametrize("gradient_clipping", [0.0, 1.0, "auto"])
     def test_gradient_clipping_is_preserved(self, gradient_clipping):
-        # Zero disables clipping; omitting it restores DeepSpeed's default instead.
+        """An explicit zero must disable clipping instead of silently restoring DeepSpeed's default."""
         plugin = DeepSpeedPlugin(gradient_clipping=gradient_clipping, zero_stage=2)
 
         assert plugin.deepspeed_config["gradient_clipping"] == gradient_clipping
