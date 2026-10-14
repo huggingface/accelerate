@@ -23,7 +23,7 @@ import os
 import re
 import shutil
 import warnings
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
@@ -2953,36 +2953,34 @@ class Accelerator:
                     opt = opt.optimizer
                 self.scaler.unscale_(opt)
 
-    def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2):
-        is_dtensor_available = torch.distributed.is_available() and is_torch_version(">=", DTENSOR_PYTORCH_VERSION)
-        if not is_dtensor_available:
-            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+    def _clip_grad_norm_dtensor_aware(
+        self, parameters, max_norm, norm_type=2.0, error_if_nonfinite=False, foreach=None
+    ):
+        """
+        Equivalent to torch.nn.utils.clip_grad_norm_ but supports a mixture of ordinary and DTensors parameters.
+        """
+        # The split norm/clipping APIs require PyTorch 2.6.
+        if not torch.distributed.is_available() or not is_torch_version(">=", "2.6"):
+            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type, error_if_nonfinite, foreach)
 
         from torch.distributed.tensor import DTensor
+        from torch.nn.utils import clip_grads_with_norm_, get_total_norm
 
-        # `DTensor` is a subclass of `torch.Tensor`, so a plain gradient is anything that is not a `DTensor`.
-        mesh_groups = {}
-        plain_params = []
-        for p in parameters:
-            if p.grad is None:
-                continue
-            if isinstance(p.grad, DTensor):
-                mesh_groups.setdefault(p.grad.device_mesh, []).append(p)
-            else:
-                plain_params.append(p)
-
-        if len(mesh_groups) + bool(plain_params) <= 1:
-            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
-
-        norm_groups = list(mesh_groups.values()) + ([plain_params] if plain_params else [])
-        group_norms = [torch.nn.utils.get_total_norm([p.grad for p in group], norm_type) for group in norm_groups]
-        # `full_tensor()` gathers each group norm on its own mesh, so the group norms can be combined as plain tensors.
-        group_norms = [norm.full_tensor() if isinstance(norm, DTensor) else norm for norm in group_norms]
-        total_norm = torch.linalg.vector_norm(torch.stack(group_norms), norm_type)
-        for mesh, group in mesh_groups.items():
-            d_total_norm = DTensor.from_local(total_norm, mesh)
-            torch.nn.utils.clip_grads_with_norm_(group, max_norm, d_total_norm)
-        torch.nn.utils.clip_grads_with_norm_(plain_params, max_norm, total_norm)
+        params_by_mesh = defaultdict(list)
+        for param in parameters:
+            if param.grad is not None:
+                params_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param)
+        norms = [
+            get_total_norm([p.grad for p in params], norm_type, foreach=foreach) for params in params_by_mesh.values()
+        ]
+        norms = (
+            torch.stack([n.full_tensor() if isinstance(n, DTensor) else n for n in norms]) if norms else torch.zeros(1)
+        )
+        total_norm = norms.sum() if norm_type == 0 else torch.linalg.vector_norm(norms, norm_type)
+        # + error_if_nonfinite check
+        if max_norm != float("inf"):
+            for params in params_by_mesh.values():
+                clip_grads_with_norm_(params, max_norm, total_norm, foreach)
         return total_norm
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
