@@ -16,7 +16,7 @@ import os
 
 from parameterized import param, parameterized
 
-from accelerate.test_utils.testing import require_deepspeed, require_huggingface_suite, require_multi_gpu
+from accelerate.test_utils.testing import require_deepspeed, require_huggingface_suite, require_multi_gpu, slow
 
 from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
 
@@ -30,6 +30,7 @@ LOW_PRECISION_ATOL = 1e-2
 
 
 @require_deepspeed
+@slow
 @require_multi_gpu
 @require_huggingface_suite
 class DeepSpeedZeRO2TrainingTest(DistributedTrainingCommon):
@@ -51,6 +52,7 @@ class DeepSpeedZeRO2TrainingTest(DistributedTrainingCommon):
 
 
 @require_deepspeed
+@slow
 @require_multi_gpu
 @require_huggingface_suite
 class DeepSpeedZeRO3TrainingTest(DistributedTrainingCommon):

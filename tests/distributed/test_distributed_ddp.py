@@ -16,7 +16,7 @@ import os
 
 from parameterized import parameterized
 
-from accelerate.test_utils.testing import require_huggingface_suite, require_multi_gpu
+from accelerate.test_utils.testing import require_huggingface_suite, require_multi_gpu, slow
 
 from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
 
@@ -24,6 +24,7 @@ from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
 DDP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "ddp.yaml")
 
 
+@slow
 @require_multi_gpu
 @require_huggingface_suite
 class DDPTrainingTest(DistributedTrainingCommon):
