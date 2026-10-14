@@ -409,7 +409,8 @@ class FSDPPluginIntegration(AccelerateTestCase):
             fsdp_plugin = FullyShardedDataParallelPlugin(auto_wrap_policy="TRANSFORMER_BASED_WRAP")
         if self.current_fsdp_version == 1:
             fsdp_plugin.set_auto_wrap_policy(model)
-            assert fsdp_plugin.transformer_cls_names_to_wrap == ["EsmLayer", "EsmEmbeddings"]
+            # Transformers stores `_no_split_modules` as a set, so the order changes between runs
+            assert sorted(fsdp_plugin.transformer_cls_names_to_wrap) == ["EsmEmbeddings", "EsmLayer"]
         else:
             policy = fsdp2_prepare_auto_wrap_policy(fsdp_plugin, model)
             assert policy(model.encoder.layer[0])
