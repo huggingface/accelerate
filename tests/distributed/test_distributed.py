@@ -33,25 +33,32 @@ from accelerate.test_utils.testing import execute_subprocess_async, get_launch_c
 
 
 CONFIGS_DIR = os.path.join(os.path.dirname(__file__), "accelerate_configs")
-TRAIN_SCRIPT = os.path.join(os.path.dirname(__file__), "scripts", "train.py")
+SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), "scripts")
+TRAIN_SCRIPT = os.path.join(SCRIPTS_DIR, "train.py")
+
+
+def run_script(script, config_file=None, **script_args):
+    """
+    Run `script` with `accelerate launch` and the accelerate `config_file`, or on a single GPU with `python` if there is
+    none. `script_args` are passed to the script as `--key=value`.
+    """
+    if config_file:
+        cmd = get_launch_command(config_file=config_file, main_process_port=get_torch_dist_unique_port())
+    else:
+        cmd = [sys.executable]
+    cmd += [script] + [f"--{key}={value}" for key, value in script_args.items()]
+    execute_subprocess_async(cmd)
 
 
 @functools.cache
 def train(config_file=None, output_dir=None, **script_args):
     """
-    Run `train.py` with the accelerate `config_file`, or on a single GPU if there is none, and return the loss of each
-    optimizer step. Runs are cached, so a run shared by several checks, like a reference, only happens once.
+    Run `train.py` and return the loss of each optimizer step. Runs are cached, so a run shared by several checks, like
+    a reference, only happens once.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_dir = output_dir or tmp_dir
-        if config_file:
-            # A port per pytest-xdist worker lets launches run in parallel.
-            launcher = get_launch_command(config_file=config_file, main_process_port=get_torch_dist_unique_port())
-        else:
-            launcher = [sys.executable]
-        cmd = launcher + [TRAIN_SCRIPT, f"--output_dir={output_dir}"]
-        cmd += [f"--{key}={value}" for key, value in script_args.items()]
-        execute_subprocess_async(cmd)
+        run_script(TRAIN_SCRIPT, config_file, output_dir=output_dir, **script_args)
         with open(os.path.join(output_dir, "losses.json")) as f:
             return json.load(f)
 
@@ -77,11 +84,11 @@ class DistributedTrainingCommon(unittest.TestCase):
         distributed = train(config_file, mixed_precision=mixed_precision)
         self.assert_same_training(distributed, reference, atol=atol)
 
-    def check_gradient_accumulation(self, config_file):
+    def check_gradient_accumulation(self, config_file, dtype="bf16"):
         """Accumulating 4 steps of 1 sample per GPU should match 1 step of 4 samples per GPU, and the reference."""
-        reference = train(dtype="bf16")
-        distributed = train(config_file, dtype="bf16")
-        accumulated = train(config_file, dtype="bf16", gradient_accumulation_steps=4)
+        reference = train(dtype=dtype)
+        distributed = train(config_file, dtype=dtype)
+        accumulated = train(config_file, dtype=dtype, gradient_accumulation_steps=4)
         self.assert_same_training(accumulated, distributed)
         self.assert_same_training(accumulated, reference)
 
