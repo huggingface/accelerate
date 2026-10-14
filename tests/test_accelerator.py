@@ -164,12 +164,14 @@ def _distributed_context(rank, directory):
 def _gradient_clipping_worker(rank, directory):
     with _distributed_context(rank, directory):
         mesh = init_device_mesh("cpu", (4,))
+        # Same seed on every rank, so all ranks build the same reference gradients.
+        torch.manual_seed(0)
         for norm_type in (0.0, 2.0, float("inf")):
             for distributed in ((False, False), (True, True), (False, True)):
                 for max_norm in (1.0, 10000.0):
                     parameters, reference = [], []
-                    for i, is_distributed in enumerate(distributed):
-                        gradient = torch.arange(1, 65, dtype=torch.float32).reshape(8, 8) * (i + 1)
+                    for is_distributed in distributed:
+                        gradient = torch.randn(8, 8)
                         expected = torch.nn.Parameter(torch.zeros_like(gradient))
                         expected.grad = gradient.clone()
                         reference.append(expected)
