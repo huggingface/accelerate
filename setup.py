@@ -32,6 +32,7 @@ extras["test_dev"] = [
     "scikit-learn",
     "tqdm",
     "bitsandbytes",
+    "nvidia-ml-py",
     "timm",
 ]
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
