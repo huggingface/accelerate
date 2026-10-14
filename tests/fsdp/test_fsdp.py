@@ -427,14 +427,15 @@ class FSDPPluginIntegration(AccelerateTestCase):
         for mp_dtype in dtypes:
             env = self.fsdp_envs[fsdp_version].copy()
             env["ACCELERATE_MIXED_PRECISION"] = mp_dtype
-            extra_arg = "buffer_dtype" if fsdp_version == 1 else "output_dtype"
             with patch_environment(**env):
                 accelerator = Accelerator()
                 if mp_dtype == "fp16":
                     dtype = torch.float16
                 elif mp_dtype == "bf16":
                     dtype = torch.bfloat16
-                mp_policy = MP(param_dtype=dtype, reduce_dtype=dtype, **{extra_arg: dtype})
+                # FSDP2 leaves `output_dtype` unset, so the outputs keep the dtype they were computed in.
+                extra_args = {"buffer_dtype": dtype} if fsdp_version == 1 else {}
+                mp_policy = MP(param_dtype=dtype, reduce_dtype=dtype, **extra_args)
                 assert accelerator.state.fsdp_plugin.mixed_precision_policy == mp_policy
                 if mp_dtype == FP16:
                     assert isinstance(accelerator.scaler, Scaler)
@@ -448,7 +449,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
                 plugin = FullyShardedDataParallelPlugin(
-                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, extra_arg: dtype}
+                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, **extra_args}
                 )
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
