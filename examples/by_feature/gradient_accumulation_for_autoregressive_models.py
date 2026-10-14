@@ -109,17 +109,13 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, max_training
         batch = tokenizer.pad(
             examples,
             padding="max_length",
-            max_length=max_length + 1,
+            max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors="pt",
         )
 
-        batch["labels"] = batch["input_ids"][:, 1:]
-        batch["input_ids"] = batch["input_ids"][:, :-1]
-        if "attention_mask" in batch:
-            batch["attention_mask"] = batch["attention_mask"][:, :-1]
-
-        batch["labels"] = torch.where(batch["labels"] == tokenizer.pad_token_id, -100, batch["labels"])
+        # Causal language models shift labels internally to predict the next token.
+        batch["labels"] = torch.where(batch["input_ids"] == tokenizer.pad_token_id, -100, batch["input_ids"])
 
         return batch
 
@@ -163,14 +159,13 @@ def training_function(config, args):
         raise NotImplementedError(
             "Gradient accumulation on TPUs is currently not supported. Pass `gradient_accumulation_steps=1`"
         )
-    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
+
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
     max_grad_norm = config["max_grad_norm"]
 
-    # We need to initialize the trackers we use, and also store our configuration
     if args.with_wandb_tracking:
         run = os.path.split(__file__)[-1].split(".")[0]
         run_name = f"{accelerator.num_processes}GPU-grad{gradient_accumulation_steps}-bs{batch_size}"
@@ -182,76 +177,84 @@ def training_function(config, args):
 
     set_seed(seed)
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
-    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-360M")
-
-    # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
-    # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
-    # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
-    model = model.to(accelerator.device)
-
-    # Instantiate optimizer
+    model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-360M").to(accelerator.device)
     optimizer = AdamW(params=model.parameters(), lr=lr)
+    lr_scheduler = get_constant_schedule(optimizer=optimizer)
 
-    # Instantiate scheduler
-    lr_scheduler = get_constant_schedule(
-        optimizer=optimizer,
+    train(
+        accelerator,
+        model,
+        optimizer,
+        train_dataloader,
+        eval_dataloader,
+        lr_scheduler,
+        num_epochs=num_epochs,
+        max_grad_norm=max_grad_norm,
+        with_wandb_tracking=args.with_wandb_tracking,
     )
+    accelerator.end_training()
 
-    # Prepare everything
-    # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
-    # prepare method.
+
+def train(
+    accelerator,
+    model,
+    optimizer,
+    train_dataloader,
+    eval_dataloader,
+    lr_scheduler,
+    *,
+    num_epochs,
+    max_grad_norm,
+    with_wandb_tracking=False,
+):
+    """Prepare the training objects, then train and evaluate for each epoch."""
+    gradient_accumulation_steps = accelerator.gradient_accumulation_steps
+
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
-    num_samples_in_epoch = len(train_dataloader)
-    remainder = num_samples_in_epoch % gradient_accumulation_steps
-    remainder = remainder if remainder != 0 else gradient_accumulation_steps
-    total_gradient_updates = math.ceil(num_samples_in_epoch / gradient_accumulation_steps)
+    num_batches_in_epoch = len(train_dataloader)
+    num_batches_in_last_update = num_batches_in_epoch % gradient_accumulation_steps
+    if num_batches_in_last_update == 0:
+        num_batches_in_last_update = gradient_accumulation_steps
+    total_gradient_updates = math.ceil(num_batches_in_epoch / gradient_accumulation_steps)
 
-    total_batched_samples = 0
-    # Now we train the model
     for epoch in range(num_epochs):
         model.train()
         training_iterator = iter(train_dataloader)
         for update_step in range(total_gradient_updates):
-            # In order to correctly the total number of non-padded tokens on which we'll compute the cross-entropy loss
-            # we need to pre-load the full local batch - i.e the next per_device_batch_size * accumulation_steps samples
-            batch_samples = []
+            # Every microbatch needs the target count for the entire update before backward.
             num_batches_in_step = (
-                gradient_accumulation_steps if update_step != (total_gradient_updates - 1) else remainder
+                gradient_accumulation_steps
+                if update_step != (total_gradient_updates - 1)
+                else num_batches_in_last_update
             )
-            for _ in range(num_batches_in_step):
-                batch_samples += [next(training_iterator)]
-            # get local num items in batch
-            local_num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
+            batches = [next(training_iterator) for _ in range(num_batches_in_step)]
 
-            # to compute it correctly in a multi-device DDP training, we need to gather the total number of items in the full batch.
+            # The first label has no preceding prediction and is excluded by the model's loss.
+            local_num_items_in_batch = sum(batch["labels"][..., 1:].ne(-100).sum() for batch in batches)
+
+            # Include targets from every process in the loss denominator.
             num_items_in_batch = accelerator.gather(local_num_items_in_batch).sum().item()
             losses = []
-            for i, batch in enumerate(batch_samples):
-                # if we perform gradient accumulation in a multi-devices set-up, we want to avoid unecessary communications when accumulating
-                # cf: https://muellerzr.github.io/blog/gradient_accumulation.html
-                ctx = (
+            for i, batch in enumerate(batches):
+                # Avoid repeated communication by synchronizing only on the last microbatch.
+                sync_context = (
                     model.no_sync
-                    if (i < len(batch_samples) - 1 and accelerator.num_processes > 1)
+                    if (i < len(batches) - 1 and accelerator.num_processes > 1)
                     else contextlib.nullcontext
                 )
-                with ctx():
-                    total_batched_samples += 1
-
+                with sync_context():
                     outputs = model(**batch, use_cache=False, num_items_in_batch=num_items_in_batch)
                     loss = outputs.loss
 
-                    # We multiply by num_processes because the DDP calculates the average gradient across all devices whereas dividing by num_items_in_batch already takes into account all devices
-                    # Same reason for gradient_accumulation_steps, but this times it's Accelerate that calculate the average gradient across the accumulated steps
-                    # Because the loss is already divided by `num_items_in_batch` in the `transformers` code, we don't need to do it again
+                    # The model already divides by the global target count. Cancel the
+                    # additional averaging from Accelerate's backward and DDP's reduction.
                     loss = loss * gradient_accumulation_steps * accelerator.num_processes
                     accelerator.backward(loss)
                     losses.append(loss.detach())
 
-            # Sync gradients and perform optimization steps once every gradient_accumulation_steps
             grad_norm = accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
             optimizer.step()
             lr_scheduler.step()
@@ -265,7 +268,7 @@ def training_function(config, args):
             accelerator.print(
                 f"epoch {epoch} - update step {update_step}:: grad norm: {grad_norm} ::train loss: {losses}"
             )
-            if args.with_wandb_tracking:
+            if with_wandb_tracking:
                 accelerator.log(
                     {
                         "train/grad_norm": grad_norm,
@@ -274,6 +277,7 @@ def training_function(config, args):
                     },
                     step=update_step + total_gradient_updates * epoch,
                 )
+
         model.eval()
         losses = []
         for step, batch in enumerate(eval_dataloader):
@@ -291,7 +295,7 @@ def training_function(config, args):
 
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:: eval perplexity: {perplexity} eval_loss: {eval_loss}")
-        if args.with_wandb_tracking:
+        if with_wandb_tracking:
             accelerator.log(
                 {
                     "eval/perplexity": perplexity,
@@ -300,7 +304,6 @@ def training_function(config, args):
                 },
                 step=update_step + total_gradient_updates * epoch,
             )
-    accelerator.end_training()
 
 
 def main():
