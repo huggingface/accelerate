@@ -352,6 +352,38 @@ class UtilsTester(unittest.TestCase):
         padded_tensor = pad_across_processes(tensor, dim=-4)
         assert padded_tensor is tensor
 
+    def test_pad_across_processes_keeps_dtype(self):
+        # Simulate another process holding a bigger tensor so that the padding path is taken.
+        def fake_gather(size):
+            return torch.cat([size, size + 1])
+
+        for dtype in (torch.bool, torch.uint8, torch.int32, torch.int64, torch.float16, torch.float32):
+            tensor = torch.ones(4, 3, dtype=dtype)
+            with patch("accelerate.utils.operations.gather", fake_gather):
+                padded_tensor = pad_across_processes(tensor)
+
+            assert padded_tensor.dtype == dtype
+            assert padded_tensor.shape == (5, 3)
+            assert torch.equal(padded_tensor[:4], tensor)
+            assert not padded_tensor[4].any()
+
+        # Explicit `pad_index` is honored and still does not change the dtype.
+        tensor = torch.ones(4, 3, dtype=torch.bool)
+        with patch("accelerate.utils.operations.gather", fake_gather):
+            padded_tensor = pad_across_processes(tensor, pad_index=1)
+
+        assert padded_tensor.dtype == torch.bool
+        assert padded_tensor[4].all()
+
+        # `pad_index` can be a tensor broadcast over the padded rows (`split_between_processes` pads with the
+        # last element).
+        tensor = torch.arange(12.0).view(4, 3)
+        with patch("accelerate.utils.operations.gather", fake_gather):
+            padded_tensor = pad_across_processes(tensor, pad_index=tensor[-1])
+
+        assert padded_tensor.dtype == torch.float32
+        assert torch.equal(padded_tensor[4], tensor[-1])
+
     def test_slice_and_concatenate(self):
         # First base case: 2 processes, batch size of 1
         num_processes = 2
