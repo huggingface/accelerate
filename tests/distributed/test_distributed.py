@@ -57,25 +57,25 @@ def train(config_file=None, output_dir=None, **script_args):
 
 
 class DistributedTrainingCommon(unittest.TestCase):
-    def assert_same_training(self, losses, reference_losses):
-        """The loss should go down, and match the reference."""
+    def assert_same_training(self, losses, reference_losses, atol=1e-3):
+        """
+        The loss should go down, and match the reference. Bugs such as a wrong loss scaling or a resume that doesn't
+        restore the optimizer move the loss by more than 5e-2.
+        """
         self.assertLess(losses[-1], losses[0])
-        # fp32 matches the reference to ~1e-6, but bf16 drifts up to ~2e-3 after 8 steps: DeepSpeed casts the model to
-        # bf16 instead of using autocast like the reference. Bugs such as a wrong loss scaling or a resume that doesn't
-        # restore the optimizer move the loss by more than 5e-2, so 1e-2 still catches them in every precision.
-        assert_close(losses, reference_losses, rtol=0, atol=1e-2)
+        assert_close(losses, reference_losses, rtol=0, atol=atol)
 
-    def check_training(self, dtype, config_file):
+    def check_training(self, dtype, config_file, atol=1e-3):
         """Training with the model loaded in `dtype` should match the reference."""
         reference = train(dtype=dtype)
         distributed = train(config_file, dtype=dtype)
-        self.assert_same_training(distributed, reference)
+        self.assert_same_training(distributed, reference, atol=atol)
 
-    def check_mixed_precision(self, mixed_precision, config_file):
+    def check_mixed_precision(self, mixed_precision, config_file, atol=1e-3):
         """Training with the model in fp32 and the compute in `mixed_precision` should match the reference."""
         reference = train(mixed_precision=mixed_precision)
         distributed = train(config_file, mixed_precision=mixed_precision)
-        self.assert_same_training(distributed, reference)
+        self.assert_same_training(distributed, reference, atol=atol)
 
     def check_gradient_accumulation(self, config_file):
         """Accumulating 4 steps of 1 sample per GPU should match 1 step of 4 samples per GPU, and the reference."""

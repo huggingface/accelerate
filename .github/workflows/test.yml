@@ -56,8 +56,6 @@ jobs:
         if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
         if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torchvision==0.20.1 torch==2.5.1; fi
-        # Transformers 5.18+ uses torch.accelerator, which is unavailable in Torch 2.5.
-        if [[ ${{ matrix.pytorch-version }} = minimum && ${{ matrix.test-kind }} != test_prod ]]; then pip install "transformers<5.18"; fi
         pip install pytest-reportlog tabulate setuptools importlib_metadata
 
     - name: Show installed libraries

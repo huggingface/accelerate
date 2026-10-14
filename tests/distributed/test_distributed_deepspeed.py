@@ -14,7 +14,7 @@
 
 import os
 
-from parameterized import parameterized
+from parameterized import param, parameterized
 
 from accelerate.test_utils.testing import require_deepspeed, require_huggingface_suite, require_multi_gpu
 
@@ -29,13 +29,16 @@ ZERO3_CONFIG_FILE = os.path.join(CONFIGS_DIR, "zero3.yaml")
 @require_multi_gpu
 @require_huggingface_suite
 class DeepSpeedZeRO2TrainingTest(DistributedTrainingCommon):
-    @parameterized.expand(["fp32", "bf16", "fp16"])
-    def test_training(self, dtype):
-        self.check_training(dtype, config_file=ZERO2_CONFIG_FILE)
+    # DeepSpeed handles bf16 itself rather than like the reference, so its bf16 losses drift up to ~2e-3 from the
+    # reference after 8 steps. That is still well below the 5e-2 a bug moves the loss by.
+    @parameterized.expand(["fp32", param("bf16", atol=1e-2), "fp16"])
+    def test_training(self, dtype, **kwargs):
+        self.check_training(dtype, config_file=ZERO2_CONFIG_FILE, **kwargs)
 
-    @parameterized.expand(["fp16", "bf16"])
-    def test_training_mixed_precision(self, mixed_precision):
-        self.check_mixed_precision(mixed_precision, config_file=ZERO2_CONFIG_FILE)
+    # Same bf16 drift as in `test_training`.
+    @parameterized.expand(["fp16", param("bf16", atol=1e-2)])
+    def test_training_mixed_precision(self, mixed_precision, **kwargs):
+        self.check_mixed_precision(mixed_precision, config_file=ZERO2_CONFIG_FILE, **kwargs)
 
     def test_training_with_gradient_accumulation(self):
         self.check_gradient_accumulation(config_file=ZERO2_CONFIG_FILE)
@@ -52,9 +55,10 @@ class DeepSpeedZeRO3TrainingTest(DistributedTrainingCommon):
     def test_training(self, dtype):
         self.check_training(dtype, config_file=ZERO3_CONFIG_FILE)
 
-    @parameterized.expand(["fp16", "bf16"])
-    def test_training_mixed_precision(self, mixed_precision):
-        self.check_mixed_precision(mixed_precision, config_file=ZERO3_CONFIG_FILE)
+    # Same bf16 drift as with ZeRO-2.
+    @parameterized.expand(["fp16", param("bf16", atol=1e-2)])
+    def test_training_mixed_precision(self, mixed_precision, **kwargs):
+        self.check_mixed_precision(mixed_precision, config_file=ZERO3_CONFIG_FILE, **kwargs)
 
     def test_training_with_gradient_accumulation(self):
         self.check_gradient_accumulation(config_file=ZERO3_CONFIG_FILE)
