@@ -19,12 +19,21 @@ from pathlib import Path
 
 import torch
 from transformers import AutoModelForCausalLM
+from transformers.integrations.deepspeed import (
+    deepspeed_config,
+    is_deepspeed_zero3_enabled,
+    unset_hf_deepspeed_config,
+)
 
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.commands.launch import launch_command, launch_command_parser
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
+    execute_subprocess_async,
+    get_launch_command,
+    get_torch_dist_unique_port,
     path_in_accelerate_package,
+    require_cuda,
     require_deepspeed,
     require_huggingface_suite,
     require_multi_device,
@@ -38,6 +47,88 @@ from accelerate.utils.deepspeed import DummyOptim, DummyScheduler, get_active_de
 
 
 GPT2_TINY = "hf-internal-testing/tiny-random-gpt2"
+
+
+@require_deepspeed
+class DeepSpeedInitializationContextTests(AccelerateTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(unset_hf_deepspeed_config)
+        self.plugin = self.create_plugin(stage=3, enabled=True)
+
+    def create_plugin(self, stage: int, enabled: bool) -> DeepSpeedPlugin:
+        plugin = DeepSpeedPlugin(
+            hf_ds_config={
+                "zero_optimization": {"stage": stage},
+                "train_micro_batch_size_per_gpu": 1,
+                "gradient_accumulation_steps": 1,
+            },
+            zero3_init_flag=enabled,
+        )
+        plugin.set_deepspeed_weakref()
+        return plugin
+
+    def test_disabled_context_restores_transformers_state(self) -> None:
+        assert is_deepspeed_zero3_enabled()
+        with self.plugin.zero3_init_context_manager(enable=False):
+            assert not self.plugin.is_zero3_init_enabled()
+            assert not is_deepspeed_zero3_enabled()
+            assert self.plugin.deepspeed_config["zero_optimization"]["stage"] == 3
+        assert self.plugin.is_zero3_init_enabled()
+        assert is_deepspeed_zero3_enabled()
+
+    def test_disabled_context_restores_state_after_error(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "model initialization failed"):
+            with self.plugin.zero3_init_context_manager(enable=False):
+                raise RuntimeError("model initialization failed")
+        assert self.plugin.is_zero3_init_enabled()
+        assert is_deepspeed_zero3_enabled()
+
+    def test_nested_context_restores_outer_state(self) -> None:
+        with self.plugin.zero3_init_context_manager(enable=False):
+            assert not is_deepspeed_zero3_enabled()
+            with self.plugin.zero3_init_context_manager(enable=True):
+                assert is_deepspeed_zero3_enabled()
+            assert not is_deepspeed_zero3_enabled()
+        assert is_deepspeed_zero3_enabled()
+
+    def test_enabled_context_restores_disabled_state(self) -> None:
+        plugin = self.create_plugin(stage=3, enabled=False)
+        assert not is_deepspeed_zero3_enabled()
+        with plugin.zero3_init_context_manager(enable=True):
+            assert plugin.is_zero3_init_enabled()
+            assert is_deepspeed_zero3_enabled()
+        assert not plugin.is_zero3_init_enabled()
+        assert not is_deepspeed_zero3_enabled()
+
+    def test_unchanged_context_preserves_configuration(self) -> None:
+        config = deepspeed_config()
+        with self.plugin.zero3_init_context_manager(enable=True):
+            assert deepspeed_config() is config
+            assert is_deepspeed_zero3_enabled()
+        assert deepspeed_config() is config
+
+    def test_stage_two_configuration_is_preserved(self) -> None:
+        plugin = self.create_plugin(stage=2, enabled=False)
+        assert deepspeed_config() == plugin.deepspeed_config
+        with plugin.zero3_init_context_manager(enable=False):
+            assert deepspeed_config() == plugin.deepspeed_config
+            assert not is_deepspeed_zero3_enabled()
+        assert deepspeed_config() == plugin.deepspeed_config
+
+    @require_cuda
+    @require_multi_device
+    def test_disabled_model_initialization_on_two_gpus(self) -> None:
+        command = get_launch_command(
+            multi_gpu=True,
+            num_processes=2,
+            num_machines=1,
+            main_process_port=get_torch_dist_unique_port(),
+        )
+        command.append(
+            path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_zero3_init_context.py")
+        )
+        execute_subprocess_async(cmd=command)
 
 
 @require_deepspeed
