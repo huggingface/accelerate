@@ -1,0 +1,94 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Checks shared by the DDP, FSDP and DeepSpeed tests.
+
+Each check trains a model on 2 GPUs with a distributed setup and compares it with a reference: the same training with
+`Accelerator` on a single GPU, without any distributed wrapper. `train.py` always trains for 8 optimizer steps of 8
+samples, so a distributed setup that trains correctly gives the same losses as the reference.
+"""
+
+import functools
+import json
+import os
+import sys
+import tempfile
+import unittest
+
+from torch.testing import assert_close
+
+from accelerate.test_utils.testing import execute_subprocess_async, get_launch_command, get_torch_dist_unique_port
+
+
+CONFIGS_DIR = os.path.join(os.path.dirname(__file__), "accelerate_configs")
+TRAIN_SCRIPT = os.path.join(os.path.dirname(__file__), "scripts", "train.py")
+
+
+@functools.cache
+def train(config_file=None, output_dir=None, **script_args):
+    """
+    Run `train.py` with the accelerate `config_file`, or on a single GPU if there is none, and return the loss of each
+    optimizer step. Runs are cached, so a run shared by several checks, like a reference, only happens once.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        output_dir = output_dir or tmp_dir
+        if config_file:
+            # A port per pytest-xdist worker lets launches run in parallel.
+            launcher = get_launch_command(config_file=config_file, main_process_port=get_torch_dist_unique_port())
+        else:
+            launcher = [sys.executable]
+        cmd = launcher + [TRAIN_SCRIPT, f"--output_dir={output_dir}"]
+        cmd += [f"--{key}={value}" for key, value in script_args.items()]
+        execute_subprocess_async(cmd)
+        with open(os.path.join(output_dir, "losses.json")) as f:
+            return json.load(f)
+
+
+class DistributedTrainingCommon(unittest.TestCase):
+    def assert_same_training(self, losses, reference_losses):
+        """The loss should go down, and match the reference."""
+        self.assertLess(losses[-1], losses[0])
+        # fp32 matches the reference to ~1e-6, but bf16 drifts up to ~2e-3 after 8 steps: DeepSpeed casts the model to
+        # bf16 instead of using autocast like the reference. Bugs such as a wrong loss scaling or a resume that doesn't
+        # restore the optimizer move the loss by more than 5e-2, so 1e-2 still catches them in every precision.
+        assert_close(losses, reference_losses, rtol=0, atol=1e-2)
+
+    def check_training(self, dtype, config_file):
+        """Training with the model loaded in `dtype` should match the reference."""
+        reference = train(dtype=dtype)
+        distributed = train(config_file, dtype=dtype)
+        self.assert_same_training(distributed, reference)
+
+    def check_mixed_precision(self, mixed_precision, config_file):
+        """Training with the model in fp32 and the compute in `mixed_precision` should match the reference."""
+        reference = train(mixed_precision=mixed_precision)
+        distributed = train(config_file, mixed_precision=mixed_precision)
+        self.assert_same_training(distributed, reference)
+
+    def check_gradient_accumulation(self, config_file):
+        """Accumulating 4 steps of 1 sample per GPU should match 1 step of 4 samples per GPU, and the reference."""
+        reference = train(dtype="bf16")
+        distributed = train(config_file, dtype="bf16")
+        accumulated = train(config_file, dtype="bf16", gradient_accumulation_steps=4)
+        self.assert_same_training(accumulated, distributed)
+        self.assert_same_training(accumulated, reference)
+
+    def check_resume(self, config_file):
+        """Resuming halfway, from the checkpoint of step 4 out of 8, should match the training that didn't stop."""
+        with tempfile.TemporaryDirectory() as output_dir:
+            full = train(config_file, output_dir=output_dir, dtype="bf16", save_steps=4)
+            checkpoint = os.path.join(output_dir, "step_4")
+            resumed = train(config_file, dtype="bf16", resume_from_checkpoint=checkpoint)
+        self.assert_same_training(resumed, full[4:])
