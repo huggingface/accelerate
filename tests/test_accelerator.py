@@ -17,11 +17,15 @@ import os
 import pickle
 import tempfile
 import time
-from unittest import skip
+from contextlib import contextmanager
+from datetime import timedelta
+from unittest import skip, skipUnless
 from unittest.mock import patch
 
 import psutil
 import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -49,7 +53,12 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     require_torchdata_stateful_dataloader,
 )
-from accelerate.utils import FP8RecipeKwargs, is_torchdata_stateful_dataloader_available, patch_environment
+from accelerate.utils import (
+    FP8RecipeKwargs,
+    is_torch_version,
+    is_torchdata_stateful_dataloader_available,
+    patch_environment,
+)
 from accelerate.utils.dataclasses import DataLoaderConfiguration
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
 from accelerate.utils.random import set_seed
@@ -57,6 +66,10 @@ from accelerate.utils.random import set_seed
 
 if is_torchdata_stateful_dataloader_available():
     from torchdata.stateful_dataloader import StatefulDataLoader
+
+if dist.is_available() and is_torch_version(">=", "2.6"):
+    from torch.distributed.device_mesh import init_device_mesh
+    from torch.distributed.tensor import DTensor, Shard, distribute_tensor
 
 
 class ModelWithTiedWeights(torch.nn.Module):
@@ -129,6 +142,54 @@ def parameterized_custom_name_func(func, param_num, param):
     if len(param.args) > 3:
         param_based_name += "_dispatch_batches" if param.args[3] is True else "_no_dispatch_batches"
     return f"{func.__name__}_{param_based_name}"
+
+
+@contextmanager
+def _distributed_context(rank, directory):
+    environment = {"RANK": str(rank), "LOCAL_RANK": str(rank), "WORLD_SIZE": "4"}
+    with patch.dict(os.environ, environment), patch("torch._C._get_accelerator", return_value=torch.device("cpu")):
+        dist.init_process_group(
+            "gloo",
+            init_method=f"file://{directory}/rendezvous",
+            rank=rank,
+            world_size=4,
+            timeout=timedelta(seconds=60),
+        )
+        try:
+            yield
+        finally:
+            dist.destroy_process_group()
+
+
+def _gradient_clipping_worker(rank, directory):
+    with _distributed_context(rank, directory):
+        mesh = init_device_mesh("cpu", (4,))
+        for norm_type in (0.0, 2.0, float("inf")):
+            for distributed in ((False, False), (True, True), (False, True)):
+                for max_norm in (1.0, 10000.0):
+                    parameters, reference = [], []
+                    for i, is_distributed in enumerate(distributed):
+                        gradient = torch.arange(1, 65, dtype=torch.float32).reshape(8, 8) * (i + 1)
+                        expected = torch.nn.Parameter(torch.zeros_like(gradient))
+                        expected.grad = gradient.clone()
+                        reference.append(expected)
+                        if is_distributed:
+                            gradient = distribute_tensor(gradient, mesh, [Shard(0)])
+                        parameter = torch.nn.Parameter(torch.zeros_like(gradient))
+                        parameter.grad = gradient
+                        parameters.append(parameter)
+                    expected_norm = torch.nn.utils.clip_grad_norm_(
+                        reference, max_norm, foreach=True, norm_type=norm_type
+                    )
+                    actual_norm = Accelerator._clip_grad_norm_dtensor_aware(
+                        None, parameters, max_norm, foreach=True, norm_type=norm_type
+                    )
+                    torch.testing.assert_close(
+                        actual_norm.full_tensor() if isinstance(actual_norm, DTensor) else actual_norm, expected_norm
+                    )
+                    for parameter, expected in zip(parameters, reference):
+                        grad = parameter.grad.full_tensor() if isinstance(parameter.grad, DTensor) else parameter.grad
+                        torch.testing.assert_close(grad, expected.grad)
 
 
 class AcceleratorTester(AccelerateTestCase):
@@ -907,3 +968,11 @@ class AcceleratorTester(AccelerateTestCase):
         ):
             with assert_exception(ValueError, "CPU or disk offload"):
                 accelerator.prepare_model(model)
+
+    @skipUnless(
+        dist.is_available() and dist.is_gloo_available() and is_torch_version(">=", "2.6"),
+        "Requires distributed Gloo and PyTorch >= 2.6",
+    )
+    def test_clip_grad_norm_dtensor_aware(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mp.spawn(_gradient_clipping_worker, args=(directory,), nprocs=4, join=True)
