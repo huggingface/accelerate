@@ -53,8 +53,8 @@ def run_script(script, config_file=None, **script_args):
 @functools.cache
 def train(config_file=None, output_dir=None, **script_args):
     """
-    Run `train.py` and return the loss of each optimizer step. Runs are cached, so a run shared by several checks, like
-    a reference, only happens once.
+    Run `train.py` and return its training and final evaluation losses. Runs are cached, so a run shared by several
+    checks, like a reference, only happens once.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_dir = output_dir or tmp_dir
@@ -64,24 +64,23 @@ def train(config_file=None, output_dir=None, **script_args):
 
 
 class DistributedTrainingCommon(unittest.TestCase):
-    def assert_same_training(self, losses, reference_losses, atol=1e-3):
-        """
-        The loss should go down, and match the reference. Bugs such as a wrong loss scaling or a resume that doesn't
-        restore the optimizer move the loss by more than 5e-2.
-        """
-        self.assertLess(losses[-1], losses[0])
-        assert_close(losses, reference_losses, rtol=0, atol=atol)
+    def assert_same_training(self, result, reference, atol=1e-3):
+        """Training losses and the loss after all updates should match the reference."""
+        assert_close(result["losses"], reference["losses"], rtol=0, atol=atol)
+        assert_close(result["final_loss"], reference["final_loss"], rtol=0, atol=atol)
 
     def check_training(self, dtype, config_file, atol=1e-3):
         """Training with the model loaded in `dtype` should match the reference."""
         reference = train(dtype=dtype)
         distributed = train(config_file, dtype=dtype)
+        self.assertLess(distributed["final_loss"], distributed["losses"][0])
         self.assert_same_training(distributed, reference, atol=atol)
 
     def check_mixed_precision(self, mixed_precision, config_file, atol=1e-3):
         """Training with the model in fp32 and the compute in `mixed_precision` should match the reference."""
         reference = train(mixed_precision=mixed_precision)
         distributed = train(config_file, mixed_precision=mixed_precision)
+        self.assertLess(distributed["final_loss"], distributed["losses"][0])
         self.assert_same_training(distributed, reference, atol=atol)
 
     def check_gradient_accumulation(self, config_file, dtype="bf16"):
@@ -89,6 +88,7 @@ class DistributedTrainingCommon(unittest.TestCase):
         reference = train(dtype=dtype)
         distributed = train(config_file, dtype=dtype)
         accumulated = train(config_file, dtype=dtype, gradient_accumulation_steps=4)
+        self.assertLess(accumulated["final_loss"], accumulated["losses"][0])
         self.assert_same_training(accumulated, distributed)
         self.assert_same_training(accumulated, reference)
 
@@ -98,4 +98,6 @@ class DistributedTrainingCommon(unittest.TestCase):
             full = train(config_file, output_dir=output_dir, dtype="bf16", save_steps=4)
             checkpoint = os.path.join(output_dir, "step_4")
             resumed = train(config_file, dtype="bf16", resume_from_checkpoint=checkpoint)
-        self.assert_same_training(resumed, full[4:])
+        expected = {"losses": full["losses"][4:], "final_loss": full["final_loss"]}
+        self.assertLess(resumed["final_loss"], full["losses"][0])
+        self.assert_same_training(resumed, expected)
