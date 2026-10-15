@@ -801,6 +801,23 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     model_has_params4bit = False
     incompatible_params4bit = set()
+    peft_adapter_modules = set()
+
+    # Identify PEFT LoRA adapter modules so auto-wrap and size_based policies
+    # can skip them — wrapping a single LoraLayer (which has very few
+    # parameters) creates an FSDP group with disproportionate all-gather
+    # overhead and can interact badly with the quantized base model's
+    # FrozenParams4bit buffers.
+    if is_peft_model(model):
+        try:
+            from peft import LoraLayer
+        except ImportError:
+            LoraLayer = None
+        if LoraLayer is not None:
+            for mod in model.modules():
+                if isinstance(mod, LoraLayer):
+                    peft_adapter_modules.add(mod)
+
     for name, param in model.named_parameters():
         # this is a temporary fix whereby loading models with bnb params cannot be moved from
         # GPU to a meta device due with FSDP2 because torch operations don't return the original class type
@@ -823,6 +840,34 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
             )
 
+    # When we have PEFT LoRA adapters on top of a quantized base model, the
+    # adapter modules themselves must not be wrapped individually.  They are
+    # tiny relative to their parent transformer layer and should inherit the
+    # parent's FSDP group.
+    if peft_adapter_modules:
+        auto_wrap_policy_func = fsdp2_plugin.auto_wrap_policy
+        if auto_wrap_policy_func is not None and not isinstance(
+            auto_wrap_policy_func, str
+        ):
+            original = auto_wrap_policy_func
+
+            def _lora_aware_policy(module: torch.nn.Module) -> bool:
+                # Skip LoraLayer submodules — they are always wrapped as part
+                # of their containing transformer layer.
+                if module in peft_adapter_modules:
+                    return False
+                return original(module)
+
+            fsdp2_plugin.auto_wrap_policy = _lora_aware_policy
+            fsdp2_kwargs.pop("ignored_params", None)  # will be re-applied below if needed
+
+    if incompatible_params4bit and is_torch_version(">=", "2.7.0"):
+        # Re-apply incompatible_params4bit after a possible auto_wrap rewrite
+        # above (the rewritten policy doesn't touch ignored_params but the
+        # pop() ensures consistency).
+        ignored = set(fsdp2_kwargs.get("ignored_params", set()))
+        fsdp2_kwargs["ignored_params"] = ignored | incompatible_params4bit
+
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
         # Also, these buffers aren't getting sharded by default
@@ -839,10 +884,20 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     # FSDP2 requires uniform orig_dtype among trainable params in each group.
     # Upcast to fp32 master weights; MixedPrecisionPolicy.param_dtype handles compute cast.
-    if accelerator.mixed_precision != "no" and not model_has_params4bit:
+    # When the model has Params4bit (QLoRA), we skip them but still upcast any
+    # non-quantized trainable params — typically LoRA adapter weights which
+    # require fp32 master weights just like any other trainable param under
+    # mixed precision.  Frozen Params4bit weights are left untouched.
+    if accelerator.mixed_precision != "no":
         upcasted_params = []
         for name, param in model.named_parameters():
-            if param.requires_grad and param.dtype != torch.float32:
+            if not param.requires_grad:
+                continue
+            # Skip Params4bit — they manage their own internal dtype (4-bit
+            # quantized storage + quant_state) and must not be upcast.
+            if param.__class__.__name__ == "Params4bit":
+                continue
+            if param.dtype != torch.float32:
                 upcasted_params.append(name)
                 param.data = param.data.to(torch.float32)
         if accelerator.is_main_process and upcasted_params:
@@ -1052,3 +1107,166 @@ def get_parameters_from_modules(
     for module in modules:
         parameters.extend(list(module.parameters()))
     return set(parameters)
+
+
+# ---------------------------------------------------------------------------
+# QLoRA / PEFT helpers for FSDP2 integration
+# ---------------------------------------------------------------------------
+
+
+def detect_peft_qlora_state(model: torch.nn.Module) -> dict:
+    """Inspect a model and return a summary of its QLoRA/PEFT properties.
+
+    Used by :func:`fsdp2_prepare_model` and callers to decide how to handle
+    the model under FSDP2 — whether to auto-wrap, which params to skip, and
+    whether LoRA adapter weights need explicit fp32 upcasting.
+
+    Returns a dict with the following keys:
+
+    * ``is_peft_model`` — bool; True when the model has PEFT adapters attached
+    * ``base_class_name`` — str; the class name of the underlying base model
+      (or the model itself when PEFT is not detected)
+    * ``num_lora_modules`` — int; count of LoraLayer submodules (0 when PEFT absent)
+    * ``num_params4bit`` — int; count of ``Params4bit`` parameters
+    * ``num_trainable_params`` — int; trainable params including LoRA adapters
+    * ``num_frozen_params4bit`` — int; frozen ``Params4bit`` count (quantized base)
+    * ``incompatible_params4bit`` — set; non-floating frozen ``Params4bit``
+      that must be excluded from FSDP2 sharding (uint8 ``quant_storage``
+      cannot survive DTensor conversion)
+    * ``peft_adapter_modules`` — set; LoraLayer submodules that should not
+      be individually wrapped by ``fully_shard``
+
+    The helper is deliberately side-effect free — callers decide what to do
+    with the returned summary.
+    """
+    import torch.nn as nn
+
+    result: dict = {
+        "is_peft_model": False,
+        "base_class_name": type(model).__name__,
+        "num_lora_modules": 0,
+        "num_params4bit": 0,
+        "num_trainable_params": 0,
+        "num_frozen_params4bit": 0,
+        "incompatible_params4bit": set(),
+        "peft_adapter_modules": set(),
+    }
+
+    # PEFT detection
+    if is_peft_model(model):
+        result["is_peft_model"] = True
+        # Base model class — PEFT wraps around the original model
+        base_prefix = getattr(model, "base_model_prefix", None)
+        if base_prefix and hasattr(model, base_prefix):
+            base = getattr(model, base_prefix)
+            result["base_class_name"] = type(base).__name__
+
+        try:
+            from peft import LoraLayer
+
+            for mod in model.modules():
+                if isinstance(mod, LoraLayer):
+                    result["num_lora_modules"] += 1
+                    result["peft_adapter_modules"].add(mod)
+        except ImportError:
+            pass
+
+    # Parameter classification
+    for param in model.parameters():
+        is_params4bit = param.__class__.__name__ == "Params4bit"
+        if is_params4bit:
+            result["num_params4bit"] += 1
+            if not param.requires_grad:
+                result["num_frozen_params4bit"] += 1
+                # Non-floating frozen Params4bit (e.g. uint8 quant_storage)
+                # cannot survive fully_shard's DTensor conversion.
+                if not param.is_floating_point() and not param.is_complex():
+                    result["incompatible_params4bit"].add(param)
+        if param.requires_grad:
+            result["num_trainable_params"] += 1
+
+    return result
+
+
+def build_qlora_fsdp2_kwargs(
+    fsdp_plugin,
+    accelerator,
+    qlora_info: dict,
+) -> dict:
+    """Augment FSDP2 kwargs returned by :func:`fsdp2_prepare_model` with
+    QLoRA-specific settings derived from :func:`detect_peft_qlora_state`.
+
+    This helper handles three concerns the default FSDP2 config does not cover:
+
+    1. **Exclude incompatible quantized params from sharding** — non-floating
+       ``Params4bit`` weights (the common case is a ``uint8`` quantized
+       storage) cannot be converted to DTensors and must appear in
+       ``ignored_params``.
+    2. **Exclude PEFT LoraLayers from auto-wrap** — small adapter modules
+       must not receive their own FSDP group; they inherit the parent layer's.
+    3. **Protect ``mixed_precision_policy`` from touching quantized weights** —
+       when the base model is quantized, ``param_dtype`` must not be forced
+       over the 4-bit storage dtype.
+
+    Args:
+        fsdp_plugin: FullyShardedDataParallelPlugin instance.
+        accelerator: Accelerator instance.
+        qlora_info: Dict returned by :func:`detect_peft_qlora_state`.
+
+    Returns:
+        dict — kwargs overlay that callers merge into their ``fsdp2_kwargs``.
+        Contains ``ignored_params`` and ``auto_wrap_policy`` keys when the
+        model is PEFT/quantized, otherwise is empty.
+    """
+    import torch.distributed as dist
+    from torch.distributed.fsdp import MixedPrecisionPolicy
+
+    overlay: dict = {}
+
+    # --- ignored_params --------------------------------------------------
+    if qlora_info.get("incompatible_params4bit"):
+        ignored = set()
+        existing = fsdp_plugin.ignored_modules
+        if existing is not None:
+            # Resolve module refs to their parameters for FSDP2's API.
+            try:
+                from accelerate.utils.fsdp_utils import get_parameters_from_modules
+
+                existing_params = get_parameters_from_modules(
+                    existing, accelerator._models[0] if accelerator._models else accelerator.device
+                )
+                ignored.update(existing_params)
+            except Exception:
+                pass
+        ignored.update(qlora_info["incompatible_params4bit"])
+        overlay["ignored_params"] = ignored
+
+    # --- auto_wrap_policy rewrite ----------------------------------------
+    if qlora_info.get("peft_adapter_modules"):
+        original = fsdp_plugin.auto_wrap_policy
+        if callable(original):
+            lora_modules = qlora_info["peft_adapter_modules"]
+
+            def _qlora_aware_policy(module: nn.Module) -> bool:
+                if module in lora_modules:
+                    return False
+                return original(module)
+
+            overlay["auto_wrap_policy"] = _qlora_aware_policy
+
+    # --- mixed_precision guard -------------------------------------------
+    if qlora_info.get("num_params4bit", 0) > 0:
+        mp = fsdp_plugin.mixed_precision_policy
+        if mp is not None and not isinstance(mp, str):
+            # Don't force param_dtype over quantized storage dtype.  When the
+            # user did not explicitly set one, fall back to the default
+            # MixedPrecisionPolicy which preserves native storage dtypes.
+            if getattr(mp, "param_dtype", None) is not None and accelerator.is_main_process:
+                logger.warning(
+                    "FSDP2 mixed_precision_policy.param_dtype is set but the model contains "
+                    "Params4bit weights.  The policy may upcast quantized storage, corrupting "
+                    "bnb quant_state metadata.  Consider leaving mixed_precision_policy unset "
+                    "or explicitly setting param_dtype=None for quantized models."
+                )
+
+    return overlay
