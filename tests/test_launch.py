@@ -25,7 +25,7 @@ from accelerate.commands.launch import (
     launch_command_parser,
     simple_launcher,
 )
-from accelerate.launchers import notebook_launcher
+from accelerate.launchers import debug_launcher, notebook_launcher
 from accelerate.utils.launch import prepare_multi_gpu_env
 
 
@@ -146,3 +146,47 @@ def test_notebook_launcher_sets_accelerate_mixed_precision(monkeypatch):
 def test_notebook_launcher_invalid_precision_error():
     with pytest.raises(ValueError, match="Unknown mixed_precision mode"):
         notebook_launcher(lambda: None, num_processes=1, mixed_precision="bogus")
+
+
+def _run_debug_launcher(monkeypatch, probe=None, start_methods=("fork", "spawn"), interfaces=(("1", "lo"),)):
+    """Run `debug_launcher` with the real workers replaced, and report what it would have started them with."""
+    captured = {}
+
+    def fake_start_processes(launcher, args=(), nprocs=1, start_method="fork"):
+        captured["start_method"] = start_method
+        captured["rdv_file"] = os.environ.get("ACCELERATE_DEBUG_RDV_FILE")
+        captured["gloo_socket_ifname"] = os.environ.get("GLOO_SOCKET_IFNAME")
+        captured["probe"] = None if probe is None else probe(captured["rdv_file"])
+
+    monkeypatch.setattr("torch.multiprocessing.get_all_start_methods", lambda: list(start_methods))
+    monkeypatch.setattr("torch.multiprocessing.start_processes", fake_start_processes)
+    monkeypatch.setattr("socket.if_nameindex", lambda: list(interfaces))
+    monkeypatch.delenv("GLOO_SOCKET_IFNAME", raising=False)
+    debug_launcher(lambda: None, num_processes=2)
+    return captured
+
+
+def test_debug_launcher_uses_an_available_start_method(monkeypatch):
+    # Windows only offers `spawn`: asking for `fork` there raises `cannot find context for 'fork'` before any
+    # worker starts, which made `debug_launcher` unusable outside Unix-like platforms.
+    assert _run_debug_launcher(monkeypatch)["start_method"] == "fork"
+    assert _run_debug_launcher(monkeypatch, start_methods=("spawn",))["start_method"] == "spawn"
+
+
+def test_debug_launcher_only_pins_loopback_where_it_exists(monkeypatch):
+    # `lo` is the Unix name for the loopback interface. Pinning it where that name does not exist leaves gloo
+    # unable to find any address at all.
+    assert _run_debug_launcher(monkeypatch)["gloo_socket_ifname"] == "lo"
+    assert _run_debug_launcher(monkeypatch, interfaces=(("1", "loopback_0"),))["gloo_socket_ifname"] is None
+
+
+def test_debug_launcher_rendezvous_file_can_be_opened_by_a_worker(monkeypatch):
+    # A `NamedTemporaryFile` stays open in this process for the whole launch. On Windows a spawned worker cannot
+    # open a file the parent still holds open, so the path handed over has to be usable by the workers themselves.
+    def write_then_read(rdv_file):
+        with open(rdv_file, "w") as f:
+            f.write("ok")
+        with open(rdv_file) as f:
+            return f.read()
+
+    assert _run_debug_launcher(monkeypatch, probe=write_then_read)["probe"] == "ok"
