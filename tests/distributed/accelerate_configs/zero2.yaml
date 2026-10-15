@@ -1,4 +1,6 @@
 distributed_type: DEEPSPEED
 deepspeed_config:
+  # Match the reference, which does not clip gradients.
+  gradient_clipping: 0.0
   zero_stage: 2
 num_processes: 2

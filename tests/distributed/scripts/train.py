@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Train a tiny causal LM on WikiText and save the loss of each optimizer step to `losses.json`.
+"""Train a tiny causal LM on WikiText and save training and final evaluation losses to `losses.json`.
 
 Every run trains for `NUM_STEPS` optimizer steps of `GLOBAL_BATCH_SIZE` samples, however the samples of a step are split
 across processes and gradient accumulation steps. All samples have `SEQ_LEN` tokens, so they have the same number of
@@ -85,9 +85,20 @@ def main():
             if args.save_steps and len(losses) % args.save_steps == 0:
                 accelerator.save_state(os.path.join(args.output_dir, f"step_{len(losses)}"))
 
+    # Revisit the first batch to check whether training improved predictions on the same inputs.
+    # A different batch might simply be easier.
+    model.eval()
+    with torch.no_grad():
+        first_batch = samples[:GLOBAL_BATCH_SIZE].to(accelerator.device)
+        logits = model(input_ids=first_batch).logits
+        # Avoid rounding the scalar loss to the model's output dtype.
+        final_loss = torch.nn.functional.cross_entropy(
+            logits[:, :-1].float().reshape(-1, logits.size(-1)), first_batch[:, 1:].reshape(-1)
+        ).item()
+
     if accelerator.is_main_process:
         with open(os.path.join(args.output_dir, "losses.json"), "w") as f:
-            json.dump(losses, f)
+            json.dump({"losses": losses, "final_loss": final_loss}, f)
     accelerator.end_training()
 
 
