@@ -63,6 +63,15 @@ def main():
     dataloader = DataLoader(samples, batch_size=batch_size)
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, dtype=DTYPES[args.dtype])
+    if args.mixed_precision != "no":
+        expected_dtype = DTYPES[args.mixed_precision]
+
+        def check_compute_dtype(module, inputs, output):
+            assert output.dtype == expected_dtype, f"Expected {expected_dtype} computation, got {output.dtype}"
+
+        # Similar losses do not prove mixed precision ran; inspect a layer before outputs are converted to FP32.
+        model.model.layers[0].self_attn.q_proj.register_forward_hook(check_compute_dtype)
+
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
