@@ -169,6 +169,11 @@ class BatchSamplerShard(BatchSampler):
 
     def __len__(self):
         if self.split_batches:
+            if not self.even_batches and not self.drop_last and type(self.batch_sampler) is BatchSampler:
+                remainder = len(self.batch_sampler.sampler) % self.batch_size
+                batch_size_per_process = self.batch_size // self.num_processes
+                if remainder > 0 and remainder <= batch_size_per_process * self.process_index:
+                    return len(self.batch_sampler) - 1
             # Split batches does not change the length of the batch sampler
             return len(self.batch_sampler)
         if len(self.batch_sampler) % self.num_processes == 0:
