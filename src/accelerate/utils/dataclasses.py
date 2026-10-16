@@ -2144,15 +2144,11 @@ class FullyShardedDataParallelPlugin:
             dtype_args = {"param_dtype": dtype, "reduce_dtype": dtype}
             if self.fsdp_version == 1:
                 dtype_args["buffer_dtype"] = buffer_type
-            else:
-                dtype_args["output_dtype"] = dtype
             # TODO(s1ro1): `cast_forward_inputs` for FSDP2?
             self.mixed_precision_policy = MixedPrecision(**dtype_args)
         elif isinstance(self.mixed_precision_policy, dict):
             # Check for incompatible types
-            valid_keys = ["param_dtype", "reduce_dtype"] + (
-                ["buffer_dtype"] if self.fsdp_version == 1 else ["output_dtype"]
-            )
+            valid_keys = ["param_dtype", "reduce_dtype"] + (["buffer_dtype"] if self.fsdp_version == 1 else [])
             missing_keys = [k for k in valid_keys if k not in self.mixed_precision_policy]
             invalid_values = [
                 k for k, v in self.mixed_precision_policy.items() if v not in mixed_precision_mapping.values()
