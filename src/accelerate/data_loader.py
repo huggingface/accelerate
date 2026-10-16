@@ -403,10 +403,54 @@ class DataLoaderStateMixin:
         "Prepares the gradient state for the current dataloader"
         self.reset()
         with suppress(Exception):
-            if not self._drop_last:
-                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+            # ``DataLoader.drop_last`` stays False when a ``BatchSampler(drop_last=True)``
+            # is passed, so also honor the batch sampler's own ``drop_last``.
+            if not self._effective_drop_last():
+                length = self._length_for_remainder()
                 self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
+
+    def _effective_drop_last(self) -> bool:
+        if getattr(self, "_drop_last", False):
+            return True
+        batch_sampler = getattr(self, "batch_sampler", None)
+        if batch_sampler is None and isinstance(getattr(self, "sampler", None), BatchSampler):
+            batch_sampler = self.sampler
+        seen = set()
+        while batch_sampler is not None and id(batch_sampler) not in seen:
+            seen.add(id(batch_sampler))
+            if getattr(batch_sampler, "drop_last", False):
+                return True
+            batch_sampler = getattr(batch_sampler, "batch_sampler", None)
+        return False
+
+    def _length_for_remainder(self) -> int:
+        """Number of samples this loader will yield, for final-batch remainder math.
+
+        Prefer a sized sampler when present (e.g. ``SubsetRandomSampler`` over a larger
+        map-style dataset). Falling back to ``len(dataset)`` alone drops or duplicates
+        samples in ``gather_for_metrics`` when the sampler selects a different count
+        (#4410). Iterable datasets can still expose ``total_dataset_length``.
+
+        ``batch_sampler.sampler`` is checked before ``self.sampler``: after
+        ``Accelerator.prepare``, the top-level ``sampler`` can be a default
+        ``SequentialSampler`` over the full dataset while the real selection lives
+        on ``batch_sampler.sampler``.
+
+        Callers should invoke ``set_epoch`` before ``begin`` so epoch-dependent
+        sampler lengths are current when remainder is computed.
+        """
+        sampler_candidates = (
+            getattr(getattr(self, "batch_sampler", None), "sampler", None),
+            getattr(getattr(getattr(self, "batch_sampler", None), "batch_sampler", None), "sampler", None),
+            getattr(self, "sampler", None),
+        )
+        for sampler in sampler_candidates:
+            if sampler is None or isinstance(sampler, BatchSampler):
+                continue
+            with suppress(TypeError, NotImplementedError, AttributeError):
+                return len(sampler)
+        return getattr(self.dataset, "total_dataset_length", len(self.dataset))
 
     def end(self):
         "Cleans up the gradient state after exiting the dataloader"
@@ -578,9 +622,9 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
-        self.begin()
-
+        # set_epoch before begin so remainder uses the current epoch's sampler length
         self.set_epoch(self.iteration)
+        self.begin()
         dataloader_iter = self.base_dataloader.__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -873,8 +917,9 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         return batch, batch_info
 
     def __iter__(self):
-        self.begin()
+        # set_epoch before begin so remainder uses the current epoch's sampler length
         self.set_epoch(self.iteration)
+        self.begin()
         main_iterator = None
         if is_torch_version(">=", "2.0.1"):
             # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
