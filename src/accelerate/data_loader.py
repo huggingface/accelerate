@@ -404,9 +404,34 @@ class DataLoaderStateMixin:
         self.reset()
         with suppress(Exception):
             if not self._drop_last:
-                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+                length = self._length_for_remainder()
                 self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
+
+    def _length_for_remainder(self) -> int:
+        """Number of samples this loader will yield, for final-batch remainder math.
+
+        Prefer a sized sampler when present (e.g. ``SubsetRandomSampler`` over a larger
+        map-style dataset). Falling back to ``len(dataset)`` alone drops or duplicates
+        samples in ``gather_for_metrics`` when the sampler selects a different count
+        (#4410). Iterable datasets can still expose ``total_dataset_length``.
+
+        ``batch_sampler.sampler`` is checked before ``self.sampler``: after
+        ``Accelerator.prepare``, the top-level ``sampler`` can be a default
+        ``SequentialSampler`` over the full dataset while the real selection lives
+        on ``batch_sampler.sampler``.
+        """
+        sampler_candidates = (
+            getattr(getattr(self, "batch_sampler", None), "sampler", None),
+            getattr(getattr(getattr(self, "batch_sampler", None), "batch_sampler", None), "sampler", None),
+            getattr(self, "sampler", None),
+        )
+        for sampler in sampler_candidates:
+            if sampler is None or isinstance(sampler, BatchSampler):
+                continue
+            with suppress(TypeError, NotImplementedError, AttributeError):
+                return len(sampler)
+        return getattr(self.dataset, "total_dataset_length", len(self.dataset))
 
     def end(self):
         "Cleans up the gradient state after exiting the dataloader"

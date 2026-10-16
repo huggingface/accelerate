@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, Subset, SubsetRandomSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -630,6 +630,31 @@ class DataLoaderTester(AccelerateTestCase):
 
         assert [batch.tolist() for batch in resumed] == [[4, 5]]
         assert resumed.remainder == -1
+
+    def test_remainder_uses_sampler_length_for_gather_for_metrics(self):
+        # #4410: SubsetRandomSampler selects 10 of 21; remainder must use 10, not len(dataset)=21
+        acc = Accelerator(cpu=True)
+        ds = range(21)
+        sampler = SubsetRandomSampler(range(10), generator=torch.Generator().manual_seed(42))
+        loader = acc.prepare(DataLoader(ds, batch_size=4, sampler=sampler))
+
+        got = []
+        for batch in loader:
+            got.extend(acc.gather_for_metrics(batch).tolist())
+
+        assert loader.remainder == 10 % loader.total_batch_size
+        assert sorted(got) == list(range(10))
+
+        # Control: Subset with the same sampler length keeps agreeing
+        control_ds = Subset(range(21), range(10))
+        control_sampler = SubsetRandomSampler(range(10), generator=torch.Generator().manual_seed(42))
+        control_loader = acc.prepare(DataLoader(control_ds, batch_size=4, sampler=control_sampler))
+        control_got = []
+        for batch in control_loader:
+            control_got.extend(acc.gather_for_metrics(batch).tolist())
+        assert sorted(control_got) == list(range(10))
+        assert sorted(got) == sorted(control_got)
+        acc.end_training()
 
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
