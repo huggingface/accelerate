@@ -316,6 +316,59 @@ class AcceleratorTester(AccelerateTestCase):
         assert torch.allclose(expected, output, atol=1e-5)
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_model_removes_files_of_previous_save(self, use_safetensors):
+        accelerator = Accelerator()
+        model = ModelForTest()
+        extension = "safetensors" if use_safetensors else "bin"
+        prefix = "model" if use_safetensors else "pytorch_model"
+        weights_name = f"{prefix}.{extension}"
+        index_name = f"{weights_name}.index.json"
+
+        def shards_in_index():
+            with open(os.path.join(tmpdirname, index_name)) as f:
+                return set(json.load(f)["weight_map"].values())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Three shards, then two shards: the shards of the first save must not stay behind.
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors, max_shard_size=100)
+            first_shards = shards_in_index()
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors, max_shard_size=150)
+            second_shards = shards_in_index()
+            assert len(first_shards) > len(second_shards) > 1
+            assert set(os.listdir(tmpdirname)) == {index_name, *second_shards}
+
+            # Not sharded anymore: neither the shards nor the index of the previous save must stay behind.
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors)
+            assert set(os.listdir(tmpdirname)) == {weights_name}
+
+            # Sharded again with new weights: the old whole checkpoint must not shadow the new shards.
+            with torch.no_grad():
+                for param in model.parameters():
+                    param.add_(1.0)
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors, max_shard_size=100)
+            assert weights_name not in os.listdir(tmpdirname)
+            reloaded = ModelForTest()
+            load_checkpoint_in_model(reloaded, tmpdirname)
+            for name, param in model.state_dict().items():
+                assert torch.equal(param, reloaded.state_dict()[name])
+
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_model_keeps_unrelated_files(self, use_safetensors):
+        accelerator = Accelerator()
+        model = ModelForTest()
+        extension = "safetensors" if use_safetensors else "bin"
+        prefix = "model" if use_safetensors else "pytorch_model"
+        unrelated_names = [f"{prefix}_other-00001-of-00002.{extension}", "notes.txt"]
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            for name in unrelated_names:
+                with open(os.path.join(tmpdirname, name), "w") as f:
+                    f.write("keep")
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors, max_shard_size=100)
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors)
+            assert set(unrelated_names) <= set(os.listdir(tmpdirname))
+
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_model_offload(self, use_safetensors):
         accelerator = Accelerator()
 
