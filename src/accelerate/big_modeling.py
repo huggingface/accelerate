@@ -278,6 +278,8 @@ def disk_offload(
     memory-mapped array in a given folder. During the forward pass, parameters will be accessed from that folder and
     put on the execution device passed as they are needed, then offloaded again.
 
+    Custom module extra state is kept on the model rather than serialized as an offloaded weight.
+
     Args:
         model (`torch.nn.Module`): The model to offload.
         offload_dir (`str` or `os.PathLike`):
@@ -294,7 +296,16 @@ def disk_offload(
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
     if not os.path.isdir(offload_dir) or not os.path.isfile(os.path.join(offload_dir, "index.json")):
-        offload_state_dict(offload_dir, model.state_dict())
+        state_dict = model.state_dict()
+        # Match PyTorch's extra-state keys for every module path, including shared submodules.
+        extra_state_keys = {
+            f"{module_name + '.' if module_name else ''}_extra_state"
+            for module_name, module in model.named_modules(remove_duplicate=False)
+            if getattr(module.__class__, "get_extra_state", nn.Module.get_extra_state) is not nn.Module.get_extra_state
+        }
+        if extra_state_keys:
+            state_dict = {name: value for name, value in state_dict.items() if name not in extra_state_keys}
+        offload_state_dict(offload_dir, state_dict)
     if execution_device is None:
         execution_device = next(iter(model.parameters())).device
     weights_map = OffloadedWeightsLoader(save_folder=offload_dir)
