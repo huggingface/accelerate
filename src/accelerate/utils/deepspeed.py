@@ -25,6 +25,20 @@ from .dataclasses import DistributedType
 from .imports import is_bnb_available
 from .versions import compare_versions
 
+def is_stock_torch_optimizer(optimizer) -> bool:
+    """Return ``True`` if ``optimizer`` is a class defined under ``torch.optim``.
+
+    Used when DeepSpeed ZeRO auto-enables ``zero_allow_untested_optimizer``: stock
+    PyTorch optimizers are the common supported case; third-party optimizers may
+    change behavior under ZeRO's flat master weights (#4392).
+    """
+    import torch
+
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        return False
+    module = type(optimizer).__module__
+    return module == "torch.optim" or module.startswith("torch.optim.")
+
 
 def map_pytorch_optim_to_deepspeed(optimizer):
     """

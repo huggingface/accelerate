@@ -130,6 +130,7 @@ from .utils.constants import (
 )
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import compile_regions, compile_regions_deepspeed, compile_regions_fsdp2, is_compiled_module
+from .utils.deepspeed import is_stock_torch_optimizer
 
 
 if is_deepspeed_available():
@@ -2259,7 +2260,20 @@ class Accelerator:
                 )
 
             if isinstance(optimizer, (torch.optim.Optimizer)):
+                # DeepSpeed only validates a small set of optimizers under ZeRO. Allow others to
+                # run, but warn when the optimizer is not a stock ``torch.optim`` class so users
+                # know ZeRO may flatten masters and change group-global / shape-dependent math
+                # (#4392).
                 deepspeed_plugin.deepspeed_config["zero_allow_untested_optimizer"] = True
+                if not is_stock_torch_optimizer(optimizer):
+                    logger.warning(
+                        f"You are using a custom optimizer ({type(optimizer).__module__}.{type(optimizer).__name__}) "
+                        "with DeepSpeed ZeRO. Accelerate set `zero_allow_untested_optimizer=True` so training can "
+                        "proceed, but ZeRO may replace parameter tensors with local flat master weights. Optimizers "
+                        "that rely on group-global statistics or original tensor shapes can silently change behavior. "
+                        "Prefer a ZeRO-aware implementation, `torch.distributed.optim.ZeroRedundancyOptimizer`, or "
+                        "set `zero_allow_untested_optimizer` yourself after validating correctness."
+                    )
 
         if scheduler is not None:
             if "scheduler" in deepspeed_plugin.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
