@@ -1819,7 +1819,7 @@ class FullyShardedDataParallelPlugin:
             "help": "The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy` is `size_based_wrap`."
         },
     )
-    quantization_config: Optional[BnbQuantizationConfig] = field(
+    quantization_config: Optional["BnbQuantizationConfig"] = field(
         default=None,
         metadata={
             "help": (
