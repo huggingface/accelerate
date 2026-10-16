@@ -121,10 +121,10 @@ class TorchUlyssesSPIntegrationTest(TempDirTestCase):
             args.append("--packed")
         self._launch(2, *args)
 
+    @parameterized.expand([(False,), (True,)])
     @unittest.skipUnless(
         _is_package_available("kernels"), "test requires the kernels library for the hub flash-attn2 kernel"
     )
-    @parameterized.expand([(False,), (True,)])
     def test_flash_attention_matches_reference(self, packed):
         args = ["--sp_size=2", "--attn_implementation=kernels-community/flash-attn2", "--dtype=bfloat16"]
         if packed:
