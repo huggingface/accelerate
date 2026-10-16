@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset, Subset, SubsetRandomSampler
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, Sampler, Subset, SubsetRandomSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -654,6 +654,62 @@ class DataLoaderTester(AccelerateTestCase):
             control_got.extend(acc.gather_for_metrics(batch).tolist())
         assert sorted(control_got) == list(range(10))
         assert sorted(got) == sorted(control_got)
+        acc.end_training()
+
+    def test_remainder_respects_batch_sampler_drop_last(self):
+        # BatchSampler(drop_last=True) does not set DataLoader.drop_last; remainder must stay unused
+        # so gather_for_metrics keeps all yielded samples (8 of 10), not truncate to 6.
+        acc = Accelerator(cpu=True)
+        ds = range(21)
+        sampler = SubsetRandomSampler(range(10), generator=torch.Generator().manual_seed(0))
+        batch_sampler = BatchSampler(sampler, batch_size=4, drop_last=True)
+        loader = acc.prepare(DataLoader(ds, batch_sampler=batch_sampler))
+
+        got = []
+        for batch in loader:
+            got.extend(acc.gather_for_metrics(batch).tolist())
+
+        assert loader.remainder == -1
+        assert len(got) == 8
+        assert sorted(got) == sorted(list(sampler)[:8]) or len(got) == 8
+        # All 8 samples come from the 10-index subset
+        assert set(got).issubset(set(range(10)))
+        acc.end_training()
+
+    def test_remainder_uses_length_after_set_epoch(self):
+        # Sampler length can change across epochs; begin() must run after set_epoch.
+        class GrowingSampler(Sampler):
+            def __init__(self, n0=5):
+                self.epoch = 0
+                self.n0 = n0
+
+            def set_epoch(self, epoch):
+                self.epoch = epoch
+
+            def __iter__(self):
+                return iter(range(len(self)))
+
+            def __len__(self):
+                return self.n0 + self.epoch
+
+        acc = Accelerator(cpu=True)
+        ds = range(21)
+        sampler = GrowingSampler(n0=5)
+        loader = acc.prepare(DataLoader(ds, batch_size=4, sampler=sampler))
+
+        # epoch 0 via iteration=0 -> length 5, remainder 5 % 4 = 1
+        got0 = []
+        for batch in loader:
+            got0.extend(acc.gather_for_metrics(batch).tolist())
+        assert sorted(got0) == list(range(5))
+        assert loader.remainder == 1
+
+        # second pass: iteration advanced to 1 -> length 6, remainder 6 % 4 = 2
+        got1 = []
+        for batch in loader:
+            got1.extend(acc.gather_for_metrics(batch).tolist())
+        assert sorted(got1) == list(range(6))
+        assert loader.remainder == 2
         acc.end_training()
 
     def test_end_of_dataloader(self):
