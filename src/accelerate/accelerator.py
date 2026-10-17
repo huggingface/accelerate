@@ -3803,8 +3803,9 @@ class Accelerator:
                 The name of the folder all relevant weights and states were saved in. Can be `None` if
                 `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint.
             load_kwargs (`dict`, *optional*):
-                Additional keyword arguments for the underlying `load` function, such as optional arguments for
-                state_dict and optimizer on.
+                Additional keyword arguments for `torch.load` when loading model, optimizer, scheduler, and dataloader
+                states. For a trusted checkpoint saved with `safe_serialization=False`, use
+                `load_kwargs={"weights_only": False}` if the model's extra state contains custom objects.
             load_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for loading model which can be passed to the underlying load function,
                 such as optional arguments for DeepSpeed's `load_checkpoint` function or a `map_location` to load the

@@ -244,7 +244,7 @@ def load_accelerator_state(
         else:
             # Load with torch
             input_model_file = input_dir.joinpath(f"{MODEL_NAME}{ending}.bin")
-            state_dict = load(input_model_file, map_location=map_location)
+            state_dict = load(input_model_file, map_location=map_location, **load_kwargs)
             model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
