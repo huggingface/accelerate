@@ -182,6 +182,12 @@ Optimizer (Actual Step) | ✅ | FSDP<br>DeepSpeed  | occurs in `torch_dtype` <br
 
 </Tip>
 
+<Tip>
+
+    DDP and single-device training do not upcast by default: a model loaded in low precision trains with low precision parameters and optimizer state, and [`Accelerator.prepare`] logs a warning. Pass [`~utils.AutocastKwargs`]`(upcast_trainable_params=True)` (or set `ACCELERATE_UPCAST_TRAINABLE_PARAMS=1`) to upcast the trainable parameters to fp32 as FSDP and DeepSpeed do.
+
+</Tip>
+
 
 To clarify the above table consider the concrete examples below; the optimizer pre- and actual step combined for brevity. With FSDP it is possible to operate in the two modes shown below, but DeepSpeed can only operate in one.
 

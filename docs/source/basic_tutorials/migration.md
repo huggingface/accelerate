@@ -148,6 +148,16 @@ Set the mixed precision type to use in the [`Accelerator`], and then use the [`~
       loss = complex_loss_function(outputs, target)
 ```
 
+Mixed precision expects the trainable parameters to be in fp32: autocast runs the forward in low precision, while the optimizer updates fp32 master weights. If the model was loaded in low precision (for example with `torch_dtype=torch.bfloat16`), FSDP and DeepSpeed upcast its trainable parameters to fp32 in [`~Accelerator.prepare`], but DDP and single-device training leave them as they are, so the optimizer steps on bf16 weights and keeps bf16 state, and small updates are rounded away. In that case [`~Accelerator.prepare`] logs a warning. Load the model in fp32, or ask [`~Accelerator.prepare`] to upcast the trainable parameters, with [`~utils.AutocastKwargs`] or by setting `ACCELERATE_UPCAST_TRAINABLE_PARAMS=1`:
+
+```py
+from accelerate.utils import AutocastKwargs
+
+accelerator = Accelerator(mixed_precision="bf16", kwargs_handlers=[AutocastKwargs(upcast_trainable_params=True)])
+```
+
+This doubles the memory of the upcast parameters, and the saved model then holds them in fp32. Frozen parameters are left as they are.
+
 ## Save and load
 
 Accelerate can also save and load a *model* once training is complete or you can also save the model and optimizer *state* which could be useful for resuming training.
