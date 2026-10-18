@@ -17,7 +17,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from accelerate.parallelism_config import ParallelismConfig
-from accelerate.utils import patch_environment
+from accelerate.utils import MegatronLMPlugin, patch_environment
 from accelerate.utils.constants import (
     BETA_CP_AVAILABLE_PYTORCH_VERSION,
     BETA_SP_AVAILABLE_DEEPSPEED_VERSION,
@@ -275,3 +275,12 @@ class TestParallelismConfig:
 
     def test_tp_handler(self):
         assert True, "Tensor parallelism handler doesn't hold any logic yet"
+
+
+class TestMegatronLMPlugin:
+    def test_context_parallel_size(self):
+        # Like `tp_degree` and `pp_degree`, context parallelism is off unless asked for
+        assert MegatronLMPlugin().context_parallel_size == 1
+
+        with patch_environment(MEGATRON_LM_CONTEXT_PARALLEL_SIZE=4):
+            assert MegatronLMPlugin().context_parallel_size == 4

@@ -2680,7 +2680,7 @@ class MegatronLMPlugin:
         if self.expert_model_parallel_size is None:
             self.expert_model_parallel_size = int(os.environ.get(prefix + "EXPERT_MODEL_PARALLEL_SIZE", 1))
         if self.context_parallel_size is None:
-            self.context_parallel_size = int(os.environ.get(prefix + "CONTEXT_PARALLEL_SIZE", 2))
+            self.context_parallel_size = int(os.environ.get(prefix + "CONTEXT_PARALLEL_SIZE", 1))
         if self.attention_dropout is None:
             self.attention_dropout = float(os.environ.get(prefix + "ATTENTION_DROPOUT", "0.0"))
         if self.hidden_dropout is None:
