@@ -274,6 +274,37 @@ def get_model_tp_size(model: torch.nn.Module) -> Optional[int]:
     return getattr(distributed_config, "tp_size", None)
 
 
+def replicate_module_on_mesh(module: torch.nn.Module, device_mesh) -> torch.nn.Module:
+    """
+    Replicate a module's parameters over `device_mesh` and run its computation on replicated inputs.
+
+    The module's parameters become `Replicate` DTensors, its first input is wrapped as a `Replicate` DTensor and its
+    output is converted back to a local tensor. This is what `transformers`' `ReplicateParallel` did before
+    `transformers` 5.20 removed it; it only relies on `torch.distributed.tensor`.
+
+    Args:
+        module (`torch.nn.Module`):
+            The module to replicate. `distribute_module` can only be applied once to a module.
+        device_mesh (`torch.distributed.DeviceMesh`):
+            The (tensor parallel) mesh to replicate over.
+
+    Returns:
+        `torch.nn.Module`: The module, modified in place.
+    """
+    from torch.distributed.tensor import DTensor, Replicate, distribute_module
+
+    def input_fn(mod, inputs, mesh):
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, mesh, (Replicate(),), run_check=False)
+        return input_tensor
+
+    def output_fn(mod, outputs, mesh):
+        return outputs.to_local() if isinstance(outputs, DTensor) else outputs
+
+    return distribute_module(module, device_mesh, input_fn=input_fn, output_fn=output_fn)
+
+
 def extract_model_from_parallel(
     model, keep_fp32_wrapper: bool = True, keep_torch_compile: bool = True, recursive: bool = False
 ):

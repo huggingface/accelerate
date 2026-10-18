@@ -30,7 +30,7 @@ from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, OPTIMIZER_NAME, SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import get_module_class_from_name
 from .modeling import get_non_persistent_buffers, is_peft_model
-from .other import get_module_children_bottom_up, is_compiled_module, save
+from .other import get_module_children_bottom_up, is_compiled_module, model_has_dtensor, save
 from .versions import is_torch_version
 
 
@@ -822,6 +822,19 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 "To enable memory-efficient sharding of 4-bit weights, set"
                 "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
             )
+
+    tp_enabled = accelerator.parallelism_config is not None and accelerator.parallelism_config.tp_enabled
+    if fsdp2_plugin.cpu_ram_efficient_loading and (tp_enabled or model_has_dtensor(model)):
+        # `fsdp2_load_full_state_dict` broadcasts the main process' full parameters to every rank. A tensor parallel
+        # model only holds its own TP shard on each rank (and `transformers` loads zeros on the non-main ranks in this
+        # mode), so the main process cannot provide the other shards: with DTensor parameters the broadcast sizes do
+        # not even match and the ranks hang, with plain local shards every rank would get the main process' shard.
+        raise ValueError(
+            "`cpu_ram_efficient_loading=True` is not supported with tensor parallelism: every rank already holds its "
+            "own shard of the tensor parallel parameters, so they cannot be broadcast from the main process. Set "
+            "`cpu_ram_efficient_loading=False` (`--fsdp_cpu_ram_efficient_loading false`, or "
+            "`FSDP_CPU_RAM_EFFICIENT_LOADING=false`) when using `tp_size > 1`."
+        )
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device

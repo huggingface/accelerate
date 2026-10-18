@@ -117,6 +117,7 @@ from .utils import (
     recursively_apply,
     reduce,
     release_memory,
+    replicate_module_on_mesh,
     save,
     save_fsdp_model,
     save_fsdp_optimizer,
@@ -1614,10 +1615,9 @@ class Accelerator:
                     continue
 
                 from torch.distributed.tensor import Replicate
-                from transformers.integrations.tensor_parallel import ReplicateParallel
 
                 model: torch.nn.Module = arg
-                tp_plan = ReplicateParallel
+                replicated_modules = set()
 
                 for name, param in model.named_parameters():
                     if isinstance(param, DTensor):
@@ -1627,7 +1627,10 @@ class Accelerator:
                     param_name, param_type = name.rsplit(".", 1)
                     module_to_tp = model.get_submodule(param_name)
 
-                    tp_plan().prepare_module_tp(module_to_tp, device_mesh["tp"])
+                    # A module with several such params (e.g. weight and bias) is replicated once
+                    if module_to_tp not in replicated_modules:
+                        replicate_module_on_mesh(module_to_tp, device_mesh["tp"])
+                        replicated_modules.add(module_to_tp)
                     if not isinstance(dp, torch.nn.Parameter):
                         dp = torch.nn.Parameter(dp, requires_grad=param.requires_grad)
                     setattr(module_to_tp, param_type, dp)
