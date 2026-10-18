@@ -1067,6 +1067,15 @@ class ModelingUtilsTester(unittest.TestCase):
         max_memory = get_balanced_memory(model, max_memory={0: 200, 2: 200}, low_zero=True)
         assert {0: 36, 2: 200} == max_memory
 
+    def test_get_balanced_memory_disk_key(self):
+        model = ModelForTest()
+        # "disk" is accepted in `max_memory` but is not a device holding a share of the model, so it is not counted.
+        max_memory = get_balanced_memory(model, max_memory={"cpu": 1000, "disk": 1000})
+        assert {"cpu": 1000, "disk": 1000} == max_memory
+
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 300, "disk": 1000})
+        assert {0: 215, 1: 300, "disk": 1000} == max_memory
+
     def test_get_balanced_memory_no_split_module_classes_set(self):
         """Regression test: no_split_module_classes should accept a set without raising TypeError.
 
