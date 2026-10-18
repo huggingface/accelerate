@@ -769,6 +769,23 @@ class ModelingUtilsTester(unittest.TestCase):
         device_memory = {0: 4, "cpu": 96000}  # Low memory device, just to force splitting and trigger the error
         infer_auto_device_map(model, device_memory)
 
+    @parameterized.expand(["linear", "otherlinear"])
+    def test_infer_auto_device_map_tied_weights_name_suffix(self, name):
+        model = nn.Sequential(
+            OrderedDict(
+                [
+                    ("linear", nn.Linear(2, 2)),
+                    ("nested", nn.Sequential(OrderedDict([(name, nn.Linear(2, 2))]))),
+                    ("tied", nn.Linear(2, 2)),
+                ]
+            )
+        )
+        model.tied.weight = model.nested.get_submodule(name).weight
+
+        device_map = infer_auto_device_map(model, max_memory={"cpu": 1024})
+
+        assert device_map == {"": "cpu"}
+
     def test_infer_auto_device_map_tied_weights_partner_module_split(self):
         # A tied parameter whose partner module gets split must not crash the map computation.
         # When `b` is split, its direct parameters (e.g. `b.w`, tied to `a.p`) become top-level
@@ -987,6 +1004,32 @@ class ModelingUtilsTester(unittest.TestCase):
         # Check that tied modules are assigned correctly
         expected_device_map = {"": 0}
         assert device_map == expected_device_map
+
+    def test_infer_auto_device_map_with_fallback_allocation_tied_weights_name_suffix(self):
+        model = nn.Sequential(
+            OrderedDict(
+                [
+                    ("large", nn.Linear(4, 4)),
+                    ("linear", nn.Linear(2, 2)),
+                    ("nested", nn.Sequential(OrderedDict([("linear", nn.Linear(2, 2))]))),
+                    ("tied", nn.Linear(2, 2)),
+                    ("reserve", nn.Linear(4, 4)),
+                ]
+            )
+        )
+        model.tied.weight = model.nested.linear.weight
+
+        # Reserving 80 bytes leaves 28 bytes: the unrelated 24-byte linear layer fits,
+        # but not if the tied layer's 8-byte bias is incorrectly counted with it.
+        device_map = infer_auto_device_map(model, max_memory={"cpu": 108}, fallback_allocation=True)
+
+        assert device_map == {
+            "linear": "cpu",
+            "large": "disk",
+            "nested": "disk",
+            "tied": "disk",
+            "reserve": "disk",
+        }
 
     def test_infer_auto_device_map_with_fallback_allocation_and_buffers(self):
         # Create a model with buffers
