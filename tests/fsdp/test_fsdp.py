@@ -47,7 +47,7 @@ from accelerate.utils.constants import (
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
 )
-from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
+from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin, GradScalerKwargs
 from accelerate.utils.fsdp_utils import (
     _get_model_state_dict,
     _set_model_state_dict,
@@ -529,6 +529,22 @@ class FSDPPluginIntegration(AccelerateTestCase):
             fsdp_plugin = FullyShardedDataParallelPlugin()
             assert fsdp_plugin.cpu_ram_efficient_loading is False
             assert os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING") == "False"
+
+    def test_clip_grad_value(self):
+        env = self.fsdp_envs[self.current_fsdp_version].copy()
+        with patch_environment(**env):
+            accelerator = Accelerator()
+            model = torch.nn.Linear(4, 4)
+            optimizer = torch.optim.AdamW(model.parameters())
+            model, optimizer = accelerator.prepare(model, optimizer)
+            # every gradient entry is 2
+            accelerator.backward(model(torch.ones(2, 4, device=accelerator.device)).sum())
+            if self.current_fsdp_version == 1:
+                with self.assertRaisesRegex(Exception, "do not support `clip_grad_value_`"):
+                    accelerator.clip_grad_value_(model.parameters(), 1.0)
+            else:
+                accelerator.clip_grad_value_(model.parameters(), 1.0)
+                assert all(p.grad.full_tensor().eq(1.0).all() for p in model.parameters())
 
     def test_ignored_modules_regex(self):
         # Check that FSDP's ignored_modules can be a string, in which case it is treated as a regex
@@ -1055,6 +1071,20 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
         super().setUp()
         self.current_fsdp_version = 2
 
+    def test_clip_grad_value(self):
+        for mixed_precision in dtypes:
+            with self.subTest(mixed_precision=mixed_precision):
+                cmd = get_launch_command(
+                    num_processes=2,
+                    num_machines=1,
+                    machine_rank=0,
+                    use_fsdp=True,
+                    fsdp_version=2,
+                    mixed_precision=mixed_precision,
+                )
+                cmd.append(os.path.abspath(__file__))
+                execute_subprocess_async(cmd, timeout=120)
+
     @require_fsdp2
     @require_peft
     def test_peft_checkpointing(self):
@@ -1083,3 +1113,22 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
                     cmd_config.append("--adapter_only")
                 with patch_environment(omp_num_threads=1):
                     execute_subprocess_async(cmd_config)
+
+
+if __name__ == "__main__":
+    # Keep scaled fp16 gradients finite, including those above the clipping threshold.
+    accelerator = Accelerator(kwargs_handlers=[GradScalerKwargs(init_scale=8.0)])
+    assert accelerator.is_fsdp2 and accelerator.num_processes == 2
+    model = torch.nn.Sequential(torch.nn.Linear(4, 4, bias=False))
+    model, optimizer = accelerator.prepare(model, torch.optim.SGD(model.parameters(), lr=0.1))
+    inputs = torch.tensor([[-2.0, -0.25, 0.25, 2.0]], device=accelerator.device)
+    signs = torch.tensor([[-1.0, -1.0, 1.0, 1.0]], device=accelerator.device)
+    accelerator.backward((model(inputs * (accelerator.process_index + 1)) * signs).sum())
+    accelerator.clip_grad_value_(model.parameters(), 1.0)
+
+    # FSDP averages the two ranks' gradients; small entries must survive clipping unchanged after unscaling.
+    expected = (signs.T @ inputs * 1.5).clamp(-1.0, 1.0)
+    grad = model[0].weight.grad
+    assert grad.to_local().numel() == expected.numel() // 2
+    torch.testing.assert_close(grad.full_tensor(), expected)
+    accelerator.end_training()
