@@ -487,6 +487,24 @@ class FSDPPluginIntegration(AccelerateTestCase):
                     assert accelerator.scaler is None
                 AcceleratorState._reset_state(True)
 
+    def test_mixed_precision_forward_runs_under_autocast(self):
+        # The FSDP mixed precision policy only casts the parameters; like the other distributed types, the forward
+        # must also run under autocast, so that ops such as softmax are computed in fp32
+        for mp_dtype in dtypes:
+            env = self.fsdp_envs[self.current_fsdp_version].copy()
+            env["ACCELERATE_MIXED_PRECISION"] = mp_dtype
+            with patch_environment(**env):
+                accelerator = Accelerator()
+                model = torch.nn.Sequential(torch.nn.Linear(4, 4), torch.nn.Softmax(dim=-1))
+                softmax_dtypes = []
+                model[1].register_forward_hook(lambda module, args, output: softmax_dtypes.append(output.dtype))
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+                model, optimizer = accelerator.prepare(model, optimizer)
+                output = model(torch.randn(2, 4, device=accelerator.device))
+                assert softmax_dtypes == [torch.float32]
+                assert output.dtype == torch.float32
+            AcceleratorState._reset_state(True)
+
     def test_cpu_offload(self):
         fsdp_version = self.current_fsdp_version
         if fsdp_version == 2:

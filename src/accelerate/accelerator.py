@@ -1692,6 +1692,12 @@ class Accelerator:
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
+        # Run the forward under autocast as `prepare_model` does for the other distributed types:
+        # `MixedPrecisionPolicy` only casts the parameters, so ops the model does not upcast itself would run in
+        # low precision.
+        if self.native_amp:
+            self._wrap_forward_in_autocast(model)
+
         # Apply AC if needed
         if self.state.fsdp_plugin.activation_checkpointing:
             model = fsdp2_apply_ac(self, model)
@@ -1766,6 +1772,20 @@ class Accelerator:
 
         return result
 
+    def _wrap_forward_in_autocast(self, model: torch.nn.Module):
+        """Wraps `model.forward` in the mixed precision autocast context and converts its outputs to fp32."""
+        model._original_forward = model.forward
+        autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
+        # NOTE: MS-AMP adds `__func__` already to `model.forward`, so we should always use `model.forward`
+        if self.fp8_backend == FP8BackendType.MSAMP or not hasattr(model.forward, "__func__"):
+            model_forward_func = model.forward
+            model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
+        else:
+            model_forward_func = model.forward.__func__
+            new_forward = autocast_context(model_forward_func)
+            model.forward = MethodType(new_forward, model)
+            model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
+
     def prepare_model(
         self, model: torch.nn.Module, device_placement: bool | None = None, evaluation_mode: bool = False
     ):
@@ -1821,17 +1841,7 @@ class Accelerator:
             )
 
         if self.native_amp:
-            model._original_forward = model.forward
-            autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
-            # NOTE: MS-AMP adds `__func__` already to `model.forward`, so we should always use `model.forward`
-            if self.fp8_backend == FP8BackendType.MSAMP or not hasattr(model.forward, "__func__"):
-                model_forward_func = model.forward
-                model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
-            else:
-                model_forward_func = model.forward.__func__
-                new_forward = autocast_context(model_forward_func)
-                model.forward = MethodType(new_forward, model)
-                model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
+            self._wrap_forward_in_autocast(model)
 
         # We prepare TE after, allowing for bf16 autocast to happen first
         if self.fp8_backend == FP8BackendType.TE and not self.delayed_fp8_autocast:
