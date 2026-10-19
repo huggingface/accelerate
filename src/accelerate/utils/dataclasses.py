@@ -16,6 +16,8 @@
 General namespace and dataclass related classes
 """
 
+from __future__ import annotations
+
 import argparse
 import copy
 import enum
