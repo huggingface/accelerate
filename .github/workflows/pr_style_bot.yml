@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   style:
-    uses: huggingface/huggingface_hub/.github/workflows/style-bot-action.yml@72b5d66c38a83ddcfba6c5fc351435dd242db676
+    uses: huggingface/huggingface_hub/.github/workflows/style-bot-action.yml@bb2ef7579c3d2dc2eb49b16ccf15a070fe5b7023
     with:
       python_quality_dependencies: "[quality]"
       style_command_type: "default"
