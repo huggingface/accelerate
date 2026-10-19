@@ -845,48 +845,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
             )
 
-    # When we have PEFT LoRA adapters on top of a quantized base model, the
-    # adapter modules themselves must not be wrapped individually.  They are
-    # tiny relative to their parent transformer layer and should inherit the
-    # parent's FSDP group.
-    if peft_adapter_modules:
-        auto_wrap_policy_func = fsdp2_plugin.auto_wrap_policy
-        if auto_wrap_policy_func is not None and not isinstance(
-            auto_wrap_policy_func, str
-        ):
-            original = auto_wrap_policy_func
-
-            import inspect
-
-            try:
-                sig = inspect.signature(original)
-                num_params = len(sig.parameters)
-            except (ValueError, TypeError):
-                num_params = 1  # fallback: assume FSDP2-style single-param
-
-            def _lora_aware_policy(module: torch.nn.Module, *args) -> bool:
-                # Skip LoraLayer submodules — they are always wrapped as part
-                # of their containing transformer layer.
-                if module in peft_adapter_modules:
-                    return False
-                # FSDP1-style policies take (module, recurse, nonwrapped_numel);
-                # FSDP2-style take only (module).  Forward the right number of args.
-                if num_params >= 2 and args:
-                    return original(module, *args[: num_params - 1])
-                return original(module)
-
-            fsdp2_plugin.auto_wrap_policy = _lora_aware_policy
-            # Do NOT pop ignored_params — the FSDP2 fully_shard function
-            # ignores this plugin-level override; user's explicit
-            # ignored_modules are already captured in fsdp2_kwargs below.
-
-    if incompatible_params4bit and is_torch_version(">=", "2.7.0"):
-        # Re-apply incompatible_params4bit after a possible auto_wrap rewrite
-        # above (the rewritten policy doesn't touch ignored_params but the
-        # pop() ensures consistency).
-        ignored = set(fsdp2_kwargs.get("ignored_params", set()))
-        fsdp2_kwargs["ignored_params"] = ignored | incompatible_params4bit
-
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
         # Also, these buffers aren't getting sharded by default
@@ -943,6 +901,22 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
     if auto_wrap_policy_func is not None:
+        # Skip PEFT LoraLayer submodules from wrapping — they are tiny
+        # relative to their parent transformer layer and should inherit the
+        # parent's FSDP group.  We layer this filter on top of the FSDP2-form
+        # policy returned by fsdp2_prepare_auto_wrap_policy rather than
+        # replacing fsdp_plugin.auto_wrap_policy (which would break the
+        # identity checks in fsdp2_prepare_auto_wrap_policy).
+        if peft_adapter_modules:
+            _base_policy = auto_wrap_policy_func
+
+            def _policy_with_lora_exclusion(module: torch.nn.Module) -> bool:
+                if module in peft_adapter_modules:
+                    return False
+                return _base_policy(module)
+
+            auto_wrap_policy_func = _policy_with_lora_exclusion
+
         # We skip the model itself, as that one is always wrapped
         for module in get_module_children_bottom_up(model)[:-1]:
             if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
@@ -1214,31 +1188,43 @@ def build_qlora_fsdp2_kwargs(
     fsdp_plugin,
     accelerator,
     qlora_info: dict,
+    model: torch.nn.Module | None = None,
 ) -> dict:
     """Augment FSDP2 kwargs returned by :func:`fsdp2_prepare_model` with
     QLoRA-specific settings derived from :func:`detect_peft_qlora_state`.
 
-    This helper handles three concerns the default FSDP2 config does not cover:
+    This helper handles two concerns the default FSDP2 config does not cover:
 
     1. **Exclude incompatible quantized params from sharding** — non-floating
        ``Params4bit`` weights (the common case is a ``uint8`` quantized
        storage) cannot be converted to DTensors and must appear in
-       ``ignored_params``.
-    2. **Exclude PEFT LoraLayers from auto-wrap** — small adapter modules
-       must not receive their own FSDP group; they inherit the parent layer's.
-    3. **Protect ``mixed_precision_policy`` from touching quantized weights** —
+       ``ignored_params``.  When a ``model`` is supplied, the returned
+       ``ignored_params`` includes both the user's ``ignored_modules``
+       (resolved against ``model``) and the incompatible quantized params.
+    2. **Protect ``mixed_precision_policy`` from touching quantized weights** —
        when the base model is quantized, ``param_dtype`` must not be forced
        over the 4-bit storage dtype.
+
+    The helper deliberately does **not** rewrite ``auto_wrap_policy`` — that
+    would break the identity checks in :func:`fsdp2_prepare_auto_wrap_policy`.
+    Callers should layer LoRA-adapter exclusion on top of the *returned*
+    FSDP2-form policy (as :func:`fsdp2_prepare_model` does), or pass the
+    model's ``peft_adapter_modules`` explicitly.
 
     Args:
         fsdp_plugin: FullyShardedDataParallelPlugin instance.
         accelerator: Accelerator instance.
         qlora_info: Dict returned by :func:`detect_peft_qlora_state`.
+        model: Optional model — used to resolve ``ignored_modules`` to
+            concrete parameters.  When omitted (e.g. before ``prepare``),
+            only incompatible quantized params are included in
+            ``ignored_params`` and callers must still account for user
+            exclusions on their own.
 
     Returns:
         dict — kwargs overlay that callers merge into their ``fsdp2_kwargs``.
-        Contains ``ignored_params`` and ``auto_wrap_policy`` keys when the
-        model is PEFT/quantized, otherwise is empty.
+        May contain ``ignored_params`` when the model has incompatible
+        ``Params4bit``; is otherwise empty.
     """
     import torch.distributed as dist
     from torch.distributed.fsdp import MixedPrecisionPolicy
@@ -1247,49 +1233,28 @@ def build_qlora_fsdp2_kwargs(
 
     # --- ignored_params --------------------------------------------------
     if qlora_info.get("incompatible_params4bit"):
-        ignored = set()
+        ignored: set = set()
         existing = fsdp_plugin.ignored_modules
-        if existing is not None:
+        if existing is not None and model is not None:
             # Resolve module refs to their parameters for FSDP2's API.
             try:
-                model = accelerator._models[0] if accelerator._models else None
                 device = accelerator.device
-                if model is not None:
-                    existing_params = get_parameters_from_modules(
-                        existing, model, device
-                    )
-                    ignored.update(existing_params)
+                existing_params = get_parameters_from_modules(existing, model, device)
+                ignored.update(existing_params)
+            except Exception:
+                pass
+        elif existing is not None and accelerator._models:
+            # Fallback: pull model from accelerator if available (e.g. called
+            # after prepare).  Only used when the caller did not pass ``model``.
+            try:
+                m = accelerator._models[0]
+                device = accelerator.device
+                existing_params = get_parameters_from_modules(existing, m, device)
+                ignored.update(existing_params)
             except Exception:
                 pass
         ignored.update(qlora_info["incompatible_params4bit"])
         overlay["ignored_params"] = ignored
-
-    # --- auto_wrap_policy rewrite ----------------------------------------
-    # NOTE: auto_wrap_policy is NOT passed through the overlay dict because
-    # FSDP2's fully_shard() does not accept that kwarg.  Instead we patch the
-    # plugin's policy in place so fsdp2_prepare_auto_wrap_policy picks it up
-    # downstream.
-    if qlora_info.get("peft_adapter_modules"):
-        original = fsdp_plugin.auto_wrap_policy
-        if callable(original):
-            lora_modules = qlora_info["peft_adapter_modules"]
-
-            import inspect
-
-            try:
-                sig = inspect.signature(original)
-                num_params = len(sig.parameters)
-            except (ValueError, TypeError):
-                num_params = 1
-
-            def _qlora_aware_policy(module: torch.nn.Module, *args) -> bool:
-                if module in lora_modules:
-                    return False
-                if num_params >= 2 and args:
-                    return original(module, *args[: num_params - 1])
-                return original(module)
-
-            fsdp_plugin.auto_wrap_policy = _qlora_aware_policy
 
     # --- mixed_precision guard -------------------------------------------
     if qlora_info.get("num_params4bit", 0) > 0:
