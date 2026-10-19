@@ -25,6 +25,8 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 import torch
+from parameterized import parameterized
+from safetensors.torch import load_file
 from torch import nn
 
 from accelerate.big_modeling import cpu_offload_with_hook
@@ -333,6 +335,82 @@ class UtilsTester(unittest.TestCase):
                 save(model.state_dict(), save_path, safe_serialization=True)
                 assert len(log.records) == 1
                 assert "Removed shared tensor" in log.output[0]
+
+    @parameterized.expand(
+        [("split", torch.float32), ("split", torch.int64), ("split", torch.bfloat16)]
+        + [(layout, torch.float32) for layout in ["overlap", "reshape", "strided", "transpose"]]
+    )
+    def test_save_safetensor_distinct_views(self, layout, dtype):
+        storage = torch.arange(12).to(dtype)
+        if layout == "split":
+            first, second = storage[:6], storage[6:]
+        elif layout == "overlap":
+            first, second = storage[:8], storage[4:]
+        elif layout == "reshape":
+            first, second = storage, storage.reshape(3, 4)
+        elif layout == "strided":
+            first, second = storage[::2], storage[1::2]
+        else:
+            first, second = storage.reshape(3, 4), storage.reshape(3, 4).T
+        model = nn.Module()
+        model.register_buffer("first", first)
+        model.register_buffer("second", second)
+        expected = model.state_dict()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "model.safetensors")
+            save(model.state_dict(), save_path, safe_serialization=True)
+            restored = load_file(save_path)
+
+        assert restored.keys() == expected.keys()
+        for name, tensor in expected.items():
+            assert restored[name].shape == tensor.shape
+            assert restored[name].dtype == tensor.dtype
+            assert torch.equal(restored[name], tensor)
+        model.load_state_dict(restored, strict=True)
+
+    @parameterized.expand([(False,), (True,)])
+    def test_save_vectorized_model_parameters(self, safe_serialization):
+        model = nn.Sequential(nn.Linear(2, 3), nn.Linear(3, 1))
+        vector = nn.utils.parameters_to_vector(model.parameters())
+        nn.utils.vector_to_parameters(vector, model.parameters())
+        inputs = torch.randn(4, 2)
+        expected = model(inputs)
+        restored_model = nn.Sequential(nn.Linear(2, 3), nn.Linear(3, 1))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "model.safetensors" if safe_serialization else "model.bin")
+            save(model.state_dict(), save_path, safe_serialization=safe_serialization)
+            state_dict = load_file(save_path) if safe_serialization else torch.load(save_path, weights_only=True)
+            restored_model.load_state_dict(state_dict, strict=True)
+
+        assert torch.equal(restored_model(inputs), expected)
+
+    @parameterized.expand([("split",), ("overlap",), ("transpose",)])
+    def test_save_safetensor_distinct_views_with_aliases(self, layout):
+        storage = torch.arange(12.0)
+        first = storage[:8] if layout == "overlap" else storage.reshape(3, 4)
+        second = storage[4:] if layout == "overlap" else storage.reshape(3, 4).T
+        if layout == "split":
+            first, second = storage[:6], storage[6:]
+        model = nn.Module()
+        model.register_buffer("first", first)
+        model.register_buffer("first_alias", first)
+        model.register_buffer("second", second)
+        model.register_buffer("second_alias", second)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "model.safetensors")
+            with self.assertLogs(level="WARNING") as log:
+                save(model.state_dict(), save_path, safe_serialization=True)
+            restored = load_file(save_path)
+
+        assert set(restored) == {"first", "second"}
+        assert torch.equal(restored["first"], first)
+        assert torch.equal(restored["second"], second)
+        assert len(log.records) == 1
+        assert "first_alias" in log.output[0]
+        assert "second_alias" in log.output[0]
 
     @require_torch_min_version(version="1.12")
     def test_pad_across_processes(self):
