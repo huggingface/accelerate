@@ -21,12 +21,78 @@ import torch.nn as nn
 
 from accelerate.utils import (
     OffloadedWeightsLoader,
+    PrefixedDataset,
     extract_submodules_state_dict,
     load_offloaded_weight,
     offload_state_dict,
     offload_weight,
 )
 from accelerate.utils.versions import is_torch_version
+
+
+class PrefixedDatasetTester(unittest.TestCase):
+    def test_mapping_contract(self):
+        dataset = {"block1.weight": 0, "block1.bias": 1, "block2.weight": 2}
+        prefixed = PrefixedDataset(dataset, "block1.")
+        self.assertEqual(len(prefixed), 2)
+        self.assertEqual(list(prefixed), ["weight", "bias"])
+        self.assertEqual(dict(prefixed), {"weight": 0, "bias": 1})
+        self.assertEqual(list(prefixed.items()), [("weight", 0), ("bias", 1)])
+        self.assertEqual(list(prefixed.values()), [0, 1])
+        self.assertEqual(list(prefixed.keys()), ["weight", "bias"])
+        for key in prefixed:
+            self.assertIn(key, prefixed)
+            self.assertEqual(prefixed[key], dataset[f"block1.{key}"])
+        self.assertNotIn("block2.weight", prefixed)
+
+    def test_empty_prefix(self):
+        dataset = {"weight": 0, "bias": 1}
+        prefixed = PrefixedDataset(dataset, "")
+        self.assertEqual(dict(prefixed), dataset)
+        self.assertEqual(len(prefixed), len(dataset))
+
+    def test_unmatched_prefix(self):
+        prefixed = PrefixedDataset({"block2.weight": 2}, "block1.")
+        self.assertEqual(len(prefixed), 0)
+        self.assertEqual(dict(prefixed), {})
+        with self.assertRaises(KeyError):
+            prefixed["weight"]
+
+    def test_nested_views(self):
+        dataset = {"block1.layer.weight": 0, "block1.bias": 1, "block2.weight": 2}
+        nested = PrefixedDataset(PrefixedDataset(dataset, "block1."), "layer.")
+        self.assertEqual(len(nested), 1)
+        self.assertEqual(dict(nested), {"weight": 0})
+
+    def test_live_view(self):
+        dataset = {"block1.weight": 0, "block2.weight": 2}
+        prefixed = PrefixedDataset(dataset, "block1.")
+        self.assertEqual(len(prefixed), 1)
+        dataset["block1.bias"] = 1
+        self.assertEqual(len(prefixed), 2)
+        self.assertEqual(dict(prefixed), {"weight": 0, "bias": 1})
+        del dataset["block1.weight"]
+        self.assertEqual(len(prefixed), 1)
+        self.assertEqual(dict(prefixed), {"bias": 1})
+
+    def test_key_equal_to_prefix(self):
+        prefixed = PrefixedDataset({"block1.": 0}, "block1.")
+        self.assertEqual(list(prefixed), [""])
+        self.assertEqual(dict(prefixed), {"": 0})
+
+    def test_similar_prefixes(self):
+        prefixed = PrefixedDataset({"block1.weight": 0, "block10.weight": 1}, "block1.")
+        self.assertEqual(list(prefixed), ["weight"])
+        self.assertEqual(len(prefixed), 1)
+
+    def test_iteration_and_length_do_not_load_values(self):
+        class UnloadedWeights(dict):
+            def __getitem__(self, key):
+                raise AssertionError("Iteration should not load offloaded weights")
+
+        prefixed = PrefixedDataset(UnloadedWeights({"block1.weight": None, "block2.weight": None}), "block1.")
+        self.assertEqual(list(prefixed), ["weight"])
+        self.assertEqual(len(prefixed), 1)
 
 
 class ModelForTest(nn.Module):
