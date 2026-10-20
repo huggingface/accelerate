@@ -150,11 +150,17 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
     ```
     """
 
+    compiled_modules = {}
+
     def _compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
+        if id(module) in compiled_modules:
+            return compiled_modules[id(module)]
         if is_repeated_blocks(module):
             new_module = torch.nn.ModuleList()
             for submodule in module:
-                new_module.append(torch.compile(submodule, **compile_kwargs))
+                if id(submodule) not in compiled_modules:
+                    compiled_modules[id(submodule)] = torch.compile(submodule, **compile_kwargs)
+                new_module.append(compiled_modules[id(submodule)])
         elif has_repeated_blocks(module):
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
@@ -162,11 +168,15 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
                 if hasattr(value, "__func__") and getattr(value, "__self__", None) is module:
                     new_module.__dict__[name] = MethodType(value.__func__, new_module)
             new_module._modules = {}
-            for name, submodule in module.named_children():
-                new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
+            # named_children() deduplicates aliases and skips registered None children.
+            for name, submodule in module._modules.items():
+                new_module.add_module(
+                    name, _compile_regions(submodule, **compile_kwargs) if submodule is not None else None
+                )
         else:
             new_module = torch.compile(module, **compile_kwargs)
 
+        compiled_modules[id(module)] = new_module
         return new_module
 
     new_module = _compile_regions(module, **compile_kwargs)
