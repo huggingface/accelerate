@@ -821,7 +821,13 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if LoraLayer is not None:
             for mod in model.modules():
                 if isinstance(mod, LoraLayer):
-                    peft_adapter_modules.add(mod)
+                    # Include every descendant too, so that
+                    # get_module_children_bottom_up's leaves-first traversal
+                    # does not wrap lora_A.default / lora_B.default individually
+                    # (size_based_policy can fire on them before we skip the
+                    # LoraLayer container itself).  mod.modules() yields mod
+                    # itself first, so the LoraLayer container is also added.
+                    peft_adapter_modules.update(mod.modules())
 
     for name, param in model.named_parameters():
         # this is a temporary fix whereby loading models with bnb params cannot be moved from
@@ -859,20 +865,35 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if not accelerator.is_main_process:
             model = model.to(torch.device("meta"))
 
-    # FSDP2 requires uniform orig_dtype among trainable params in each group.
+    # FSDP2 requires uniform orig_dtype among params in each group.
     # Upcast to fp32 master weights; MixedPrecisionPolicy.param_dtype handles compute cast.
     # When the model has Params4bit (QLoRA), we skip them but still upcast any
     # non-quantized trainable params — typically LoRA adapter weights which
     # require fp32 master weights just like any other trainable param under
     # mixed precision.  Frozen Params4bit weights are left untouched.
+    #
+    # PyTorch < 2.8 validates uniform orig_dtype across *all* params
+    # (including frozen quant_storage) in an FSDP group, not just trainable
+    # ones.  Upcasting LoRA adapters to fp32 while a sibling Params4bit keeps
+    # a bf16/fp16 quant_storage would therefore raise on 2.7.  We skip the
+    # LoRA upcast on older versions and only upcast when the model has no
+    # Params4bit or the runtime is >= 2.8.
     if accelerator.mixed_precision != "no":
         upcasted_params = []
+        # LoRA adapter upcast is only safe when there are no Params4bit or
+        # PyTorch is new enough to ignore frozen-params dtype mismatches.
+        can_upcast_lora = not model_has_params4bit or is_torch_version(">=", "2.8.0")
         for name, param in model.named_parameters():
             if not param.requires_grad:
                 continue
             # Skip Params4bit — they manage their own internal dtype (4-bit
             # quantized storage + quant_state) and must not be upcast.
             if param.__class__.__name__ == "Params4bit":
+                continue
+            if not can_upcast_lora:
+                # QLoRA + PyTorch < 2.8: leaving LoRA weights in their native
+                # bf16/fp16 avoids a FSDP dtype-validator crash; accuracy is
+                # slightly reduced vs fp32 master weights.
                 continue
             if param.dtype != torch.float32:
                 upcasted_params.append(name)
@@ -881,6 +902,11 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             logger.info(
                 "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints. "
                 f"This effects {len(upcasted_params)} parameters: {upcasted_params}..."
+            )
+        elif model_has_params4bit and not can_upcast_lora and accelerator.is_main_process:
+            logger.info(
+                "Detected Params4bit with PyTorch < 2.8 — skipping fp32 upcast of LoRA adapter params "
+                "to avoid FSDP dtype-validator crash. Upgrade PyTorch to >= 2.8 to enable fp32 master weights."
             )
 
     # Capture after upcast so dtypes match what `fully_shard` will produce.
@@ -1163,7 +1189,10 @@ def detect_peft_qlora_state(model: torch.nn.Module) -> dict:
             for mod in model.modules():
                 if isinstance(mod, LoraLayer):
                     result["num_lora_modules"] += 1
-                    result["peft_adapter_modules"].add(mod)
+                    # Include descendants too, so callers can drop the set
+                    # straight into a wrap-policy predicate without worrying
+                    # about lora_A / lora_B being visited first.
+                    result["peft_adapter_modules"].update(mod.modules())
         except ImportError:
             pass
 
