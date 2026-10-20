@@ -102,7 +102,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -129,7 +128,6 @@ dmypy.json
 .pyre/
 
 # VSCode
-.vscode
 
 # IntelliJ
 .idea
@@ -142,3 +140,5 @@ wandb
 
 # ruff
 .ruff_cache
+config.bat
+node_modules
