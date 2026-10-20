@@ -711,13 +711,16 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
         )
 
 
-def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
+def fsdp2_apply_ac(accelerator, model: torch.nn.Module, preserve_rng_state: bool = True):
     """
     Applies the activation checkpointing to the model.
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
         model (`torch.nn.Module`): The model to apply the activation checkpointing to
+        preserve_rng_state (`bool`, defaults to `True`):
+            Whether to preserve RNG state during recomputation, so stochastic operations such as dropout use the same
+            random values as in the forward pass. Set to `False` to skip RNG state preservation when it is not needed.
 
     Returns:
         `torch.nn.Module`: The model with the activation checkpointing applied
@@ -732,7 +735,7 @@ def fsdp2_apply_ac(accelerator, model: torch.nn.Module):
 
     for layer_name, layer in get_module_children_bottom_up(model, return_fqns=True)[:-1]:
         if auto_wrap_policy_func(layer):
-            wrapped = checkpoint_wrapper(layer, preserve_rng_state=False)
+            wrapped = checkpoint_wrapper(layer, preserve_rng_state=preserve_rng_state)
             if accelerator.state.fsdp_plugin.activation_checkpointing_offload:
                 # `offload_wrapper` puts `save_on_cpu` around the checkpoint, so what moves to host
                 # is the input the checkpoint saved for its recompute: `layers x seq x hidden` bytes,
