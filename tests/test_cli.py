@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+import json
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import torch
+import yaml
 from huggingface_hub.utils import GatedRepoError
 
 import accelerate.commands.env as accelerate_env_cmd
@@ -41,7 +45,7 @@ from accelerate.test_utils.testing import (
     run_command,
     run_first,
 )
-from accelerate.utils import TorchDynamoPlugin, patch_environment
+from accelerate.utils import ComputeEnvironment, DistributedType, DynamoBackend, TorchDynamoPlugin, patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
 
 
@@ -327,6 +331,69 @@ class ClusterConfigTester(unittest.TestCase):
         assert config.distributed_type == "MULTI_GPU"
         assert config.num_processes == 2
         assert config.enable_cpu_affinity is True
+
+    def test_config_serialization_preserves_state(self):
+        expected = {
+            "compute_environment": "LOCAL_MACHINE",
+            "distributed_type": "NO",
+            "mixed_precision": "no",
+            "use_cpu": True,
+            "debug": False,
+            "num_processes": 1,
+            "machine_rank": 0,
+            "num_machines": 1,
+            "rdzv_backend": "static",
+            "same_network": False,
+            "main_training_function": "main",
+            "enable_cpu_affinity": False,
+            "downcast_bf16": False,
+            "tpu_use_cluster": False,
+            "tpu_use_sudo": False,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for format in ("dict", "json", "yaml"):
+                with self.subTest(format=format):
+                    config = ClusterConfig(
+                        compute_environment="LOCAL_MACHINE",
+                        distributed_type="NO",
+                        mixed_precision="no",
+                        num_processes=1,
+                        use_cpu=True,
+                        debug=False,
+                    )
+                    original = copy.deepcopy(config.__dict__)
+                    if format == "dict":
+                        serialized = config.to_dict()
+                    else:
+                        filename = str(Path(directory) / f"config.{format}")
+                        getattr(config, f"to_{format}_file")(filename)
+                        with open(filename) as file:
+                            serialized = json.load(file) if format == "json" else yaml.safe_load(file)
+                        self.assertEqual(load_config_from_file(filename).__dict__, original)
+                    self.assertEqual(serialized, expected)
+                    self.assertEqual(config.__dict__, original)
+                    self.assertIs(config.compute_environment, ComputeEnvironment.LOCAL_MACHINE)
+                    self.assertIs(config.distributed_type, DistributedType.NO)
+                    config.dynamo_config["dynamo_backend"] = "INDUCTOR"
+                    self.assertEqual(config.dynamo_config, {"dynamo_backend": "INDUCTOR"})
+
+    def test_config_serialization_does_not_alias_nested_settings(self):
+        config = ClusterConfig(
+            compute_environment="LOCAL_MACHINE",
+            distributed_type="NO",
+            mixed_precision="no",
+            num_processes=1,
+            use_cpu=True,
+            debug=False,
+            dynamo_config={"dynamo_backend": DynamoBackend.INDUCTOR},
+            deepspeed_config={"zero_optimization": {"stage": 2}, "empty": {}},
+        )
+        serialized = config.to_dict()
+        self.assertEqual(serialized["dynamo_config"], {"dynamo_backend": "INDUCTOR"})
+        self.assertEqual(serialized["deepspeed_config"], {"zero_optimization": {"stage": 2}, "empty": None})
+        self.assertIs(config.dynamo_config["dynamo_backend"], DynamoBackend.INDUCTOR)
+        serialized["deepspeed_config"]["zero_optimization"]["stage"] = 3
+        self.assertEqual(config.deepspeed_config, {"zero_optimization": {"stage": 2}, "empty": {}})
 
     def test_sagemaker_config(self):
         config = SageMakerConfig(

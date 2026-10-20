@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import os
 from dataclasses import dataclass
@@ -81,7 +82,7 @@ class BaseConfig:
     debug: bool
 
     def to_dict(self):
-        result = self.__dict__
+        result = copy.deepcopy(self.__dict__)
         # For serialization, it's best to convert Enums to strings (or their underlying value type).
 
         def _convert_enums(value):
