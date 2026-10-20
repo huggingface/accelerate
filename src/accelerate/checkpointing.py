@@ -177,6 +177,15 @@ def save_accelerator_state(
     output_states_file = output_dir.joinpath(states_name)
     torch.save(states, output_states_file)
     logger.info(f"Random states saved in {output_states_file}")
+    if (PartialState().is_main_process and not save_on_each_node) or (
+        PartialState().is_local_main_process and save_on_each_node
+    ):
+        # Remove the previous format only after all writes succeed, so loading cannot prefer stale weights.
+        for i in range(len(model_states)):
+            previous_weights_name = SAFE_WEIGHTS_NAME if not safe_serialization else WEIGHTS_NAME
+            if i > 0:
+                previous_weights_name = previous_weights_name.replace(".", f"_{i}.")
+            output_dir.joinpath(previous_weights_name).unlink(missing_ok=True)
     return output_dir
 
 

@@ -20,6 +20,8 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -28,6 +30,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
+from accelerate.state import PartialState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
@@ -36,7 +39,7 @@ from accelerate.test_utils import (
     run_first,
 )
 from accelerate.test_utils.testing import AccelerateTestCase
-from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
+from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, save, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -123,6 +126,114 @@ class CheckpointTest(AccelerateTestCase):
             # Save second state
             accelerator.save_state(safe_serialization=self.use_safetensors)
             assert len(os.listdir(accelerator.project_dir)) == 1
+
+    def test_save_state_after_changing_serialization(self):
+        accelerator = Accelerator(cpu=True)
+        models = accelerator.prepare(nn.Linear(2, 2), nn.Linear(2, 1))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+            unrelated_file = Path(tmpdir) / "model_backup.safetensors"
+            unrelated_file.write_bytes(b"keep")
+            expected_states = []
+            for model in models:
+                with torch.no_grad():
+                    for parameter in model.parameters():
+                        parameter.add_(1)
+                expected_states.append({name: value.clone() for name, value in model.state_dict().items()})
+
+            accelerator.save_state(tmpdir, safe_serialization=not self.use_safetensors)
+            previous_weights_names = (
+                ("model.safetensors", "model_1.safetensors")
+                if self.use_safetensors
+                else ("pytorch_model.bin", "pytorch_model_1.bin")
+            )
+            for filename in previous_weights_names:
+                self.assertFalse((Path(tmpdir) / filename).exists())
+            self.assertEqual(unrelated_file.read_bytes(), b"keep")
+            for model in models:
+                with torch.no_grad():
+                    for parameter in model.parameters():
+                        parameter.zero_()
+
+            accelerator.load_state(tmpdir)
+            for model, expected_state in zip(models, expected_states):
+                torch.testing.assert_close(model.state_dict(), expected_state)
+
+    def test_serialization_cleanup_respects_saving_process(self):
+        accelerator = Accelerator(cpu=True)
+        accelerator.prepare(nn.Linear(2, 2))
+        previous_weights_name = "model.safetensors" if self.use_safetensors else "pytorch_model.bin"
+        new_weights_name = "pytorch_model.bin" if self.use_safetensors else "model.safetensors"
+        for save_on_each_node, local_process_index in [(False, 0), (False, 1), (True, 0), (True, 1)]:
+            with self.subTest(save_on_each_node=save_on_each_node, local_process_index=local_process_index):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+                    previous_weights = (Path(tmpdir) / previous_weights_name).read_bytes()
+                    accelerator.project_configuration.save_on_each_node = save_on_each_node
+                    with (
+                        patch.object(PartialState(), "process_index", 1),
+                        patch.object(PartialState(), "local_process_index", local_process_index),
+                    ):
+                        accelerator.save_state(tmpdir, safe_serialization=not self.use_safetensors)
+                    if save_on_each_node and local_process_index == 0:
+                        self.assertFalse((Path(tmpdir) / previous_weights_name).exists())
+                        self.assertTrue((Path(tmpdir) / new_weights_name).exists())
+                    else:
+                        self.assertEqual((Path(tmpdir) / previous_weights_name).read_bytes(), previous_weights)
+                        self.assertFalse((Path(tmpdir) / new_weights_name).exists())
+
+    def test_serialization_cleanup_preserves_checkpoint_on_save_failure(self):
+        accelerator = Accelerator(cpu=True)
+        models = accelerator.prepare(nn.Linear(2, 2), nn.Linear(2, 1))
+        accelerator.prepare(torch.optim.Adam(models[0].parameters()))
+        previous_weights_names = (
+            ("model.safetensors", "model_1.safetensors")
+            if self.use_safetensors
+            else ("pytorch_model.bin", "pytorch_model_1.bin")
+        )
+        new_weights_names = (
+            ("pytorch_model.bin", "pytorch_model_1.bin")
+            if self.use_safetensors
+            else ("model.safetensors", "model_1.safetensors")
+        )
+        torch_save = torch.save
+        for failure_filename in (*new_weights_names, "optimizer.bin", "random_states_0.pkl"):
+            with self.subTest(failure_filename=failure_filename), tempfile.TemporaryDirectory() as tmpdir:
+                for model in models:
+                    with torch.no_grad():
+                        for parameter in model.parameters():
+                            parameter.fill_(1)
+                accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+                previous_weights = {
+                    filename: (Path(tmpdir) / filename).read_bytes() for filename in previous_weights_names
+                }
+                for model in models:
+                    with torch.no_grad():
+                        for parameter in model.parameters():
+                            parameter.fill_(2)
+
+                def fail_on_selected_file(save_function):
+                    def save_with_failure(obj, filename, **kwargs):
+                        if Path(filename).name == failure_filename:
+                            raise OSError("save failed")
+                        return save_function(obj, filename, **kwargs)
+
+                    return save_with_failure
+
+                with (
+                    patch("accelerate.checkpointing.save", side_effect=fail_on_selected_file(save)),
+                    patch("accelerate.checkpointing.torch.save", side_effect=fail_on_selected_file(torch_save)),
+                ):
+                    with self.assertRaisesRegex(OSError, "save failed"):
+                        accelerator.save_state(tmpdir, safe_serialization=not self.use_safetensors)
+                for filename, contents in previous_weights.items():
+                    self.assertEqual((Path(tmpdir) / filename).read_bytes(), contents)
+                if self.use_safetensors:
+                    # The preferred old format must still restore both models after a failed replacement save.
+                    accelerator.load_state(tmpdir)
+                    for model in models:
+                        for parameter in model.parameters():
+                            torch.testing.assert_close(parameter, torch.ones_like(parameter))
 
     def test_can_resume_training_with_folder(self):
         with tempfile.TemporaryDirectory() as tmpdir:
