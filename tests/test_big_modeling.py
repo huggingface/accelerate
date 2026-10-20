@@ -14,6 +14,7 @@
 import copy
 import gc
 import itertools
+import json
 import logging
 import os
 import unittest
@@ -275,6 +276,139 @@ class BigModelingTester(unittest.TestCase):
             disk_offload(model, tmp_dir, execution_device=device, offload_buffers=True)
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
+    def test_disk_offload_with_extra_state(self):
+        class ParameterNamedExtraState(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.register_parameter("_extra_state", nn.Parameter(torch.tensor(3.0)))
+
+            def forward(self, x):
+                return x * self._extra_state
+
+        class Linear8bitLt(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.weight = nn.Parameter(torch.tensor([[1, 2], [3, 4]], dtype=torch.int8), requires_grad=False)
+                self.register_buffer("scale", torch.tensor(2.0))
+                self.state = SimpleNamespace(CB=None, SCB=None, CxB=None)
+                self.seen_scb = None
+                self.extra_state = {"schema_version": 1, "output_scale": 0.5}
+
+                def add_scb(module, state_dict, prefix, local_metadata):
+                    state_dict[prefix + "SCB"] = torch.tensor([0.25, 0.5])
+
+                self.register_state_dict_post_hook(add_scb)
+
+            def get_extra_state(self):
+                return self.extra_state
+
+            def set_extra_state(self, state):
+                self.extra_state = state
+
+            def forward(self, x):
+                self.seen_scb = getattr(self.weight, "SCB", None)
+                return x @ self.weight.float() * self.scale * self.extra_state["output_scale"]
+
+        class ModelWithExtraState(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.direct = ParameterNamedExtraState()
+                shared = Linear8bitLt()
+                self.left = shared
+                self.right = shared
+                self.register_buffer("bias", torch.tensor(1.0))
+                self.extra_state = {"root_version": 1, "output_offset": 0.5}
+
+            def get_extra_state(self):
+                return self.extra_state
+
+            def set_extra_state(self, state):
+                self.extra_state = state
+
+            def forward(self, x):
+                return self.left(self.direct(x)) + self.right(x) + self.bias + self.extra_state["output_offset"]
+
+        x = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        for offload_buffers in (False, True):
+            with self.subTest(offload_buffers=offload_buffers):
+                model = ModelWithExtraState()
+                expected = model(x)
+                root_extra_state = model.get_extra_state()
+                nested_extra_state = model.left.get_extra_state()
+
+                with TemporaryDirectory() as tmp_dir:
+                    disk_offload(model, tmp_dir, execution_device="cpu", offload_buffers=offload_buffers)
+                    output = model(x)
+                    torch.testing.assert_close(expected, output)
+
+                    with open(os.path.join(tmp_dir, "index.json")) as f:
+                        offload_index = json.load(f)
+
+                self.assertIn("direct._extra_state", offload_index)
+                self.assertIn("left.SCB", offload_index)
+                self.assertIn("left.weight", offload_index)
+                self.assertNotIn("_extra_state", offload_index)
+                self.assertNotIn("left._extra_state", offload_index)
+                self.assertNotIn("right._extra_state", offload_index)
+                self.assertIsNotNone(model.left.seen_scb)
+                torch.testing.assert_close(model.left.seen_scb, torch.tensor([0.25, 0.5]))
+                self.assertIs(model.get_extra_state(), root_extra_state)
+                self.assertEqual(root_extra_state, {"root_version": 1, "output_offset": 0.5})
+                self.assertIs(model.left.get_extra_state(), nested_extra_state)
+                self.assertEqual(nested_extra_state, {"schema_version": 1, "output_scale": 0.5})
+
+    def test_disk_offload_does_not_offload_tensor_extra_state(self):
+        class LinearWithTensorExtraState(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(2, 2)
+                self.extra_state = torch.tensor([2.0, 1.0])
+
+            def get_extra_state(self):
+                return self.extra_state
+
+            def set_extra_state(self, state):
+                self.extra_state = state
+
+            def forward(self, x):
+                return self.linear(x) * self.extra_state[0]
+
+        class ModelWithTensorExtraState(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = LinearWithTensorExtraState()
+                self.extra_state = torch.tensor([3.0, 4.0])
+
+            def get_extra_state(self):
+                return self.extra_state
+
+            def set_extra_state(self, state):
+                self.extra_state = state
+
+            def forward(self, x):
+                return self.linear(x) * self.extra_state[0]
+
+        model = ModelWithTensorExtraState()
+        x = torch.tensor([[1.0, 2.0]])
+        expected = model(x)
+        root_extra_state = model.get_extra_state()
+        nested_extra_state = model.linear.get_extra_state()
+
+        with TemporaryDirectory() as tmp_dir:
+            disk_offload(model, tmp_dir, execution_device="cpu")
+            output = model(x)
+            torch.testing.assert_close(expected, output)
+
+            with open(os.path.join(tmp_dir, "index.json")) as f:
+                offload_index = json.load(f)
+
+        self.assertNotIn("_extra_state", offload_index)
+        self.assertNotIn("linear._extra_state", offload_index)
+        self.assertIs(model.get_extra_state(), root_extra_state)
+        self.assertIs(model.linear.get_extra_state(), nested_extra_state)
+        torch.testing.assert_close(root_extra_state, torch.tensor([3.0, 4.0]))
+        torch.testing.assert_close(nested_extra_state, torch.tensor([2.0, 1.0]))
 
     def test_disk_offload_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
