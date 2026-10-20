@@ -859,7 +859,9 @@ class DataLoaderConfiguration:
             `False` when the dataset is already sharded across processes (for example when each process reads its own
             files, or when using `datasets.distributed.split_dataset_by_node`) to avoid sharding the stream a second
             time, which would make each process skip samples. When set to `False`, keeping the shards balanced across
-            processes becomes your responsibility. This has no effect on map-style datasets.
+            processes becomes your responsibility, `dispatch_batches` defaults to `False`, and setting
+            `dispatch_batches=True` raises an error, since dispatching would ignore the other processes' shards. This
+            has no effect on map-style datasets.
     """
 
     split_batches: bool = field(
@@ -925,7 +927,9 @@ class DataLoaderConfiguration:
             " to `False` when the dataset is already sharded across processes (for example when each process reads its own"
             " files, or when using `datasets.distributed.split_dataset_by_node`) to avoid sharding the stream a second time,"
             " which would make each process skip samples. When set to `False`, keeping the shards balanced across processes"
-            " becomes your responsibility. This has no effect on map-style datasets."
+            " becomes your responsibility, `dispatch_batches` defaults to `False`, and setting `dispatch_batches=True`"
+            " raises an error, since dispatching would ignore the other processes' shards. This has no effect on"
+            " map-style datasets."
         },
     )
 

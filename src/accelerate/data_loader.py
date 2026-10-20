@@ -1107,7 +1107,9 @@ def prepare_data_loader(
             is already sharded across processes (for example when each process reads its own files, or when using
             `datasets.distributed.split_dataset_by_node`) to avoid sharding the stream a second time, which would make
             each process skip samples. When set to `False`, keeping the shards balanced across processes becomes your
-            responsibility, since Accelerate will no longer equalize the number of batches seen by each process. This
+            responsibility, since Accelerate will no longer equalize the number of batches seen by each process. It
+            also makes `dispatch_batches` default to `False`, and combining it with `dispatch_batches=True` raises an
+            error, since dispatching only reads the data on the main process and would ignore the other shards. This
             has no effect on map-style datasets.
         torch_device_mesh (`torch.distributed.DeviceMesh`, *optional*, defaults to `None`):
             PyTorch device mesh.
@@ -1124,11 +1126,15 @@ def prepare_data_loader(
     </Tip>
     """
     if dispatch_batches is None:
-        if not put_on_device:
+        if not put_on_device or not shard_iterable_dataset:
             dispatch_batches = False
         else:
             dispatch_batches = isinstance(dataloader.dataset, IterableDataset)
-
+    if dispatch_batches and not shard_iterable_dataset:
+        raise ValueError(
+            "`shard_iterable_dataset=False` can't be used with `dispatch_batches=True`: dispatching reads the data "
+            "on the main process only, so the shards held by the other processes would be ignored."
+        )
     if dispatch_batches and not put_on_device:
         raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
     # Grab defaults from PartialState
