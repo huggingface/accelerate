@@ -261,6 +261,8 @@ def find_batch_size(data):
             return find_batch_size(data[k])
     elif not isinstance(data, torch.Tensor):
         raise TypeError(f"Can only find the batch size of tensors but got {type(data)}.")
+    if data.ndim == 0:
+        raise ValueError("Cannot find the batch size from a 0-dimensional tensor.")
     return data.shape[0]
 
 
