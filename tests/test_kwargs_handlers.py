@@ -23,13 +23,14 @@ from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
+    get_launch_command,
     path_in_accelerate_package,
     require_fp16,
     require_multi_device,
     require_non_cpu,
     run_first,
 )
-from accelerate.test_utils.testing import AccelerateTestCase, slow
+from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, slow
 from accelerate.utils import (
     AutocastKwargs,
     KwargsHandler,
@@ -105,6 +106,18 @@ class KwargsHandlerTester(AccelerateTestCase):
             # We should be back in fp16
             assert g_float16.dtype == torch.float16
 
+    def test_autocast_kwargs_upcast_trainable_params(self):
+        # Not a `torch.autocast` argument, so it must never reach `to_kwargs`
+        assert AutocastKwargs(upcast_trainable_params=True).to_kwargs() == {}
+        assert AutocastKwargs(cache_enabled=True, upcast_trainable_params=True).to_kwargs() == {"cache_enabled": True}
+        with clear_environment():
+            assert AutocastKwargs().upcast_trainable_params is False
+            os.environ["ACCELERATE_UPCAST_TRAINABLE_PARAMS"] = "1"
+            assert AutocastKwargs().upcast_trainable_params is True
+            # An explicit value wins over the environment
+            assert AutocastKwargs(upcast_trainable_params=False).upcast_trainable_params is False
+        assert os.environ.get("ACCELERATE_UPCAST_TRAINABLE_PARAMS") is None
+
     @slow
     def test_profile_kwargs(self):
         # Arrange
@@ -167,6 +180,17 @@ class KwargsHandlerTester(AccelerateTestCase):
     @require_multi_device
     def test_ddp_comm_hook(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [path_in_accelerate_package("test_utils", "scripts", "test_ddp_comm_hook.py")]
+        execute_subprocess_async(cmd)
+
+    @run_first
+    @require_multi_device
+    @require_cuda
+    def test_upcast_trainable_params_ddp(self):
+        # A bf16-loaded model under 2-process DDP with `mixed_precision="bf16"`: with `upcast_trainable_params=True` it
+        # must train like a reference with fp32 master weights
+        cmd = get_launch_command(num_processes=2, mixed_precision="bf16") + [
+            path_in_accelerate_package("test_utils", "scripts", "test_upcast_trainable_params.py")
+        ]
         execute_subprocess_async(cmd)
 
 

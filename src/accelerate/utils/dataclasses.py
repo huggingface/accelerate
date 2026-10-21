@@ -127,10 +127,32 @@ class AutocastKwargs(KwargsHandler):
     kwargs = AutocastKwargs(cache_enabled=True)
     accelerator = Accelerator(kwargs_handlers=[kwargs])
     ```
+
+    Args:
+        enabled (`bool`, *optional*, defaults to `True`):
+            Whether autocasting is enabled in the regions it applies to.
+        cache_enabled (`bool`, *optional*):
+            Whether the weight cache inside autocast is enabled.
+        upcast_trainable_params (`bool`, *optional*):
+            Whether [`Accelerator.prepare`] upcasts fp16/bf16 trainable parameters to fp32 when `mixed_precision` is
+            `"fp16"` or `"bf16"` and the model is prepared for DDP or a single device. The optimizer then steps on fp32
+            master weights and keeps fp32 state, while the forward still runs in low precision under autocast. This is
+            what FSDP and DeepSpeed already do with mixed precision. It doubles the memory of those parameters, and
+            the model's state dict, and so its checkpoints, holds them in fp32. Frozen parameters are left as they
+            are. Defaults to the `ACCELERATE_UPCAST_TRAINABLE_PARAMS` environment variable, or `False`. Not passed to
+            `torch.autocast`.
     """
 
     enabled: bool = True
     cache_enabled: Optional[bool] = None
+    upcast_trainable_params: Optional[bool] = None
+
+    def __post_init__(self):
+        if self.upcast_trainable_params is None:
+            self.upcast_trainable_params = parse_flag_from_env("ACCELERATE_UPCAST_TRAINABLE_PARAMS")
+
+    def to_dict(self, ignore_keys=("upcast_trainable_params",)):
+        return {k: v for k, v in super().to_dict().items() if k not in ignore_keys}
 
 
 class DDPCommunicationHookType(BaseEnum):

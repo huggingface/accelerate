@@ -450,6 +450,10 @@ class Accelerator:
                 setattr(self, handler_attr, handler)
                 if "recipe_handler" in handler_attr and not self.has_fp8_handler:
                     self.has_fp8_handler = True
+        # Resolved now, so that `ACCELERATE_UPCAST_TRAINABLE_PARAMS` is read when the `Accelerator` is created
+        self._upcast_trainable_params = (
+            self.autocast_handler if self.autocast_handler is not None else AutocastKwargs()
+        ).upcast_trainable_params
 
         if parallelism_config is None:
             # TODO: Remove after deprecating tp_plugin
@@ -1766,6 +1770,60 @@ class Accelerator:
 
         return result
 
+    def _handle_low_precision_trainable_params(self, model: torch.nn.Module):
+        """
+        Upcasts, or warns about, trainable parameters stored in fp16 or bf16 when mixed precision is enabled.
+
+        With mixed precision, FSDP (both versions) and DeepSpeed hold the trainable parameters in fp32, so the optimizer
+        steps on fp32 master weights. On the other paths (DDP, a single device, ...) the parameters are left in the
+        dtype the model was loaded in, so the optimizer updates them, and keeps its state, in that low precision. With
+        `AutocastKwargs(upcast_trainable_params=True)` (or `ACCELERATE_UPCAST_TRAINABLE_PARAMS=1`) they are upcast to
+        fp32 here, as `fsdp2_prepare_model` does for FSDP2; otherwise a warning is logged.
+        """
+        if self.mixed_precision not in ("fp16", "bf16") or self.distributed_type in (
+            DistributedType.FSDP,
+            DistributedType.DEEPSPEED,
+            DistributedType.MEGATRON_LM,
+            DistributedType.XLA,
+        ):
+            return
+        if getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False):
+            return
+        if model_has_dtensor(model):
+            # Tensor parallel models: their DTensor parameters are managed by the code that sharded them
+            return
+        low_precision_params = [
+            (name, param)
+            for name, param in model.named_parameters()
+            if param.requires_grad and param.dtype in (torch.float16, torch.bfloat16)
+        ]
+        if not low_precision_params:
+            return
+        names = [name for name, _ in low_precision_params]
+        dtypes = ", ".join(sorted({str(param.dtype) for _, param in low_precision_params}))
+        shown_names = f"{names[:5]}" + ("..." if len(names) > 5 else "")
+        if self._upcast_trainable_params:
+            for _, param in low_precision_params:
+                # Assigning `.data` keeps the `Parameter` object, so an optimizer created on it stays valid and
+                # allocates its state in fp32 on the first step
+                param.data = param.data.to(torch.float32)
+            if self.is_main_process:
+                logger.info(
+                    f"Upcast {len(names)} trainable {dtypes} parameters to fp32 (`upcast_trainable_params=True` with "
+                    f"`mixed_precision='{self.mixed_precision}'`), so the optimizer steps on fp32 master weights. The "
+                    f"model's state dict now holds them in fp32. Parameters: {shown_names}"
+                )
+            return
+        logger.warning(
+            f"{len(names)} trainable parameters are stored in {dtypes} while `mixed_precision='{self.mixed_precision}'`. "
+            f"With `distributed_type={self.distributed_type.value}`, Accelerate does not upcast them to fp32 by default "
+            "(FSDP and DeepSpeed do), so the optimizer updates them, and keeps its state, in this low precision, without "
+            "fp32 master weights. Updates smaller than the dtype's resolution are rounded away. Mixed precision expects "
+            "fp32 trainable parameters: pass `AutocastKwargs(upcast_trainable_params=True)` (or set "
+            "`ACCELERATE_UPCAST_TRAINABLE_PARAMS=1`) to upcast them in `prepare`, or load the model in fp32; the "
+            f"forward still runs in {self.mixed_precision} under autocast. Affected parameters: {shown_names}"
+        )
+
     def prepare_model(
         self, model: torch.nn.Module, device_placement: bool | None = None, evaluation_mode: bool = False
     ):
@@ -1819,6 +1877,9 @@ class Accelerator:
                 "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
+
+        if not evaluation_mode:
+            self._handle_low_precision_trainable_params(model)
 
         if self.native_amp:
             model._original_forward = model.forward

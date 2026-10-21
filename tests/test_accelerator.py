@@ -29,7 +29,7 @@ from accelerate import DistributedType, infer_auto_device_map, init_empty_weight
 from accelerate.accelerator import Accelerator
 from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard, skip_first_batches
 from accelerate.hooks import ModelHook, add_hook_to_module
-from accelerate.state import GradientState, PartialState
+from accelerate.state import AcceleratorState, GradientState, PartialState
 from accelerate.test_utils import (
     require_bnb,
     require_cuda_or_xpu,
@@ -50,7 +50,12 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     require_torchdata_stateful_dataloader,
 )
-from accelerate.utils import FP8RecipeKwargs, is_torchdata_stateful_dataloader_available, patch_environment
+from accelerate.utils import (
+    AutocastKwargs,
+    FP8RecipeKwargs,
+    is_torchdata_stateful_dataloader_available,
+    patch_environment,
+)
 from accelerate.utils.dataclasses import DataLoaderConfiguration
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
 from accelerate.utils.random import set_seed
@@ -658,6 +663,88 @@ class AcceleratorTester(AccelerateTestCase):
 
         model = accelerator.unwrap_model(model, keep_fp32_wrapper=False)
         model(inputs)  # check that this still works
+
+    def test_warns_on_low_precision_trainable_params_with_mixed_precision(self):
+        # FSDP and DeepSpeed upcast trainable params to fp32 when mixed precision is on; this path does not, so the
+        # optimizer would step on bf16 params without fp32 master weights
+        model = create_components()[0].to(torch.bfloat16)
+        accelerator = Accelerator(mixed_precision="bf16", cpu=True)
+        with self.assertLogs("accelerate.accelerator", level="WARNING") as cm:
+            model = accelerator.prepare(model)
+        assert any("2 trainable parameters are stored in torch.bfloat16" in log for log in cm.output)
+        assert any("upcast_trainable_params=True" in log for log in cm.output)
+        # By default the params are left as they are
+        assert all(param.dtype == torch.bfloat16 for param in model.parameters())
+
+    @parameterized.expand([("kwargs_handler", True), ("env_var", False)])
+    def test_upcast_trainable_params_with_mixed_precision(self, _, use_kwargs_handler):
+        # With the option, trainable bf16 params are upcast to fp32 master weights in `prepare`, as FSDP and DeepSpeed
+        # do, while the forward still runs in bf16 under autocast and frozen params are left as they are
+        model = torch.nn.Sequential(torch.nn.Linear(2, 4), torch.nn.Linear(4, 2)).to(torch.bfloat16)
+        model[0].requires_grad_(False)
+        optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=1e-3)
+        trainable_params = list(model[1].parameters())
+        if use_kwargs_handler:
+            accelerator = Accelerator(
+                mixed_precision="bf16", cpu=True, kwargs_handlers=[AutocastKwargs(upcast_trainable_params=True)]
+            )
+        else:
+            with patch_environment(accelerate_upcast_trainable_params="1"):
+                accelerator = Accelerator(mixed_precision="bf16", cpu=True)
+        output_dtypes = []
+        model[1].register_forward_hook(lambda module, args, output: output_dtypes.append(output.dtype))
+        with self.assertNoLogs("accelerate.accelerator", level="WARNING"):
+            model, optimizer = accelerator.prepare(model, optimizer)
+
+        # The same `Parameter` objects, now fp32, so the optimizer still holds them
+        assert [p for group in optimizer.param_groups for p in group["params"]] == trainable_params
+        assert all(param.dtype == torch.float32 for param in model[1].parameters())
+        assert all(param.dtype == torch.bfloat16 for param in model[0].parameters())
+
+        output = model(torch.randn(3, 2, dtype=torch.bfloat16))
+        assert output_dtypes == [torch.bfloat16]  # the forward runs under bf16 autocast
+        accelerator.backward(output.float().pow(2).mean())
+        optimizer.step()
+        for param in model[1].parameters():
+            assert param.grad.dtype == torch.float32
+            state = optimizer.state[param]
+            assert state["exp_avg"].dtype == torch.float32
+            assert state["exp_avg_sq"].dtype == torch.float32
+
+    def test_upcast_trainable_params_keeps_small_updates(self):
+        # A bf16 weight of 1.0 cannot represent 1.0 + 1e-4 (its resolution there is 2**-7), so without fp32 master
+        # weights an update of that size is lost entirely; with them it accumulates
+        def train(upcast):
+            AcceleratorState._reset_state(True)
+            model = torch.nn.Linear(1, 1, bias=False).to(torch.bfloat16)
+            torch.nn.init.ones_(model.weight)
+            optimizer = torch.optim.SGD(model.parameters(), lr=1e-4)
+            accelerator = Accelerator(
+                mixed_precision="bf16", cpu=True, kwargs_handlers=[AutocastKwargs(upcast_trainable_params=upcast)]
+            )
+            model, optimizer = accelerator.prepare(model, optimizer)
+            for _ in range(10):
+                # d(-w * x)/dw = -x = -1, so each SGD step adds lr to the weight
+                accelerator.backward(-model(torch.ones(1, 1)).float().sum())
+                optimizer.step()
+                optimizer.zero_grad()
+            return model.weight.detach().float().item()
+
+        assert train(upcast=False) == 1.0
+        assert abs(train(upcast=True) - (1.0 + 10 * 1e-4)) < 1e-6
+
+    @parameterized.expand(
+        [
+            ("fp32_params", torch.float32, "bf16", True),
+            ("frozen_bf16_params", torch.bfloat16, "bf16", False),
+            ("no_mixed_precision", torch.bfloat16, "no", True),
+        ]
+    )
+    def test_no_low_precision_params_warning(self, _, dtype, mixed_precision, requires_grad):
+        model = create_components()[0].to(dtype).requires_grad_(requires_grad)
+        accelerator = Accelerator(mixed_precision=mixed_precision, cpu=True)
+        with self.assertNoLogs("accelerate.accelerator", level="WARNING"):
+            accelerator.prepare(model)
 
     def test_can_unwrap_distributed_compiled_model_keep_torch_compile(self):
         model = create_components()[0]
