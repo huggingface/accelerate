@@ -3627,8 +3627,9 @@ class Accelerator:
 
         If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled
         then checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater
-        than `total_limit` then the oldest save is deleted. Each checkpoint is saved in separate folders named
-        `checkpoint_<iteration>`.
+        than `total_limit` then the oldest saves are deleted after the new checkpoint has been saved on all processes.
+        This temporarily requires space for the new checkpoint in addition to the retained checkpoints. Each checkpoint
+        is saved in separate folders named `checkpoint_<iteration>`.
 
         Otherwise they are just saved to `output_dir`.
 
@@ -3664,21 +3665,6 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         if self.project_configuration.automatic_checkpoint_naming:
             folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-            if (
-                self.project_configuration.total_limit is not None
-                and (len(folders) + 1 > self.project_configuration.total_limit)
-                and self.is_main_process
-            ):
-
-                def _inner(folder):
-                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
-
-                folders.sort(key=_inner)
-                logger.warning(
-                    f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
-                )
-                for folder in folders[: len(folders) + 1 - self.project_configuration.total_limit]:
-                    shutil.rmtree(folder)
             output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
             if os.path.exists(output_dir):
                 raise ValueError(
@@ -3753,6 +3739,24 @@ class Accelerator:
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
+
+        if (
+            self.project_configuration.automatic_checkpoint_naming
+            and self.project_configuration.total_limit is not None
+        ):
+            # Other processes may still be writing their checkpoint state.
+            self.wait_for_everyone()
+            if (len(folders) + 1 > self.project_configuration.total_limit) and self.is_main_process:
+
+                def _inner(folder):
+                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+
+                folders.sort(key=_inner)
+                logger.warning(
+                    f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} old checkpoints after saving the new checkpoint."
+                )
+                for folder in folders[: len(folders) + 1 - self.project_configuration.total_limit]:
+                    shutil.rmtree(folder)
         self.project_configuration.iteration += 1
         return save_location
 

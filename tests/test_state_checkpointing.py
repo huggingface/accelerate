@@ -19,7 +19,8 @@ import random
 import shutil
 import tempfile
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -123,6 +124,88 @@ class CheckpointTest(AccelerateTestCase):
             # Save second state
             accelerator.save_state(safe_serialization=self.use_safetensors)
             assert len(os.listdir(accelerator.project_dir)) == 1
+
+    def check_failed_save_retention(self, failure):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_config = ProjectConfiguration(total_limit=1, project_dir=tmpdir, automatic_checkpoint_naming=True)
+            accelerator = Accelerator(cpu=True, project_config=project_config)
+            model = accelerator.prepare(nn.Linear(1, 1))
+            expected = {key: value.clone() for key, value in model.state_dict().items()}
+            previous = accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            def fail(*args, **kwargs):
+                raise OSError("checkpoint writer failed")
+
+            if failure == "hook":
+                accelerator.register_save_state_pre_hook(fail)
+                failure_context = nullcontext()
+            elif failure == "serializer":
+                failure_context = patch("accelerate.checkpointing.save", side_effect=fail)
+            else:
+                # Custom objects are written after the model, optimizer and RNG state.
+                failure_context = patch("accelerate.accelerator.save_custom_state", side_effect=fail)
+                accelerator.register_for_checkpointing(model)
+
+            with torch.no_grad():
+                for parameter in model.parameters():
+                    parameter.add_(1)
+            with failure_context, pytest.raises(OSError, match="checkpoint writer failed"):
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            assert os.path.isdir(previous)
+            assert accelerator.save_iteration == 1
+            accelerator._custom_objects.clear()
+            accelerator.load_state(previous)
+            for key, value in model.state_dict().items():
+                torch.testing.assert_close(value, expected[key])
+
+    def test_failed_save_hook_keeps_previous_checkpoint(self):
+        self.check_failed_save_retention("hook")
+
+    def test_failed_save_serializer_keeps_previous_checkpoint(self):
+        self.check_failed_save_retention("serializer")
+
+    def test_failed_save_custom_state_keeps_previous_checkpoint(self):
+        self.check_failed_save_retention("custom")
+
+    def test_existing_checkpoint_is_not_deleted_before_collision_check(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_config = ProjectConfiguration(total_limit=1, project_dir=tmpdir, automatic_checkpoint_naming=True)
+            accelerator = Accelerator(cpu=True, project_config=project_config)
+            model = accelerator.prepare(nn.Linear(1, 1))
+            expected = {key: value.clone() for key, value in model.state_dict().items()}
+            previous = accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.project_configuration.iteration = 0
+            with pytest.raises(ValueError, match="already exists"):
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.load_state(previous)
+            for key, value in model.state_dict().items():
+                torch.testing.assert_close(value, expected[key])
+
+    def test_checkpoint_deletion_waits_for_custom_state_and_all_processes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_config = ProjectConfiguration(total_limit=1, project_dir=tmpdir, automatic_checkpoint_naming=True)
+            accelerator = Accelerator(cpu=True, project_config=project_config)
+            model = accelerator.prepare(nn.Linear(1, 1))
+            accelerator.register_for_checkpointing(model)
+            previous = accelerator.save_state(safe_serialization=self.use_safetensors)
+            events = []
+
+            def custom_state_saved(*args, **kwargs):
+                events.append("custom_state_saved")
+
+            def delete_checkpoint(path):
+                assert events[-2:] == ["custom_state_saved", "barrier"]
+                assert path == str(previous)
+                events.append("delete")
+
+            with (
+                patch.object(accelerator, "wait_for_everyone", side_effect=lambda: events.append("barrier")),
+                patch("accelerate.accelerator.save_custom_state", side_effect=custom_state_saved),
+                patch("accelerate.accelerator.shutil.rmtree", side_effect=delete_checkpoint),
+            ):
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+            assert events[-1] == "delete"
 
     def test_can_resume_training_with_folder(self):
         with tempfile.TemporaryDirectory() as tmpdir:
