@@ -21,7 +21,7 @@ import torch.nn as nn
 from parameterized import parameterized
 from torch.fx import symbolic_trace
 
-from accelerate.big_modeling import attach_layerwise_casting_hooks
+from accelerate.big_modeling import attach_layerwise_casting_hooks, cpu_offload_with_hook
 from accelerate.hooks import (
     AlignDevicesHook,
     CpuOffload,
@@ -33,7 +33,7 @@ from accelerate.hooks import (
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_multi_device, require_non_hpu, torch_device
+from accelerate.test_utils import require_multi_device, require_non_cpu, require_non_hpu, torch_device
 from accelerate.utils import is_xpu_available
 from accelerate.utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 
@@ -482,6 +482,79 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear1.weight.device == device
         assert model.batchnorm.weight.device == device
         assert model.linear2.weight.device == device
+
+    @parameterized.expand(
+        [
+            ("no_tensors", nn.Identity),
+            ("buffers_only", lambda: nn.BatchNorm1d(3, affine=False).eval()),
+            ("parameters", lambda: nn.Linear(3, 3)),
+        ]
+    )
+    def test_cpu_offload_hook_module_types(self, _, model_factory):
+        model = model_factory()
+        inputs = torch.randn(2, 3)
+        expected = model(inputs)
+        model, hook = cpu_offload_with_hook(model, execution_device=torch.device("cpu"))
+
+        torch.testing.assert_close(model(inputs), expected)
+        torch.testing.assert_close(model(inputs), expected)
+        hook.offload()
+        torch.testing.assert_close(model(inputs), expected)
+        hook.remove()
+        torch.testing.assert_close(model(inputs), expected)
+
+    @parameterized.expand(
+        [
+            ("no_tensors", nn.Identity),
+            ("buffers_only", lambda: nn.BatchNorm1d(3, affine=False).eval()),
+            ("parameters", lambda: nn.Linear(3, 3)),
+        ]
+    )
+    def test_cpu_offload_hook_previous_module_types(self, _, model_factory):
+        previous_model = model_factory()
+        model = nn.Linear(3, 3)
+        inputs = torch.randn(2, 3)
+        expected_current = model(inputs)
+        expected = model(previous_model(inputs))
+        previous_model, previous_hook = cpu_offload_with_hook(previous_model, execution_device=torch.device("cpu"))
+        model, hook = cpu_offload_with_hook(
+            model, execution_device=torch.device("cpu"), prev_module_hook=previous_hook
+        )
+
+        # The previous model may have no parameters even though it is a valid pipeline stage.
+        torch.testing.assert_close(model(inputs), expected_current)
+        torch.testing.assert_close(model(previous_model(inputs)), expected)
+        previous_hook.remove()
+        hook.remove()
+
+    @parameterized.expand(
+        [
+            ("no_tensors", nn.Identity),
+            ("buffers_only", lambda: nn.BatchNorm1d(3, affine=False).eval()),
+            ("parameters", lambda: nn.Linear(3, 3)),
+        ]
+    )
+    @require_non_cpu
+    def test_cpu_offload_hook_module_types_on_device(self, _, model_factory):
+        previous_model = model_factory()
+        model = nn.Linear(3, 3)
+        inputs = torch.randn(2, 3)
+        expected = model(previous_model(inputs))
+        device = torch.device(torch_device)
+        previous_model, previous_hook = cpu_offload_with_hook(previous_model, execution_device=device)
+        model, hook = cpu_offload_with_hook(model, execution_device=device, prev_module_hook=previous_hook)
+
+        intermediate = previous_model(inputs)
+        self.assertEqual(intermediate.device, device)
+        for tensor in list(previous_model.parameters()) + list(previous_model.buffers()):
+            self.assertEqual(tensor.device, device)
+        output = model(intermediate)
+        for tensor in list(previous_model.parameters()) + list(previous_model.buffers()):
+            self.assertEqual(tensor.device, torch.device("cpu"))
+        torch.testing.assert_close(output.cpu(), expected)
+        hook.offload()
+        previous_hook.remove()
+        hook.remove()
 
     def test_cpu_offload_hook_with_prev_module(self):
         if not torch.cuda.is_available() and not is_xpu_available():
