@@ -1010,7 +1010,9 @@ def get_balanced_memory(
         [
             d
             for d in max_memory
-            if (isinstance(d, int) or torch.device(d).type == expected_device_type) and max_memory[d] > 0
+            if d != "disk"
+            and (isinstance(d, int) or torch.device(d).type == expected_device_type)
+            and max_memory[d] > 0
         ]
     )
 
