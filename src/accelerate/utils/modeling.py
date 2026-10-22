@@ -1976,6 +1976,41 @@ def load_checkpoint_in_model(
     buffer_names = [name for name, _ in model.named_buffers()]
     model_devices = {t.device for t in model.state_dict().values() if isinstance(t, torch.Tensor)}
     model_physical_devices = model_devices - {torch.device("meta")}
+
+    tied_fp32_names = set()
+    if device_map is None and dtype is not None:
+        if keep_in_fp32_modules is not None and dtype == torch.float16:
+            for group in tied_params:
+                if any(
+                    any(((key in name) and (key + "." in name)) or key == name for key in keep_in_fp32_modules)
+                    for name in group
+                ):
+                    tied_fp32_names.update(group)
+
+        for param_name, param in model.named_parameters():
+            if torch.is_floating_point(param):
+                target_dtype = dtype
+                if keep_in_fp32_modules is not None and dtype == torch.float16:
+                    if param_name in tied_fp32_names or any(
+                        ((key in param_name) and (key + "." in param_name)) or key == param_name
+                        for key in keep_in_fp32_modules
+                    ):
+                        target_dtype = torch.float32
+                if param.dtype != target_dtype:
+                    param.data = param.data.to(target_dtype)
+
+        for buffer_name, buffer in model.named_buffers():
+            if torch.is_floating_point(buffer):
+                target_dtype = dtype
+                if keep_in_fp32_modules is not None and dtype == torch.float16:
+                    if any(
+                        ((key in buffer_name) and (key + "." in buffer_name)) or key == buffer_name
+                        for key in keep_in_fp32_modules
+                    ):
+                        target_dtype = torch.float32
+                if buffer.dtype != target_dtype:
+                    buffer.data = buffer.data.to(target_dtype)
+
     for checkpoint_file in checkpoint_files:
         if device_map is None:
             # exception for multi-device loading was made for the meta device in torch v2.7.0
@@ -1992,6 +2027,17 @@ def load_checkpoint_in_model(
                     if not broadcast_from_rank0 or dist.get_rank() == 0
                     else {}
                 )
+                if dtype is not None:
+                    for k, v in loaded_checkpoint.items():
+                        if torch.is_floating_point(v):
+                            target_dtype = dtype
+                            if keep_in_fp32_modules is not None and dtype == torch.float16:
+                                if k in tied_fp32_names or any(
+                                    ((key in k) and (key + "." in k)) or key == k for key in keep_in_fp32_modules
+                                ):
+                                    target_dtype = torch.float32
+                            if v.dtype != target_dtype:
+                                loaded_checkpoint[k] = v.to(target_dtype)
                 set_model_state_dict(
                     model,
                     loaded_checkpoint,
@@ -2003,6 +2049,17 @@ def load_checkpoint_in_model(
                 )
             else:
                 loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+                if dtype is not None:
+                    for k, v in loaded_checkpoint.items():
+                        if torch.is_floating_point(v):
+                            target_dtype = dtype
+                            if keep_in_fp32_modules is not None and dtype == torch.float16:
+                                if k in tied_fp32_names or any(
+                                    ((key in k) and (key + "." in k)) or key == k for key in keep_in_fp32_modules
+                                ):
+                                    target_dtype = torch.float32
+                            if v.dtype != target_dtype:
+                                loaded_checkpoint[k] = v.to(target_dtype)
                 model.load_state_dict(loaded_checkpoint, strict=strict)
 
             unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
