@@ -53,6 +53,7 @@ from accelerate.utils.fsdp_utils import (
     _set_model_state_dict,
     disable_fsdp_ram_efficient_loading,
     enable_fsdp_ram_efficient_loading,
+    fsdp2_prepare_auto_wrap_policy,
     load_fsdp_optimizer,
     save_fsdp_optimizer,
 )
@@ -63,6 +64,7 @@ set_seed(42)
 
 BERT_BASE_CASED = "bert-base-cased"
 LLAMA_TESTING = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+ESM_TESTING = "hf-internal-testing/tiny-random-EsmModel"
 FP16 = "fp16"
 BF16 = "bf16"
 
@@ -398,6 +400,22 @@ class FSDPPluginIntegration(AccelerateTestCase):
         fsdp_plugin.set_auto_wrap_policy(model)
         assert fsdp_plugin.auto_wrap_policy is None
 
+    def test_auto_wrap_policy_skips_absent_no_split_modules(self):
+        # `EsmModel` lists `EsmFoldTriangularSelfAttentionBlock` in `_no_split_modules`, but only `EsmForProteinFolding`
+        # contains it
+        model = AutoModel.from_pretrained(ESM_TESTING)
+        env = self.fsdp_envs[self.current_fsdp_version].copy()
+        with patch_environment(**env):
+            fsdp_plugin = FullyShardedDataParallelPlugin(auto_wrap_policy="TRANSFORMER_BASED_WRAP")
+        if self.current_fsdp_version == 1:
+            fsdp_plugin.set_auto_wrap_policy(model)
+            # Transformers stores `_no_split_modules` as a set, so the order changes between runs
+            assert sorted(fsdp_plugin.transformer_cls_names_to_wrap) == ["EsmEmbeddings", "EsmLayer"]
+        else:
+            policy = fsdp2_prepare_auto_wrap_policy(fsdp_plugin, model)
+            assert policy(model.encoder.layer[0])
+            assert policy(model.embeddings)
+
     def test_mixed_precision(self):
         fsdp_version = self.current_fsdp_version
         if fsdp_version == 2:
@@ -410,14 +428,15 @@ class FSDPPluginIntegration(AccelerateTestCase):
         for mp_dtype in dtypes:
             env = self.fsdp_envs[fsdp_version].copy()
             env["ACCELERATE_MIXED_PRECISION"] = mp_dtype
-            extra_arg = "buffer_dtype" if fsdp_version == 1 else "output_dtype"
             with patch_environment(**env):
                 accelerator = Accelerator()
                 if mp_dtype == "fp16":
                     dtype = torch.float16
                 elif mp_dtype == "bf16":
                     dtype = torch.bfloat16
-                mp_policy = MP(param_dtype=dtype, reduce_dtype=dtype, **{extra_arg: dtype})
+                # FSDP2 leaves `output_dtype` unset, so the outputs keep the dtype they were computed in.
+                extra_args = {"buffer_dtype": dtype} if fsdp_version == 1 else {}
+                mp_policy = MP(param_dtype=dtype, reduce_dtype=dtype, **extra_args)
                 assert accelerator.state.fsdp_plugin.mixed_precision_policy == mp_policy
                 if mp_dtype == FP16:
                     assert isinstance(accelerator.scaler, Scaler)
@@ -431,7 +450,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
                 plugin = FullyShardedDataParallelPlugin(
-                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, extra_arg: dtype}
+                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, **extra_args}
                 )
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):

@@ -642,6 +642,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     @property
     def total_batch_size(self):
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
+        while isinstance(batch_sampler, SkipBatchSampler):
+            batch_sampler = batch_sampler.batch_sampler
         return (
             batch_sampler.batch_size
             if getattr(batch_sampler, "split_batches", False)
