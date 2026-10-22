@@ -169,6 +169,15 @@ with deepspeed.zero.Init(accelerator.deepspeed_plugin.config):
     model = MyModel(...)
 ```
 
+To initialize a model without ZeRO-3 partitioning, use the active plugin's context manager:
+
+```python
+with accelerator.deepspeed_plugin.zero3_init_context_manager(enable=False):
+    auxiliary_model = AutoModel.from_pretrained(...)
+```
+
+This changes only model initialization, not the engine's training configuration. The previous initialization state is restored when the context exits, including when model loading raises an exception.
+
 ### Training
 
 From here, your training loop can be whatever you like, as long as `teacher_model` is never being trained on.
