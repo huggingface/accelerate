@@ -1,4 +1,5 @@
 distributed_type: DEEPSPEED
 deepspeed_config:
+  gradient_clipping: 1.0
   zero_stage: 2
 num_processes: 2
