@@ -763,12 +763,11 @@ class CpuOffload(ModelHook):
                 self.prev_module_hook.offload()
                 clear_device_cache()
 
-        # If the current device is already the self.execution_device, we can skip the transfer.
+        # A resident model can skip the transfer, but each new batch still needs device placement.
         current_tensor = next(chain(module.parameters(), module.buffers()), None)
-        if current_tensor is not None and current_tensor.device == self.execution_device:
-            return args, kwargs
+        if current_tensor is None or current_tensor.device != self.execution_device:
+            module.to(self.execution_device)
 
-        module.to(self.execution_device)
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 
 

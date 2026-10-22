@@ -15,6 +15,7 @@
 import inspect
 import re
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -588,3 +589,29 @@ class HooksModelTester(unittest.TestCase):
         assert model2.linear1.weight.device == device
         assert model2.batchnorm.weight.device == device
         assert model2.linear2.weight.device == device
+
+    @parameterized.expand(
+        [
+            ("parameters_args", lambda: nn.Linear(3, 3), False),
+            ("parameters_kwargs", lambda: nn.Linear(3, 3), True),
+            ("buffers_only_args", lambda: nn.BatchNorm1d(3, affine=False).eval(), False),
+            ("buffers_only_kwargs", lambda: nn.BatchNorm1d(3, affine=False).eval(), True),
+        ]
+    )
+    @require_non_cpu
+    def test_cpu_offload_hook_resident_model_receives_cpu_inputs(self, _, model_factory, use_kwargs):
+        model = model_factory()
+        inputs = torch.randn(2, 3)
+        expected = model(inputs)
+        device = torch.device(torch_device)
+        model, hook = cpu_offload_with_hook(model, execution_device=device)
+        model(torch.randn(2, 3))
+
+        # The first forward leaves the model resident, but a new batch may still be on CPU.
+        with patch.object(model, "to", wraps=model.to) as move_model:
+            output = model(input=inputs) if use_kwargs else model(inputs)
+        move_model.assert_not_called()
+        self.assertEqual(output.device, device)
+        torch.testing.assert_close(output.cpu(), expected)
+        hook.offload()
+        hook.remove()
