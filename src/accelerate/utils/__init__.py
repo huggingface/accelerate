@@ -293,6 +293,7 @@ from .other import (
     merge_dicts,
     model_has_dtensor,
     recursive_getattr,
+    replicate_module_on_mesh,
     save,
     wait_for_everyone,
     write_basic_config,

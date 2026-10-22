@@ -60,6 +60,7 @@ from accelerate.utils import (
     patch_environment,
     purge_accelerate_environment,
     recursively_apply,
+    replicate_module_on_mesh,
     save,
     send_to_device,
 )
@@ -484,6 +485,36 @@ class UtilsTester(unittest.TestCase):
         # a config that round-tripped through JSON holds a plain dict
         model.config = SimpleNamespace(distributed_config={"tp_size": 8})
         assert get_model_tp_size(model) == 8
+
+    @require_torch_min_version(version="2.5.0")
+    def test_replicate_module_on_mesh(self):
+        import torch.distributed as dist
+        from torch.distributed.device_mesh import init_device_mesh
+        from torch.distributed.tensor import DTensor, Replicate
+
+        if dist.is_initialized():
+            self.skipTest("needs to create its own process group")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dist.init_process_group("gloo", init_method=f"file://{tmpdir}/store", rank=0, world_size=1)
+            try:
+                mesh = init_device_mesh("cpu", (1,))
+                # A module with two plain params (weight and bias) is replicated in one call
+                module = nn.Linear(4, 4)
+                inputs = torch.randn(2, 4)
+                expected = module(inputs)
+
+                replicate_module_on_mesh(module, mesh)
+
+                for param in module.parameters():
+                    assert isinstance(param, DTensor)
+                    assert param.placements == (Replicate(),)
+                output = module(inputs)
+                assert not isinstance(output, DTensor)
+                torch.testing.assert_close(output, expected)
+                output.sum().backward()
+                assert all(param.grad is not None for param in module.parameters())
+            finally:
+                dist.destroy_process_group()
 
     def test_concatenate(self):
         tensor1 = torch.randn(2, 3)
