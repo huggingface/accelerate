@@ -268,6 +268,10 @@ def set_module_tensor_to_device(
     is_buffer = tensor_name in module._buffers
     old_value = getattr(module, tensor_name)
 
+    # Buffers can share a parameter's data pointer while having a different view or gradient requirements.
+    if is_buffer:
+        tied_params_map = None
+
     # Treat the case where old_value (or a custom `value`, typically offloaded to RAM/disk) belongs to a tied group, and one of the weight
     # in the tied group has already been dispatched to the device, by avoiding reallocating memory on the device and just copying the pointer.
     if (

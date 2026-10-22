@@ -26,7 +26,7 @@ from parameterized import parameterized
 from safetensors.torch import save_file
 
 from accelerate import init_empty_weights
-from accelerate.big_modeling import cpu_offload
+from accelerate.big_modeling import cpu_offload, dispatch_model
 from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_device,
@@ -241,6 +241,64 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest()
         set_module_tensor_to_device(model, "linear1.weight", "cpu", value=model.linear1.weight, dtype=torch.float16)
         assert model.linear1.weight.dtype == torch.float16
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    def test_buffer_does_not_use_tied_parameter_cache(self, with_value, populated_cache):
+        model = nn.Module()
+        model.weight = nn.Parameter(torch.arange(9.0).reshape(3, 3))
+        model.register_buffer("transposed", model.weight.detach().T)
+        expected = model.transposed.clone()
+        pointer = model.weight.data_ptr()
+        cache = {pointer: {"cpu": model.weight} if populated_cache else {}}
+
+        set_module_tensor_to_device(
+            model,
+            "transposed",
+            "cpu",
+            value=model.transposed if with_value else None,
+            tied_params_map=cache,
+        )
+
+        torch.testing.assert_close(model.transposed, expected)
+        assert "transposed" not in model._parameters
+        assert model.transposed is model._buffers["transposed"]
+        assert not model.transposed.requires_grad
+        if populated_cache:
+            assert cache[pointer]["cpu"] is model.weight
+        else:
+            assert cache[pointer] == {}
+
+        set_module_tensor_to_device(model, "weight", "cpu", tied_params_map=cache)
+        torch.testing.assert_close(model.weight, torch.arange(9.0).reshape(3, 3))
+        assert cache[pointer]["cpu"] is model.weight
+
+    @parameterized.expand([True, False])
+    def test_dispatch_model_preserves_buffer_view_of_tied_parameter(self, persistent):
+        class ModelWithBufferView(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.first = nn.Linear(3, 3, bias=False)
+                with torch.no_grad():
+                    self.first.weight.copy_(torch.arange(9.0).reshape(3, 3))
+                self.second = nn.Linear(3, 3, bias=False)
+                self.second.weight = self.first.weight
+                self.second.register_buffer("transposed", self.first.weight.detach().T, persistent=persistent)
+
+            def forward(self, x):
+                return self.first(x) + self.second(x) + x @ self.second.transposed
+
+        model = ModelWithBufferView()
+        inputs = torch.arange(3.0).unsqueeze(0)
+        expected = model(inputs).detach()
+
+        dispatch_model(model, {"": "cpu"}, force_hooks=True)
+
+        torch.testing.assert_close(model(inputs), expected)
+        assert model.first.weight is model.second.weight
+        assert "transposed" not in model.second._parameters
+        assert model.second.transposed is model.second._buffers["transposed"]
+        assert not model.second.transposed.requires_grad
+        assert ("second.transposed" in model.state_dict()) == persistent
 
     def test_set_module_tensor_checks_shape(self):
         model = ModelForTest()
