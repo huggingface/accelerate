@@ -379,7 +379,8 @@ def wait_for_everyone():
 
 def clean_state_dict_for_safetensors(state_dict: dict):
     """
-    Cleans the state dictionary from a model and removes tensor aliasing if present.
+    Cleans the state dictionary from a model and removes tensor aliasing if present. Distinct views of shared storage
+    are preserved, with separate copies when needed for safetensors.
 
     Args:
         state_dict (`dict`):
@@ -395,15 +396,34 @@ def clean_state_dict_for_safetensors(state_dict: dict):
     shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
     warn_names = set()
     for names in shared_ptrs.values():
+        views = collections.defaultdict(list)
+        for name in names:
+            tensor = state_dict[name]
+            views[(tensor.storage_offset(), tensor.shape, tensor.stride(), tensor.dtype)].append(name)
+
         # When not all duplicates have been cleaned, we still remove those keys but put a clear warning.
         # If the link between tensors was done at runtime then `from_pretrained` will not get
         # the key back leading to random tensor. A proper warning will be shown
         # during reload (if applicable), but since the file is not necessarily compatible with
         # the config, better show a proper warning.
-        found_names = [name for name in names if name in state_dict]
-        warn_names.update(found_names[1:])
-        for name in found_names[1:]:
-            del state_dict[name]
+        ranges = []
+        for view_names in views.values():
+            tensor = state_dict[view_names[0]]
+            if tensor.is_contiguous():
+                start = tensor.storage_offset() * tensor.element_size()
+                ranges.append((start, start + tensor.numel() * tensor.element_size(), view_names[0]))
+            warn_names.update(view_names[1:])
+            for name in view_names[1:]:
+                del state_dict[name]
+
+        # Disjoint contiguous views can be saved directly. Clone only overlapping ranges; noncontiguous views are
+        # already copied by contiguous() below.
+        previous_end = 0
+        for start, end, name in sorted(ranges):
+            if start < previous_end:
+                state_dict[name] = state_dict[name].clone()
+            else:
+                previous_end = end
     if len(warn_names) > 0:
         logger.warning(
             f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
