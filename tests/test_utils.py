@@ -63,7 +63,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
-from accelerate.utils.operations import is_namedtuple
+from accelerate.utils.operations import find_batch_size, ignorant_find_batch_size, is_namedtuple
 
 
 if is_torch_xla_available():
@@ -78,6 +78,13 @@ class UtilsTester(unittest.TestCase):
     def setUp(self):
         # logging requires initialized state
         PartialState()
+
+    def test_find_batch_size_zero_dim_tensor(self):
+        assert find_batch_size({"x": torch.ones(4, 2)}) == 4
+        with pytest.raises(ValueError, match="0-dimensional"):
+            find_batch_size(torch.tensor(1.0))
+        assert ignorant_find_batch_size(torch.tensor(1.0)) is None
+        assert ignorant_find_batch_size([torch.tensor(1.0), torch.ones(3)]) is None
 
     def test_send_to_device(self):
         tensor = torch.randn(5, 2)
