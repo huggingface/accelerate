@@ -13,6 +13,7 @@ Script `nd_parallel.py` showcases this. We enable you to configure 4 different p
 - tp_size: how many devices to use for tensor parallelism, this is utilizing the tensor parallelism from 🤗 transformers
 - cp_size: how many devices to use for context parallelism, this will also shard the model, optimizer and gradients using `FSDP2` across
 the same group of devices, to further optimize memory usage (this comes with no slowdown)
+- sp_size: how many devices to use for Ulysses sequence parallelism (`sp_backend="torch"`), which shards the model with `FSDP2` across the same group of devices like `cp_size` does, but keeps the model's own attention implementation, so flash attention and packed sequences work. `cp_size` and `sp_size` are mutually exclusive
 
 For example, with 8 nodes, you can run the script as such:
 ```bash
