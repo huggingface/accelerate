@@ -22,6 +22,9 @@ from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
 
 
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
+FSDP2_ACTIVATION_CHECKPOINTING_COMPILE_CONFIG_FILE = os.path.join(
+    CONFIGS_DIR, "fsdp2_activation_checkpointing_compile.yaml"
+)
 
 
 @require_fsdp2
@@ -42,3 +45,6 @@ class FSDP2TrainingTest(DistributedTrainingCommon):
 
     def test_training_and_can_resume_normally(self):
         self.check_resume(config_file=FSDP2_CONFIG_FILE)
+
+    def test_training_with_activation_checkpointing_and_regional_compilation(self):
+        self.check_compiled_training("fp32", config_file=FSDP2_ACTIVATION_CHECKPOINTING_COMPILE_CONFIG_FILE)

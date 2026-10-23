@@ -92,6 +92,17 @@ class DistributedTrainingCommon(unittest.TestCase):
         self.assert_same_training(accumulated, distributed)
         self.assert_same_training(accumulated, reference)
 
+    def check_compiled_training(self, dtype, config_file):
+        """Training with `torch.compile` should match the reference, and compile each block without graph breaks."""
+        reference = train(dtype=dtype)
+        with tempfile.TemporaryDirectory() as output_dir:
+            compiled = train(config_file, output_dir=output_dir, dtype=dtype)
+            with open(os.path.join(output_dir, "compile_stats.json")) as f:
+                compile_stats = json.load(f)
+        self.assert_same_training(compiled, reference)
+        self.assertGreater(compile_stats["compiled_graphs"], 0)
+        self.assertEqual(compile_stats["graph_breaks"], {})
+
     def check_resume(self, config_file):
         """Resuming halfway, from the checkpoint of step 4 out of 8, should match the training that didn't stop."""
         with tempfile.TemporaryDirectory() as output_dir:
