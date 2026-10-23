@@ -97,6 +97,65 @@ class SimpleBatchSampler(BatchSampler):
 
 
 class DataLoaderTester(AccelerateTestCase):
+    @parameterized.expand(
+        [
+            ("shard_first", DataLoaderShard, 0),
+            ("shard_later", DataLoaderShard, 4),
+            ("dispatcher_first", DataLoaderDispatcher, 0),
+            ("dispatcher_later", DataLoaderDispatcher, 4),
+            ("skip_first", SkipDataLoader, 0),
+            ("skip_later", SkipDataLoader, 4),
+        ]
+    )
+    def test_failed_dataloader_clears_gradient_state(self, name, dataloader_cls, failing_batch):
+        PartialState(cpu=True)
+        error = ValueError("collation failed")
+
+        def collate(batch):
+            if batch[0] == failing_batch:
+                raise error
+            return torch.tensor(batch)
+
+        dataloader = dataloader_cls(range(6), batch_size=2, collate_fn=collate)
+        with pytest.raises(ValueError, match="collation failed") as exc_info:
+            list(dataloader)
+
+        assert exc_info.value is error
+        assert dataloader.gradient_state.active_dataloader is None
+        assert not dataloader.gradient_state.in_dataloader
+
+    @parameterized.expand([("shard", DataLoaderShard), ("dispatcher", DataLoaderDispatcher), ("skip", SkipDataLoader)])
+    def test_failed_dataloader_restores_gradient_accumulation(self, name, dataloader_cls):
+        accelerator = Accelerator(cpu=True, gradient_accumulation_steps=4)
+        model = torch.nn.Linear(1, 1)
+        training_dataloader = accelerator.prepare(DataLoader(range(2), batch_size=2))
+
+        def collate(batch):
+            raise ValueError("validation data is invalid")
+
+        validation_dataloader = dataloader_cls(range(4), batch_size=2, collate_fn=collate)
+        for batch in training_dataloader:
+            assert batch.tolist() == [0, 1]
+            with pytest.raises(ValueError, match="validation data is invalid"):
+                next(iter(validation_dataloader))
+
+            assert accelerator.gradient_state.active_dataloader is training_dataloader
+            with accelerator.accumulate(model):
+                assert accelerator.sync_gradients
+
+        assert accelerator.gradient_state.active_dataloader is None
+
+    @parameterized.expand(
+        [("shard", DataLoaderShard, True), ("dispatcher", DataLoaderDispatcher, True), ("skip", SkipDataLoader, False)]
+    )
+    def test_temporary_dataloader_iterator_preserves_gradient_state(self, name, dataloader_cls, end_of_dataloader):
+        PartialState(cpu=True)
+        dataloader = dataloader_cls(range(3), batch_size=4)
+
+        assert next(iter(dataloader)).tolist() == [0, 1, 2]
+        assert dataloader.gradient_state.active_dataloader is dataloader
+        assert dataloader.gradient_state.end_of_dataloader is end_of_dataloader
+
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False, even_batches=True):
         batch_sampler_shards = [
             BatchSamplerShard(batch_sampler, 2, i, split_batches=split_batches, even_batches=even_batches)
