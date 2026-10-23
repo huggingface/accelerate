@@ -409,7 +409,8 @@ class FSDPPluginIntegration(AccelerateTestCase):
             fsdp_plugin = FullyShardedDataParallelPlugin(auto_wrap_policy="TRANSFORMER_BASED_WRAP")
         if self.current_fsdp_version == 1:
             fsdp_plugin.set_auto_wrap_policy(model)
-            assert fsdp_plugin.transformer_cls_names_to_wrap == ["EsmLayer", "EsmEmbeddings"]
+            # Transformers stores `_no_split_modules` as a set, so the order changes between runs
+            assert sorted(fsdp_plugin.transformer_cls_names_to_wrap) == ["EsmEmbeddings", "EsmLayer"]
         else:
             policy = fsdp2_prepare_auto_wrap_policy(fsdp_plugin, model)
             assert policy(model.encoder.layer[0])
@@ -427,14 +428,15 @@ class FSDPPluginIntegration(AccelerateTestCase):
         for mp_dtype in dtypes:
             env = self.fsdp_envs[fsdp_version].copy()
             env["ACCELERATE_MIXED_PRECISION"] = mp_dtype
-            extra_arg = "buffer_dtype" if fsdp_version == 1 else "output_dtype"
             with patch_environment(**env):
                 accelerator = Accelerator()
                 if mp_dtype == "fp16":
                     dtype = torch.float16
                 elif mp_dtype == "bf16":
                     dtype = torch.bfloat16
-                mp_policy = MP(param_dtype=dtype, reduce_dtype=dtype, **{extra_arg: dtype})
+                # FSDP2 leaves `output_dtype` unset, so the outputs keep the dtype they were computed in.
+                extra_args = {"buffer_dtype": dtype} if fsdp_version == 1 else {}
+                mp_policy = MP(param_dtype=dtype, reduce_dtype=dtype, **extra_args)
                 assert accelerator.state.fsdp_plugin.mixed_precision_policy == mp_policy
                 if mp_dtype == FP16:
                     assert isinstance(accelerator.scaler, Scaler)
@@ -448,7 +450,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
                 plugin = FullyShardedDataParallelPlugin(
-                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, extra_arg: dtype}
+                    mixed_precision_policy={"param_dtype": dtype, "reduce_dtype": dtype, **extra_args}
                 )
                 assert plugin.mixed_precision_policy == mp_policy
             with patch_environment(**env):
