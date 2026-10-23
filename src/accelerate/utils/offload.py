@@ -22,6 +22,10 @@ import torch
 from safetensors import safe_open
 
 
+# Number of safetensors files `OffloadedWeightsLoader` keeps open at the same time
+MAX_OPEN_SAFETENSORS_FILES = 8
+
+
 def offload_weight(weight, weight_name, offload_folder, index=None):
     dtype = None
     # Check the string instead of the dtype to be compatible with versions of PyTorch that don't have bfloat16.
@@ -166,6 +170,24 @@ class OffloadedWeightsLoader(Mapping):
         self.all_keys = list(self.state_dict.keys())
         self.all_keys.extend([key for key in self.index if key not in self.state_dict])
         self.device = device
+        # Opening a safetensors file parses its whole header, so keep the last few files open
+        self._safe_open_handles = {}
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_safe_open_handles"] = {}
+        return state
+
+    def _safe_open(self, filename, device):
+        key = (filename, str(device))
+        handle = self._safe_open_handles.pop(key, None)
+        if handle is None:
+            handle = safe_open(filename, framework="pt", device=device)
+            if len(self._safe_open_handles) >= MAX_OPEN_SAFETENSORS_FILES:
+                del self._safe_open_handles[next(iter(self._safe_open_handles))]
+        # most recently used last
+        self._safe_open_handles[key] = handle
+        return handle
 
     def __getitem__(self, key: str):
         # State dict gets priority
@@ -176,12 +198,12 @@ class OffloadedWeightsLoader(Mapping):
             device = "cpu" if self.device is None else self.device
             tensor = None
             try:
-                with safe_open(weight_info["safetensors_file"], framework="pt", device=device) as f:
-                    tensor = f.get_tensor(weight_info.get("weight_name", key))
+                f = self._safe_open(weight_info["safetensors_file"], device)
+                tensor = f.get_tensor(weight_info.get("weight_name", key))
             except TypeError:
                 # if failed to get_tensor on the device, such as bf16 on mps, try to load it on CPU first
-                with safe_open(weight_info["safetensors_file"], framework="pt", device="cpu") as f:
-                    tensor = f.get_tensor(weight_info.get("weight_name", key))
+                f = self._safe_open(weight_info["safetensors_file"], "cpu")
+                tensor = f.get_tensor(weight_info.get("weight_name", key))
 
             if "dtype" in weight_info:
                 tensor = tensor.to(getattr(torch, weight_info["dtype"]))
