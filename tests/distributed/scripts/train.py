@@ -29,6 +29,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate import Accelerator
+from accelerate.utils import DynamoBackend
 
 
 MODEL_NAME = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -88,6 +89,17 @@ def main():
     if accelerator.is_main_process:
         with open(os.path.join(args.output_dir, "losses.json"), "w") as f:
             json.dump(losses, f)
+        if accelerator.state.dynamo_plugin.backend != DynamoBackend.NO:
+            # A graph break splits a compiled region, so a count above zero is lost compilation. Zero compiled graphs
+            # means nothing was compiled at all.
+            from torch._dynamo.utils import counters
+
+            compile_stats = {
+                "graph_breaks": dict(counters["graph_break"]),
+                "compiled_graphs": counters["stats"]["unique_graphs"],
+            }
+            with open(os.path.join(args.output_dir, "compile_stats.json"), "w") as f:
+                json.dump(compile_stats, f)
     accelerator.end_training()
 
 
