@@ -869,9 +869,27 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
     if auto_wrap_policy_func is not None:
+        # The policy looks through `CheckpointWrapper`, so a checkpointed layer matches twice: as the wrapper and as
+        # the layer inside it. Shard it once, at the `CheckpointWrapper`. Sharding both puts an FSDP hook inside the
+        # checkpointed region, which `torch.compile` cannot trace and so breaks the graph of every compiled block. A
+        # layer that is also reached outside its wrapper (a shared module) keeps its own FSDP unit.
+        parent_count = defaultdict(int)
+        for parent in model.modules():
+            for child in parent._modules.values():
+                if child is not None:
+                    parent_count[child] += 1
+        checkpointed_layers = {
+            module._checkpoint_wrapped_module
+            for module in model.modules()
+            if hasattr(module, "_checkpoint_wrapped_module")
+            and auto_wrap_policy_func(module)
+            and parent_count[module._checkpoint_wrapped_module] == 1
+        }
         # We skip the model itself, as that one is always wrapped
         for module in get_module_children_bottom_up(model)[:-1]:
-            if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
+            if module in checkpointed_layers or isinstance(module, FSDPModule):
+                continue
+            if auto_wrap_policy_func(module):
                 fully_shard(module, **fsdp2_kwargs)
 
     # Carve embed + tail=[final_norm, lm_head] into their own units. Tail gets `False`
