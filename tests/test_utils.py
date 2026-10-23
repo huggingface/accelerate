@@ -36,6 +36,7 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     require_torch_min_version,
     require_tpu,
+    require_transformers,
     require_triton,
     torch_device,
 )
@@ -416,6 +417,55 @@ class UtilsTester(unittest.TestCase):
         result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 66 items now
         assert result.shape == torch.Size([66, 4, 4])
+
+    def test_send_to_device_skip_keys_mapping_with_to(self):
+        # A `Mapping` that also has a `.to()` method (like `transformers.BatchEncoding`) used to take the `.to()`
+        # shortcut and move every entry, silently ignoring `skip_keys`.
+        class BatchLike(UserDict):
+            def to(self, device, non_blocking=False):
+                return BatchLike({k: v.to(device, non_blocking=non_blocking) for k, v in self.items()})
+
+        batch = BatchLike({"input_ids": torch.zeros(2), "labels": torch.zeros(2)})
+
+        moved = send_to_device(batch, torch.device("meta"), skip_keys="labels")
+        assert isinstance(moved, BatchLike)
+        assert moved["input_ids"].device.type == "meta"
+        assert moved["labels"].device.type == "cpu"
+
+        moved = send_to_device(batch, torch.device("meta"), skip_keys=["labels", "missing"])
+        assert moved["input_ids"].device.type == "meta"
+        assert moved["labels"].device.type == "cpu"
+
+        # Without a matching key, the object's own `.to()` is still used.
+        with patch.object(BatchLike, "to", wraps=batch.to) as mocked_to:
+            moved = send_to_device(batch, torch.device("meta"), skip_keys="missing")
+        mocked_to.assert_called_once()
+        assert moved["labels"].device.type == "meta"
+
+    @require_transformers
+    def test_send_to_device_skip_keys_batch_encoding(self):
+        from tokenizers import Tokenizer, models, pre_tokenizers
+        from transformers import BatchEncoding
+
+        # Build a fast-tokenizer `BatchEncoding` in memory so the test doesn't need a pretrained checkpoint.
+        tokenizer = Tokenizer(models.WordLevel({"hello": 0, "world": 1, "[UNK]": 2}, unk_token="[UNK]"))
+        tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+        encodings = tokenizer.encode_batch(["hello world", "world hello"])
+        batch = BatchEncoding(
+            {"input_ids": torch.tensor([e.ids for e in encodings]), "labels": torch.zeros(2, 2)},
+            encoding=encodings,
+        )
+
+        moved = send_to_device(batch, torch.device("meta"), skip_keys="labels")
+        assert isinstance(moved, BatchEncoding)
+        assert moved["input_ids"].device.type == "meta"
+        assert moved["labels"].device.type == "cpu"
+        # The tokenizer metadata must survive the move.
+        assert moved.encodings is batch.encodings
+        assert moved.word_ids(0) == [0, 1]
+        assert moved.n_sequences == 1
+        # The input is left untouched.
+        assert batch["input_ids"].device.type == "cpu"
 
     def test_send_to_device_compiles(self):
         compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
