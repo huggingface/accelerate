@@ -18,6 +18,7 @@ import re
 import socket
 from codecs import encode
 from collections import OrderedDict
+from copy import copy
 from functools import partial, reduce
 from types import MethodType
 from typing import Optional
@@ -154,6 +155,15 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
         if is_repeated_blocks(module):
             new_module = torch.nn.ModuleList()
             for submodule in module:
+                if type(submodule).__call__ is not torch.nn.Module.__call__:
+                    module_copy = copy(submodule)
+                    forward = module_copy.forward
+                    if hasattr(forward, "__func__") and getattr(forward, "__self__", None) is submodule:
+                        forward = MethodType(forward.__func__, module_copy)
+                    # Compile inside custom call wrappers, such as gradient checkpointing,
+                    # so a graph break does not force the entire checkpoint region to eager.
+                    module_copy.forward = torch.compile(forward, **compile_kwargs)
+                    submodule = module_copy
                 new_module.append(torch.compile(submodule, **compile_kwargs))
         elif has_repeated_blocks(module):
             new_module = module.__class__.__new__(module.__class__)
