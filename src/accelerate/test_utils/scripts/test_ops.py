@@ -165,6 +165,9 @@ def _mp_fn(index):
 
 def main():
     state = PartialState()
+    if torch.distributed.is_initialized():
+        # A misdetected single-process state lets gather checks pass locally and skips reductions.
+        assert state.num_processes == torch.distributed.get_world_size()
     state.print(f"State: {state}")
     state.print("testing gather")
     test_gather(state)
