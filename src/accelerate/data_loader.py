@@ -395,6 +395,13 @@ class DataLoaderStateMixin:
         cls.end_of_dataloader = False
         cls.remainder = -1
 
+    def __iter__(self):
+        try:
+            yield from self._iter_batches()
+        except Exception:
+            self.end()
+            raise
+
     def reset(self):
         self.end_of_dataloader = False
         self.remainder = -1
@@ -575,7 +582,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         # batches yielded to the user).
         pass
 
-    def __iter__(self):
+    def _iter_batches(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
         self.begin()
@@ -872,7 +879,7 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
                 broadcast_object_list(batch_info)
         return batch, batch_info
 
-    def __iter__(self):
+    def _iter_batches(self):
         self.begin()
         self.set_epoch(self.iteration)
         main_iterator = None
@@ -1374,7 +1381,7 @@ class SkipDataLoader(DataLoaderAdapter, DataLoaderStateMixin):
         self.skip_batches = skip_batches
         self.gradient_state = GradientState()
 
-    def __iter__(self):
+    def _iter_batches(self):
         self.begin()
         for index, batch in enumerate(self.base_dataloader.__iter__()):
             if index >= self.skip_batches:
