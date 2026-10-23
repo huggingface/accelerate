@@ -175,6 +175,61 @@ class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
         assert optimizer.state
 
 
+@require_fsdp2
+class FSDP2CheckpointedLayerShardingTest(AccelerateTestCase):
+    """A checkpointed layer is sharded once, at its checkpoint wrapper; a shared layer keeps its own unit."""
+
+    def _shard(self, model):
+        from unittest.mock import Mock, patch
+
+        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointWrapper
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        def policy(module):
+            if isinstance(module, CheckpointWrapper):
+                module = module._checkpoint_wrapped_module
+            return isinstance(module, torch.nn.Linear)
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "no"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+        mock_plugin = mock_accelerator.state.fsdp_plugin
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard") as fully_shard,
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=policy),
+            patch("accelerate.utils.fsdp_utils.logger"),
+        ):
+            fsdp2_prepare_model(mock_accelerator, model)
+        # `fully_shard` is mocked, so a module reached twice is not an `FSDPModule` on the second visit; dedupe.
+        return list(dict.fromkeys(call.args[0] for call in fully_shard.call_args_list))
+
+    def test_checkpointed_layer_is_sharded_at_its_wrapper(self):
+        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper
+
+        model = torch.nn.Sequential(
+            checkpoint_wrapper(torch.nn.Linear(4, 4)), checkpoint_wrapper(torch.nn.Linear(4, 4))
+        )
+        sharded = self._shard(model)
+        assert sharded == [model[0], model[1], model]
+
+    def test_shared_layer_keeps_its_own_unit(self):
+        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper
+
+        layer = torch.nn.Linear(4, 4)
+        model = torch.nn.Sequential(checkpoint_wrapper(layer), layer)
+        sharded = self._shard(model)
+        assert sharded == [layer, model[0], model]
+
+
 @require_non_cpu
 @require_non_torch_xla
 class FSDPPluginIntegration(AccelerateTestCase):
