@@ -173,6 +173,36 @@ class UtilsTester(unittest.TestCase):
             raise RuntimeError("Oopsy daisy!")
         assert os.environ[key] == os.getenv(key) == orig_value  # noqa: TID251
 
+    def test_patch_environment_restores_when_entering_fails(self):
+        """Partially applied environment changes are rolled back if setup fails."""
+
+        class Unstringifiable:
+            def __str__(self):
+                raise RuntimeError("value conversion failed")
+
+        invalid_variables = (
+            ({"INVALID=KEY": "value"}, ValueError),
+            ({"INVALID_VALUE": "embedded\0null"}, ValueError),
+            ({"INVALID_VALUE": Unstringifiable()}, RuntimeError),
+        )
+        for original_value in (None, "", "original"):
+            for invalid, exception_type in invalid_variables:
+                with self.subTest(original_value=original_value, invalid=invalid):
+                    with patch.dict(os.environ, {}, clear=True):
+                        key = "ACCELERATE_TEST_ENTRY_ROLLBACK"
+                        if original_value is not None:
+                            os.environ[key] = original_value
+                        os.environ["UNTOUCHED"] = "original"
+                        original_environment = dict(os.environ)
+                        entered = False
+
+                        with self.assertRaises(exception_type):
+                            with patch_environment(**{key.lower(): "temporary", **invalid, "UNTOUCHED": "changed"}):
+                                entered = True
+
+                        self.assertFalse(entered)
+                        self.assertEqual(dict(os.environ), original_environment)
+
     def test_clear_environment(self):
         key, value = os.environ.copy().popitem()
         with pytest.raises(RuntimeError), clear_environment():
