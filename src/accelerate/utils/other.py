@@ -17,7 +17,6 @@ import platform
 import re
 import socket
 from codecs import encode
-from collections import OrderedDict
 from functools import partial, reduce
 from types import MethodType
 from typing import Optional
@@ -435,7 +434,9 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
     # Check if it's a model and remove duplicates
     if safe_serialization:
         save_func = partial(safe_save_file, metadata={"format": "pt"})
-        if isinstance(obj, OrderedDict):
+        # state_dict() is an OrderedDict, but a plain dict is ordered too and is what
+        # callers pass. Both need shared storages removed or safetensors refuses the save.
+        if isinstance(obj, dict):
             obj = clean_state_dict_for_safetensors(obj)
     else:
         save_func = torch.save

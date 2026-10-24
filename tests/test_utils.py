@@ -573,6 +573,19 @@ class UtilsTester(unittest.TestCase):
         assert result["inputs"][1].shape == torch.Size([6, 4])
         assert result["labels"].shape == torch.Size([6, 1])
 
+    def test_save_plain_dict_drops_shared_tensors(self):
+        from safetensors.torch import load_file
+
+        from accelerate.utils.other import save
+
+        shared = torch.zeros(2)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "weights.safetensors")
+            save({"a": shared, "b": shared}, path, safe_serialization=True)
+            loaded = load_file(path)
+        self.assertIn("a", loaded)
+        self.assertNotIn("b", loaded)
+
 
 def set_dummy_accelerate_env_var():
     """Set an accelerate env var
