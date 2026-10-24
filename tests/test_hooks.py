@@ -15,13 +15,14 @@
 import inspect
 import re
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
 from parameterized import parameterized
 from torch.fx import symbolic_trace
 
-from accelerate.big_modeling import attach_layerwise_casting_hooks
+from accelerate.big_modeling import attach_layerwise_casting_hooks, cpu_offload_with_hook
 from accelerate.hooks import (
     AlignDevicesHook,
     CpuOffload,
@@ -33,7 +34,7 @@ from accelerate.hooks import (
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_multi_device, require_non_hpu, torch_device
+from accelerate.test_utils import require_multi_device, require_non_cpu, require_non_hpu, torch_device
 from accelerate.utils import is_xpu_available
 from accelerate.utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 
@@ -483,6 +484,79 @@ class HooksModelTester(unittest.TestCase):
         assert model.batchnorm.weight.device == device
         assert model.linear2.weight.device == device
 
+    @parameterized.expand(
+        [
+            ("no_tensors", nn.Identity),
+            ("buffers_only", lambda: nn.BatchNorm1d(3, affine=False).eval()),
+            ("parameters", lambda: nn.Linear(3, 3)),
+        ]
+    )
+    def test_cpu_offload_hook_module_types(self, _, model_factory):
+        model = model_factory()
+        inputs = torch.randn(2, 3)
+        expected = model(inputs)
+        model, hook = cpu_offload_with_hook(model, execution_device=torch.device("cpu"))
+
+        torch.testing.assert_close(model(inputs), expected)
+        torch.testing.assert_close(model(inputs), expected)
+        hook.offload()
+        torch.testing.assert_close(model(inputs), expected)
+        hook.remove()
+        torch.testing.assert_close(model(inputs), expected)
+
+    @parameterized.expand(
+        [
+            ("no_tensors", nn.Identity),
+            ("buffers_only", lambda: nn.BatchNorm1d(3, affine=False).eval()),
+            ("parameters", lambda: nn.Linear(3, 3)),
+        ]
+    )
+    def test_cpu_offload_hook_previous_module_types(self, _, model_factory):
+        previous_model = model_factory()
+        model = nn.Linear(3, 3)
+        inputs = torch.randn(2, 3)
+        expected_current = model(inputs)
+        expected = model(previous_model(inputs))
+        previous_model, previous_hook = cpu_offload_with_hook(previous_model, execution_device=torch.device("cpu"))
+        model, hook = cpu_offload_with_hook(
+            model, execution_device=torch.device("cpu"), prev_module_hook=previous_hook
+        )
+
+        # The previous model may have no parameters even though it is a valid pipeline stage.
+        torch.testing.assert_close(model(inputs), expected_current)
+        torch.testing.assert_close(model(previous_model(inputs)), expected)
+        previous_hook.remove()
+        hook.remove()
+
+    @parameterized.expand(
+        [
+            ("no_tensors", nn.Identity),
+            ("buffers_only", lambda: nn.BatchNorm1d(3, affine=False).eval()),
+            ("parameters", lambda: nn.Linear(3, 3)),
+        ]
+    )
+    @require_non_cpu
+    def test_cpu_offload_hook_module_types_on_device(self, _, model_factory):
+        previous_model = model_factory()
+        model = nn.Linear(3, 3)
+        inputs = torch.randn(2, 3)
+        expected = model(previous_model(inputs))
+        device = torch.device(torch_device)
+        previous_model, previous_hook = cpu_offload_with_hook(previous_model, execution_device=device)
+        model, hook = cpu_offload_with_hook(model, execution_device=device, prev_module_hook=previous_hook)
+
+        intermediate = previous_model(inputs)
+        self.assertEqual(intermediate.device, device)
+        for tensor in list(previous_model.parameters()) + list(previous_model.buffers()):
+            self.assertEqual(tensor.device, device)
+        output = model(intermediate)
+        for tensor in list(previous_model.parameters()) + list(previous_model.buffers()):
+            self.assertEqual(tensor.device, torch.device("cpu"))
+        torch.testing.assert_close(output.cpu(), expected)
+        hook.offload()
+        previous_hook.remove()
+        hook.remove()
+
     def test_cpu_offload_hook_with_prev_module(self):
         if not torch.cuda.is_available() and not is_xpu_available():
             self.skipTest("CUDA or XPU not available for offload test.")
@@ -515,3 +589,29 @@ class HooksModelTester(unittest.TestCase):
         assert model2.linear1.weight.device == device
         assert model2.batchnorm.weight.device == device
         assert model2.linear2.weight.device == device
+
+    @parameterized.expand(
+        [
+            ("parameters_args", lambda: nn.Linear(3, 3), False),
+            ("parameters_kwargs", lambda: nn.Linear(3, 3), True),
+            ("buffers_only_args", lambda: nn.BatchNorm1d(3, affine=False).eval(), False),
+            ("buffers_only_kwargs", lambda: nn.BatchNorm1d(3, affine=False).eval(), True),
+        ]
+    )
+    @require_non_cpu
+    def test_cpu_offload_hook_resident_model_receives_cpu_inputs(self, _, model_factory, use_kwargs):
+        model = model_factory()
+        inputs = torch.randn(2, 3)
+        expected = model(inputs)
+        device = torch.device(torch_device)
+        model, hook = cpu_offload_with_hook(model, execution_device=device)
+        model(torch.randn(2, 3))
+
+        # The first forward leaves the model resident, but a new batch may still be on CPU.
+        with patch.object(model, "to", wraps=model.to) as move_model:
+            output = model(input=inputs) if use_kwargs else model(inputs)
+        move_model.assert_not_called()
+        self.assertEqual(output.device, device)
+        torch.testing.assert_close(output.cpu(), expected)
+        hook.offload()
+        hook.remove()
