@@ -573,6 +573,23 @@ class UtilsTester(unittest.TestCase):
         assert result["inputs"][1].shape == torch.Size([6, 4])
         assert result["labels"].shape == torch.Size([6, 1])
 
+    def test_load_keeps_numpy_arrays_under_weights_only(self):
+        from accelerate.utils.other import load
+
+        arrays = {
+            "i64": np.array([1, -2], dtype=np.int64),
+            "u16": np.array([1, 2], dtype=np.uint16),
+            "f32": np.array([1.5, -0.25], dtype=np.float32),
+            "f16": np.array([1.0], dtype=np.float16),
+            "b": np.array([True, False]),
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "arrays.pt")
+            torch.save(arrays, path)
+            loaded = load(path)
+        for key, value in arrays.items():
+            np.testing.assert_array_equal(loaded[key], value)
+
 
 def set_dummy_accelerate_env_var():
     """Set an accelerate env var
