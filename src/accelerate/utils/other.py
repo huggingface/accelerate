@@ -459,7 +459,28 @@ TORCH_SAFE_GLOBALS = [
 ]
 
 if is_numpy_available("1.25.0"):
-    TORCH_SAFE_GLOBALS.append(np.dtypes.UInt32DType)
+    # A pickled ndarray records its scalar type (numpy.dtypes.Int64DType, ...).
+    # Allowlisting only UInt32DType made every other integer and float array fail weights_only load.
+    for _dtype_name in (
+        "BoolDType",
+        "Int8DType",
+        "Int16DType",
+        "Int32DType",
+        "Int64DType",
+        "UInt8DType",
+        "UInt16DType",
+        "UInt32DType",
+        "UInt64DType",
+        "Float16DType",
+        "Float32DType",
+        "Float64DType",
+        "Complex64DType",
+        "Complex128DType",
+        "LongDoubleDType",
+    ):
+        _dtype_cls = getattr(np.dtypes, _dtype_name, None)
+        if _dtype_cls is not None:
+            TORCH_SAFE_GLOBALS.append(_dtype_cls)
 
 
 def load(f, map_location=None, **kwargs):
