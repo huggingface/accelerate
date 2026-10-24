@@ -30,6 +30,7 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     get_launch_command,
     path_in_accelerate_package,
+    require_cuda,
     require_fp16,
     require_fsdp2,
     require_multi_device,
@@ -1054,6 +1055,13 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
+
+    @require_cuda
+    def test_full_state_source_ownership(self):
+        test_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "full_state_ownership.py")
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, use_fsdp=True, fsdp_version=2)
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd + [test_file_path])
 
     @require_fsdp2
     @require_peft
