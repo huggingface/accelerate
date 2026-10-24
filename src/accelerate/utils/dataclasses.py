@@ -16,6 +16,8 @@
 General namespace and dataclass related classes
 """
 
+from __future__ import annotations
+
 import argparse
 import copy
 import enum
@@ -1817,6 +1819,19 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={
             "help": "The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy` is `size_based_wrap`."
+        },
+    )
+    quantization_config: Optional["BnbQuantizationConfig"] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Optional bitsandbytes quantization config used to indicate that the model has been quantized "
+                "(e.g. QLoRA with nf4).  When set, FSDP2 prepare_model will correctly skip Params4bit from "
+                "trainable-param upcasts and auto-wrap policies, while still upcasting non-quantized "
+                "trainable params such as PEFT LoRA adapter weights.  Set this via the "
+                "`fsdp_plugin` argument to `Accelerator.prepare` — it is not automatically inferred from "
+                "the model itself."
+            )
         },
     )
 
