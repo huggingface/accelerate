@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import os
+import pickle
 import unittest
 from tempfile import TemporaryDirectory
 
 import torch
 import torch.nn as nn
+from safetensors.torch import save_file
 
 from accelerate.utils import (
     OffloadedWeightsLoader,
@@ -26,6 +29,7 @@ from accelerate.utils import (
     offload_state_dict,
     offload_weight,
 )
+from accelerate.utils.offload import MAX_OPEN_SAFETENSORS_FILES
 from accelerate.utils.versions import is_torch_version
 
 
@@ -118,6 +122,39 @@ class OffloadTester(unittest.TestCase):
             assert sorted(weight_map) == sorted(state_dict.keys())
             for key, param in state_dict.items():
                 assert torch.allclose(param, weight_map[key])
+
+    def test_offload_weights_loader_safetensors(self):
+        model = ModelForTest()
+        state_dict = model.state_dict()
+
+        with TemporaryDirectory() as tmp_dir:
+            # All weights in one file, like a checkpoint shard
+            filename = os.path.join(tmp_dir, "model.safetensors")
+            save_file(state_dict, filename)
+            index = {key: {"safetensors_file": filename, "weight_name": key} for key in state_dict}
+            weight_map = OffloadedWeightsLoader(index=index)
+            for _ in range(2):
+                for key, param in state_dict.items():
+                    assert torch.equal(param, weight_map[key])
+            assert len(weight_map._safe_open_handles) == 1
+
+            # One file per weight, the number of open files stays bounded
+            index = {}
+            for i in range(MAX_OPEN_SAFETENSORS_FILES + 2):
+                for key, param in state_dict.items():
+                    filename = os.path.join(tmp_dir, f"{i}.{key}.safetensors")
+                    save_file({key: param}, filename)
+                    index[f"{i}.{key}"] = {"safetensors_file": filename, "weight_name": key}
+            weight_map = OffloadedWeightsLoader(index=index)
+            for key, info in index.items():
+                assert torch.equal(state_dict[info["weight_name"]], weight_map[key])
+            assert len(weight_map._safe_open_handles) == MAX_OPEN_SAFETENSORS_FILES
+
+            # Open files are not copied or pickled
+            for weight_map_copy in [copy.deepcopy(weight_map), pickle.loads(pickle.dumps(weight_map))]:
+                assert len(weight_map_copy._safe_open_handles) == 0
+                for key, info in index.items():
+                    assert torch.equal(state_dict[info["weight_name"]], weight_map_copy[key])
 
     def test_extract_submodules_state_dict(self):
         state_dict = {"a.1": 0, "a.10": 1, "a.2": 2}
