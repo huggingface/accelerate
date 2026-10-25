@@ -16,6 +16,7 @@ import inspect
 import logging
 import os
 import random
+import re
 import shutil
 import tempfile
 import uuid
@@ -375,6 +376,34 @@ class CheckpointTest(AccelerateTestCase):
             assert not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
+
+    def test_checkpoint_deletion_with_parent_dir_digits(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_dir = os.path.join(tmpdir, "run1")
+            project_config = ProjectConfiguration(
+                project_dir=project_dir, automatic_checkpoint_naming=True, total_limit=2
+            )
+            accelerator = Accelerator(project_config=project_config)
+            model = accelerator.prepare(model)
+            for _ in range(14):
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+            ckpts_dir = os.path.join(project_dir, "checkpoints")
+            assert not os.path.exists(os.path.join(ckpts_dir, "checkpoint_0"))
+            assert not os.path.exists(os.path.join(ckpts_dir, "checkpoint_9"))
+            assert os.path.exists(os.path.join(ckpts_dir, "checkpoint_12"))
+            assert os.path.exists(os.path.join(ckpts_dir, "checkpoint_13"))
+
+            # Verify that load_state resumes from checkpoint_13
+            accelerator.load_state()
+            folders = [os.path.join(ckpts_dir, f) for f in os.listdir(ckpts_dir)]
+
+            def _inner(folder):
+                return list(map(int, re.findall(r"[\\/]?([0-9]+)(?=[^\\/]*$)", folder)))[0]
+
+            folders.sort(key=_inner)
+            assert folders[-1] == os.path.join(ckpts_dir, "checkpoint_13")
 
     @run_first
     @require_non_cpu
