@@ -806,6 +806,12 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
         if self.submesh_tp and (self.submesh_dp or self.submesh_fsdp):
             raise ValueError("TP + (DP/FSDP) is not yet supported in dispatch mode")
 
+    def adjust_state_dict_for_prefetch(self):
+        # Split batches fetch one base batch per output batch, so the snapshot taken before
+        # the next fetch already matches the batches yielded to the user.
+        if not self.split_batches:
+            super().adjust_state_dict_for_prefetch()
+
     def _fetch_batches(self, iterator):
         batches, batch = None, None
         # On process 0, we gather the batch to dispatch.
