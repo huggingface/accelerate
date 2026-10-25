@@ -47,3 +47,6 @@ class FSDP2TrainingTest(DistributedTrainingCommon):
 
     def test_training_with_activation_checkpointing_and_regional_compilation(self):
         self.check_compiled_training("fp32", config_file=FSDP2_ACTIVATION_CHECKPOINTING_COMPILE_CONFIG_FILE)
+
+    def test_training_with_activation_checkpointing_and_regional_compilation_can_resume(self):
+        self.check_resume(config_file=FSDP2_ACTIVATION_CHECKPOINTING_COMPILE_CONFIG_FILE)

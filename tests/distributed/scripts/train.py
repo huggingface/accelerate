@@ -20,6 +20,7 @@ targets and the loss of a step doesn't depend on that split.
 """
 
 import argparse
+import inspect
 import json
 import os
 
@@ -90,13 +91,27 @@ def main():
         with open(os.path.join(args.output_dir, "losses.json"), "w") as f:
             json.dump(losses, f)
         if accelerator.state.dynamo_plugin.backend != DynamoBackend.NO:
-            # A graph break splits a compiled region, so a count above zero is lost compilation. Zero compiled graphs
-            # means nothing was compiled at all.
-            from torch._dynamo.utils import counters
+            # Zero compiled graphs means nothing was compiled. A graph break ends a compiled region; the ones that
+            # matter here are inside the checkpointed decoder blocks, whose breaks carry `CheckpointWrapper.forward` on
+            # their user stack. Breaks elsewhere (a sharded embedding, for example) are counted separately so they are
+            # neither hidden nor blamed on the blocks. The unit layout says who owns the checkpointed blocks.
+            from torch._dynamo.utils import counters, graph_break_reasons
+            from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointWrapper
+            from torch.distributed.fsdp import FSDPModule
 
+            wrapper_file = inspect.getsourcefile(CheckpointWrapper)
+            in_checkpointed_block = [
+                any(frame.filename == wrapper_file for frame in reason.user_stack) for reason in graph_break_reasons
+            ]
+            wrappers = [m for m in model.modules() if isinstance(m, CheckpointWrapper)]
             compile_stats = {
-                "graph_breaks": dict(counters["graph_break"]),
                 "compiled_graphs": counters["stats"]["unique_graphs"],
+                "graph_breaks": dict(counters["graph_break"]),
+                "graph_breaks_in_checkpointed_blocks": sum(in_checkpointed_block),
+                "graph_breaks_elsewhere": len(in_checkpointed_block) - sum(in_checkpointed_block),
+                "checkpoint_wrappers": len(wrappers),
+                "checkpoint_wrappers_sharded": sum(isinstance(w, FSDPModule) for w in wrappers),
+                "inner_layers_sharded": sum(isinstance(w._checkpoint_wrapped_module, FSDPModule) for w in wrappers),
             }
             with open(os.path.join(args.output_dir, "compile_stats.json"), "w") as f:
                 json.dump(compile_stats, f)
