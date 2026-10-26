@@ -188,6 +188,10 @@ class BatchSamplerShard(BatchSampler):
     def __iter__(self):
         return self._iter_with_split() if self.split_batches else self._iter_with_no_split()
 
+    def set_epoch(self, epoch):
+        if hasattr(self.batch_sampler, "set_epoch"):
+            self.batch_sampler.set_epoch(epoch)
+
     def _iter_with_split(self):
         initial_data = []
         batch_length = self.batch_sampler.batch_size // self.num_processes
