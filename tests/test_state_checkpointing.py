@@ -387,7 +387,10 @@ class CheckpointTest(AccelerateTestCase):
             )
             accelerator = Accelerator(project_config=project_config)
             model = accelerator.prepare(model)
-            for _ in range(14):
+            for i in range(14):
+                with torch.no_grad():
+                    model.a.fill_(float(i))
+                    model.b.fill_(float(i * 10))
                 accelerator.save_state(safe_serialization=self.use_safetensors)
             ckpts_dir = os.path.join(project_dir, "checkpoints")
             assert not os.path.exists(os.path.join(ckpts_dir, "checkpoint_0"))
@@ -395,15 +398,40 @@ class CheckpointTest(AccelerateTestCase):
             assert os.path.exists(os.path.join(ckpts_dir, "checkpoint_12"))
             assert os.path.exists(os.path.join(ckpts_dir, "checkpoint_13"))
 
-            # Verify that load_state resumes from checkpoint_13
+            # Reset model parameters to verify load_state restores state from checkpoint_13
+            with torch.no_grad():
+                model.a.fill_(-1.0)
+                model.b.fill_(-1.0)
+
             accelerator.load_state()
-            folders = [os.path.join(ckpts_dir, f) for f in os.listdir(ckpts_dir)]
+            assert model.a.item() == 13.0
+            assert model.b.item() == 130.0
 
-            def _inner(folder):
-                return list(map(int, re.findall(r"[\\/]?([0-9]+)(?=[^\\/]*$)", folder)))[0]
+    def test_checkpoint_sorting_windows_paths(self):
+        # Explicitly verify sorting with Windows-style path separators and parent directory digits
+        # to ensure regression coverage on all platforms including Linux CI (see #4454)
+        windows_folders = [
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_1",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_10",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_2",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_13",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_9",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_0",
+        ]
 
-            folders.sort(key=_inner)
-            assert folders[-1] == os.path.join(ckpts_dir, "checkpoint_13")
+        def _inner(folder):
+            return list(map(int, re.findall(r"[\\/]?([0-9]+)(?=[^\\/]*$)", folder)))[0]
+
+        windows_folders.sort(key=_inner)
+        expected = [
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_0",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_1",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_2",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_9",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_10",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_13",
+        ]
+        assert windows_folders == expected
 
     @run_first
     @require_non_cpu
