@@ -26,7 +26,6 @@ extras["test_dev"] = [
     "evaluate",
     "peft",
     "torchdata>=0.8.0",
-    "torchpippy>=0.2.0",
     "transformers",
     "scipy",
     "scikit-learn",
