@@ -32,15 +32,10 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union, get_a
 import torch
 
 from .constants import (
-    BETA_CP_AVAILABLE_PYTORCH_VERSION,
-    BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
-    FSDP2_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
-    MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
-    XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
@@ -161,14 +156,6 @@ class DistributedDataParallelKwargs(KwargsHandler):
     [wrapper](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) for more
     information on each argument.
 
-    <Tip warning={true}>
-
-    `gradient_as_bucket_view` is only available in PyTorch 1.7.0 and later versions.
-
-    `static_graph` is only available in PyTorch 1.11.0 and later versions.
-
-    </Tip>
-
     Example:
 
     ```python
@@ -245,13 +232,6 @@ class GradScalerKwargs(KwargsHandler):
     Use this object in your [`Accelerator`] to customize the behavior of mixed precision, specifically how the
     `torch.amp.GradScaler` or `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this
     [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument.
-
-    <Tip warning={true}>
-
-    `torch.cuda.amp.GradScaler` is only available in PyTorch 1.5.0 and later versions, and `torch.amp.GradScaler` is
-    only available in PyTorch 2.4.0 and later versions.
-
-    </Tip>
 
     Example:
 
@@ -489,12 +469,6 @@ class ProfileKwargs(KwargsHandler):
     documentation of this [context manager](https://pytorch.org/docs/stable/profiler.html#torch.profiler.profile) for
     more information on each argument.
 
-    <Tip warning={true}>
-
-    `torch.profiler` is only available in PyTorch 1.8.1 and later versions.
-
-    </Tip>
-
     Example:
 
     ```python
@@ -561,13 +535,11 @@ class ProfileKwargs(KwargsHandler):
         if is_hpu_available():
             profiler_activity_map["hpu"] = torch.profiler.ProfilerActivity.HPU
 
-        if is_torch_version(">=", XPU_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            if torch.xpu.is_available():
-                profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
+        if torch.xpu.is_available():
+            profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
 
-        if is_torch_version(">=", MITA_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            if torch.mtia.is_available():
-                profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
+        if torch.mtia.is_available():
+            profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
 
         if activity not in profiler_activity_map:
             raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
@@ -1830,10 +1802,6 @@ class FullyShardedDataParallelPlugin:
         if self.fsdp_version is None:
             self.fsdp_version = int(os.environ.get(env_prefix + "VERSION", "1"))
 
-        if self.fsdp_version == 2:
-            if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
-                raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
-
         if self.sharding_strategy is not None:
             # We cannot properly detect all of the cases, as by default `args.fsdp_sharding_strategy` is set to `fully_shard`
             # Therefore we issue a warning only if the user has explicitly set it inside their plugin
@@ -2211,7 +2179,7 @@ class FullyShardedDataParallelPlugin:
 @dataclass
 class TorchTensorParallelPlugin:
     """
-    This plugin is used to enable tensor parallelism using PyTorch >= 2.0.
+    This plugin is used to enable tensor parallelism using PyTorch.
     """
 
     tp_size: int = field(
@@ -2237,12 +2205,6 @@ class TorchContextParallelConfig:
     )
 
     def __post_init__(self):
-        if not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION):
-            raise ValueError(
-                f"FSDP2-based Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
-                "Please upgrade your PyTorch version."
-            )
-
         if self.cp_comm_strategy is None:
             self.cp_comm_strategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
         if self.cp_comm_strategy not in ["allgather", "alltoall"]:
@@ -2320,12 +2282,6 @@ class TorchTensorParallelConfig:
     enable_async_tp: bool = False
 
     def __post_init__(self):
-        if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
-            raise ValueError(
-                f"Torch tensor parallelism is only available in PyTorch {BETA_TP_AVAILABLE_PYTORCH_VERSION} and later versions. "
-                "Please upgrade your PyTorch version."
-            )
-
         if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
             raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
 

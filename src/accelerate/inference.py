@@ -22,7 +22,6 @@ from .utils import (
     copy_tensor_to_devices,
     ignorant_find_batch_size,
     infer_auto_device_map,
-    is_pippy_available,
     pad_input_tensors,
     send_to_device,
 )
@@ -156,8 +155,6 @@ def prepare_pippy(
         gather_output (`bool`, defaults to `False`):
             If `True`, the output from the last GPU (which holds the true outputs) is sent across to all GPUs.
     """
-    if not is_pippy_available():
-        raise ImportError("Using `torch.distributed.pipelining` requires PyTorch 2.4.0 or later.")
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
     example_kwargs = send_to_device(example_kwargs, "cpu")

@@ -31,7 +31,6 @@ from accelerate.test_utils.testing import (
     get_launch_command,
     path_in_accelerate_package,
     require_fp16,
-    require_fsdp2,
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
@@ -75,7 +74,6 @@ if is_bf16_available():
     dtypes.append(BF16)
 
 
-@require_fsdp2
 @require_peft
 class FSDP2PeftStateDictTest(AccelerateTestCase):
     """
@@ -134,7 +132,6 @@ class FSDP2PeftStateDictTest(AccelerateTestCase):
         assert restored == {0.5}
 
 
-@require_fsdp2
 class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
     """Checkpointing FSDP2 optimizer state must not step the fp16 `GradScaler`."""
 
@@ -547,7 +544,6 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert model._ignored_params == params_to_ignore
 
 
-@require_fsdp2
 @require_non_cpu
 @require_non_torch_xla
 class FSDP2PluginIntegration(FSDPPluginIntegration):
@@ -862,7 +858,6 @@ class FSDPIntegrationTest(TempDirTestCase):
 
         self.current_fsdp_version = 1
 
-    @require_fsdp2
     def test_fsdp2_mixed_precision_bf16_with_bf16_model_loaded(self):
         """FSDP2 + `mixed_precision=bf16` with the model loaded in bf16."""
         cmd = get_launch_command(
@@ -1044,7 +1039,6 @@ class FSDPIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_config)
 
 
-@require_fsdp2
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
 @require_non_torch_xla
@@ -1055,7 +1049,6 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
         super().setUp()
         self.current_fsdp_version = 2
 
-    @require_fsdp2
     @require_peft
     def test_peft_checkpointing(self):
         """Every rank's shard of the adapter must survive a `save_fsdp_model`/`load_fsdp_model` round-trip."""

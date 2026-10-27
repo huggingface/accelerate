@@ -104,7 +104,6 @@ from .utils import (
     is_msamp_available,
     is_musa_available,
     is_npu_available,
-    is_torch_version,
     is_torch_xla_available,
     is_torchao_available,
     is_transformer_engine_available,
@@ -123,9 +122,6 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import (
-    DTENSOR_PYTORCH_VERSION,
-    FSDP2_PYTORCH_VERSION,
-    FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
@@ -378,12 +374,6 @@ class Accelerator:
 
             self.deepspeed_engine_wrapped = None
 
-        if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or isinstance(
-            fsdp_plugin, FullyShardedDataParallelPlugin
-        ):
-            if not is_torch_version(">=", FSDP_PYTORCH_VERSION):
-                raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
-
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
                 FullyShardedDataParallelPlugin()
@@ -394,10 +384,6 @@ class Accelerator:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
-
-        if fsdp_plugin is not None and fsdp_plugin.fsdp_version == 2:
-            if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
-                raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
 
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
@@ -572,8 +558,6 @@ class Accelerator:
                 raise ValueError(
                     f"fp16 mixed precision requires a device in {supported_device} (not {self.device.type!r})."
                 )
-            if self.device.type == "mps" and not is_torch_version(">=", "2.5.0"):
-                raise ValueError("fp16 mixed precision with MPS device requires a Pytorch >= 2.5.0")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
 
             # FSDP2 doesn't use ShardedGradScaler, don't want to modify `get_grad_scaler`, rather create a simple utility
@@ -591,9 +575,7 @@ class Accelerator:
             else:
                 self.native_amp = is_bf16_available(True)
             if not self.native_amp and not is_torch_xla_available():
-                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
-            if self.native_amp and self.device.type == "mps" and not is_torch_version(">=", "2.6.0"):
-                raise ValueError("bf16 mixed precision with MPS device requires a Pytorch >= 2.6.0")
+                raise ValueError("bf16 mixed precision requires a supported device.")
 
         # for DeepSpeed,  self.state.mixed_precision is always "bf16",
         # see https://github.com/huggingface/accelerate/blob/main/src/accelerate/state.py#L968 and
@@ -2161,10 +2143,6 @@ class Accelerator:
                 raise ImportError(
                     "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
                 )
-            if not is_torch_version(">=", "2.2.0"):
-                raise ImportError(
-                    "Tried to use TP, but `torch.distributed.device_mesh` requires PyTorch >= 2.2.0. Please upgrade your PyTorch version"
-                )
             from torch.distributed.device_mesh import init_device_mesh
 
             mesh_dim_name = "tp"
@@ -2954,7 +2932,7 @@ class Accelerator:
                 self.scaler.unscale_(opt)
 
     def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2):
-        is_dtensor_available = torch.distributed.is_available() and is_torch_version(">=", DTENSOR_PYTORCH_VERSION)
+        is_dtensor_available = torch.distributed.is_available()
         if not is_dtensor_available:
             return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
@@ -3989,10 +3967,7 @@ class Accelerator:
                     from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
                     accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
-                _torch_distributed_available = torch.distributed.is_available()
-                _is_dtensor_available = _torch_distributed_available and is_torch_version(
-                    ">=", DTENSOR_PYTORCH_VERSION
-                )
+                _is_dtensor_available = torch.distributed.is_available()
                 # we know we're in FSDP2 so DTensor is available
                 if _is_dtensor_available:
                     from torch.distributed.tensor import DTensor
