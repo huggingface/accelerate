@@ -43,7 +43,6 @@ from .testing import (
     require_non_torch_xla,
     require_non_xpu,
     require_npu,
-    require_pippy,
     require_sdaa,
     require_single_device,
     require_single_gpu,

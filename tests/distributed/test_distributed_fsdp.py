@@ -14,9 +14,9 @@
 
 import os
 
-from parameterized import param, parameterized
+from parameterized import parameterized
 
-from accelerate.test_utils.testing import require_fsdp2, require_huggingface_suite, require_multi_gpu, slow
+from accelerate.test_utils.testing import require_huggingface_suite, require_multi_gpu, slow
 
 from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
 
@@ -24,7 +24,6 @@ from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
 
 
-@require_fsdp2
 @slow
 @require_multi_gpu
 @require_huggingface_suite
@@ -33,13 +32,9 @@ class FSDP2TrainingTest(DistributedTrainingCommon):
     def test_training(self, dtype):
         self.check_training(dtype, config_file=FSDP2_CONFIG_FILE)
 
-    # TODO: remove the tolerance once FSDP2 stops casting the model outputs to `mixed_precision` (`output_dtype`). The
-    # cast rounds the loss, to steps of 0.0625 around 11.9 in bf16. In fp16, the gradient flowing back into the cast is
-    # the gradient scaler's initial scale (65536), which overflows fp16 and skips the first step. The losses end up to
-    # ~3e-2 from the reference.
-    @parameterized.expand([param("fp16", atol=5e-2), param("bf16", atol=5e-2)])
-    def test_training_mixed_precision(self, mixed_precision, **kwargs):
-        self.check_mixed_precision(mixed_precision, config_file=FSDP2_CONFIG_FILE, **kwargs)
+    @parameterized.expand(["fp16", "bf16"])
+    def test_training_mixed_precision(self, mixed_precision):
+        self.check_mixed_precision(mixed_precision, config_file=FSDP2_CONFIG_FILE)
 
     def test_training_with_gradient_accumulation(self):
         self.check_gradient_accumulation(config_file=FSDP2_CONFIG_FILE)

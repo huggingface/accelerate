@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Installation
 
-Before you start, you will need to setup your environment, install the appropriate packages, and configure Accelerate. Accelerate is tested on **Python 3.8+**.
+Before you start, you will need to setup your environment, install the appropriate packages, and configure Accelerate. Accelerate is tested on **Python 3.11+**.
 
 Accelerate is available on pypi and conda, as well as on GitHub. Details to install from each are below:
 
