@@ -536,14 +536,6 @@ def require_mlflow(test_case):
     return unittest.skipUnless(is_mlflow_available(), "test requires mlflow")(test_case)
 
 
-def require_pippy(test_case):
-    """
-    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed It is
-    also checked if the test is running on a Gaudi1 device which doesn't support pippy.
-    """
-    return unittest.skipUnless(not is_habana_gaudi1(), "test requires pippy, which Gaudi1 does not support")(test_case)
-
-
 def require_import_timer(test_case):
     """
     Decorator marking a test that requires tuna interpreter installed. These tests are skipped when tuna isn't
