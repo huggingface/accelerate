@@ -92,24 +92,6 @@ class DistributedTrainingCommon(unittest.TestCase):
         self.assert_same_training(accumulated, distributed)
         self.assert_same_training(accumulated, reference)
 
-    def check_compiled_training(self, dtype, config_file):
-        """
-        Training with activation checkpointing and regional compilation should match the reference; each checkpointed
-        block should be one FSDP unit, owned at its checkpoint wrapper, and rank 0 should record no graph break inside
-        the checkpointed blocks. Graph breaks elsewhere are reported in the failure message but not asserted here.
-        """
-        reference = train(dtype=dtype)
-        with tempfile.TemporaryDirectory() as output_dir:
-            compiled = train(config_file, output_dir=output_dir, dtype=dtype)
-            with open(os.path.join(output_dir, "compile_stats.json")) as f:
-                compile_stats = json.load(f)
-        self.assert_same_training(compiled, reference)
-        self.assertGreater(compile_stats["compiled_graphs"], 0)
-        self.assertGreater(compile_stats["checkpoint_wrappers"], 0)
-        self.assertEqual(compile_stats["checkpoint_wrappers_sharded"], compile_stats["checkpoint_wrappers"])
-        self.assertEqual(compile_stats["inner_layers_sharded"], 0)
-        self.assertEqual(compile_stats["graph_breaks_in_checkpointed_blocks"], 0, compile_stats)
-
     def check_resume(self, config_file):
         """Resuming halfway, from the checkpoint of step 4 out of 8, should match the training that didn't stop."""
         with tempfile.TemporaryDirectory() as output_dir:

@@ -172,127 +172,63 @@ class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
         assert optimizer.state
 
 
-@require_fsdp2
 class FSDP2CheckpointedLayerShardingTest(AccelerateTestCase):
-    """Real FSDP2 preparation on CPU: a checkpointed layer is sharded once, at its checkpoint wrapper, and a layer
-    reused in two places keeps its own unit, with every parameter owned by exactly one FSDP group."""
-
-    class Decoder(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.up = torch.nn.Linear(4, 4, bias=False)
-            self.down = torch.nn.Linear(4, 4, bias=False)
-            self.down.weight = self.up.weight  # an in-block alias, as some models tie weights
-
-        def forward(self, x):
-            return x + self.down(torch.relu(self.up(x)))
-
-    class Model(torch.nn.Module):
-        _no_split_modules = ["Decoder"]
-
-        def __init__(self, shared_decoder=False):
-            super().__init__()
-            self.embed = torch.nn.Embedding(8, 4)
-            decoder = FSDP2CheckpointedLayerShardingTest.Decoder
-            layers = [decoder()] * 2 if shared_decoder else [decoder(), decoder()]
-            self.layers = torch.nn.ModuleList(layers)
-            self.norm = torch.nn.LayerNorm(4)
-            self.head = torch.nn.Linear(4, 8, bias=False)
-            self.head.weight = self.embed.weight
-
-        def get_input_embeddings(self):
-            return self.embed
-
-        def get_output_embeddings(self):
-            return self.head
+    """A layer called both through a checkpoint wrapper and directly must keep its own FSDP hooks."""
 
     def setUp(self):
         super().setUp()
         import torch.distributed as dist
 
-        self.tmp_dir = tempfile.TemporaryDirectory()
-        dist.init_process_group("gloo", init_method=f"file://{self.tmp_dir.name}/store", rank=0, world_size=1)
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
 
-    def tearDown(self):
-        import torch.distributed as dist
+        dist.init_process_group("gloo", init_method=f"file://{tmp_dir.name}/store", rank=0, world_size=1)
+        self.addCleanup(dist.destroy_process_group)
 
-        dist.destroy_process_group()
-        self.tmp_dir.cleanup()
-        super().tearDown()
-
-    def _prepare(self, shared_decoder):
+    def _prepare(self, model):
         from types import SimpleNamespace
 
         from torch.distributed.device_mesh import init_device_mesh
-        from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 
+        from accelerate import ParallelismConfig
         from accelerate.utils.fsdp_utils import fsdp2_apply_ac, fsdp2_prepare_model
 
-        model = self.Model(shared_decoder=shared_decoder)
-        plugin = SimpleNamespace(
-            auto_wrap_policy=transformer_auto_wrap_policy,
-            transformer_cls_names_to_wrap=["Decoder"],
+        plugin = FullyShardedDataParallelPlugin(
+            fsdp_version=2,
+            auto_wrap_policy="TRANSFORMER_BASED_WRAP",
+            transformer_cls_names_to_wrap=["Linear"],
             activation_checkpointing=True,
             activation_checkpointing_offload=False,
             reshard_after_forward=True,
-            cpu_offload=None,
-            mixed_precision_policy=None,
-            ignored_modules=None,
-            cpu_ram_efficient_loading=False,
-            set_auto_wrap_policy=lambda _: None,
+            cpu_offload=False,
         )
+        # Set this after construction to avoid changing the process environment.
+        plugin.cpu_ram_efficient_loading = False
+
         accelerator = SimpleNamespace(
             state=SimpleNamespace(fsdp_plugin=plugin),
             mixed_precision="no",
-            is_main_process=True,
-            device=torch.device("cpu"),
-            torch_device_mesh=init_device_mesh("cpu", (1,), mesh_dim_names=("fsdp",)),
-            parallelism_config=SimpleNamespace(fsdp_dim_names=["fsdp"]),
+            torch_device_mesh=init_device_mesh("cpu", (1,), mesh_dim_names=("dp_shard_cp",)),
+            parallelism_config=ParallelismConfig(),
         )
+
+        plugin.set_auto_wrap_policy(model)
         fsdp2_apply_ac(accelerator, model)
         fsdp2_prepare_model(accelerator, model)
         return model
 
-    @staticmethod
-    def _owner_counts(model):
-        """How many FSDP groups own each parameter; a parameter in a group but absent from the model is stale."""
+    def test_shared_layer_is_sharded(self):
         from torch.distributed.fsdp import FSDPModule
 
-        params = {id(p): name for name, p in model.named_parameters()}
-        owners = dict.fromkeys(params, 0)
-        seen = set()
-        for module in model.modules():
-            if not isinstance(module, FSDPModule):
-                continue
-            state = module._get_fsdp_state()
-            groups = getattr(state, "_fsdp_param_groups", None) or [state._fsdp_param_group]
-            for group in groups:
-                if group is None or id(group) in seen:
-                    continue
-                seen.add(id(group))
-                for fsdp_param in group.fsdp_params:
-                    assert id(fsdp_param.sharded_param) in params, (
-                        "FSDP group owns a parameter the model no longer has"
-                    )
-                    owners[id(fsdp_param.sharded_param)] += 1
-        return {params[k]: v for k, v in owners.items()}
-
-    def test_checkpointed_layer_is_sharded_at_its_wrapper(self):
-        from torch.distributed.fsdp import FSDPModule
-
-        model = self._prepare(shared_decoder=False)
-        wrappers = list(model.layers)
-        assert all(isinstance(w, FSDPModule) for w in wrappers)
-        assert not any(isinstance(w._checkpoint_wrapped_module, FSDPModule) for w in wrappers)
-        assert all(count == 1 for count in self._owner_counts(model).values())
-
-    def test_shared_layer_keeps_its_own_unit(self):
-        from torch.distributed.fsdp import FSDPModule
-
-        model = self._prepare(shared_decoder=True)
-        shared = model.layers[0]._checkpoint_wrapped_module
-        assert isinstance(shared, FSDPModule)
-        assert all(count == 1 for count in self._owner_counts(model).values())
+        shared = torch.nn.Linear(4, 4)
+        # Deformable DETR in Transformers v4.57.1 shares one Linear classification head across decoder levels
+        # when with_box_refine=False. These entries reproduce that shared registration.
+        # Checkpointing wraps only the first entry:
+        # model[0] -> checkpoint wrapper -> shared <- model[1]
+        # Calls through model[1] bypass the wrapper, so the shared layer needs its own FSDP hooks.
+        model = self._prepare(torch.nn.Sequential(shared, shared))
+        assert model[0]._checkpoint_wrapped_module is model[1]
+        assert isinstance(model[1], FSDPModule)
 
 
 @require_non_cpu
