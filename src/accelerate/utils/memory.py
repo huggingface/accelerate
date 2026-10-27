@@ -20,10 +20,13 @@ A collection of utilities for ensuring that training can always occur. Heavily i
 import functools
 import gc
 import inspect
+import os
+import sys
 from typing import Optional
 
 import torch
 
+from .environment import str_to_bool
 from .imports import (
     is_cuda_available,
     is_hpu_available,
@@ -35,6 +38,90 @@ from .imports import (
     is_sdaa_available,
     is_xpu_available,
 )
+
+
+# Default for capping the CPU budget of `get_max_memory` at the cgroup memory limit of the process. Flip this one
+# line to change the default; `ACCELERATE_RESPECT_CGROUP_MEMORY=1` or `=0` overrides it.
+RESPECT_CGROUP_MEMORY_BY_DEFAULT = False
+
+_CGROUP_ROOT = "/sys/fs/cgroup"
+_PROC_SELF_CGROUP = "/proc/self/cgroup"
+# cgroup v1 reports "no limit" as a huge sentinel instead of `max`.
+_CGROUP_UNLIMITED = 1 << 62
+
+
+def _read_cgroup_int(path: str) -> Optional[int]:
+    try:
+        with open(path) as f:
+            value = f.read().strip()
+    except OSError:
+        return None
+    return int(value) if value.isdigit() else None
+
+
+def _read_memory_stat(path: str, key: str) -> int:
+    try:
+        with open(path) as f:
+            for line in f:
+                name, _, value = line.partition(" ")
+                if name == key:
+                    return int(value)
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
+def _cgroup_dirs(controller: Optional[str]) -> list[str]:
+    """Directories of this process's cgroup from `/proc/self/cgroup`, nearest first, mount root last."""
+    root = _CGROUP_ROOT if controller is None else os.path.join(_CGROUP_ROOT, controller)
+    rel_path = ""
+    try:
+        with open(_PROC_SELF_CGROUP) as f:
+            for line in f:
+                parts = line.strip().split(":", 2)
+                if len(parts) != 3:
+                    continue
+                is_v2 = controller is None and parts[0] == "0" and parts[1] == ""
+                is_v1 = controller is not None and controller in parts[1].split(",")
+                if is_v2 or is_v1:
+                    rel_path = parts[2]
+                    break
+    except OSError:
+        pass
+    components = [c for c in rel_path.split("/") if c]
+    if ".." in components:
+        # A cgroup outside this cgroup namespace cannot be resolved from here.
+        components = []
+    return [os.path.join(root, *components[:depth]) for depth in range(len(components), 0, -1)] + [root]
+
+
+def get_cgroup_available_memory() -> Optional[int]:
+    """
+    Returns the memory in bytes that the cgroup of this process can still use, or `None` when no cgroup memory limit
+    applies (or the check is disabled, see `RESPECT_CGROUP_MEMORY_BY_DEFAULT`).
+
+    The limit is the smallest one from the process's own cgroup up to the cgroup root, which is the one the kernel
+    enforces. Usage is read from that same cgroup, minus its inactive page cache, which the kernel can reclaim.
+    """
+    override = os.environ.get("ACCELERATE_RESPECT_CGROUP_MEMORY")
+    enabled = RESPECT_CGROUP_MEMORY_BY_DEFAULT if override is None else str_to_bool(override, to_bool=True)
+    if not enabled or sys.platform != "linux":
+        return None
+    for controller, limit_file, usage_file, inactive_key in (
+        (None, "memory.max", "memory.current", "inactive_file"),
+        ("memory", "memory.limit_in_bytes", "memory.usage_in_bytes", "total_inactive_file"),
+    ):
+        levels = [(d, _read_cgroup_int(os.path.join(d, limit_file))) for d in _cgroup_dirs(controller)]
+        levels = [(d, limit) for d, limit in levels if limit is not None and limit < _CGROUP_UNLIMITED]
+        if not levels:
+            continue
+        cgroup_dir, limit = min(levels, key=lambda level: level[1])
+        usage = _read_cgroup_int(os.path.join(cgroup_dir, usage_file))
+        if usage is None:
+            return None
+        inactive_file = _read_memory_stat(os.path.join(cgroup_dir, "memory.stat"), inactive_key)
+        return max(0, limit - max(0, usage - inactive_file))
+    return None
 
 
 def clear_device_cache(garbage_collection: bool = False) -> None:
