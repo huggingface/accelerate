@@ -52,6 +52,6 @@ The `TransformerEngine` can receive many different arguments that customize how 
 * `amax_compute_algo`: The algorithm to use for the scaling factor computation. Must be one of `max` or `most_recent`.
 * `override_linear_precision`: Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
 
-You can customize each of these as part of [`utils.FP8RecipeKwargs`] to help optimize performance of your models.
+You can customize each of these as part of [`utils.TERecipeKwargs`] to help optimize performance of your models.
 
 If we notice in the chart mentioned earlier, TE simply casts the computation layers into FP8, while everything else is in FP32. As a result this winds up utilizing the most memory but does so with the benefit of guaranteeing the least amount of loss in end accuracy during training. 

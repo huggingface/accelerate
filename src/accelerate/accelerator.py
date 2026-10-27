@@ -58,7 +58,6 @@ from .utils import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
-    FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
     GradientAccumulationPlugin,
     GradScalerKwargs,
@@ -400,7 +399,6 @@ class Accelerator:
         self.ddp_handler = None
         self.scaler_handler = None
         self.init_handler = None
-        self.fp8_recipe_handler = None
         self.ao_recipe_handler = None
         self.te_recipe_handler = None
         self.autocast_handler = None
@@ -412,7 +410,6 @@ class Accelerator:
             DistributedDataParallelKwargs: "ddp_handler",
             GradScalerKwargs: "scaler_handler",
             InitProcessGroupKwargs: "init_handler",
-            FP8RecipeKwargs: "fp8_recipe_handler",
             AutocastKwargs: "autocast_handler",
             ProfileKwargs: "profile_handler",
             AORecipeKwargs: "ao_recipe_handler",
@@ -1796,7 +1793,7 @@ class Accelerator:
 
         # We prepare TE after, allowing for bf16 autocast to happen first
         if self.fp8_backend == FP8BackendType.TE and not self.delayed_fp8_autocast:
-            model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
+            model = apply_fp8_autowrap(model, self.te_recipe_handler)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
@@ -2024,7 +2021,7 @@ class Accelerator:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
         if self.fp8_backend == FP8BackendType.TE and self.delayed_fp8_autocast:
-            model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
+            model = apply_fp8_autowrap(model, self.te_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if self.state.dynamo_plugin.use_regional_compilation:
@@ -2240,7 +2237,7 @@ class Accelerator:
         if model is not None:
             # If we are using FP8, we need to apply the autowrap now
             if self.fp8_backend == FP8BackendType.TE:
-                model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
+                model = apply_fp8_autowrap(model, self.te_recipe_handler)
             # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
             deepspeed_plugin.set_moe_leaf_modules(model)
             # deal with config keys that use `auto` value and rely on model's hidden_size
@@ -4263,9 +4260,7 @@ class Accelerator:
     def fp8_backend(self) -> FP8BackendType:
         "Returns the configured backend for training in FP8"
         if self.has_fp8_handler:
-            if self.fp8_recipe_handler is not None:
-                return FP8BackendType(self.fp8_recipe_handler.backend)
-            elif self.ao_recipe_handler is not None:
+            if self.ao_recipe_handler is not None:
                 return FP8BackendType.AO
             elif self.te_recipe_handler is not None:
                 return FP8BackendType.TE

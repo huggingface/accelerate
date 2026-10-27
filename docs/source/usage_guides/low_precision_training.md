@@ -74,9 +74,9 @@ To use it, specify `backend="te"` and modify any of the arguments you want as pa
 
 ```{python}
 from accelerate import Accelerator
-from accelerate.utils import FP8RecipeKwargs
-kwargs = [FP8RecipeKwargs(backend="te", ...)]
-accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
+from accelerate.utils import TERecipeKwargs
+kwargs = [TERecipeKwargs(...)]
+accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=kwargs)
 ```
 
 Or during `accelerate launch` via `--fp8_backend=te ...`. Use `accelerate launch --fp8_backend=te -h` to see relevant arguments.
