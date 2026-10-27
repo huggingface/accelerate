@@ -89,10 +89,6 @@ def is_pytest_available():
     return _is_package_available("pytest")
 
 
-def is_msamp_available():
-    return _is_package_available("msamp", "ms-amp")
-
-
 def is_schedulefree_available():
     return _is_package_available("schedulefree")
 
@@ -182,7 +178,7 @@ def is_fp16_available():
 
 def is_fp8_available():
     "Checks if fp8 is supported"
-    return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
+    return is_transformer_engine_available() or is_torchao_available()
 
 
 def is_4bit_bnb_available():

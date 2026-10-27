@@ -939,7 +939,7 @@ class AcceleratorState:
                 # this is confusing, why is is_fp8_available only checks for library availability ?
                 if not is_fp8_available():
                     raise ValueError(
-                        "Using `fp8` precision requires `transformer_engine` or `MS-AMP` to be installed."
+                        "Using `fp8` precision requires `transformer_engine` or `torchao` to be installed."
                     )
                 elif torch.cuda.is_available() and not check_cuda_fp8_capability():
                     logger.warning(

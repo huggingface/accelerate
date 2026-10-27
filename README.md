@@ -258,7 +258,7 @@ pip install accelerate
 - multi-GPU on several nodes (machines)
 - TPU
 - FP16/BFloat16 mixed precision
-- FP8 mixed precision with [Transformer Engine](https://github.com/NVIDIA/TransformerEngine) or [MS-AMP](https://github.com/Azure/MS-AMP/)
+- FP8 mixed precision with [Transformer Engine](https://github.com/NVIDIA/TransformerEngine) or [torchao](https://github.com/pytorch/ao)
 - DeepSpeed support (Experimental)
 - PyTorch Fully Sharded Data Parallel (FSDP) support (Experimental)
 - Megatron-LM support (Experimental)
