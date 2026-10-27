@@ -14,7 +14,6 @@
 from ..parallelism_config import ParallelismConfig
 from .ao import convert_model_to_fp8_ao, filter_first_and_last_linear_layers, has_ao_layers
 from .constants import (
-    MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
     MODEL_NAME,
     OPTIMIZER_NAME,
     PROFILE_PATTERN_NAME,
@@ -31,7 +30,6 @@ from .constants import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     WEIGHTS_PATTERN_NAME,
-    XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .dataclasses import (
     AORecipeKwargs,

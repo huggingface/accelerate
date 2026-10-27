@@ -158,7 +158,8 @@ def is_deepspeed_available():
 
 
 def is_pippy_available():
-    return is_torch_version(">=", "2.4.0")
+    # `torch.distributed.pipelining` ships with every supported torch version
+    return True
 
 
 def is_bf16_available(ignore_tpu=False):
@@ -534,9 +535,8 @@ def deepspeed_required(func):
 
 
 def is_weights_only_available():
-    # Weights only with allowlist was added in 2.4.0
-    # ref: https://github.com/pytorch/pytorch/pull/124331
-    return is_torch_version(">=", "2.4.0")
+    # `torch.load(weights_only=True)` with an allowlist ships with every supported torch version
+    return True
 
 
 def is_numpy_available(min_version="1.25.0"):

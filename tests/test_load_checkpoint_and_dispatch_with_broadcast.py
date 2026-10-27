@@ -36,7 +36,7 @@ from accelerate.test_utils import (
     run_first,
     torch_device,
 )
-from accelerate.test_utils.testing import require_torch_min_version, require_transformers
+from accelerate.test_utils.testing import require_transformers
 from accelerate.utils.imports import is_hpu_available, is_transformers_available
 
 
@@ -193,7 +193,6 @@ def load_checkpoint_and_dispatch_ddp():
         torch.testing.assert_close(tensor, ddp_tensor, msg=ddp_name)
 
 
-@require_torch_min_version(version="2.4.0")
 @require_transformers
 @require_multi_device
 @run_first

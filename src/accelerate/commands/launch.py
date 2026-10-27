@@ -197,7 +197,7 @@ def launch_command_parser(subparsers=None):
         choices=["no", "fp16", "bf16", "fp8"],
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
-        "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
+        "BF16 training is only supported on Nvidia Ampere GPUs.",
     )
     resource_args.add_argument(
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."

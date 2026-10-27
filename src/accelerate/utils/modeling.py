@@ -18,7 +18,6 @@ import inspect
 import json
 import logging
 import os
-import re
 import shutil
 import tempfile
 import warnings
@@ -169,14 +168,7 @@ def dtype_byte_size(dtype: torch.dtype):
         return 1 / 2
     elif dtype == CustomDtype.FP8:
         return 1
-    elif is_torch_version(">=", "2.1.0"):
-        # The name regex below misreads FP8 and sub-byte dtypes such as `uint4` and `float4_e2m1fn_x2`
-        return dtype.itemsize
-    bit_search = re.search(r"[^\d](\d+)$", str(dtype))
-    if bit_search is None:
-        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
-    bit_size = int(bit_search.groups()[0])
-    return bit_size // 8
+    return dtype.itemsize
 
 
 def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
@@ -332,7 +324,7 @@ def set_module_tensor_to_device(
                 device = "hpu"
             elif torch.cuda.is_available():
                 pass
-            elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+            elif torch.accelerator.is_available():
                 device = f"{torch.accelerator.current_accelerator().type}:{device}"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
@@ -817,7 +809,7 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
-        elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+        elif torch.accelerator.is_available():
             acc_type = torch.accelerator.current_accelerator().type
             for i in range(torch.accelerator.device_count()):
                 try:
@@ -860,7 +852,7 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.hpu.device_count()
     elif torch.cuda.is_available():
         num_devices = torch.cuda.device_count()
-    elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+    elif torch.accelerator.is_available():
         num_devices = torch.accelerator.device_count()
     else:
         num_devices = 0
@@ -999,7 +991,7 @@ def get_balanced_memory(
         expected_device_type = "mps"
     elif torch.cuda.is_available():
         expected_device_type = "cuda"
-    elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+    elif torch.accelerator.is_available():
         expected_device_type = torch.accelerator.current_accelerator().type
     else:
         expected_device_type = None
@@ -1981,12 +1973,9 @@ def load_checkpoint_in_model(
             # exception for multi-device loading was made for the meta device in torch v2.7.0
             # https://github.com/pytorch/pytorch/blob/v2.6.0/torch/distributed/checkpoint/state_dict.py#L557-L563
             # https://github.com/pytorch/pytorch/blob/v2.7.0-rc2/torch/distributed/checkpoint/state_dict.py#L575-L587
-            if is_torch_version(">=", "2.2.0") and (
-                (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1
-            ):
+            if (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1:
                 from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
 
-                broadcast_from_rank0 &= is_torch_version(">=", "2.4.0")
                 loaded_checkpoint = (
                     load_state_dict(checkpoint_file, device_map=device_map)
                     if not broadcast_from_rank0 or dist.get_rank() == 0
@@ -1998,7 +1987,7 @@ def load_checkpoint_in_model(
                     options=StateDictOptions(
                         full_state_dict=full_state_dict,
                         strict=strict,
-                        **({"broadcast_from_rank0": broadcast_from_rank0} if is_torch_version(">=", "2.4.0") else {}),
+                        broadcast_from_rank0=broadcast_from_rank0,
                     ),
                 )
             else:
@@ -2177,10 +2166,7 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
             raise ValueError("Grad Scaler with MPS device requires a Pytorch >= 2.8.0")
         return torch.amp.GradScaler("mps", **kwargs)
     else:
-        if is_torch_version(">=", "2.3"):
-            return torch.amp.GradScaler("cuda", **kwargs)
-        else:
-            return torch.cuda.amp.GradScaler(**kwargs)
+        return torch.amp.GradScaler("cuda", **kwargs)
 
 
 def has_offloaded_params(module: torch.nn.Module) -> bool:

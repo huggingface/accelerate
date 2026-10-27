@@ -236,7 +236,7 @@ If you like the simplicity of 🤗 Accelerate but would prefer a higher-level ab
 
 ## Installation
 
-This repository is tested on Python 3.11+ and PyTorch 2.0.0+
+This repository is tested on Python 3.11+ and PyTorch 2.6.0+
 
 You should install 🤗 Accelerate in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
