@@ -42,7 +42,6 @@ from .imports import (
     is_cuda_available,
     is_hpu_available,
     is_mlu_available,
-    is_msamp_available,
     is_musa_available,
     is_neuron_available,
     is_npu_available,
@@ -282,8 +281,7 @@ class InitProcessGroupKwargs(KwargsHandler):
 
 
 # Literals
-Backend = Literal["MSAMP", "TE"]
-OptLevel = Literal["O1", "O2"]
+Backend = Literal["TE"]
 FP8Format = Literal["HYBRID", "E4M3", "E5M2"]
 AmaxComputeAlgorithm = Literal["max", "most_recent"]
 
@@ -417,26 +415,9 @@ class TERecipeKwargs(KwargsHandler):
 
 
 @dataclass
-class MSAMPRecipeKwargs(KwargsHandler):
+class FP8RecipeKwargs(TERecipeKwargs):
     """
-    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
-    training with `ms-amp`.
-    """
-
-    opt_level: OptLevel = None
-
-    def __post_init__(self):
-        env_prefix = "ACCELERATE_FP8_"
-        if self.opt_level is None:
-            self.opt_level = os.environ.get(env_prefix + "OPT_LEVEL", "O2")
-        if self.opt_level not in get_args(OptLevel):
-            raise ValueError(f"`opt_level` must be one of {' or '.join(get_args(OptLevel))}")
-
-
-@dataclass
-class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
-    """
-    Deprecated. Please use one of the proper FP8 recipe kwargs classes such as `TERecipeKwargs` or `MSAMPRecipeKwargs`
+    Deprecated. Please use one of the proper FP8 recipe kwargs classes such as `TERecipeKwargs` or `AORecipeKwargs`
     instead.
     """
 
@@ -446,15 +427,14 @@ class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
         env_prefix = "ACCELERATE_FP8_"
         warnings.warn(
             "FP8RecipeKwargs is deprecated and will be removed in Accelerate v2.0.0. "
-            "Please use one of the proper FP8 recipe kwargs classes such as TERecipeKwargs or MSAMPRecipeKwargs instead.",
+            "Please use one of the proper FP8 recipe kwargs classes such as TERecipeKwargs or AORecipeKwargs instead.",
             FutureWarning,
         )
-        default_backend = "msamp" if is_msamp_available() else "te"
         if self.backend is None:
-            self.backend = os.environ.get(env_prefix + "BACKEND", default_backend)
+            self.backend = os.environ.get(env_prefix + "BACKEND", "te")
         self.backend = self.backend.upper()
         if self.backend not in get_args(Backend):
-            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine) to use `FP8RecipeKwargs`.")
+            raise ValueError("`backend` must be 'TE' (TransformerEngine) to use `FP8RecipeKwargs`.")
         super().__post_init__()
 
 
@@ -634,13 +614,11 @@ class FP8BackendType(str, enum.Enum):
     Values:
 
         - **TE** -- using TransformerEngine.
-        - **MSAMP** -- using msamp.
     """
 
     # Subclassing str as well as Enum allows the `FP8BackendType` to be JSON-serializable out of the box.
     NO = "NO"
     TE = "TE"
-    MSAMP = "MSAMP"
     AO = "AO"
 
 
@@ -1122,11 +1100,6 @@ class DeepSpeedPlugin:
         transformer_moe_cls_names (`str`, defaults to `None`):
             Comma-separated list of Transformers MoE layer class names (case-sensitive). For example,
             `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention`, `JetMoEBlock`, etc.
-        enable_msamp (`bool`, defaults to `None`):
-            Flag to indicate whether to enable MS-AMP backend for FP8 training.
-        msamp_opt_level (`Optional[Literal["O1", "O2"]]`, defaults to `None`):
-            Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one
-            of ['O1' or 'O2'].
     """
 
     hf_ds_config: Any = field(
@@ -1184,16 +1157,6 @@ class DeepSpeedPlugin:
             " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
         },
     )
-    enable_msamp: bool = field(
-        default=None,
-        metadata={"help": "Flag to indicate whether to enable MS-AMP backend for FP8 training."},
-    )
-    msamp_opt_level: Optional[Literal["O1", "O2"]] = field(
-        default=None,
-        metadata={
-            "help": "Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one of ['O1' or 'O2']."
-        },
-    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -1227,12 +1190,6 @@ class DeepSpeedPlugin:
             self.zero3_save_16bit_model = (
                 os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false").lower() == "true"
             )
-        if self.enable_msamp is None:
-            self.enable_msamp = os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"
-
-        if self.msamp_opt_level is None:
-            self.msamp_opt_level = os.environ.get("ACCELERATE_FP8_OPT_LEVEL", "O1")
-
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
 
@@ -1313,19 +1270,6 @@ class DeepSpeedPlugin:
         # to the `Accelerator`'s `deepspeed_plugin` param, *or* `AcceleratorState().enable_deepspeed_plugin(plugin_key)` is manually called
         self._set_selected(False)
 
-        # Ignore if it's already set
-        if self.enable_msamp and "msamp" not in self.deepspeed_config:
-            if self.zero_stage == 3:
-                raise NotImplementedError(
-                    "MS-AMP is not supported for ZeRO Stage 3. Please use ZeRO Stage 0, 1, or 2 instead."
-                )
-            if self.msamp_opt_level not in ["O1", "O2"]:
-                raise ValueError("Invalid optimization level for MS-AMP. Please use one of ['O1' or'O2'].")
-            self.deepspeed_config["msamp"] = {
-                "enabled": True,
-                "opt_level": self.msamp_opt_level,
-            }
-
     def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
         mismatches = [] if mismatches is None else mismatches
         config, ds_key = self.hf_ds_config.find_config_node(ds_key_long)
@@ -1397,13 +1341,6 @@ class DeepSpeedPlugin:
         elif mixed_precision in ("bf16", "fp8"):
             if "bf16" not in ds_config:
                 ds_config["bf16"] = {"enabled": True}
-
-        if mixed_precision == "fp8" and self.enable_msamp:
-            if "msamp" not in ds_config:
-                ds_config["msamp"] = {
-                    "enabled": True,
-                    "opt_level": self.msamp_opt_level,
-                }
 
         if mixed_precision != "no":
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"

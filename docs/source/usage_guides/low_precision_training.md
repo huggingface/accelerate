@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Low Precision Training Methods
 
-Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine`, `MS-AMP`, and `torchao` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training. 
+Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine` and `torchao` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training. 
 
 ## What training on FP8 means
 
@@ -30,7 +30,7 @@ What this will result in is some reduction in the memory used (as we've cut the 
 
 ## Configuring the Accelerator
 
-Currently two actively maintained backends for FP8 are supported (`TransformersEngine` and `torchao`), each with different capabilities and configurations. A legacy `MS-AMP` backend also exists but is no longer recommended (see [below](#configuring-ms-amp) for details).
+Currently two actively maintained backends for FP8 are supported (`TransformersEngine` and `torchao`), each with different capabilities and configurations.
 
 To use either, the same core API is used. Just pass `mixed_precision="fp8"` to either the [`Accelerator`], during `accelerate config` when prompted about mixed precision, or as part of your `config.yaml` file in the `mixed_precision` key:
 
@@ -39,7 +39,7 @@ from accelerate import Accelerator
 accelerator = Accelerator(mixed_precision="fp8")
 ```
 
-To specify a backend (and customize other parts of the FP8 mixed precision setup), you can utilize one of the `RecipeKwargs` dataclasses such as [`utils.AORecipeKwargs`], [`utils.TERecipeKwargs`], or [`utils.MSAMPRecipeKwargs`]; you can also clarify it in your config `yaml`/during `accelerate launch`. We recommend using `TransformersEngine` or `torchao` for new projects:
+To specify a backend (and customize other parts of the FP8 mixed precision setup), you can utilize one of the `RecipeKwargs` dataclasses such as [`utils.AORecipeKwargs`] or [`utils.TERecipeKwargs`]; you can also clarify it in your config `yaml`/during `accelerate launch`. We recommend using `TransformersEngine` or `torchao` for new projects:
 
 ```{python}
 from accelerate import Accelerator
@@ -62,49 +62,6 @@ fp8_config:
   margin: 0
   override_linear_precision: (false, false, false)
   use_autocast_during_eval: false
-```
-
-## Configuring MS-AMP
-
-<Tip warning={true}>
-
-**⚠️ Deprecated / Unmaintained:** MS-AMP is no longer actively maintained by Microsoft. The [MS-AMP repository](https://github.com/Azure/MS-AMP) has not received updates since 2023 and has known compatibility issues:
-
-- Requires CUDA 11.x (does not support CUDA 12.x+)
-- Requires older NCCL versions incompatible with recent PyTorch releases
-- Does not support recent PyTorch versions (2.2+)
-
-**We strongly recommend using [`TransformersEngine`](#configuring-transformersengine) or [`torchao`](#configuring-torchao) instead for all new and existing FP8 training workflows.** Both are actively maintained and support modern CUDA/PyTorch versions. Native PyTorch FP8 support via `torchao` is particularly promising as a vendor-neutral solution.
-
-The MS-AMP backend is retained in Accelerate for legacy compatibility but may be removed in a future release.
-
-</Tip>
-
-`MS-AMP` has a single configuration argument: the optimization level. 
-
-Currently two levels of optimization are supported in the Accelerate integration, `"O1"` and `"O2"` (using the letter 'o', not zero). 
-
-* `"O1"` will cast the weight gradients and `all_reduce` communications to happen in 8-bit, while the rest are done in 16 bit. This reduces the general GPU memory usage and speeds up communication bandwidths.
-* `"O2"` will also cast first-order optimizer states into 8 bit, while the second order states are in FP16. (Currently just the `Adam` optimizer is supported). This tries its best to minimize final accuracy degradation and will save the highest potential memory.
-
-To specify an optimization level, pass it to the `FP8KwargsHandler` by setting the `optimization_level` argument:
-
-```{python}
-from accelerate import Accelerator
-from accelerate.utils import FP8RecipeKwargs
-kwargs = [FP8RecipeKwargs(backend="msamp", optimization_level="O2")]
-accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
-```
-
-Or during `accelerate launch` via `--fp8_backend=msamp --fp8_opt_level=O2`
-
-Similarly this can be set in your `config.yaml`:
-
-```{yaml}
-mixed_precision: fp8
-fp8_config:
-    backend: MSAMP
-    opt_level: O2
 ```
 
 ## Configuring TransformersEngine
@@ -212,7 +169,6 @@ Find out more [here](https://github.com/huggingface/accelerate/tree/main/benchma
 
 To learn more about training in FP8 please check out the following resources:
 
-* [Our concept guide](../concept_guides/low_precision_training) detailing into more about TransformersEngine, torchao, and MS-AMP
+* [Our concept guide](../concept_guides/low_precision_training) detailing into more about TransformersEngine and torchao
 * [The `transformers-engine` documentation](https://docs.nvidia.com/deeplearning/transformer-engine/api/common.html)
 * [The `torchao` documentation](https://github.com/pytorch/ao/tree/main/torchao/float8)
-* [The `MS-AMP` documentation](https://azure.github.io/MS-AMP/) (⚠️ no longer maintained)

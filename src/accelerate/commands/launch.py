@@ -797,8 +797,8 @@ def launch_command_parser(subparsers=None):
     fp8_args.add_argument(
         "--fp8_backend",
         type=str,
-        choices=["ao", "te", "msamp"],
-        help="Choose a backend to train with FP8 (ao: torchao, te: TransformerEngine, msamp: MS-AMP)",
+        choices=["ao", "te"],
+        help="Choose a backend to train with FP8 (ao: torchao, te: TransformerEngine)",
     )
     fp8_args.add_argument(
         "--fp8_use_autocast_during_eval",
@@ -843,13 +843,6 @@ def launch_command_parser(subparsers=None):
         type=lambda x: tuple(map(str_to_bool, x.split(","))),
         default=(False, False, False),
         help="Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision. Should be passed in a comma-separated string of booleans (useful only when `--fp8_backend=te` is passed).",
-    )
-    fp8_args.add_argument(
-        "--fp8_opt_level",
-        type=str,
-        default="O2",
-        choices=["O1", "O2"],
-        help="What level of 8-bit collective communication should be used with MS-AMP (useful only when `--fp8_backend=msamp` is passed).",
     )
     fp8_args.add_argument(
         "--fp8_enable_fsdp_float8_all_gather",
