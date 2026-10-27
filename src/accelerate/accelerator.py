@@ -2847,10 +2847,10 @@ class Accelerator:
                     opt = opt.optimizer
                 self.scaler.unscale_(opt)
 
-    def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2):
+    def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2, foreach=None):
         is_dtensor_available = torch.distributed.is_available()
         if not is_dtensor_available:
-            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+            return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type, foreach=foreach)
 
         from torch.distributed.tensor import DTensor
         from torch.nn.utils import clip_grads_with_norm_, get_total_norm
@@ -2866,7 +2866,6 @@ class Accelerator:
             torch.stack([n.full_tensor() if isinstance(n, DTensor) else n for n in norms]) if norms else torch.zeros(1)
         )
         total_norm = norms.sum() if norm_type == 0 else torch.linalg.vector_norm(norms, norm_type)
-        # + error_if_nonfinite check
         if max_norm != float("inf"):
             for params in params_by_mesh.values():
                 clip_grads_with_norm_(params, max_norm, total_norm, foreach)
