@@ -177,6 +177,9 @@ class PartialState:
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
         if not self.initialized:
+            # Standalone users must honor CPU launches without relying on AcceleratorState initialization.
+            if parse_flag_from_env("ACCELERATE_USE_CPU"):
+                cpu = True
             self._cpu = cpu
             self.backend = None
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
