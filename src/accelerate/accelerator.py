@@ -2856,13 +2856,18 @@ class Accelerator:
         for param in parameters:
             if param.grad is not None:
                 params_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param)
-        norms = [
-            get_total_norm([p.grad for p in params], norm_type, foreach=foreach) for params in params_by_mesh.values()
-        ]
+        if norm_type == 0:
+            # Reduce each gradient's norm before counting nonzero norms.
+            norms = [torch.linalg.vector_norm(p.grad, 0) for params in params_by_mesh.values() for p in params]
+        else:
+            norms = [
+                get_total_norm([p.grad for p in params], norm_type, foreach=foreach)
+                for params in params_by_mesh.values()
+            ]
         norms = (
             torch.stack([n.full_tensor() if isinstance(n, DTensor) else n for n in norms]) if norms else torch.zeros(1)
         )
-        total_norm = norms.sum() if norm_type == 0 else torch.linalg.vector_norm(norms, norm_type)
+        total_norm = torch.linalg.vector_norm(norms, norm_type)
         if max_norm != float("inf"):
             for params in params_by_mesh.values():
                 clip_grads_with_norm_(params, max_norm, total_norm, foreach)
