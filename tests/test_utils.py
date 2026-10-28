@@ -14,15 +14,21 @@
 import builtins
 import os
 import pickle
+import signal
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 import warnings
 from collections import UserDict, namedtuple
+from textwrap import dedent
 from types import SimpleNamespace
 from typing import NamedTuple, Optional
 from unittest.mock import Mock, patch
 
 import numpy as np
+import psutil
 import pytest
 import torch
 from torch import nn
@@ -31,6 +37,7 @@ from accelerate.big_modeling import cpu_offload_with_hook
 from accelerate.hooks import attach_align_device_hook, remove_hook_from_module
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
+    execute_subprocess_async,
     require_huggingface_suite,
     require_non_cpu,
     require_non_torch_xla,
@@ -71,6 +78,217 @@ if is_torch_xla_available():
     from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
+
+
+@pytest.fixture
+def subprocess_pid_file(tmp_path):
+    """Keep failed tests from leaving their recorded subprocess running.
+
+    Tests check that execute_subprocess_async stopped the process before this fixture cleans up.
+    Teardown runs even if an assertion fails.
+    """
+    pid_file = tmp_path / "process.pid"
+    yield pid_file
+    if pid_file.exists():
+        try:
+            process = psutil.Process(int(pid_file.read_text()))
+            process.kill()
+            try:
+                process.wait(timeout=2)  # kill() is asynchronous and may return before the process exits.
+            except psutil.TimeoutExpired:
+                # A zombie has exited; only its parent can reap it, that's fine.
+                if process.status() != psutil.STATUS_ZOMBIE:
+                    raise
+        except psutil.NoSuchProcess:
+            pass  # The process is already gone.
+
+
+def assert_subprocess_stopped(pid_file):
+    try:
+        process = psutil.Process(int(pid_file.read_text()))
+        assert not process.is_running() or process.status() == psutil.STATUS_ZOMBIE, (
+            f"Subprocess {process.pid} is still running"
+        )
+    except psutil.NoSuchProcess:
+        pass
+
+
+class TestExecuteSubprocessAsync:
+    @unittest.skipUnless(os.name == "posix", "Negative signal exit codes are POSIX-only")
+    def test_negative_returncode_raises(self):
+        """Signal termination must raise, even though its exit code is negative."""
+        command = [sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"]
+
+        # SIGTERM is 15 on Linux. A child terminated by that signal has return code -15.
+        with pytest.raises(RuntimeError, match=f"returncode {-signal.SIGTERM}"):
+            execute_subprocess_async(command, echo=False)
+
+    def test_captures_both_output_streams_without_hanging(self):
+        """execute_subprocess_async must collect both streams without blocking the child on an unread pipe.
+
+        Reading all of stdout before starting stderr can hang: a full stderr pipe blocks the child's next write.
+        The child cannot finish and close stdout, so execute_subprocess_async never reaches stderr.
+        The timeout makes this deadlock fail the test instead of hanging.
+        https://docs.python.org/3.12/library/asyncio-subprocess.html#asyncio.subprocess.Process.wait
+        """
+        child_code = dedent("""
+            import sys
+
+            # A few short messages would fit in the buffers and would not expose sequential reading.
+            for _ in range(1000):
+                print("out" * 100)
+                print("err" * 100, file=sys.stderr)
+        """)
+
+        result = execute_subprocess_async([sys.executable, "-c", child_code], timeout=5, quiet=True, echo=False)
+
+        # Successful exit alone does not prove that all output was captured.
+        assert result.stdout == ["out" * 100] * 1000
+        assert result.stderr == ["err" * 100] * 1000
+
+    @pytest.mark.parametrize("close_output", [False, True], ids=["open-pipes", "closed-pipes"])
+    def test_timeout_stops_child(self, subprocess_pid_file, close_output):
+        """execute_subprocess_async must stop a timed-out child and preserve its output in the exception.
+
+        Closing stdout and stderr does not mean the child has exited: the timeout must still cover waiting for exit.
+        No result is returned on timeout, so the exception must retain output that can help explain the stall.
+        """
+        child_code = dedent(f"""
+            import os
+            import sys
+            import time
+            from pathlib import Path
+
+            Path({str(subprocess_pid_file)!r}).write_text(str(os.getpid()))
+            print("started", flush=True)
+            print("diagnostic", file=sys.stderr, flush=True)
+            if {close_output}:
+                os.close(1)
+                os.close(2)
+            time.sleep(5)
+        """)
+
+        started = time.monotonic()
+        with pytest.raises(TimeoutError) as error:
+            execute_subprocess_async([sys.executable, "-c", child_code], timeout=1, quiet=True, echo=False)
+
+        # Allow time for cleanup, but fail before the child could finish its five-second sleep naturally.
+        assert time.monotonic() - started < 4
+        # Check captured output, not the command text in the exception, which also contains these messages.
+        assert "Captured stdout:\nstarted" in str(error.value)
+        assert "Captured stderr:\ndiagnostic" in str(error.value)
+        assert_subprocess_stopped(subprocess_pid_file)
+
+    @unittest.skipUnless(os.name == "posix", "Process-group cleanup requires POSIX")
+    def test_timeout_stops_worker_after_launcher_exits(self, subprocess_pid_file):
+        """A timeout must stop workers in the launched process group even after the launcher exits.
+
+        execute_subprocess_async -> launcher (exits) -> worker (keeps running)
+        """
+        launcher_code = dedent(f"""
+            import subprocess
+            import sys
+            from pathlib import Path
+
+            # Popen starts a process and lets the caller continue without waiting for it to finish.
+            # By default, the worker inherits stdout and stderr, keeping their pipes open after this launcher exits.
+            # execute_subprocess_async then times out waiting for output to end and must stop the surviving worker.
+            worker = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])
+            Path({str(subprocess_pid_file)!r}).write_text(str(worker.pid))
+        """)
+
+        started = time.monotonic()
+        with pytest.raises(TimeoutError):
+            execute_subprocess_async([sys.executable, "-c", launcher_code], timeout=1, quiet=True, echo=False)
+
+        # A worker that finishes its sleep naturally must not count as successful cleanup.
+        assert time.monotonic() - started < 4
+        assert_subprocess_stopped(subprocess_pid_file)
+
+    def test_reader_failure_stops_child(self, subprocess_pid_file):
+        """execute_subprocess_async must stop its child before re-raising an output-reading exception.
+
+        Decoding the child's invalid UTF-8 raises UnicodeDecodeError in the parent; the child keeps running.
+        Handling timeouts alone would leave that child alive.
+        Invalid UTF-8 is only a convenient exception trigger; this test checks process cleanup.
+        """
+        child_code = dedent(rf"""
+            import os
+            import time
+            from pathlib import Path
+
+            Path({str(subprocess_pid_file)!r}).write_text(str(os.getpid()))
+            # Fail UTF-8 decoding; the newline lets the reader receive the bytes while the child is still running.
+            os.write(1, b"\xff\n")
+            time.sleep(5)
+        """)
+
+        started = time.monotonic()
+        with pytest.raises(UnicodeDecodeError):
+            execute_subprocess_async([sys.executable, "-c", child_code], quiet=True, echo=False)
+
+        # Waiting for the child to finish its 5s sleep naturally must not count as successful cleanup.
+        assert time.monotonic() - started < 4
+        assert_subprocess_stopped(subprocess_pid_file)
+
+    @unittest.skipUnless(os.name == "posix", "Sending SIGINT directly to a process requires POSIX")
+    def test_keyboard_interrupt_stops_child(self, subprocess_pid_file):
+        """execute_subprocess_async must stop its child before re-raising KeyboardInterrupt to its caller.
+
+        Ctrl+C must not leave the launched command running after its caller is interrupted.
+
+        pytest -> supervisor running execute_subprocess_async -> sleeping child
+        Send SIGINT only to the supervisor: if the child also received it, the child could exit on its own
+        and hide missing cleanup in execute_subprocess_async.
+        """
+        child_code = dedent(f"""
+            import os
+            import time
+            from pathlib import Path
+
+            # File existence triggers SIGINT; publish it atomically so the child cannot be killed mid-write.
+            pid_file = Path({str(subprocess_pid_file)!r})
+            pending_pid_file = pid_file.with_suffix(".tmp")
+            pending_pid_file.write_text(str(os.getpid()))
+            pending_pid_file.replace(pid_file)
+            # Comfortably exceed the 5s startup + 4s response limits so natural exit cannot be mistaken for cleanup.
+            time.sleep(30)
+        """)
+        supervisor_code = dedent(f"""
+            import sys
+            from accelerate.test_utils.testing import execute_subprocess_async
+
+            try:
+                execute_subprocess_async([sys.executable, "-c", {child_code!r}], echo=False)
+            except KeyboardInterrupt:
+                print("caught KeyboardInterrupt")
+        """)
+
+        # Run the helper in another process so sending SIGINT does not interrupt pytest.
+        supervisor = subprocess.Popen(
+            [sys.executable, "-c", supervisor_code],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+        try:
+            # Wait for the child to start, so SIGINT tests cleanup rather than interrupting imports.
+            startup_deadline = time.monotonic() + 5
+            while not subprocess_pid_file.exists() and time.monotonic() < startup_deadline:
+                time.sleep(0.01)
+            assert subprocess_pid_file.exists(), "Child did not start"
+
+            supervisor.send_signal(signal.SIGINT)
+            stdout, stderr = supervisor.communicate(timeout=4)  # Fail if SIGINT does not lead to supervisor exit.
+
+            assert supervisor.returncode == 0, stderr.decode()
+            assert b"caught KeyboardInterrupt" in stdout
+            assert_subprocess_stopped(subprocess_pid_file)
+        finally:
+            # Keep a failed test from leaving its supervisor running.
+            if supervisor.poll() is None:  # None means still running.
+                supervisor.kill()
+            supervisor.communicate(timeout=5)  # Finish collecting output and wait for exit; kill() does neither.
 
 
 class UtilsTester(unittest.TestCase):

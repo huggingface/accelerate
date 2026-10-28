@@ -18,6 +18,7 @@ import io
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -725,57 +726,110 @@ class _RunOutput:
         self.stderr = stderr
 
 
-async def _read_stream(stream, callback):
-    while True:
-        line = await stream.readline()
-        if line:
-            callback(line)
-        else:
-            break
+async def _stop_subprocess(process, tasks):
+    try:
+        if os.name == "posix":
+            # Workers may still be alive even after their launcher has exited.
+            os.killpg(process.pid, signal.SIGKILL)
+        elif process.returncode is None:
+            process.kill()
+    except ProcessLookupError:
+        pass  # The process or process group is already gone.
+    finally:
+        for task in tasks:
+            task.cancel()
+        # Finish cancelling the readers before communicate reads from the same pipes.
+        await asyncio.gather(*tasks, return_exceptions=True)
+        # Waiting for exit without draining buffered output can deadlock.
+        stdout, stderr = await process.communicate()
+    return stdout, stderr
 
 
 async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> _RunOutput:
+    """
+    Start the process
+        ↓
+    Read stdout, read stderr and wait for exit concurrently
+        ↓
+    Success: return captured output
+    Failure/interruption: stop execution, finish cleanup, then report the failure
+    """
     if echo:
         print("\nRunning: ", " ".join(cmd))
 
-    p = await asyncio.create_subprocess_exec(
+    process = await asyncio.create_subprocess_exec(
         cmd[0],
         *cmd[1:],
         stdin=stdin,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env=env,
+        # Children normally inherit the caller's process group. Start a new POSIX session instead,
+        # giving the child its own group so cleanup can stop it and its workers without signalling the caller.
+        # Workers that leave this group are not covered; non-POSIX cleanup stops only the direct child.
+        start_new_session=os.name == "posix",  # False if not POSIX
     )
 
-    # note: there is a warning for a possible deadlock when using `wait` with huge amounts of data in the pipe
-    # https://docs.python.org/3/library/asyncio-subprocess.html#asyncio.asyncio.subprocess.Process.wait
-    #
-    # If it starts hanging, will need to switch to the following code. The problem is that no data
-    # will be seen until it's done and if it hangs for example there will be no debug info.
-    # out, err = await p.communicate()
-    # return _RunOutput(p.returncode, out, err)
+    stdout_lines = []
+    stderr_lines = []
 
-    out = []
-    err = []
+    async def read_output(stream, lines, console, label):
+        while True:
+            raw_line = await stream.readline()
+            if not raw_line:
+                break
+            line = raw_line.decode("utf-8").rstrip()
+            lines.append(line)
+            if not quiet:
+                print(label, line, file=console)
 
-    def tee(line, sink, pipe, label=""):
-        line = line.decode("utf-8").rstrip()
-        sink.append(line)
-        if not quiet:
-            print(label, line, file=pipe)
+    tasks = [
+        asyncio.create_task(read_output(process.stdout, stdout_lines, sys.stdout, "stdout:")),
+        asyncio.create_task(read_output(process.stderr, stderr_lines, sys.stderr, "stderr:")),
+        asyncio.create_task(process.wait()),  # Wait for process exit: bcs closing its output != child has finished.
+    ]
+    try:
+        # gather waits for all three. wait_for puts one deadline around that combined operation.
+        # A worker retaining an output pipe after its launcher exits therefore remains subject to the deadline too.
+        # So does a child that closes its output but keeps running.
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=timeout)
+    except BaseException as error:
+        # CancelledError inherits from BaseException; clean up before propagating cancellation too.
+        stdout, stderr = await _stop_subprocess(process, tasks)
+        # Invalid bytes in remaining output must not replace the original failure with a decoding error.
+        stdout_lines.extend(stdout.decode("utf-8", errors="replace").splitlines())
+        stderr_lines.extend(stderr.decode("utf-8", errors="replace").splitlines())
 
-    # XXX: the timeout doesn't seem to make any difference here
-    await asyncio.wait(
-        [
-            asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
-            asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
-        ],
-        timeout=timeout,
-    )
-    return _RunOutput(await p.wait(), out, err)
+        if isinstance(error, asyncio.TimeoutError):
+            stdout, stderr = "\n".join(stdout_lines), "\n".join(stderr_lines)
+            raise TimeoutError(
+                f"'{' '.join(map(str, cmd))}' timed out after {timeout} seconds\n\n"
+                f"Captured stdout:\n{stdout}\n\nCaptured stderr:\n{stderr}"
+            ) from error
+        raise
+
+    return _RunOutput(process.returncode, stdout_lines, stderr_lines)
 
 
-def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
+def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=None, quiet=False, echo=True) -> _RunOutput:
+    """Run a command and capture stdout/stderr. `quiet=True` suppresses only their live console output.
+
+    `cmd` contains the executable and its arguments. `echo=True` prints the command before starting it.
+    `env=None` inherits the caller's environment; a supplied mapping replaces it.
+    `stdin=None` inherits the caller's input stream. Pass an open file or file descriptor to redirect input,
+    or `subprocess.DEVNULL` to supply no input.
+
+    `timeout=None` means no deadline. A finite timeout (seconds) covers output collection and process exit
+    after creation. Process creation and cleanup can extend total runtime beyond this limit.
+
+    A nonzero exit status raises `RuntimeError`. On timeout, cancellation or output-reading errors,
+    kill and reap the direct child before raising. Timeouts raise `TimeoutError`; cancellation and
+    output-reading errors are re-raised after cleanup.
+
+    On POSIX, a separate process group lets cleanup stop the child and workers that remain in that group.
+    Elsewhere, cleanup stops only the direct child. Descendants outside this scope may remain running
+    and delay cleanup if they keep the output pipes open.
+    """
     # Cast every path in `cmd` to a string
     for i, c in enumerate(cmd):
         if isinstance(c, Path):
@@ -784,7 +838,7 @@ def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet
     result = asyncio.run(_stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo))
 
     cmd_str = " ".join(cmd)
-    if result.returncode > 0:
+    if result.returncode != 0:
         stderr = "\n".join(result.stderr)
         raise RuntimeError(
             f"'{cmd_str}' failed with returncode {result.returncode}\n\n"
