@@ -46,6 +46,7 @@ RESPECT_CGROUP_MEMORY_BY_DEFAULT = False
 
 _CGROUP_ROOT = "/sys/fs/cgroup"
 _PROC_SELF_CGROUP = "/proc/self/cgroup"
+_PROC_SELF_MOUNTINFO = "/proc/self/mountinfo"
 # cgroup v1 reports "no limit" as a huge sentinel instead of `max`.
 _CGROUP_UNLIMITED = 1 << 62
 
@@ -71,10 +72,12 @@ def _read_memory_stat(path: str, key: str) -> int:
     return 0
 
 
-def _cgroup_dirs(controller: Optional[str]) -> list[str]:
-    """Directories of this process's cgroup from `/proc/self/cgroup`, nearest first, mount root last."""
-    root = _CGROUP_ROOT if controller is None else os.path.join(_CGROUP_ROOT, controller)
-    rel_path = ""
+def _path_parts(path: str) -> list[str]:
+    return [part for part in path.split("/") if part]
+
+
+def _cgroup_membership(controller: Optional[str]) -> str:
+    """The cgroup path of this process from `/proc/self/cgroup`, relative to the hierarchy root."""
     try:
         with open(_PROC_SELF_CGROUP) as f:
             for line in f:
@@ -84,15 +87,65 @@ def _cgroup_dirs(controller: Optional[str]) -> list[str]:
                 is_v2 = controller is None and parts[0] == "0" and parts[1] == ""
                 is_v1 = controller is not None and controller in parts[1].split(",")
                 if is_v2 or is_v1:
-                    rel_path = parts[2]
-                    break
+                    return parts[2]
     except OSError:
         pass
-    components = [c for c in rel_path.split("/") if c]
+    return ""
+
+
+def _cgroup_mount(controller: Optional[str], membership: str) -> tuple[str, str]:
+    """
+    Returns (mount point, mount root) of the cgroup hierarchy from `/proc/self/mountinfo`.
+
+    The mount can expose a subtree of the hierarchy (mount root other than `/`, e.g. Docker with the host cgroup
+    namespace), cgroup v1 can co-mount controllers under a name such as `cpu,memory`, and several mounts can match,
+    e.g. a bind mount of the container subtree next to the full hierarchy. The mount whose root contains the
+    membership is used; among those, the one with the shortest root, because it exposes the most ancestors and an
+    ancestor limit still applies. Then the first match; then `/sys/fs/cgroup`.
+    """
+    candidates = []
+    try:
+        with open(_PROC_SELF_MOUNTINFO) as f:
+            for line in f:
+                before, separator, after = line.partition(" - ")
+                mount_fields, fs_fields = before.split(), after.split()
+                if not separator or len(mount_fields) < 5 or len(fs_fields) < 3:
+                    continue
+                fs_type, super_options = fs_fields[0], fs_fields[2].split(",")
+                is_v2 = controller is None and fs_type == "cgroup2"
+                is_v1 = controller is not None and fs_type == "cgroup" and controller in super_options
+                if is_v2 or is_v1:
+                    # mountinfo escapes spaces as \040.
+                    candidates.append((mount_fields[4].replace("\\040", " "), mount_fields[3].replace("\\040", " ")))
+    except OSError:
+        pass
+    member_parts = _path_parts(membership)
+    containing = [
+        (mount_point, mount_root)
+        for mount_point, mount_root in candidates
+        if member_parts[: len(_path_parts(mount_root))] == _path_parts(mount_root)
+    ]
+    if containing:
+        return min(containing, key=lambda mount: len(_path_parts(mount[1])))
+    if candidates:
+        return candidates[0]
+    return (_CGROUP_ROOT if controller is None else os.path.join(_CGROUP_ROOT, controller)), "/"
+
+
+def _cgroup_dirs(controller: Optional[str]) -> list[str]:
+    """Directories of this process's cgroup, nearest first, mount point last."""
+    membership = _cgroup_membership(controller)
+    mount_point, mount_root = _cgroup_mount(controller, membership)
+    components = _path_parts(membership)
+    root_components = _path_parts(mount_root)
     if ".." in components:
         # A cgroup outside this cgroup namespace cannot be resolved from here.
         components = []
-    return [os.path.join(root, *components[:depth]) for depth in range(len(components), 0, -1)] + [root]
+    elif components[: len(root_components)] == root_components:
+        # /proc/self/cgroup is relative to the hierarchy root; the mount starts at mount_root.
+        components = components[len(root_components) :]
+    dirs = [os.path.join(mount_point, *components[:depth]) for depth in range(len(components), 0, -1)]
+    return dirs + [mount_point]
 
 
 def get_cgroup_available_memory() -> Optional[int]:
@@ -100,8 +153,10 @@ def get_cgroup_available_memory() -> Optional[int]:
     Returns the memory in bytes that the cgroup of this process can still use, or `None` when no cgroup memory limit
     applies (or the check is disabled, see `RESPECT_CGROUP_MEMORY_BY_DEFAULT`).
 
-    The limit is the smallest one from the process's own cgroup up to the cgroup root, which is the one the kernel
-    enforces. Usage is read from that same cgroup, minus its inactive page cache, which the kernel can reclaim.
+    Every cgroup from the process's own one up to the cgroup root can carry a limit, and the kernel enforces all of
+    them, so the result is the smallest headroom (limit minus usage) over every limited level: a parent with a larger
+    limit can still have less room when its other children use memory. Usage excludes the inactive page cache, which
+    the kernel can reclaim. Returns `None` when no limited level exposes its usage.
     """
     override = os.environ.get("ACCELERATE_RESPECT_CGROUP_MEMORY")
     enabled = RESPECT_CGROUP_MEMORY_BY_DEFAULT if override is None else str_to_bool(override, to_bool=True)
@@ -111,16 +166,21 @@ def get_cgroup_available_memory() -> Optional[int]:
         (None, "memory.max", "memory.current", "inactive_file"),
         ("memory", "memory.limit_in_bytes", "memory.usage_in_bytes", "total_inactive_file"),
     ):
-        levels = [(d, _read_cgroup_int(os.path.join(d, limit_file))) for d in _cgroup_dirs(controller)]
-        levels = [(d, limit) for d, limit in levels if limit is not None and limit < _CGROUP_UNLIMITED]
-        if not levels:
-            continue
-        cgroup_dir, limit = min(levels, key=lambda level: level[1])
-        usage = _read_cgroup_int(os.path.join(cgroup_dir, usage_file))
-        if usage is None:
-            return None
-        inactive_file = _read_memory_stat(os.path.join(cgroup_dir, "memory.stat"), inactive_key)
-        return max(0, limit - max(0, usage - inactive_file))
+        limited = False
+        available = None
+        for cgroup_dir in _cgroup_dirs(controller):
+            limit = _read_cgroup_int(os.path.join(cgroup_dir, limit_file))
+            if limit is None or limit >= _CGROUP_UNLIMITED:
+                continue
+            limited = True
+            usage = _read_cgroup_int(os.path.join(cgroup_dir, usage_file))
+            if usage is None:
+                continue
+            inactive_file = _read_memory_stat(os.path.join(cgroup_dir, "memory.stat"), inactive_key)
+            headroom = max(0, limit - max(0, usage - inactive_file))
+            available = headroom if available is None else min(available, headroom)
+        if limited:
+            return available
     return None
 
 

@@ -191,20 +191,25 @@ class MemoryTest(unittest.TestCase):
         assert memory_allocated_func() == starting_memory
 
 
+MiB = 1 << 20
 GiB = 1 << 30
 
 
 class CgroupMemoryTest(unittest.TestCase):
-    """`get_cgroup_available_memory` must use the cgroup limit the kernel enforces: the smallest one from the
-    process's cgroup up to the root, with usage read from that same cgroup."""
+    """`get_cgroup_available_memory` must honour every cgroup limit the kernel enforces, from the process's cgroup up
+    to the root, resolving the cgroup directories through `/proc/self/mountinfo` like the kernel does."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = os.path.join(self.tmp.name, "cgroup")
         self.proc_self_cgroup = os.path.join(self.tmp.name, "proc_self_cgroup")
+        # Not created unless a test writes it, so the real /proc/self/mountinfo is never read and the fallback is
+        # `_CGROUP_ROOT`, which points into the temporary tree.
+        self.proc_self_mountinfo = os.path.join(self.tmp.name, "proc_self_mountinfo")
         for patcher in (
             mock.patch.object(memory_utils, "_CGROUP_ROOT", self.root),
             mock.patch.object(memory_utils, "_PROC_SELF_CGROUP", self.proc_self_cgroup),
+            mock.patch.object(memory_utils, "_PROC_SELF_MOUNTINFO", self.proc_self_mountinfo),
             mock.patch.object(sys, "platform", "linux"),
             mock.patch.dict(os.environ, {"ACCELERATE_RESPECT_CGROUP_MEMORY": "1"}),
         ):
@@ -212,14 +217,24 @@ class CgroupMemoryTest(unittest.TestCase):
             self.addCleanup(patcher.stop)
         self.addCleanup(self.tmp.cleanup)
 
-    def write_tree(self, proc_self_cgroup, files):
+    def write_tree(self, proc_self_cgroup, files, mountinfo=None):
+        """Writes the fake `/proc/self/cgroup`, the fake `/proc/self/mountinfo` (a list of (mount root, mount point,
+        fs type, super options)) and the cgroup files. File paths are relative to the fake cgroup root unless they
+        are absolute, which the mount tests use to place files under their own mount points."""
         with open(self.proc_self_cgroup, "w") as f:
             f.write(proc_self_cgroup + "\n")
+        if mountinfo is not None:
+            with open(self.proc_self_mountinfo, "w") as f:
+                for i, (mount_root, mount_point, fs_type, super_options) in enumerate(mountinfo):
+                    f.write(f"{40 + i} 25 0:30 {mount_root} {mount_point} rw - {fs_type} cgroup {super_options}\n")
         for rel_path, content in files.items():
             path = os.path.join(self.root, rel_path)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:
                 f.write(content + "\n")
+
+    def mount(self, name):
+        return os.path.join(self.tmp.name, "mnt", name)
 
     def test_limit_on_parent_cgroup(self):
         # Kubernetes sets the pod limit on the parent cgroup; the container's own memory.max is `max`.
@@ -261,6 +276,68 @@ class CgroupMemoryTest(unittest.TestCase):
             },
         )
         assert get_cgroup_available_memory() == GiB
+
+    def test_sibling_usage_counts_against_parent_limit(self):
+        # The container's own limit is the smallest, but the parent has less room left because a sibling uses it.
+        self.write_tree(
+            "0::/pod/ctr",
+            {
+                "memory.max": "max",
+                "pod/memory.max": str(2 * GiB),
+                "pod/memory.current": str(7 * GiB // 4),
+                "pod/ctr/memory.max": str(GiB),
+                "pod/ctr/memory.current": "0",
+            },
+        )
+        assert get_cgroup_available_memory() == GiB // 4
+
+    def test_subtree_alias_does_not_hide_parent_limit(self):
+        # The full hierarchy and a bind mount of the container's subtree both contain the process. The full view
+        # must win whatever the mount order, because the parent limit still applies.
+        main, ctr = self.mount("main"), self.mount("ctr")
+        mounts = [("/", main, "cgroup2", "rw"), ("/pod/ctr", ctr, "cgroup2", "rw")]
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                self.write_tree(
+                    "0::/pod/ctr",
+                    {
+                        f"{main}/memory.max": "max",
+                        f"{main}/pod/memory.max": str(512 * MiB),
+                        f"{main}/pod/memory.current": str(256 * MiB),
+                        f"{main}/pod/ctr/memory.max": str(GiB),
+                        f"{main}/pod/ctr/memory.current": "0",
+                        f"{ctr}/memory.max": str(GiB),
+                        f"{ctr}/memory.current": "0",
+                    },
+                    mountinfo=mounts[::-1] if reverse else mounts,
+                )
+                assert get_cgroup_available_memory() == 256 * MiB
+
+    def test_cgroup_v1_mount_root_is_stripped(self):
+        # Docker with the host cgroup namespace: /proc/self/cgroup names the cgroup relative to the hierarchy root,
+        # while the mount exposes only the container's subtree.
+        memory = self.mount("memory")
+        self.write_tree(
+            "12:memory:/docker/abc/pod/app\n3:cpu,cpuacct:/docker/abc/pod/app",
+            {
+                f"{memory}/memory.limit_in_bytes": str(GiB),
+                f"{memory}/memory.usage_in_bytes": str(128 * MiB),
+                f"{memory}/pod/app/memory.limit_in_bytes": str(256 * MiB),
+                f"{memory}/pod/app/memory.usage_in_bytes": str(64 * MiB),
+            },
+            mountinfo=[("/docker/abc", memory, "cgroup", "rw,memory")],
+        )
+        assert get_cgroup_available_memory() == 192 * MiB
+
+    def test_mount_point_with_escaped_space(self):
+        # mountinfo escapes a space in a path as \040.
+        mount_point = self.mount("my cg")
+        self.write_tree(
+            "0::/job",
+            {f"{mount_point}/job/memory.max": str(GiB), f"{mount_point}/job/memory.current": str(256 * MiB)},
+            mountinfo=[("/", mount_point.replace(" ", "\\040"), "cgroup2", "rw")],
+        )
+        assert get_cgroup_available_memory() == 768 * MiB
 
     def test_no_limit_returns_none(self):
         self.write_tree("0::/", {"memory.max": "max", "memory.current": str(GiB)})
