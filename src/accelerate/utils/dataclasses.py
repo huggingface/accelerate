@@ -281,7 +281,6 @@ class InitProcessGroupKwargs(KwargsHandler):
 
 
 # Literals
-Backend = Literal["TE"]
 FP8Format = Literal["HYBRID", "E4M3", "E5M2"]
 AmaxComputeAlgorithm = Literal["max", "most_recent"]
 
@@ -412,30 +411,6 @@ class TERecipeKwargs(KwargsHandler):
             self.override_linear_precision = (fprop, dgrad, wgrad)
         if self.use_mxfp8_block_scaling is None:
             self.use_mxfp8_block_scaling = parse_flag_from_env(env_prefix + "USE_MXFP8_BLOCK_SCALING")
-
-
-@dataclass
-class FP8RecipeKwargs(TERecipeKwargs):
-    """
-    Deprecated. Please use one of the proper FP8 recipe kwargs classes such as `TERecipeKwargs` or `AORecipeKwargs`
-    instead.
-    """
-
-    backend: Backend = None
-
-    def __post_init__(self):
-        env_prefix = "ACCELERATE_FP8_"
-        warnings.warn(
-            "FP8RecipeKwargs is deprecated and will be removed in Accelerate v2.0.0. "
-            "Please use one of the proper FP8 recipe kwargs classes such as TERecipeKwargs or AORecipeKwargs instead.",
-            FutureWarning,
-        )
-        if self.backend is None:
-            self.backend = os.environ.get(env_prefix + "BACKEND", "te")
-        self.backend = self.backend.upper()
-        if self.backend not in get_args(Backend):
-            raise ValueError("`backend` must be 'TE' (TransformerEngine) to use `FP8RecipeKwargs`.")
-        super().__post_init__()
 
 
 # Literal
