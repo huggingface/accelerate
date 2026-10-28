@@ -50,11 +50,7 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     require_torchdata_stateful_dataloader,
 )
-from accelerate.utils import (
-    FP8RecipeKwargs,
-    is_torchdata_stateful_dataloader_available,
-    patch_environment,
-)
+from accelerate.utils import TERecipeKwargs, is_torchdata_stateful_dataloader_available, patch_environment
 from accelerate.utils.dataclasses import DataLoaderConfiguration
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
 from accelerate.utils.random import set_seed
@@ -604,7 +600,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_transformer_engine
     def test_can_unwrap_model_te(self):
         model, optimizer, *_ = create_components()
-        fp8_recipe = FP8RecipeKwargs(backend="TE")
+        fp8_recipe = TERecipeKwargs()
         accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[fp8_recipe])
         inputs = torch.randn(10, 2).to(torch_device)
         model, optimizer = accelerator.prepare(model, optimizer)

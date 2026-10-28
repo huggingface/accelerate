@@ -66,8 +66,6 @@ These are configurable arguments for specific interactions throughout the PyTorc
 
 [[autodoc]] utils.DistributedDataParallelKwargs
 
-[[autodoc]] utils.FP8RecipeKwargs
-
 [[autodoc]] utils.GradScalerKwargs
 
 [[autodoc]] utils.InitProcessGroupKwargs
