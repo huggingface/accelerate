@@ -44,6 +44,11 @@ The [`~data_loader.DataLoaderShard`] subclasses `DataLoader` to add the followin
   
 The [`~data_loader.DataLoaderDispatcher`] subclasses differs from the [`~data_loader.DataLoaderShard`] in that when iterating through the `DataLoader`, the data is all starting from process 0 and *then* split and sent off to each process rather than it happening at the dataset level.
 
+Accelerate tracks the active dataloader to determine when to synchronize accumulated gradients and remove padding from
+gathered metrics. If iteration raises an exception, the failed dataloader is removed from that state before the exception
+is propagated. When a caller catches the exception inside another dataloader's loop, the enclosing dataloader becomes
+active again.
+
 The random number generator synchronization will by default synchronize:
 
 - the `generator` attribute of a given sampler (like the PyTorch `RandomSampler`) for PyTorch >= 1.6
