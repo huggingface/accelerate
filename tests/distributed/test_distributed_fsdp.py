@@ -16,7 +16,7 @@ import os
 
 from parameterized import parameterized
 
-from accelerate.test_utils.testing import require_fsdp2, require_huggingface_suite, require_multi_gpu, slow
+from accelerate.test_utils.testing import require_huggingface_suite, require_multi_gpu, slow
 
 from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
 
@@ -24,7 +24,6 @@ from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
 
 
-@require_fsdp2
 @slow
 @require_multi_gpu
 @require_huggingface_suite

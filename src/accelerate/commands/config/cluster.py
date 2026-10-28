@@ -24,7 +24,6 @@ from ...utils import (
     is_hpu_available,
     is_mlu_available,
     is_mps_available,
-    is_msamp_available,
     is_musa_available,
     is_neuron_available,
     is_npu_available,
@@ -801,13 +800,11 @@ def get_cluster_input():
             )
             if mixed_precision == "fp8":
                 if not is_fp8_available():
-                    raise ValueError(
-                        "FP8 (either torchao, Transformer Engine or MSAMP) is not installed on this machine."
-                    )
+                    raise ValueError("FP8 (either torchao or Transformer Engine) is not installed on this machine.")
                 fp8_config = {}
                 fp8_config["backend"] = _ask_options(
                     "Which FP8 backend do you want to use?",
-                    ["ao", "te", "msamp"],
+                    ["ao", "te"],
                     _convert_fp8_backend,
                 )
                 if fp8_config["backend"] == "TE":
@@ -869,16 +866,6 @@ def get_cluster_input():
                         fp8_config["override_linear_precision"] = (fprop, dgrad, wgrad)
                     else:
                         fp8_config["override_linear_precision"] = (False, False, False)
-
-                elif fp8_config["backend"] == "MSAMP":
-                    if not is_msamp_available():
-                        raise ValueError("MSAMP was selected, but it is not installed on this machine.")
-                    fp8_config["optimization_level"] = _ask_options(
-                        "Which optimization level should be used?",
-                        ["O1", "O2"],
-                        lambda x: "O1" if x == 0 else "O2",
-                        default=1,
-                    )
 
                 elif fp8_config["backend"] == "AO":
                     if not is_torchao_available():

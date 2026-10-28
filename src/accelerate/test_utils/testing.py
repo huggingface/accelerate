@@ -60,7 +60,6 @@ from ..utils import (
     is_npu_available,
     is_pandas_available,
     is_peft_available,
-    is_pippy_available,
     is_pytest_available,
     is_schedulefree_available,
     is_sdaa_available,
@@ -81,7 +80,6 @@ from ..utils import (
     is_xpu_available,
     str_to_bool,
 )
-from ..utils.constants import FSDP2_PYTORCH_VERSION
 
 
 def get_backend():
@@ -256,12 +254,6 @@ def require_fp8(test_case):
         fp8_is_available = False
 
     return unittest.skipUnless(fp8_is_available, "test requires FP8 support")(test_case)
-
-
-def require_fsdp2(test_case):
-    return unittest.skipUnless(
-        is_torch_version(">=", FSDP2_PYTORCH_VERSION), f"test requires FSDP2 (torch >= {FSDP2_PYTORCH_VERSION})"
-    )(test_case)
 
 
 def require_peft(test_case):
@@ -460,8 +452,7 @@ def require_tp(test_case):
     Decorator marking a test that requires TP installed. These tests are skipped when TP isn't installed
     """
     return unittest.skipUnless(
-        is_torch_version(">=", "2.3.0") and compare_versions("transformers", ">=", "4.52.0"),
-        "test requires torch version >= 2.3.0 and transformers version >= 4.52.0",
+        compare_versions("transformers", ">=", "4.52.0"), "test requires transformers version >= 4.52.0"
     )(test_case)
 
 
@@ -544,14 +535,6 @@ def require_mlflow(test_case):
     Decorator marking a test that requires mlflow installed. These tests are skipped when mlflow isn't installed
     """
     return unittest.skipUnless(is_mlflow_available(), "test requires mlflow")(test_case)
-
-
-def require_pippy(test_case):
-    """
-    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed It is
-    also checked if the test is running on a Gaudi1 device which doesn't support pippy.
-    """
-    return unittest.skipUnless(is_pippy_available() and not is_habana_gaudi1(), "test requires pippy")(test_case)
 
 
 def require_import_timer(test_case):

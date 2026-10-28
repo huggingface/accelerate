@@ -26,7 +26,6 @@ extras["test_dev"] = [
     "evaluate",
     "peft",
     "torchdata>=0.8.0",
-    "torchpippy>=0.2.0",
     "transformers",
     "scipy",
     "scikit-learn",
@@ -76,13 +75,13 @@ setup(
             "accelerate-merge-weights=accelerate.commands.merge:main",
         ]
     },
-    python_requires=">=3.10.0",
+    python_requires=">=3.11.0",
     install_requires=[
         "numpy>=1.17",
         "packaging>=20.0",
         "psutil",
         "pyyaml",
-        "torch>=2.0.0",
+        "torch>=2.6.0",
         "huggingface_hub>=0.21.0",
         "safetensors>=0.4.3",
     ],
@@ -95,7 +94,7 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
 )

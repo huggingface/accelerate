@@ -24,7 +24,6 @@ from .big_modeling import (
     load_checkpoint_and_dispatch,
 )
 from .data_loader import skip_first_batches
-from .inference import prepare_pippy
 from .launchers import debug_launcher, notebook_launcher
 from .parallelism_config import ParallelismConfig
 from .state import PartialState
