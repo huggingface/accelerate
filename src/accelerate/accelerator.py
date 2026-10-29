@@ -3081,7 +3081,8 @@ class Accelerator:
                 The tensors to reduce across all processes.
             reduction (`str`, *optional*, defaults to "sum"):
                 A reduction type, can be one of 'sum', 'mean', 'max', or 'none'. If 'none', will not perform any
-                operation.
+                operation. For `reduction="mean"` with more than one process, integer tensors are returned as
+                floating-point tensors.
             scale (`float`, *optional*, defaults to 1.0):
                 A default scaling value to be applied after the reduce, only valid on XLA.
 
