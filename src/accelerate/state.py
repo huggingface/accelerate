@@ -420,10 +420,11 @@ class PartialState:
         if not is_main:
             self.wait_for_everyone()
 
-        yield
-
-        if is_main:
-            self.wait_for_everyone()
+        try:
+            yield
+        finally:
+            if is_main:
+                self.wait_for_everyone()
 
     @contextmanager
     def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
