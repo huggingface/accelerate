@@ -29,7 +29,7 @@ from accelerate.utils import find_executable_batch_size
 ########################################################################
 # This is a fully working simple example to use Accelerate,
 # specifically showcasing how to combine both the gradient accumulation
-# and automatic batch size finder utilities of Accelerate to perfrom
+# and automatic batch size finder utilities of Accelerate to perform
 # automatic gradient accumulation
 #
 # This example trains a Bert base model on GLUE MRPC
@@ -152,7 +152,7 @@ def training_function(config, args):
         # Next we need to free all of the stored model references in the Accelerator each time
         accelerator.free_memory()
 
-        # And set the seed so our results are reproducable each reset
+        # And set the seed so our results are reproducible each reset
         set_seed(seed)
 
         # Instantiate the model (we build the model here so that the seed also control new weights initialization)

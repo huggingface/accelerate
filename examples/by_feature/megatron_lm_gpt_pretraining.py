@@ -605,7 +605,7 @@ def main():
         with open(latest_iter_file) as f:
             contents = f.read().strip()
         assert contents == "0", (
-            f"latest_checkpointed_iteration.txt in {checkpoint_dir} must contain only '0' (found '{contents}'), please mannually change it to '0' and rename the directory release to iter_0000000, also make sure megatron_lm_no_load_optim is set to true in the config file"
+            f"latest_checkpointed_iteration.txt in {checkpoint_dir} must contain only '0' (found '{contents}'), please manually change it to '0' and rename the directory release to iter_0000000, also make sure megatron_lm_no_load_optim is set to true in the config file"
         )
         # Also assert iter_0000000 directory exists
         iter0_dir = os.path.join(checkpoint_dir, "iter_0000000")
@@ -714,7 +714,7 @@ def main():
             accelerator.save_state(output_dir)
 
     # this is causing some issue with Megatron-LM when using `wandb` at the end of the main function.
-    # Everything works fine inspite of commenting this out. (wandb finishes/closes the run without error)
+    # Everything works fine in spite of commenting this out. (wandb finishes/closes the run without error)
     # if args.with_tracking:
     #     accelerator.end_training()
 

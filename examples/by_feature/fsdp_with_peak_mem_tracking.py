@@ -440,7 +440,7 @@ def main():
         "--logging_dir",
         type=str,
         default="logs",
-        help="Location on where to store experiment tracking logs`",
+        help="Location on where to store experiment tracking logs",
     )
     parser.add_argument(
         "--model_name_or_path",
