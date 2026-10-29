@@ -14,6 +14,7 @@
 
 import functools
 from collections.abc import Mapping
+from itertools import chain
 from typing import Optional, Union
 
 import torch
@@ -755,19 +756,18 @@ class CpuOffload(ModelHook):
     def pre_forward(self, module, *args, **kwargs):
         if self.prev_module_hook is not None and isinstance(self.prev_module_hook, UserCpuOffloadHook):
             prev_module = self.prev_module_hook.model
-            prev_device = next(prev_module.parameters()).device
+            prev_tensor = next(chain(prev_module.parameters(), prev_module.buffers()), None)
 
             # Only offload the previous module if it is not already on CPU.
-            if prev_device != torch.device("cpu"):
+            if prev_tensor is not None and prev_tensor.device != torch.device("cpu"):
                 self.prev_module_hook.offload()
                 clear_device_cache()
 
-        # If the current device is already the self.execution_device, we can skip the transfer.
-        current_device = next(module.parameters()).device
-        if current_device == self.execution_device:
-            return args, kwargs
+        # A resident model can skip the transfer, but each new batch still needs device placement.
+        current_tensor = next(chain(module.parameters(), module.buffers()), None)
+        if current_tensor is None or current_tensor.device != self.execution_device:
+            module.to(self.execution_device)
 
-        module.to(self.execution_device)
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 
 
