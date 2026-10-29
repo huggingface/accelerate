@@ -1698,7 +1698,7 @@ class Accelerator:
 
         # Get new params and canonicalize
         new_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*result))
-        # Build a map from old to new params and handle missings gracefully
+        # Build a map from old to new params and handle missing ones gracefully
         mapping = {}
         missing_params = []
         for n, p in old_named_params.items():
