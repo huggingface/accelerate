@@ -58,7 +58,6 @@ from .utils import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
-    FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
     GradientAccumulationPlugin,
     GradScalerKwargs,
@@ -66,7 +65,6 @@ from .utils import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
-    MSAMPRecipeKwargs,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
@@ -101,10 +99,8 @@ from .utils import (
     is_lomo_available,
     is_megatron_lm_available,
     is_mlu_available,
-    is_msamp_available,
     is_musa_available,
     is_npu_available,
-    is_torch_version,
     is_torch_xla_available,
     is_torchao_available,
     is_transformer_engine_available,
@@ -123,9 +119,6 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import (
-    DTENSOR_PYTORCH_VERSION,
-    FSDP2_PYTORCH_VERSION,
-    FSDP_PYTORCH_VERSION,
     PROFILE_PATTERN_NAME,
 )
 from .utils.modeling import get_state_dict_offloaded_model
@@ -378,12 +371,6 @@ class Accelerator:
 
             self.deepspeed_engine_wrapped = None
 
-        if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true" or isinstance(
-            fsdp_plugin, FullyShardedDataParallelPlugin
-        ):
-            if not is_torch_version(">=", FSDP_PYTORCH_VERSION):
-                raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
-
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
                 FullyShardedDataParallelPlugin()
@@ -394,10 +381,6 @@ class Accelerator:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
-
-        if fsdp_plugin is not None and fsdp_plugin.fsdp_version == 2:
-            if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
-                raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
 
         if megatron_lm_plugin is None:  # init from env variables
             megatron_lm_plugin = (
@@ -416,10 +399,8 @@ class Accelerator:
         self.ddp_handler = None
         self.scaler_handler = None
         self.init_handler = None
-        self.fp8_recipe_handler = None
         self.ao_recipe_handler = None
         self.te_recipe_handler = None
-        self.msamp_recipe_handler = None
         self.autocast_handler = None
         self.profile_handler = None
         self.has_lomo_optimizer = False
@@ -429,12 +410,10 @@ class Accelerator:
             DistributedDataParallelKwargs: "ddp_handler",
             GradScalerKwargs: "scaler_handler",
             InitProcessGroupKwargs: "init_handler",
-            FP8RecipeKwargs: "fp8_recipe_handler",
             AutocastKwargs: "autocast_handler",
             ProfileKwargs: "profile_handler",
             AORecipeKwargs: "ao_recipe_handler",
             TERecipeKwargs: "te_recipe_handler",
-            MSAMPRecipeKwargs: "msamp_recipe_handler",
         }
         self.has_fp8_handler = False
         if kwargs_handlers is not None:
@@ -482,23 +461,18 @@ class Accelerator:
                 self.ao_recipe_handler = AORecipeKwargs()
             elif self.fp8_backend == FP8BackendType.TE:
                 self.te_recipe_handler = TERecipeKwargs()
-            elif self.fp8_backend == FP8BackendType.MSAMP:
-                self.msamp_recipe_handler = MSAMPRecipeKwargs()
             elif self.fp8_backend == FP8BackendType.NO:
-                # Prioritize AO -> TE -> MSAMP
+                # Prioritize AO -> TE
                 if is_torchao_available():
                     logger.info("Found `torchao` installed, using it for FP8 training.")
                     self.ao_recipe_handler = AORecipeKwargs()
                 elif is_transformer_engine_available():
                     logger.info("Found `transformer-engine` installed, using it for FP8 training.")
                     self.te_recipe_handler = TERecipeKwargs()
-                elif is_msamp_available():
-                    logger.info("Found `msamp` installed, using it for FP8 training.")
-                    self.msamp_recipe_handler = MSAMPRecipeKwargs()
                 else:
                     raise ImportError(
                         "Tried to train with `fp8` and auto-detect backend, but no FP8-compatible backend was installed. "
-                        "Valid backends are: `torchao`, `transformer-engine`, and `msamp`."
+                        "Valid backends are: `torchao` and `transformer-engine`."
                     )
             self.has_fp8_handler = True
 
@@ -572,8 +546,6 @@ class Accelerator:
                 raise ValueError(
                     f"fp16 mixed precision requires a device in {supported_device} (not {self.device.type!r})."
                 )
-            if self.device.type == "mps" and not is_torch_version(">=", "2.5.0"):
-                raise ValueError("fp16 mixed precision with MPS device requires a Pytorch >= 2.5.0")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
 
             # FSDP2 doesn't use ShardedGradScaler, don't want to modify `get_grad_scaler`, rather create a simple utility
@@ -591,9 +563,7 @@ class Accelerator:
             else:
                 self.native_amp = is_bf16_available(True)
             if not self.native_amp and not is_torch_xla_available():
-                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
-            if self.native_amp and self.device.type == "mps" and not is_torch_version(">=", "2.6.0"):
-                raise ValueError("bf16 mixed precision with MPS device requires a Pytorch >= 2.6.0")
+                raise ValueError("bf16 mixed precision requires a supported device.")
 
         # for DeepSpeed,  self.state.mixed_precision is always "bf16",
         # see https://github.com/huggingface/accelerate/blob/main/src/accelerate/state.py#L968 and
@@ -601,15 +571,6 @@ class Accelerator:
         elif self.fp8_enabled:
             # We always enable `native_amp` for FP8
             self.native_amp = True
-            if self.fp8_backend == FP8BackendType.MSAMP:
-                if self.distributed_type == DistributedType.FSDP:
-                    raise NotImplementedError(
-                        "`accelerate` + `MS-AMP` + `FSDP` is not supported at this time. "
-                        "Please consider using deepspeed, which is supported."
-                    )
-                elif self.distributed_type != DistributedType.DEEPSPEED:
-                    # MS-AMP requires `GradScaler` even with bf16 autocast w/ single GPU or DDP:
-                    self.scaler = get_grad_scaler(**kwargs)
 
         # Start of internal step tracking
         self.step = 0
@@ -1552,8 +1513,6 @@ class Accelerator:
         elif self.is_fsdp2:
             result = self._prepare_fsdp2(*args)
         else:
-            if self.fp8_backend == FP8BackendType.MSAMP:
-                args, device_placement = self._prepare_msamp(*args, device_placement=device_placement)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
@@ -1823,8 +1782,7 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
-            # NOTE: MS-AMP adds `__func__` already to `model.forward`, so we should always use `model.forward`
-            if self.fp8_backend == FP8BackendType.MSAMP or not hasattr(model.forward, "__func__"):
+            if not hasattr(model.forward, "__func__"):
                 model_forward_func = model.forward
                 model.forward = convert_outputs_to_fp32(autocast_context(model_forward_func))
             else:
@@ -1835,7 +1793,7 @@ class Accelerator:
 
         # We prepare TE after, allowing for bf16 autocast to happen first
         if self.fp8_backend == FP8BackendType.TE and not self.delayed_fp8_autocast:
-            model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
+            model = apply_fp8_autowrap(model, self.te_recipe_handler)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
@@ -2063,7 +2021,7 @@ class Accelerator:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
         if self.fp8_backend == FP8BackendType.TE and self.delayed_fp8_autocast:
-            model = apply_fp8_autowrap(model, self.te_recipe_handler or self.fp8_recipe_handler)
+            model = apply_fp8_autowrap(model, self.te_recipe_handler)
         # torch.compile should be called last and only if the model isn't already compiled
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if self.state.dynamo_plugin.use_regional_compilation:
@@ -2141,11 +2099,6 @@ class Accelerator:
         import deepspeed
 
         ds_initialize = deepspeed.initialize
-        if self.fp8_backend == FP8BackendType.MSAMP:
-            # MS-AMP requires DeepSpeed patches
-            from msamp import deepspeed as msamp_deepspeed
-
-            ds_initialize = msamp_deepspeed.initialize
 
         deepspeed_plugin = self.deepspeed_plugin
 
@@ -2160,10 +2113,6 @@ class Accelerator:
             if not compare_versions("deepspeed", ">=", "0.16.4"):
                 raise ImportError(
                     "Deepspeed TP requires deepspeed >= 0.16.4, Please update DeepSpeed via `pip install deepspeed -U`."
-                )
-            if not is_torch_version(">=", "2.2.0"):
-                raise ImportError(
-                    "Tried to use TP, but `torch.distributed.device_mesh` requires PyTorch >= 2.2.0. Please upgrade your PyTorch version"
                 )
             from torch.distributed.device_mesh import init_device_mesh
 
@@ -2288,7 +2237,7 @@ class Accelerator:
         if model is not None:
             # If we are using FP8, we need to apply the autowrap now
             if self.fp8_backend == FP8BackendType.TE:
-                model = apply_fp8_autowrap(model, self.fp8_recipe_handler)
+                model = apply_fp8_autowrap(model, self.te_recipe_handler)
             # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
             deepspeed_plugin.set_moe_leaf_modules(model)
             # deal with config keys that use `auto` value and rely on model's hidden_size
@@ -2626,61 +2575,6 @@ class Accelerator:
         else:
             return self.torch_device_mesh
 
-    def _prepare_msamp(self, *args, device_placement):
-        warnings.warn(
-            "MS-AMP is deprecated and will be removed in a future version of Accelerate. "
-            "Please use `'te'` (Transformer Engine) or `'torchao'` as the backend for FP8 "
-            "mixed precision training instead.",
-            FutureWarning,
-        )
-        if not is_msamp_available():
-            raise ImportError(
-                "MS-AMP was not found on your system. Please ensure that MS-AMP is available "
-                " or choose `'te'` as the backend for FP8 mixed precision training."
-            )
-        # We've already checked for FSDP + MS-AMP during `__init__`
-        import msamp
-
-        model, optimizer = None, None
-        optimizer_index = None
-        num_models, num_optimizers = 0, 0
-        result = [obj for obj in args]
-        for i, obj in enumerate(result):
-            if isinstance(obj, torch.nn.Module):
-                model = obj
-                num_models += 1
-            elif isinstance(obj, (torch.optim.Optimizer)):
-                optimizer = obj
-                optimizer_index = i
-                num_optimizers += 1
-        # DataLoader/Scheduler case
-        if optimizer is None and model is None:
-            return result, device_placement
-        elif optimizer is None or model is None:
-            raise ValueError(
-                "You must pass a model and an optimizer together to `accelerate.prepare()` when using MS-AMP."
-            )
-        elif num_models > 1 or num_optimizers > 1:
-            raise ValueError(
-                f"You can't use multiple models ({num_models}) or optimizers {num_optimizers} with MS-AMP."
-            )
-        else:
-            # DEPRECATE @ 2.0
-            if self.fp8_recipe_handler is not None:
-                opt_level = self.fp8_recipe_handler.opt_level
-            else:
-                opt_level = self.msamp_recipe_handler.opt_level
-            model, optimizer = msamp.initialize(model, optimizer, opt_level=opt_level)
-        for i in range(len(result)):
-            if isinstance(result[i], torch.nn.Module):
-                result[i] = model
-            elif isinstance(result[i], (torch.optim.Optimizer)):
-                result[i] = optimizer
-        if optimizer_index is not None:
-            # NOTE: MS-AMP moves the optimizer, but *not* the model to the right device
-            device_placement[optimizer_index] = False
-        return tuple(result), device_placement
-
     def prepare_data_loader(
         self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
     ):
@@ -2777,10 +2671,7 @@ class Accelerator:
             return optimizer
         if device_placement is None:
             device_placement = self.device_placement
-        # NOTE: Special case with MS-AMP we do *not* pass in the scaler explicitly to the `AcceleratedOptimizer`,
-        # Their optimizer handles it for us.
-        scaler = None if self.fp8_backend == FP8BackendType.MSAMP else self.scaler
-        optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=scaler)
+        optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=self.scaler)
         self._optimizers.append(optimizer)
         return optimizer
 
@@ -2954,7 +2845,7 @@ class Accelerator:
                 self.scaler.unscale_(opt)
 
     def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2):
-        is_dtensor_available = torch.distributed.is_available() and is_torch_version(">=", DTENSOR_PYTORCH_VERSION)
+        is_dtensor_available = torch.distributed.is_available()
         if not is_dtensor_available:
             return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
@@ -3991,10 +3882,7 @@ class Accelerator:
                     from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
                     accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
-                _torch_distributed_available = torch.distributed.is_available()
-                _is_dtensor_available = _torch_distributed_available and is_torch_version(
-                    ">=", DTENSOR_PYTORCH_VERSION
-                )
+                _is_dtensor_available = torch.distributed.is_available()
                 # we know we're in FSDP2 so DTensor is available
                 if _is_dtensor_available:
                     from torch.distributed.tensor import DTensor
@@ -4374,15 +4262,9 @@ class Accelerator:
     def fp8_backend(self) -> FP8BackendType:
         "Returns the configured backend for training in FP8"
         if self.has_fp8_handler:
-            if self.fp8_recipe_handler is not None:
-                return FP8BackendType(self.fp8_recipe_handler.backend)
-            elif self.ao_recipe_handler is not None:
+            if self.ao_recipe_handler is not None:
                 return FP8BackendType.AO
             elif self.te_recipe_handler is not None:
                 return FP8BackendType.TE
-            elif self.msamp_recipe_handler is not None:
-                return FP8BackendType.MSAMP
-        elif self.state.deepspeed_plugin is not None and self.state.deepspeed_plugin.enable_msamp:
-            return FP8BackendType.MSAMP
 
         return FP8BackendType(parse_choice_from_env("ACCELERATE_FP8_BACKEND", "NO"))
