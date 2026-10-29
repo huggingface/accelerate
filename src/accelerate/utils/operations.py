@@ -856,7 +856,8 @@ def reduce(tensor, reduction="mean", scale=1.0):
         tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to reduce.
         reduction (`str`, *optional*, defaults to `"mean"`):
-            A reduction method. Can be of "mean", "sum", "max", or "none"
+            A reduction method. Can be of "mean", "sum", "max", or "none". For `reduction="mean"` with more than one
+            process, integer tensors are returned as floating-point tensors.
         scale (`float`, *optional*):
             A default scaling value to be applied after the reduce, only valid on XLA.
 
@@ -882,7 +883,7 @@ def reduce(tensor, reduction="mean", scale=1.0):
             torch_op = ReduceOp.MAX if reduction == "max" else ReduceOp.SUM
             torch.distributed.all_reduce(cloned_tensor, torch_op)
         if reduction == "mean":
-            # Out-of-place so that integer tensors are promoted to float instead of failing the in-place cast
+            # Out of place, so integer tensors are promoted to float
             cloned_tensor = cloned_tensor / state.num_processes
         return cloned_tensor
 

@@ -108,6 +108,7 @@ def test_reduce_mean_integer(state):
         return
     tensor = create_tensor(state).long()
     reduced_tensor = reduce(tensor, "mean")
+    assert reduced_tensor.is_floating_point(), f"{reduced_tensor.dtype} is not a floating point dtype"
     truth_tensor = torch.tensor([2.0, 3]).to(state.device)
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
