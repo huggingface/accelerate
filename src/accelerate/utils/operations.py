@@ -882,7 +882,8 @@ def reduce(tensor, reduction="mean", scale=1.0):
             torch_op = ReduceOp.MAX if reduction == "max" else ReduceOp.SUM
             torch.distributed.all_reduce(cloned_tensor, torch_op)
         if reduction == "mean":
-            cloned_tensor /= state.num_processes
+            # Out-of-place so that integer tensors are promoted to float instead of failing the in-place cast
+            cloned_tensor = cloned_tensor / state.num_processes
         return cloned_tensor
 
     return recursively_apply(
