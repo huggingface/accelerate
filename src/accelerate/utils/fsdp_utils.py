@@ -865,9 +865,32 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
     if auto_wrap_policy_func is not None:
+        # Shard the selected wrapper instead of its inner module only when that module is not registered elsewhere in
+        # the model. This avoids adding FSDP hooks inside the compiled region while keeping them on shared modules that
+        # can be called without going through the wrapper.
+
+        # Check whether the wrapper holds the only registered reference to its inner module. Visit each parent once.
+        # Use _modules.values() rather than children() so two entries pointing to the same child count twice.
+        module_ref_counts = defaultdict(int)
+        for parent in model.modules():
+            for child in parent._modules.values():
+                if child is not None:
+                    module_ref_counts[child] += 1
+
+        inner_modules_to_skip_sharding = {
+            module._checkpoint_wrapped_module
+            for module in model.modules()
+            if hasattr(module, "_checkpoint_wrapped_module")
+            and auto_wrap_policy_func(module)
+            and module_ref_counts[module._checkpoint_wrapped_module] == 1
+        }
+
         # We skip the model itself, as that one is always wrapped
         for module in get_module_children_bottom_up(model)[:-1]:
-            if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
+            if module in inner_modules_to_skip_sharding or isinstance(module, FSDPModule):
+                continue
+            if auto_wrap_policy_func(module):
+                # modifies module in-place: attaching FSDP state+hooks != container
                 fully_shard(module, **fsdp2_kwargs)
 
     # Carve embed + tail=[final_norm, lm_head] into their own units. Tail gets `False`

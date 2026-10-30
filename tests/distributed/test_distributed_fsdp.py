@@ -12,16 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
+import tempfile
 
 from parameterized import parameterized
 
 from accelerate.test_utils.testing import require_huggingface_suite, require_multi_gpu, slow
 
-from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
+from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon, train
 
 
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
+FSDP2_ACTIVATION_CHECKPOINTING_COMPILE_CONFIG_FILE = os.path.join(
+    CONFIGS_DIR, "fsdp2_activation_checkpointing_compile.yaml"
+)
 
 
 @slow
@@ -41,3 +46,32 @@ class FSDP2TrainingTest(DistributedTrainingCommon):
 
     def test_training_and_can_resume_normally(self):
         self.check_resume(config_file=FSDP2_CONFIG_FILE)
+
+    def test_training_with_activation_checkpointing_and_regional_compilation(self):
+        """Checkpointed FSDP2 training with regional compilation should match the unsharded reference."""
+        reference_losses = train(dtype="fp32")
+        with tempfile.TemporaryDirectory() as output_dir:
+            compiled_losses = train(
+                FSDP2_ACTIVATION_CHECKPOINTING_COMPILE_CONFIG_FILE, output_dir=output_dir, dtype="fp32"
+            )
+            with open(os.path.join(output_dir, "compile_stats.json")) as f:
+                compile_stats = json.load(f)
+
+        self.assert_same_training(compiled_losses, reference_losses)
+
+        # These observations come from rank 0. Require wrappers so the counts cannot all be zero.
+        self.assertGreater(compile_stats["checkpoint_wrappers"], 0)
+        self.assertEqual(compile_stats["checkpoint_wrappers_sharded"], compile_stats["checkpoint_wrappers"])
+        self.assertEqual(compile_stats["inner_modules_sharded"], 0)
+
+        # Other regions can compile even if regional compilation skips the checkpointed blocks.
+        self.assertGreater(compile_stats["compiled_graphs"], 0)
+        self.assertEqual(
+            compile_stats["checkpoint_wrappers_with_compiled_callable"], compile_stats["checkpoint_wrappers"]
+        )
+
+        # A correct FSDP layout alone does not rule out breaks involving a checkpoint wrapper.
+        self.assertEqual(compile_stats["graph_breaks_with_checkpoint_wrapper"], 0, compile_stats)
+
+    def test_training_with_activation_checkpointing_and_regional_compilation_can_resume(self):
+        self.check_resume(config_file=FSDP2_ACTIVATION_CHECKPOINTING_COMPILE_CONFIG_FILE)
