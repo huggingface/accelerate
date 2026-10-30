@@ -100,7 +100,7 @@ The current implementation works only with basic multi-GPU (or multi-CPU) traini
     back to at least:
 
     Zhang, J., De Sa, C., Mitliagkas, I., & Ré, C. (2016). [Parallel SGD: When does averaging help?. arXiv preprint
-    arXiv:1606.07365.](https://huggingface.co/papers/1606.07365)
+    arXiv:1606.07365.](https://arxiv.org/abs/1606.07365)
 
     We credit the term Local SGD to the following paper (but there might be earlier references we are not aware of).
 
