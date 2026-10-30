@@ -42,7 +42,7 @@ from .imports import (
     is_torch_xla_available,
     is_xpu_available,
 )
-from .memory import clear_device_cache
+from .memory import clear_device_cache, get_cgroup_available_memory
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import is_torch_version
@@ -826,7 +826,10 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
         if is_mps_available():
             max_memory["mps"] = psutil.virtual_memory().available
         elif not is_integrated_cuda:
-            max_memory["cpu"] = psutil.virtual_memory().available
+            # In a container or pod, host RAM overstates what the process can use; cap it at the cgroup limit.
+            available = psutil.virtual_memory().available
+            cgroup_available = get_cgroup_available_memory()
+            max_memory["cpu"] = available if cgroup_available is None else min(available, cgroup_available)
         return max_memory
 
     for key in max_memory:
