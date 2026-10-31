@@ -188,6 +188,44 @@ class HooksModelTester(unittest.TestCase):
         output1 = test_model(x)
         assert not output1.requires_grad
 
+    @parameterized.expand([(False, False), (True, False), (False, True), (True, True)])
+    def test_no_grad_in_sequential_hook(self, first_no_grad, second_no_grad):
+        model = nn.Linear(3, 2)
+        first_hook, second_hook = ModelHook(), ModelHook()
+        first_hook.no_grad = first_no_grad
+        second_hook.no_grad = second_no_grad
+        add_hook_to_module(model, SequentialHook(first_hook, second_hook))
+
+        inputs = torch.randn(2, 3, requires_grad=True)
+        expected = model._old_forward(inputs).detach()
+        output = model(inputs)
+
+        torch.testing.assert_close(output, expected)
+        assert output.requires_grad == (not (first_no_grad or second_no_grad))
+        if output.requires_grad:
+            output.sum().backward()
+            assert model.weight.grad is not None
+            assert inputs.grad is not None
+
+    @parameterized.expand([(False, True), (True, False)])
+    def test_append_hook_preserves_no_grad(self, first_no_grad, second_no_grad):
+        model = nn.Linear(3, 2)
+        first_hook, second_hook = ModelHook(), ModelHook()
+        first_hook.no_grad = first_no_grad
+        second_hook.no_grad = second_no_grad
+        add_hook_to_module(model, first_hook)
+        add_hook_to_module(model, second_hook, append=True)
+
+        assert not model(torch.randn(2, 3, requires_grad=True)).requires_grad
+
+    def test_no_grad_in_nested_sequential_hook(self):
+        model = nn.Linear(3, 2)
+        hook = ModelHook()
+        hook.no_grad = True
+        add_hook_to_module(model, SequentialHook(ModelHook(), SequentialHook(hook, ModelHook())))
+
+        assert not model(torch.randn(2, 3, requires_grad=True)).requires_grad
+
     @require_non_hpu  # hpu does not support device indexing "hpu:1"
     @require_multi_device
     def test_align_devices_as_model_parallelism(self):

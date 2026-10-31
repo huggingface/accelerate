@@ -116,10 +116,12 @@ class ModelHook:
 class SequentialHook(ModelHook):
     """
     A hook that can contain several hooks and iterates through them at each event.
+    The forward pass runs without gradients if any of the hooks has `no_grad=True`.
     """
 
     def __init__(self, *hooks):
         self.hooks = hooks
+        self.no_grad = any(hook.no_grad for hook in hooks)
 
     def init_hook(self, module):
         for hook in self.hooks:
