@@ -551,6 +551,15 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         super().setUp()
         self.current_fsdp_version = 2
 
+    def test_clip_grad_value(self):
+        with patch_environment(**self.fsdp_envs[2]):
+            accelerator = Accelerator(mixed_precision="fp16", kwargs_handlers=[GradScalerKwargs(init_scale=8.0)])
+            model = torch.nn.Sequential(torch.nn.Linear(4, 4, bias=False))
+            model, _ = accelerator.prepare(model, torch.optim.SGD(model.parameters(), lr=0.1))
+            accelerator.backward(model(torch.tensor([[3.0, 0.5, -3.0, -0.5]], device=accelerator.device)).sum())
+            accelerator.clip_grad_value_(model.parameters(), 1.0)
+            assert model[0].weight.grad.full_tensor().tolist() == [[1.0, 0.5, -1.0, -0.5]] * 4
+
     def test_param_mapping_error_handling(self):
         """Test FSDP2's defensive error handling for parameter mapping failures in tied/non-tied cases."""
         from unittest.mock import Mock, patch
@@ -1049,10 +1058,6 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
         super().setUp()
         self.current_fsdp_version = 2
 
-    def test_clip_grad_value(self):
-        cmd = get_launch_command(num_processes=2, use_fsdp=True, fsdp_version=2, mixed_precision="fp16")
-        execute_subprocess_async(cmd + [os.path.abspath(__file__)])
-
     @require_peft
     def test_peft_checkpointing(self):
         """Every rank's shard of the adapter must survive a `save_fsdp_model`/`load_fsdp_model` round-trip."""
@@ -1080,17 +1085,3 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
                     cmd_config.append("--adapter_only")
                 with patch_environment(omp_num_threads=1):
                     execute_subprocess_async(cmd_config)
-
-
-if __name__ == "__main__":
-    # A loss scale of 8 keeps the scaled fp16 gradients finite; skipping the unscale would clip 0.5 (scaled to 4) to 1.
-    accelerator = Accelerator(kwargs_handlers=[GradScalerKwargs(init_scale=8.0)])
-    model = torch.nn.Sequential(torch.nn.Linear(4, 4, bias=False))
-    model, _ = accelerator.prepare(model, torch.optim.SGD(model.parameters(), lr=0.1))
-    accelerator.backward(model(torch.tensor([[3.0, 0.5, -3.0, -0.5]], device=accelerator.device)).sum())
-    accelerator.clip_grad_value_(model.parameters(), 1.0)
-    grad = model[0].weight.grad
-    assert grad.to_local().shape == (2, 4)  # each rank clips its own shard
-    expected = torch.tensor([[1.0, 0.5, -1.0, -0.5]] * 4, device=accelerator.device)
-    torch.testing.assert_close(grad.full_tensor(), expected)
-    accelerator.end_training()
