@@ -552,6 +552,7 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         self.current_fsdp_version = 2
 
     def test_clip_grad_value(self):
+        """`clip_grad_value_` must unscale FSDP2 gradients before clipping them."""
         for mp_dtype in dtypes:
             with patch_environment(**self.fsdp_envs[2]):
                 accelerator = Accelerator(mixed_precision=mp_dtype, kwargs_handlers=[GradScalerKwargs(init_scale=8.0)])
