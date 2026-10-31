@@ -41,6 +41,8 @@ from accelerate.test_utils.testing import (
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
     CannotPadNestedTensorWarning,
+    DistributedType,
+    broadcast,
     check_os_kernel,
     clear_environment,
     concatenate,
@@ -71,6 +73,45 @@ if is_torch_xla_available():
     from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
+
+
+@pytest.mark.parametrize("from_process", [0, 1])
+@pytest.mark.parametrize("structure", ["tensor", "list", "tuple", "dict", "user_dict", "namedtuple", "mixed"])
+def test_broadcast_xla_preserves_nested_source(from_process, structure):
+    def wrap(tensor):
+        return {
+            "tensor": tensor,
+            "list": [tensor, tensor + 1],
+            "tuple": (tensor, tensor + 1),
+            "dict": {"a": tensor, "b": tensor + 1},
+            "user_dict": UserDict({"a": tensor, "b": tensor + 1}),
+            "namedtuple": ExampleNamedTuple(tensor, tensor + 1, tensor + 2),
+            "mixed": {"nested": (tensor, [UserDict({"value": tensor + 1})])},
+        }[structure]
+
+    # Simulate two ranks with different values while exercising the public XLA dispatch and reduction callback.
+    mesh_reduce = Mock(side_effect=lambda name, tensor, reduce_fn: reduce_fn([tensor, tensor + 10]))
+    state = SimpleNamespace(distributed_type=DistributedType.XLA, debug=False)
+    tensor = torch.tensor([1, 2])
+    with (
+        patch("accelerate.utils.operations.PartialState", return_value=state),
+        patch("accelerate.utils.operations.xm", SimpleNamespace(mesh_reduce=mesh_reduce), create=True),
+    ):
+        result = broadcast(wrap(tensor), from_process=from_process)
+
+    torch.testing.assert_close(result, wrap(tensor + 10 * from_process))
+    assert (
+        mesh_reduce.call_count
+        == {
+            "tensor": 1,
+            "list": 2,
+            "tuple": 2,
+            "dict": 2,
+            "user_dict": 2,
+            "namedtuple": 3,
+            "mixed": 2,
+        }[structure]
+    )
 
 
 class UtilsTester(unittest.TestCase):
