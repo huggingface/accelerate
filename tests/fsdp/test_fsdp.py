@@ -771,6 +771,34 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         finally:
             model[0].weight.__class__ = original_class
 
+    def test_ignored_modules_with_cpu_ram_efficient_loading(self):
+        # With cpu_ram_efficient_loading the model is moved to `meta` before sharding; ignored modules must still be
+        # left unsharded, and loaded with their checkpoint values
+        from torch.distributed.tensor import DTensor
+
+        expected = AutoModel.from_pretrained(LLAMA_TESTING).layers[0].self_attn.q_proj.weight.detach().clone()
+        env = self.fsdp_envs[2].copy()
+        env["FSDP_IGNORED_MODULES"] = ".*\\.q_proj$"
+        env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "true"
+        with patch_environment(**env):
+            accelerator = Accelerator()
+            model = AutoModel.from_pretrained(LLAMA_TESTING)
+            model, _ = accelerator.prepare(model, torch.optim.AdamW(model.parameters(), lr=1e-4))
+            weight = model.layers[0].self_attn.q_proj.weight
+            assert not isinstance(weight, DTensor)
+            torch.testing.assert_close(weight.detach().cpu(), expected)
+
+    def test_cpu_ram_efficient_loading_with_persistent_buffer(self):
+        # Persistent buffers are in the state dict but not sharded by FSDP2: they must load as plain tensors
+        env = self.fsdp_envs[2].copy()
+        env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "true"
+        with patch_environment(**env):
+            accelerator = Accelerator()
+            model = AutoModel.from_pretrained(LLAMA_TESTING)
+            model.layers[0].register_buffer("persistent_buffer", torch.arange(4, dtype=torch.float32))
+            model, _ = accelerator.prepare(model, torch.optim.AdamW(model.parameters(), lr=1e-4))
+            torch.testing.assert_close(model.layers[0].persistent_buffer.cpu(), torch.arange(4, dtype=torch.float32))
+
     def test_compile_regions_fsdp2_preserves_block_class(self):
         """`compile_regions_fsdp2` must use in-place `module.compile()` so module classes are preserved.
 
