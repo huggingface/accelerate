@@ -43,6 +43,7 @@ from accelerate.test_utils.testing import (
     require_matplotlib,
     require_mlflow,
     require_pandas,
+    require_runyard,
     require_swanlab,
     require_tensorboard,
     require_trackio,
@@ -57,6 +58,7 @@ from accelerate.tracking import (
     DVCLiveTracker,
     GeneralTracker,
     MLflowTracker,
+    RunyardTracker,
     SwanLabTracker,
     TensorBoardTracker,
     TrackioTracker,
@@ -714,6 +716,22 @@ class SwanLabTrackingTest(TempDirTestCase, MockingTestCase):
         assert len(backup_images) == record_images_count, "Total images count does not match"
 
 
+class RunyardTrackingTest(unittest.TestCase):
+    def test_init_log_and_finish(self):
+        fake_runyard = mock.MagicMock()
+        run = fake_runyard.init.return_value
+        with mock.patch.dict("sys.modules", {"runyard": fake_runyard}):
+            accelerator = Accelerator(log_with=RunyardTracker("test_project", name="run1"))
+            accelerator.init_trackers("test_project", config={"learning_rate": 1e-3})
+            accelerator.log({"loss": 0.5}, step=1)
+            accelerator.end_training()
+
+        fake_runyard.init.assert_called_once_with(project="test_project", name="run1")
+        run.config.update.assert_called_once_with({"learning_rate": 1e-3})
+        run.log.assert_called_once_with({"loss": 0.5}, step=1)
+        run.finish.assert_called_once()
+
+
 class MyCustomTracker(GeneralTracker):
     "Basic tracker that writes to a csv for testing"
 
@@ -1056,6 +1074,15 @@ class TrackerDeferredInitializationTest(unittest.TestCase):
             self.assertEqual(PartialState._shared_state, {})
             _ = Accelerator(log_with=tracker)
             self.assertNotEqual(PartialState._shared_state, {})
+
+    @require_runyard
+    def test_runyard_deferred_init(self):
+        """Test that runyard tracker initialization doesn't initialize distributed"""
+        PartialState._reset_state()
+        tracker = RunyardTracker(run_name="test_runyard")
+        self.assertEqual(PartialState._shared_state, {})
+        _ = Accelerator(log_with=tracker)
+        self.assertNotEqual(PartialState._shared_state, {})
 
     @require_swanlab
     def test_swanlab_deferred_init(self):
