@@ -838,6 +838,52 @@ class StatefulDataLoaderTester(AccelerateTestCase):
             assert torch.allclose(d1, d2)
 
     @require_torchdata_stateful_dataloader
+    def test_dataloader_state_dict_restores_epoch(self):
+        """
+        Test that resuming a stateful dataloader restores its epoch, both at an epoch boundary and mid-epoch, so a
+        seeded sampler is reshuffled with the right epoch instead of replaying epoch 0.
+        """
+
+        def make_dataloader():
+            generator = torch.Generator()
+            generator.manual_seed(42)
+            sampler = SeedableRandomSampler(range(16), generator=generator)
+            return DataLoaderShard(list(range(16)), batch_size=4, sampler=sampler, use_stateful_dataloader=True)
+
+        # Save at the end of epoch 0, resume into epoch 1
+        dataloader = make_dataloader()
+        list(dataloader)
+        sd = dataloader.state_dict()
+        expected = [batch.tolist() for batch in dataloader]
+        dataloader2 = make_dataloader()
+        dataloader2.load_state_dict(sd)
+        assert dataloader2.iteration == 1
+        assert [batch.tolist() for batch in dataloader2] == expected
+
+        # Save in the middle of epoch 1
+        dataloader = make_dataloader()
+        list(dataloader)
+        vals = []
+        for idx, batch in enumerate(dataloader):
+            vals.append(batch.tolist())
+            if idx == 1:
+                sd = dataloader.state_dict()
+        dataloader2 = make_dataloader()
+        dataloader2.load_state_dict(sd)
+        assert dataloader2.iteration == 1
+        assert [batch.tolist() for batch in dataloader2] == vals[2:]
+
+    @require_torchdata_stateful_dataloader
+    def test_dataloader_dispatcher_state_dict_restores_epoch(self):
+        dataloader = DataLoaderDispatcher(list(range(16)), batch_size=4, use_stateful_dataloader=True)
+        list(dataloader)
+        sd = dataloader.state_dict()
+        dataloader2 = DataLoaderDispatcher(list(range(16)), batch_size=4, use_stateful_dataloader=True)
+        dataloader2.load_state_dict(sd)
+        assert dataloader2.iteration == 1
+        assert len(list(dataloader2)) == 4
+
+    @require_torchdata_stateful_dataloader
     def test_dataloader_inheritance(self):
         """
         `DataLoaderAdapter`'s parent classes are dynamically constructed, assert that if use_stateful_dataloader=True,
@@ -919,8 +965,11 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         # The adapters should all produce the same state_dict as the reference stateful dataloader
         expected_state_dict = stateful_dl.state_dict()
         skip_dl_state_dict = skip_dl.state_dict()
+        skip_dl_state_dict.pop("_accelerate_iteration", None)
         dl_shard_state_dict = dl_shard.state_dict()
+        dl_shard_state_dict.pop("_accelerate_iteration", None)
         dl_dispatcher_state_dict = dl_dispatcher.state_dict()
+        dl_dispatcher_state_dict.pop("_accelerate_iteration", None)
 
         assert expected_state_dict == skip_dl_state_dict
         assert expected_state_dict == dl_shard_state_dict
@@ -1030,8 +1079,11 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         # The adapters should all produce the same state_dict as the reference stateful dataloader
         expected_state_dict = stateful_dl.state_dict()
         skip_dl_state_dict = skip_dl.state_dict()
+        skip_dl_state_dict.pop("_accelerate_iteration", None)
         dl_shard_state_dict = dl_shard.state_dict()
+        dl_shard_state_dict.pop("_accelerate_iteration", None)
         dl_dispatcher_state_dict = dl_dispatcher.state_dict()
+        dl_dispatcher_state_dict.pop("_accelerate_iteration", None)
 
         assert expected_state_dict == skip_dl_state_dict
         assert expected_state_dict == dl_shard_state_dict
