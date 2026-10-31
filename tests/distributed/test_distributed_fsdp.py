@@ -18,7 +18,7 @@ from parameterized import parameterized
 
 from accelerate.test_utils.testing import require_huggingface_suite, require_multi_gpu, slow
 
-from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
+from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon, train
 
 
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
@@ -41,3 +41,9 @@ class FSDP2TrainingTest(DistributedTrainingCommon):
 
     def test_training_and_can_resume_normally(self):
         self.check_resume(config_file=FSDP2_CONFIG_FILE)
+
+    @parameterized.expand(["fp16", "bf16"])
+    def test_training_with_clip_grad_value(self, mixed_precision):
+        reference = train(mixed_precision=mixed_precision, clip_grad_value=0.01)
+        distributed = train(FSDP2_CONFIG_FILE, mixed_precision=mixed_precision, clip_grad_value=0.01)
+        self.assert_same_training(distributed, reference)
