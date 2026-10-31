@@ -769,6 +769,19 @@ class ModelingUtilsTester(unittest.TestCase):
         device_memory = {0: 4, "cpu": 96000}  # Low memory device, just to force splitting and trigger the error
         infer_auto_device_map(model, device_memory)
 
+    @parameterized.expand([2, 3])
+    def test_infer_auto_device_map_multiple_ties_to_same_module(self, num_modules):
+        model = nn.Sequential(*(nn.BatchNorm1d(2) for _ in range(num_modules)))
+        for module in model[1:]:
+            module.weight = model[0].weight
+            module.bias = model[0].bias
+
+        # The affine parameters use 16 bytes, and each module has 24 bytes of independent buffers.
+        # Reserve another 24 bytes for the largest remaining layer.
+        max_memory = {"cpu": 16 + 24 * num_modules + 24}
+        device_map = infer_auto_device_map(model, max_memory=max_memory)
+        assert device_map == {"": "cpu"}
+
     def test_infer_auto_device_map_tied_weights_partner_module_split(self):
         # A tied parameter whose partner module gets split must not crash the map computation.
         # When `b` is split, its direct parameters (e.g. `b.w`, tied to `a.p`) become top-level
@@ -1138,6 +1151,27 @@ class ModelingUtilsTester(unittest.TestCase):
         assert module_size_with_ties == module_size + (num_layers - 1) * bias_size
         assert tied_module_names == expected_tied_module_names
         assert tied_modules == expected_tied_modules
+
+    @parameterized.expand([(2, False), (2, True), (3, False), (3, True)])
+    def test_get_module_size_with_multiple_ties_to_same_module(self, num_modules, deduplicate_sizes):
+        model = nn.Sequential(*(nn.BatchNorm1d(2) for _ in range(num_modules)))
+        module_sizes = compute_module_sizes(model)
+        for module in model[1:]:
+            module.weight = model[0].weight
+            module.bias = model[0].bias
+        if deduplicate_sizes:
+            module_sizes = compute_module_sizes(model)
+
+        # Check both sizes that include every alias and sizes that already deduplicate tied parameters.
+        tied_params = [f"{i}.{name}" for i in range(1, num_modules) for name in ("weight", "bias")]
+        module_size_with_ties, tied_module_names, tied_modules = get_module_size_with_ties(
+            tied_params, module_sizes["0"], module_sizes, list(model.named_children())[1:]
+        )
+
+        # Shared affine parameters use 16 bytes; each set of running statistics and its counter use 24.
+        assert module_size_with_ties == 16 + 24 * num_modules
+        assert tied_module_names == [str(i) for i in range(1, num_modules)]
+        assert tied_modules == list(model.children())[1:]
 
     @require_non_cpu
     def test_load_state_dict(self):
