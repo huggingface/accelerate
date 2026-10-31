@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import random
+import tempfile
 import weakref
 
 import pytest
@@ -809,6 +810,41 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         for d1, d2 in zip(data1, data2):
             assert torch.allclose(d1, d2)
 
+    @require_torchdata_stateful_dataloader
+    def test_dataloader_state_dict_epoch_boundary_resume(self):
+        """
+        Regression test for #4480: a checkpoint saved exactly at an epoch boundary must resume into the
+        *next* epoch's permutation, not replay the just-completed one. The shard's `iteration` counter
+        drives `set_epoch` but was not part of the saved state.
+        """
+        from accelerate import DataLoaderConfiguration
+
+        dataset = torch.utils.data.TensorDataset(torch.arange(16))
+
+        def make():
+            accelerator = Accelerator(
+                dataloader_config=DataLoaderConfiguration(use_stateful_dataloader=True, use_seedable_sampler=True)
+            )
+            dataloader = accelerator.prepare(DataLoader(dataset, batch_size=4, shuffle=True))
+            return accelerator, dataloader
+
+        def one_epoch(dataloader):
+            return [batch.tolist() for (batch,) in dataloader]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            accelerator, dataloader = make()
+            reference_epochs = [one_epoch(dataloader) for _ in range(2)]
+
+            accelerator, dataloader = make()
+            first_epoch = one_epoch(dataloader)
+            accelerator.save_state(tmpdir)
+
+            accelerator2, dataloader2 = make()
+            accelerator2.load_state(tmpdir)
+            resumed_epochs = [first_epoch, one_epoch(dataloader2)]
+
+        assert resumed_epochs == reference_epochs
+
     @parameterized.expand([0, 2], name_func=parameterized_custom_name_func)
     @require_torchdata_stateful_dataloader
     def test_dataloader_dispatcher_state_dict(self, num_workers):
@@ -923,6 +959,12 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         dl_dispatcher_state_dict = dl_dispatcher.state_dict()
 
         assert expected_state_dict == skip_dl_state_dict
+        # `DataLoaderShard`/`DataLoaderDispatcher` additionally checkpoint their own epoch counter (it drives
+        # `set_epoch` on resume, see #4480); the base `StatefulDataLoader` does not track it, so compare the
+        # remaining keys with the reference and the counter separately.
+        shard_epoch = dl_shard_state_dict.pop("_accelerate_epoch")
+        dispatcher_epoch = dl_dispatcher_state_dict.pop("_accelerate_epoch")
+        assert shard_epoch == dispatcher_epoch == 0
         assert expected_state_dict == dl_shard_state_dict
         assert expected_state_dict == dl_dispatcher_state_dict
 
@@ -1034,6 +1076,12 @@ class StatefulDataLoaderTester(AccelerateTestCase):
         dl_dispatcher_state_dict = dl_dispatcher.state_dict()
 
         assert expected_state_dict == skip_dl_state_dict
+        # `DataLoaderShard`/`DataLoaderDispatcher` additionally checkpoint their own epoch counter (it drives
+        # `set_epoch` on resume, see #4480); the base `StatefulDataLoader` does not track it, so compare the
+        # remaining keys with the reference and the counter separately.
+        shard_epoch = dl_shard_state_dict.pop("_accelerate_epoch")
+        dispatcher_epoch = dl_dispatcher_state_dict.pop("_accelerate_epoch")
+        assert shard_epoch == dispatcher_epoch == 0
         assert expected_state_dict == dl_shard_state_dict
         assert expected_state_dict == dl_dispatcher_state_dict
 
