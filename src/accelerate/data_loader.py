@@ -943,11 +943,12 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
     def __len__(self):
         whole_length = len(self.base_dataloader)
         if self.split_batches:
-            return whole_length
+            dispatched_length = whole_length
         elif self._drop_last:
-            return whole_length // self.state.num_processes
+            dispatched_length = whole_length // self.state.num_processes
         else:
-            return math.ceil(whole_length / self.state.num_processes)
+            dispatched_length = math.ceil(whole_length / self.state.num_processes)
+        return max(0, dispatched_length - self.skip_batches)
 
     def __reduce__(self):
         """
@@ -1378,6 +1379,9 @@ def skip_first_batches(dataloader, num_batches=0):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`. Should not be used if
     the original dataloader is a `StatefulDataLoader`.
+
+    Dispatched loaders skip complete distributed iterations after fetching and broadcasting the batches. This preserves
+    batch grouping and short-tail padding, but does not avoid reading the skipped data.
     """
     state = PartialState()
     if state.distributed_type == DistributedType.XLA:
@@ -1414,13 +1418,18 @@ def skip_first_batches(dataloader, num_batches=0):
         kwargs["batch_size"] = dataloader.batch_size
 
     if isinstance(dataloader, DataLoaderDispatcher):
-        if new_batch_sampler is None:
-            # Need to manually skip batches in the dataloader
-            kwargs["skip_batches"] = num_batches
+        # A dispatched step may consume multiple underlying batches. Skip after
+        # dispatch so grouping and padding still match the original iteration.
+        # This also preserves the original first batch used to pad a short tail.
+        kwargs["skip_batches"] = dataloader.skip_batches + num_batches
+        if isinstance(dataset, IterableDataset):
+            dispatcher_batch_sampler = None
+        else:
+            dispatcher_batch_sampler = dataloader.batch_sampler
         dataloader = DataLoaderDispatcher(
             dataset,
             split_batches=dataloader.split_batches,
-            batch_sampler=new_batch_sampler,
+            batch_sampler=dispatcher_batch_sampler,
             _drop_last=dataloader._drop_last,
             _non_blocking=dataloader._non_blocking,
             slice_fn=dataloader.slice_fn,
