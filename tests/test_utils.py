@@ -49,8 +49,10 @@ from accelerate.utils import (
     convert_to_fp32,
     extract_model_from_parallel,
     find_device,
+    get_data_structure,
     get_model_tp_size,
     has_offloaded_params,
+    initialize_tensors,
     is_torch_xla_available,
     listify,
     model_has_dtensor,
@@ -116,6 +118,26 @@ class UtilsTester(unittest.TestCase):
         assert torch.equal(result4["b"][0].cpu(), tensor)
         assert torch.equal(result4["b"][1].cpu(), tensor)
         assert result4["c"] == 1
+
+    def test_initialize_tensors(self):
+        for shape in [(2, 3), (0,), ()]:
+            for dtype in [torch.float32, torch.int64, torch.bool]:
+                with self.subTest(shape=shape, dtype=dtype):
+                    tensor = torch.empty(shape, dtype=dtype)
+                    result = initialize_tensors(get_data_structure(tensor))
+                    assert result.shape == tensor.shape
+                    assert result.dtype == tensor.dtype
+
+        data = {"a": ExampleNamedTuple(torch.tensor(1), [torch.empty(0), torch.empty(2, 3)], "unchanged")}
+        result = initialize_tensors(get_data_structure(data))
+        assert isinstance(result, dict)
+        assert isinstance(result["a"], ExampleNamedTuple)
+        assert isinstance(result["a"].b, list)
+        assert result["a"].a.shape == torch.Size([])
+        assert result["a"].a.dtype == torch.int64
+        assert result["a"].b[0].shape == torch.Size([0])
+        assert result["a"].b[1].shape == torch.Size([2, 3])
+        assert result["a"].c == "unchanged"
 
     def test_honor_type(self):
         with self.assertRaises(TypeError) as cm:
