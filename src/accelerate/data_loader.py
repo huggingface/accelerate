@@ -328,6 +328,10 @@ class IterableDatasetShard(IterableDataset):
         else:
             return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
 
+    @property
+    def total_dataset_length(self):
+        return len(self.dataset)
+
     def __iter__(self):
         if (
             not hasattr(self.dataset, "set_epoch")
@@ -628,6 +632,12 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
     @property
     def total_batch_size(self):
+        if isinstance(self.dataset, IterableDatasetShard):
+            return (
+                self.dataset.batch_size
+                if self.dataset.split_batches
+                else (self.dataset.batch_size * self.dataset.num_processes)
+            )
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
         while isinstance(batch_sampler, SkipBatchSampler):
             batch_sampler = batch_sampler.batch_sampler
@@ -641,6 +651,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     def total_dataset_length(self):
         if hasattr(self.dataset, "total_length"):
             return self.dataset.total_length
+        elif hasattr(self.dataset, "total_dataset_length"):
+            return self.dataset.total_dataset_length
         else:
             return len(self.dataset)
 
