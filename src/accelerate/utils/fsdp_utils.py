@@ -1154,7 +1154,6 @@ def detect_peft_qlora_state(model: torch.nn.Module) -> dict:
     The helper is deliberately side-effect free — callers decide what to do
     with the returned summary.
     """
-    import torch.nn as nn
 
     result: dict = {
         "is_peft_model": False,
@@ -1251,8 +1250,6 @@ def build_qlora_fsdp2_kwargs(
         May contain ``ignored_params`` when the model has incompatible
         ``Params4bit``; is otherwise empty.
     """
-    import torch.distributed as dist
-    from torch.distributed.fsdp import MixedPrecisionPolicy
 
     overlay: dict = {}
 

@@ -310,7 +310,7 @@ class AORecipeKwargs(KwargsHandler):
             example.
     """
 
-    config: Optional["Float8LinearConfig"] = None
+    config: Optional[Float8LinearConfig] = None
     module_filter_func: Optional[Callable] = None
     pad_inner_dim: Optional[bool] = None
     enable_fsdp_float8_all_gather: Optional[bool] = None
@@ -1549,20 +1549,20 @@ class FullyShardedDataParallelPlugin:
         },
     )
 
-    sharding_strategy: Union[str, "torch.distributed.fsdp.ShardingStrategy"] = field(
+    sharding_strategy: Union[str, torch.distributed.fsdp.ShardingStrategy] = field(
         default=None,
         metadata={
             "help": "Sharding strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'. Is deprecated in favor of `reshard_after_forward` "
         },
     )
 
-    reshard_after_forward: Union[str, "torch.distributed.fsdp.ShardingStrategy", bool] = field(
+    reshard_after_forward: Union[str, torch.distributed.fsdp.ShardingStrategy, bool] = field(
         default=None,
         metadata={
             "help": "Sharding strategy to use. Should be a bool if `fsdp_version` is set to 2 else a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`. Defaults to 'FULL_SHARD'"
         },
     )
-    backward_prefetch: Optional[Union[str, "torch.distributed.fsdp.BackwardPrefetch"]] = field(
+    backward_prefetch: Optional[Union[str, torch.distributed.fsdp.BackwardPrefetch]] = field(
         default=None,
         metadata={
             "help": "Backward prefetch strategy to use. Should be either a `str` or an instance of `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`. Defaults to 'NO_PREFETCH'. This becomes obsolete in FSDP2."
@@ -1572,8 +1572,8 @@ class FullyShardedDataParallelPlugin:
         Union[
             dict,
             str,
-            "torch.distributed.fsdp.MixedPrecision",
-            "torch.distributed.fsdp.MixedPrecisionPolicy",
+            torch.distributed.fsdp.MixedPrecision,
+            torch.distributed.fsdp.MixedPrecisionPolicy,
         ]
     ] = field(
         default=None,
@@ -1594,8 +1594,8 @@ class FullyShardedDataParallelPlugin:
     )
     cpu_offload: Union[
         bool,
-        "torch.distributed.fsdp.CPUOffload",
-        "torch.distributed.fsdp.CPUOffloadPolicy",
+        torch.distributed.fsdp.CPUOffload,
+        torch.distributed.fsdp.CPUOffloadPolicy,
     ] = field(
         default=None,
         metadata={
@@ -1607,7 +1607,7 @@ class FullyShardedDataParallelPlugin:
         metadata={"help": "A list of modules to ignore when wrapping with FSDP."},
     )
 
-    state_dict_type: Union[str, "torch.distributed.fsdp.StateDictType"] = field(
+    state_dict_type: Union[str, torch.distributed.fsdp.StateDictType] = field(
         default=None,
         metadata={
             "help": "State dict type to use. If a string, it must be one of `full_state_dict`, `local_state_dict`, or `sharded_state_dict`. Defaults to `FULL_STATE_DICT`"
@@ -1615,8 +1615,8 @@ class FullyShardedDataParallelPlugin:
     )
     state_dict_config: Optional[
         Union[
-            "torch.distributed.fsdp.FullStateDictConfig",
-            "torch.distributed.fsdp.ShardedStateDictConfig",
+            torch.distributed.fsdp.FullStateDictConfig,
+            torch.distributed.fsdp.ShardedStateDictConfig,
         ]
     ] = field(
         default=None,
@@ -1624,8 +1624,8 @@ class FullyShardedDataParallelPlugin:
     )
     optim_state_dict_config: Optional[
         Union[
-            "torch.distributed.fsdp.FullOptimStateDictConfig",
-            "torch.distributed.fsdp.ShardedOptimStateDictConfig",
+            torch.distributed.fsdp.FullOptimStateDictConfig,
+            torch.distributed.fsdp.ShardedOptimStateDictConfig,
         ]
     ] = field(
         default=None,
@@ -1705,7 +1705,7 @@ class FullyShardedDataParallelPlugin:
             "help": "The minimum number of parameters a module must have to be wrapped. Only applicable when `auto_wrap_policy` is `size_based_wrap`."
         },
     )
-    quantization_config: Optional["BnbQuantizationConfig"] = field(
+    quantization_config: Optional[BnbQuantizationConfig] = field(
         default=None,
         metadata={
             "help": (
@@ -2115,7 +2115,7 @@ class TorchTensorParallelPlugin:
     )
 
     # torch_device_mesh is of type "torch.distributed.DeviceMesh"
-    torch_device_mesh: Optional["torch.distributed.DeviceMesh"] = field(default=None)
+    torch_device_mesh: Optional[torch.distributed.DeviceMesh] = field(default=None)
 
 
 @dataclass
