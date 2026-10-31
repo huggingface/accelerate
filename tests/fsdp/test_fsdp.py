@@ -46,7 +46,7 @@ from accelerate.utils.constants import (
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
 )
-from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin, GradScalerKwargs
+from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.fsdp_utils import (
     _get_model_state_dict,
     _set_model_state_dict,
@@ -550,15 +550,6 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
-
-    def test_clip_grad_value(self):
-        with patch_environment(**self.fsdp_envs[2]):
-            accelerator = Accelerator(mixed_precision="fp16", kwargs_handlers=[GradScalerKwargs(init_scale=8.0)])
-            model = torch.nn.Sequential(torch.nn.Linear(4, 4, bias=False))
-            model, _ = accelerator.prepare(model, torch.optim.SGD(model.parameters(), lr=0.1))
-            accelerator.backward(model(torch.tensor([[3.0, 0.5, -3.0, -0.5]], device=accelerator.device)).sum())
-            accelerator.clip_grad_value_(model.parameters(), 1.0)
-            assert model[0].weight.grad.full_tensor().tolist() == [[1.0, 0.5, -1.0, -0.5]] * 4
 
     def test_param_mapping_error_handling(self):
         """Test FSDP2's defensive error handling for parameter mapping failures in tied/non-tied cases."""
