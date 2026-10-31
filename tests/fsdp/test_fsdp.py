@@ -1049,6 +1049,21 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
         super().setUp()
         self.current_fsdp_version = 2
 
+    def test_clip_grad_value(self):
+        """`clip_grad_value_` must clip every rank's shard of the gradients, after unscaling them under fp16."""
+        test_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clip_grad_value.py")
+        for mixed_precision in ("fp16", "bf16"):
+            cmd = get_launch_command(
+                num_processes=2,
+                num_machines=1,
+                machine_rank=0,
+                use_fsdp=True,
+                fsdp_version=2,
+                mixed_precision=mixed_precision,
+            )
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd + [test_file_path])
+
     @require_peft
     def test_peft_checkpointing(self):
         """Every rank's shard of the adapter must survive a `save_fsdp_model`/`load_fsdp_model` round-trip."""

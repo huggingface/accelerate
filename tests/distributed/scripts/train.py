@@ -44,7 +44,6 @@ def main():
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
     parser.add_argument("--save_steps", type=int)
     parser.add_argument("--resume_from_checkpoint")
-    parser.add_argument("--clip_grad_value", type=float)
     args = parser.parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -77,8 +76,6 @@ def main():
         with accelerator.accumulate(model):
             loss = model(input_ids=batch, labels=batch).loss
             accelerator.backward(loss)
-            if args.clip_grad_value:
-                accelerator.clip_grad_value_(model.parameters(), args.clip_grad_value)
             optimizer.step()
             optimizer.zero_grad()
         step_losses.append(loss.detach())
