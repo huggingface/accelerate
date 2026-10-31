@@ -14,7 +14,6 @@
 from ..parallelism_config import ParallelismConfig
 from .ao import convert_model_to_fp8_ao, filter_first_and_last_linear_layers, has_ao_layers
 from .constants import (
-    MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
     MODEL_NAME,
     OPTIMIZER_NAME,
     PROFILE_PATTERN_NAME,
@@ -31,7 +30,6 @@ from .constants import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     WEIGHTS_PATTERN_NAME,
-    XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .dataclasses import (
     AORecipeKwargs,
@@ -46,7 +44,6 @@ from .dataclasses import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
-    FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
     GradientAccumulationPlugin,
     GradScalerKwargs,
@@ -54,7 +51,6 @@ from .dataclasses import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
-    MSAMPRecipeKwargs,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
@@ -112,13 +108,11 @@ from .imports import (
     is_mlflow_available,
     is_mlu_available,
     is_mps_available,
-    is_msamp_available,
     is_musa_available,
     is_neuron_available,
     is_npu_available,
     is_pandas_available,
     is_peft_available,
-    is_pippy_available,
     is_pynvml_available,
     is_pytest_available,
     is_rich_available,
@@ -140,7 +134,6 @@ from .imports import (
     is_transformers_available,
     is_triton_available,
     is_wandb_available,
-    is_weights_only_available,
     is_xccl_available,
     is_xpu_available,
     torchao_required,

@@ -23,7 +23,6 @@ from accelerate.utils.dataclasses import (
     TorchContextParallelConfig,
     TorchTensorParallelConfig,
 )
-from accelerate.utils.versions import is_torch_version
 
 
 if TYPE_CHECKING:
@@ -220,10 +219,7 @@ class ParallelismConfig:
         if self.sp_backend == "deepspeed" and self.sp_size > 1:
             return None
 
-        if is_torch_version(">=", "2.2.0"):
-            from torch.distributed.device_mesh import init_device_mesh
-        else:
-            raise RuntimeError("Building a device_mesh requires to have torch>=2.2.0")
+        from torch.distributed.device_mesh import init_device_mesh
 
         mesh = self._get_mesh()
         if len(mesh) == 0:
@@ -333,11 +329,11 @@ class ParallelismConfig:
                 "Please set either cp_size=1 or sp_size=1."
             )
 
-        if (self.tp_size > 1 or self.cp_size > 1) and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
+        if self.cp_size > 1 and self.dp_replicate_size > 1 and self.dp_shard_size == 1:
             raise ValueError(
-                "Tensor/Context parallelism (tp/cp_size > 1) cannot be used with pure data parallelism (dp_replicate_size > 1 and dp_shard_size == 1). "
-                "Please set dp_shard_size > 1 and dp_replicate_size == 1 to compose FSDP + TP/CP for 2D parallel, "
-                "or set dp_replicate_size == 1 and dp_shard_size > 1 to compose HSDP + TP/CP for 3D parallel."
+                "Context parallelism (cp_size > 1) cannot be used with pure data parallelism (dp_replicate_size > 1 and dp_shard_size == 1). "
+                "Please set dp_shard_size > 1 and dp_replicate_size == 1 to compose FSDP + CP for 2D parallel, "
+                "or set dp_replicate_size == 1 and dp_shard_size > 1 to compose HSDP + CP for 3D parallel."
             )
         self._sizes = {
             "dp_replicate": self.dp_replicate_size,

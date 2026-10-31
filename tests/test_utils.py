@@ -34,7 +34,6 @@ from accelerate.test_utils.testing import (
     require_huggingface_suite,
     require_non_cpu,
     require_non_torch_xla,
-    require_torch_min_version,
     require_tpu,
     require_triton,
     torch_device,
@@ -334,7 +333,6 @@ class UtilsTester(unittest.TestCase):
                 assert len(log.records) == 1
                 assert "Removed shared tensor" in log.output[0]
 
-    @require_torch_min_version(version="1.12")
     def test_pad_across_processes(self):
         from torch.nested import nested_tensor
 

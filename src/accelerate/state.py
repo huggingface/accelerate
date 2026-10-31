@@ -403,13 +403,16 @@ class PartialState:
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
-            DistributedType.MULTI_CPU,
             DistributedType.MULTI_HPU,
             DistributedType.MULTI_NEURON,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
             torch.distributed.barrier(device_ids=[self.local_process_index])
+        elif self.distributed_type == DistributedType.MULTI_CPU:
+            # Don't pass `device_ids` on CPU: torch would then run the barrier on the machine's accelerator
+            # (e.g. MPS on macOS) rather than on the gloo/CPU process group, which fails or is not implemented.
+            torch.distributed.barrier()
         elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
@@ -936,7 +939,7 @@ class AcceleratorState:
                 # this is confusing, why is is_fp8_available only checks for library availability ?
                 if not is_fp8_available():
                     raise ValueError(
-                        "Using `fp8` precision requires `transformer_engine` or `MS-AMP` to be installed."
+                        "Using `fp8` precision requires `transformer_engine` or `torchao` to be installed."
                     )
                 elif torch.cuda.is_available() and not check_cuda_fp8_capability():
                     logger.warning(

@@ -176,7 +176,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
-                "FP8 is not available on this machine. Please ensure that either Transformer Engine, MSAMP or torchao is installed."
+                "FP8 is not available on this machine. Please ensure that either Transformer Engine or torchao is installed."
             )
         current_env = setup_fp8_env(args, current_env)
 
@@ -286,7 +286,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
-                "FP8 is not available on this machine. Please ensure that either Transformer Engine, MSAMP or torchao is installed."
+                "FP8 is not available on this machine. Please ensure that either Transformer Engine or torchao is installed."
             )
         current_env = setup_fp8_env(args, current_env)
 
@@ -561,7 +561,7 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
-                "FP8 is not available on this machine. Please ensure that either Transformer Engine, MSAMP or torchao is installed."
+                "FP8 is not available on this machine. Please ensure that either Transformer Engine or torchao is installed."
             )
         current_env = setup_fp8_env(args, current_env)
     current_env["ACCELERATE_CONFIG_DS_FIELDS"] = str(args.deepspeed_fields_from_accelerate_config).lower()
@@ -711,7 +711,7 @@ def prepare_sagemager_args_inputs(
     if args.mixed_precision.lower() == "fp8":
         if not is_fp8_available():
             raise RuntimeError(
-                "FP8 is not available on this machine. Please ensure that either Transformer Engine, MSAMP or torchao is installed."
+                "FP8 is not available on this machine. Please ensure that either Transformer Engine or torchao is installed."
             )
         environment = setup_fp8_env(args, environment)
     # configure distribution set up

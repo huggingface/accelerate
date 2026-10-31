@@ -247,6 +247,11 @@ As was pointed out in this [blog-post](https://huggingface.co/blog/gradient_accu
 
 In other words, some adjustments must be made on losses that operate on a token-level basis.
 
+Count the targets that actually contribute to the loss. For Transformers causal language models that shift labels internally,
+pass unshifted labels and count `(labels[..., 1:] != -100).sum()`: the first label has no preceding prediction.
+Do not shift those labels again in the data collator. The [autoregressive accumulation example](https://github.com/huggingface/accelerate/blob/main/examples/by_feature/gradient_accumulation_for_autoregressive_models.py)
+uses this convention; other loss functions may use different target alignment.
+
 ### Skeleton code
 
 ```python

@@ -33,7 +33,6 @@ from .utils import (
     get_data_structure,
     initialize_tensors,
     is_datasets_available,
-    is_torch_version,
     is_torchdata_stateful_dataloader_available,
     send_to_device,
     slice_tensors,
@@ -60,14 +59,8 @@ _PYTORCH_DATALOADER_KWARGS = {
     "prefetch_factor": 2,
     "persistent_workers": False,
     "pin_memory_device": "",
+    "in_order": True,
 }
-
-# kwargs added after by version
-_PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {"2.6.0": {"in_order": True}}
-
-for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
-    if is_torch_version(">=", v):
-        _PYTORCH_DATALOADER_KWARGS.update(additional_kwargs)
 
 
 class SeedableRandomSampler(RandomSampler):
@@ -90,9 +83,7 @@ class SeedableRandomSampler(RandomSampler):
 
     def __iter__(self):
         if self.generator is None:
-            self.generator = torch.Generator(
-                device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
-            )
+            self.generator = torch.Generator(device=torch.get_default_device())
             self.generator.manual_seed(self.initial_seed)
 
         # Allow `self.epoch` to modify the seed of the generator
@@ -430,11 +421,7 @@ class DataLoaderAdapter:
             )
         if use_stateful_dataloader:
             torchdata_version = version.parse(importlib.metadata.version("torchdata"))
-            if (
-                "in_order" in kwargs
-                and compare_versions(torchdata_version, "<", "0.11")
-                and is_torch_version(">=", "2.6.0")
-            ):
+            if "in_order" in kwargs and compare_versions(torchdata_version, "<", "0.11"):
                 kwargs.pop("in_order")
             self.base_dataloader = StatefulDataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
         else:
@@ -642,6 +629,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     @property
     def total_batch_size(self):
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
+        while isinstance(batch_sampler, SkipBatchSampler):
+            batch_sampler = batch_sampler.batch_sampler
         return (
             batch_sampler.batch_size
             if getattr(batch_sampler, "split_batches", False)
@@ -873,14 +862,10 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
     def __iter__(self):
         self.begin()
         self.set_epoch(self.iteration)
-        main_iterator = None
-        if is_torch_version(">=", "2.0.1"):
-            # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
-            # shared seed to all dist processes. Thus, we need to create iterator for all dist processes.
-            # But, we only iterate through the DataLoader on process 0.
-            main_iterator = self.base_dataloader.__iter__()
-        elif self.state.process_index == 0:
-            main_iterator = self.base_dataloader.__iter__()
+        # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
+        # shared seed to all dist processes. Thus, we need to create iterator for all dist processes.
+        # But, we only iterate through the DataLoader on process 0.
+        main_iterator = self.base_dataloader.__iter__()
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
@@ -1206,16 +1191,14 @@ def prepare_data_loader(
             generator=getattr(
                 sampler,
                 "generator",
-                torch.Generator(device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"),
+                torch.Generator(device=torch.get_default_device()),
             ),
             data_seed=data_seed,
         )
 
     if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
         # isinstance(dataloader.sampler, RandomSampler) indicates the original dataloader has `shuffle` enabled.
-        generator = torch.Generator(
-            device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
-        )
+        generator = torch.Generator(device=torch.get_default_device())
         seed = int(torch.empty((), dtype=torch.int64).random_().item())
         generator.manual_seed(seed)
         dataloader.generator = generator
@@ -1245,9 +1228,7 @@ def prepare_data_loader(
         else:
             if not use_seedable_sampler and hasattr(sampler, "generator"):
                 if sampler.generator is None:
-                    sampler.generator = torch.Generator(
-                        device=torch.get_default_device() if hasattr(torch, "get_default_device") else "cpu"
-                    )
+                    sampler.generator = torch.Generator(device=torch.get_default_device())
                     seed = int(torch.empty((), dtype=torch.int64).random_().item())
                     sampler.generator.manual_seed(seed)
                 synchronized_generator = sampler.generator

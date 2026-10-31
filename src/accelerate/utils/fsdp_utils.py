@@ -97,7 +97,7 @@ def _set_model_state_dict(model, state_dict, adapter_only=False, sd_options=None
 def _prepare_sd_options(fsdp_plugin):
     sd_options = None
 
-    # we use this only for FSDP2, as it requires torch >= 2.6.0 and this api requires torch >= 2.2.0
+    # we use this only for FSDP2
     if fsdp_plugin.fsdp_version == 2:
         from torch.distributed.checkpoint.state_dict import StateDictOptions
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -506,9 +506,6 @@ def merge_fsdp_weights(
     checkpoint_dir = Path(checkpoint_dir)
     from accelerate.state import PartialState
 
-    if not is_torch_version(">=", "2.3.0"):
-        raise ValueError("`merge_fsdp_weights` requires PyTorch >= 2.3.0`")
-
     # Verify that the checkpoint directory exists
     if not checkpoint_dir.exists():
         model_path_exists = (checkpoint_dir / "pytorch_model_fsdp_0").exists()
@@ -614,9 +611,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             submodule = model.get_submodule(base_param_name)
             old_param = getattr(submodule, local_param_name)
 
-        is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
         casting_dtype = None
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+        is_param_float8_e4m3fn = empty_param.dtype == torch.float8_e4m3fn
 
         if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
             casting_dtype = old_param.dtype
@@ -823,6 +819,20 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                 "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
             )
 
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
+        # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
+        # Also, these buffers aren't getting sharded by default
+        # We get the FQNs of all non-persistent buffers, to re-register them after
+        non_persistent_buffer_fqns = get_non_persistent_buffers(model, recurse=True, fqns=True)
+        original_non_persistent_buffers = copy.deepcopy(
+            {k: v for k, v in model.named_buffers() if k in non_persistent_buffer_fqns}
+        )
+        # Non-main ranks only need the shapes: their weights are replaced by the main process' in
+        # `fsdp2_load_full_state_dict`. Moving them to `meta` before the upcast below avoids writing a full fp32 copy of
+        # every trainable parameter into host memory on every rank.
+        if not accelerator.is_main_process:
+            model = model.to(torch.device("meta"))
+
     # FSDP2 requires uniform orig_dtype among trainable params in each group.
     # Upcast to fp32 master weights; MixedPrecisionPolicy.param_dtype handles compute cast.
     if accelerator.mixed_precision != "no" and not model_has_params4bit:
@@ -846,13 +856,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.empty`), `fully_shard` would move it to GPU
         # Afterwards, when we call `fsdp2_load_full_state_dict`, us creating the state_dict would result into briefly having two copies of model state_dict on the GPU -> VRAM spike
 
-        # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
-        # Also, these buffers aren't getting sharded by default
-        # We get the FQNs of all non-persistent buffers, to re-register them after
-        non_persistent_buffer_fqns = get_non_persistent_buffers(model, recurse=True, fqns=True)
-        original_non_persistent_buffers = copy.deepcopy(
-            {k: v for k, v in model.named_buffers() if k in non_persistent_buffer_fqns}
-        )
         # We move the model to meta device, as then sharding happens on meta device
         model = model.to(torch.device("meta"))
         # We need to re-tie the weights, not exactly sure why, but if we don't do this, reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
@@ -955,7 +958,11 @@ def fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model: torch.nn.Module) -> Call
         no_split_modules = getattr(model, "_no_split_modules", None)
         if no_split_modules is None:
             no_split_modules = []
-        transformer_cls_names_to_wrap = list(no_split_modules)
+        # `_no_split_modules` can name classes this model doesn't instantiate (e.g. the ESMFold blocks of an
+        # `EsmModel`, or the audio layers of a Gemma 4 checkpoint without audio tower)
+        transformer_cls_names_to_wrap = [
+            name for name in no_split_modules if get_module_class_from_name(model, name) is not None
+        ]
         if fsdp2_plugin.transformer_cls_names_to_wrap is not None:
             transformer_cls_names_to_wrap = fsdp2_plugin.transformer_cls_names_to_wrap
         transformer_cls_to_wrap = set()
