@@ -170,18 +170,19 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             if self.scaler is not None:
                 self.optimizer.step = self._optimizer_patched_step_method
 
-                self.scaler.step(self.optimizer, closure)
-                self.scaler.update()
+                try:
+                    self.scaler.step(self.optimizer, closure)
+                    self.scaler.update()
 
-                if not self._accelerate_step_called:
-                    # If the optimizer step was skipped, gradient overflow was detected.
-                    self._is_overflow = True
-                else:
-                    self._is_overflow = False
-                # Reset the step method to the original one
-                self.optimizer.step = self._optimizer_original_step_method
-                # Reset the indicator
-                self._accelerate_step_called = False
+                    if not self._accelerate_step_called:
+                        # If the optimizer step was skipped, gradient overflow was detected.
+                        self._is_overflow = True
+                    else:
+                        self._is_overflow = False
+                finally:
+                    # Restore the method and indicator even if the optimizer or scaler raises.
+                    self.optimizer.step = self._optimizer_original_step_method
+                    self._accelerate_step_called = False
             else:
                 self.optimizer.step(closure)
         if self.accelerator_state.distributed_type == DistributedType.XLA:
