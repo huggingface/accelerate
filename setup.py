@@ -46,6 +46,7 @@ extras["test_trackers"] = [
     "matplotlib",
     "swanlab[dashboard]",  # dashboard required for local use
     "trackio",
+    "runyard",
 ]
 extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
