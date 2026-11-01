@@ -20,7 +20,79 @@ import torch
 from accelerate import Accelerator, debug_launcher
 from accelerate.state import AcceleratorState, GradientState
 from accelerate.test_utils import require_cpu, require_huggingface_suite
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import GradientAccumulationPlugin
+
+
+def run_accumulation_loop(accelerator, model, optimizer, scheduler, num_micro_steps, metric=None):
+    for _ in range(num_micro_steps):
+        with accelerator.accumulate(model):
+            accelerator.backward(model(torch.ones(2, 2)).sum())
+            optimizer.step()
+            if metric is None:
+                scheduler.step()
+            else:
+                scheduler.step(metric)
+            optimizer.zero_grad()
+
+
+@require_cpu
+class SchedulerAdjustmentTester(AccelerateTestCase):
+    def test_adjust_scheduler_reaches_gradient_state(self):
+        # `GradientAccumulationPlugin.adjust_scheduler` defaults to `True`, so creating an
+        # `Accelerator` with `gradient_accumulation_steps` should enable the adjustment.
+        accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2)
+        self.assertTrue(accelerator.gradient_state.adjust_scheduler)
+        GradientState._reset_state()
+        AcceleratorState._reset_state(True)
+
+        # An explicit value must be respected in both directions.
+        plugin = GradientAccumulationPlugin(num_steps=2, adjust_scheduler=False)
+        accelerator = Accelerator(cpu=True, gradient_accumulation_plugin=plugin)
+        self.assertFalse(accelerator.gradient_state.adjust_scheduler)
+        GradientState._reset_state()
+        AcceleratorState._reset_state(True)
+
+        plugin = GradientAccumulationPlugin(num_steps=2, adjust_scheduler=True)
+        accelerator = Accelerator(cpu=True, gradient_accumulation_plugin=plugin)
+        self.assertTrue(accelerator.gradient_state.adjust_scheduler)
+
+    def test_accumulation_accounts_for_skipped_scheduler_steps(self):
+        accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2)
+        model = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda n: 1.0)
+        model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+
+        run_accumulation_loop(accelerator, model, optimizer, scheduler, num_micro_steps=4)
+        # The scheduler's internal counter tracks every micro-step, so schedulers sized on
+        # the total number of batches are accounted for, not just the optimizer steps.
+        self.assertEqual(scheduler.scheduler._step_count, 5)
+        # While only one optimizer step worth of updates happened per accumulation group
+        self.assertEqual(scheduler.scheduler.last_epoch, 2)
+
+    def test_accumulation_with_plateau_scheduler(self):
+        # Schedulers without a `_step_count` (e.g. `ReduceLROnPlateau`) must keep working.
+        accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2)
+        model = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=0, factor=0.5)
+        model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+
+        run_accumulation_loop(accelerator, model, optimizer, scheduler, num_micro_steps=8, metric=1.0)
+        # One learning rate update per optimizer step, four steps in total
+        self.assertAlmostEqual(scheduler.get_last_lr()[0], 0.1 * 0.5**3)
+
+    def test_accumulation_with_one_cycle_scheduler(self):
+        accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2)
+        model = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.1, total_steps=4)
+        model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+
+        run_accumulation_loop(accelerator, model, optimizer, scheduler, num_micro_steps=8)
+        # `OneCycleLR` is still stepped exactly `total_steps` times, without raising
+        self.assertEqual(scheduler.scheduler.last_epoch, 4)
 
 
 def one_cycle_test(num_processes=2, step_scheduler_with_optimizer=True, split_batches=False):
