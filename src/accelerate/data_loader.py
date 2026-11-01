@@ -396,6 +396,15 @@ class DataLoaderStateMixin:
         with suppress(Exception):
             if not self._drop_last:
                 length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+                # A sized sampler can select fewer or more samples than the dataset contains
+                # (e.g. `SubsetRandomSampler` or `WeightedRandomSampler`), in which case it is
+                # the number of samples it selects that determines the size of the final batch.
+                batch_sampler = getattr(self.batch_sampler, "batch_sampler", self.batch_sampler)
+                sampler = getattr(batch_sampler, "sampler", None)
+                while isinstance(sampler, BatchSampler):
+                    sampler = getattr(sampler, "sampler", None)
+                if sampler is not None:
+                    length = len(sampler)
                 self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 

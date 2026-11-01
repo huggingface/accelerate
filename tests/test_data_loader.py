@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, SubsetRandomSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -630,6 +630,39 @@ class DataLoaderTester(AccelerateTestCase):
 
         assert [batch.tolist() for batch in resumed] == [[4, 5]]
         assert resumed.remainder == -1
+
+    def test_remainder_uses_sampler_length(self):
+        # Regression test for https://github.com/huggingface/accelerate/issues/4410:
+        # a sized sampler that selects fewer samples than the dataset contains must drive
+        # the final batch remainder, otherwise `gather_for_metrics` drops valid samples.
+        dataset = range(21)
+        sampler = SubsetRandomSampler(range(10), generator=torch.Generator().manual_seed(42))
+        dataloader = DataLoader(dataset, batch_size=4, sampler=sampler)
+
+        accelerator = Accelerator()
+        dataloader = accelerator.prepare(dataloader)
+
+        samples = []
+        for batch in dataloader:
+            samples.extend(accelerator.gather_for_metrics(batch).tolist())
+
+        assert sorted(samples) == list(range(10))
+        assert dataloader.remainder == 2
+
+    def test_remainder_uses_sampler_length_across_processes(self):
+        # Regression test for https://github.com/huggingface/accelerate/issues/4410:
+        # with several processes, computing the remainder from the dataset length instead
+        # of the sampler length leaves padding duplicates in the gathered last batch.
+        dataloader = prepare_data_loader(
+            DataLoader(range(21), batch_size=4, sampler=SubsetRandomSampler(range(10))),
+            num_processes=2,
+            process_index=0,
+        )
+
+        for _ in dataloader:
+            pass
+
+        assert dataloader.remainder == 2
 
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
