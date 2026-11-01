@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
-from unittest import mock, skip
+from unittest import mock
 
 import torch
 
@@ -33,7 +33,6 @@ from accelerate.test_utils.testing import (
     require_fp16,
     require_huggingface_suite,
     require_multi_device,
-    require_pippy,
     require_schedulefree,
     require_trackers,
     run_command,
@@ -297,18 +296,4 @@ class FeatureExamplesTests(TempDirTestCase):
     @require_multi_device
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
-        run_command(self.launch_args + testargs)
-
-    @require_pippy
-    @require_multi_device
-    @skip("Will soon deprecate pippy")
-    def test_pippy_examples_bert(self):
-        testargs = ["examples/inference/pippy/bert.py"]
-        run_command(self.launch_args + testargs)
-
-    @require_pippy
-    @require_multi_device
-    @skip("Will soon deprecate pippy")
-    def test_pippy_examples_gpt2(self):
-        testargs = ["examples/inference/pippy/gpt2.py"]
         run_command(self.launch_args + testargs)

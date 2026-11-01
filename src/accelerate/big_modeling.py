@@ -513,7 +513,7 @@ def dispatch_model(
                 device = f"neuron:{device}"
             elif torch.cuda.is_available():
                 pass
-            elif hasattr(torch, "accelerator") and torch.accelerator.is_available():
+            elif torch.accelerator.is_available():
                 device = f"{torch.accelerator.current_accelerator().type}:{device}"
         model.to(device)
     # Convert OrderedDict back to dict for easier usage

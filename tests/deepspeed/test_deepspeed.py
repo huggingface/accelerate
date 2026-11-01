@@ -104,6 +104,15 @@ class DummyConfig:
         self._name_or_path = "dummy"
 
 
+class DeepSpeedPluginTest(AccelerateTestCase):
+    @parameterized.expand([(0.0,), (1.0,), ("auto",)])
+    def test_gradient_clipping_is_preserved(self, gradient_clipping):
+        """An explicit zero must disable clipping instead of silently restoring DeepSpeed's default."""
+        plugin = DeepSpeedPlugin(gradient_clipping=gradient_clipping, zero_stage=2)
+
+        assert plugin.deepspeed_config["gradient_clipping"] == gradient_clipping
+
+
 @require_deepspeed
 @require_non_cpu
 class DeepSpeedConfigIntegration(AccelerateTestCase):

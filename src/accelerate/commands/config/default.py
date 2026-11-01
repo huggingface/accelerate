@@ -159,7 +159,7 @@ def default_command_parser(parser, parents):
         type=str,
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
-        "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
+        "BF16 training is only supported on Nvidia Ampere GPUs.",
         default="no",
     )
     parser.set_defaults(func=default_config_command)
