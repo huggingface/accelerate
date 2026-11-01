@@ -1284,7 +1284,10 @@ class GradientState:
     @property
     def adjust_scheduler(self) -> bool:
         "Returns whether the scheduler should be adjusted"
-        return self.plugin_kwargs.get("adjust_scheduler", False)
+        # Defaults to `True`, matching `GradientAccumulationPlugin.adjust_scheduler`. Note that
+        # `KwargsHandler.to_kwargs()` only keeps values different from the dataclass defaults, so the
+        # plugin's default (and any explicit `True`) is never stored in `plugin_kwargs`.
+        return self.plugin_kwargs.get("adjust_scheduler", True)
 
     @property
     def sync_with_dataloader(self) -> bool:
