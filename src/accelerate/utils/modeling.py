@@ -1870,7 +1870,8 @@ def load_checkpoint_in_model(
             If provided, the weights will be converted to that type when loaded.
         offload_state_dict (`bool`, *optional*, defaults to `False`):
             If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
-            the weight of the CPU state dict + the biggest shard does not fit.
+            the weight of the CPU state dict + the biggest shard does not fit. The temporary files are removed when
+            loading finishes or raises.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to include the buffers in the weights offloaded to disk.
         keep_in_fp32_modules(`List[str]`, *optional*):
@@ -1963,127 +1964,136 @@ def load_checkpoint_in_model(
         state_dict_folder = tempfile.mkdtemp()
         state_dict_index = {}
 
-    unexpected_keys = set()
-    model_keys = set(model.state_dict().keys())
-    buffer_names = [name for name, _ in model.named_buffers()]
-    model_devices = {t.device for t in model.state_dict().values() if isinstance(t, torch.Tensor)}
-    model_physical_devices = model_devices - {torch.device("meta")}
-    for checkpoint_file in checkpoint_files:
-        if device_map is None:
-            # exception for multi-device loading was made for the meta device in torch v2.7.0
-            # https://github.com/pytorch/pytorch/blob/v2.6.0/torch/distributed/checkpoint/state_dict.py#L557-L563
-            # https://github.com/pytorch/pytorch/blob/v2.7.0-rc2/torch/distributed/checkpoint/state_dict.py#L575-L587
-            if (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1:
-                from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
+    try:
+        unexpected_keys = set()
+        model_keys = set(model.state_dict().keys())
+        buffer_names = [name for name, _ in model.named_buffers()]
+        model_devices = {t.device for t in model.state_dict().values() if isinstance(t, torch.Tensor)}
+        model_physical_devices = model_devices - {torch.device("meta")}
+        for checkpoint_file in checkpoint_files:
+            if device_map is None:
+                # exception for multi-device loading was made for the meta device in torch v2.7.0
+                # https://github.com/pytorch/pytorch/blob/v2.6.0/torch/distributed/checkpoint/state_dict.py#L557-L563
+                # https://github.com/pytorch/pytorch/blob/v2.7.0-rc2/torch/distributed/checkpoint/state_dict.py#L575-L587
+                if (is_torch_version(">=", "2.7.0") and len(model_physical_devices) <= 1) or len(model_devices) <= 1:
+                    from torch.distributed.checkpoint.state_dict import StateDictOptions, set_model_state_dict
 
-                loaded_checkpoint = (
-                    load_state_dict(checkpoint_file, device_map=device_map)
-                    if not broadcast_from_rank0 or dist.get_rank() == 0
-                    else {}
-                )
-                set_model_state_dict(
-                    model,
-                    loaded_checkpoint,
-                    options=StateDictOptions(
-                        full_state_dict=full_state_dict,
-                        strict=strict,
-                        broadcast_from_rank0=broadcast_from_rank0,
-                    ),
-                )
+                    loaded_checkpoint = (
+                        load_state_dict(checkpoint_file, device_map=device_map)
+                        if not broadcast_from_rank0 or dist.get_rank() == 0
+                        else {}
+                    )
+                    set_model_state_dict(
+                        model,
+                        loaded_checkpoint,
+                        options=StateDictOptions(
+                            full_state_dict=full_state_dict,
+                            strict=strict,
+                            broadcast_from_rank0=broadcast_from_rank0,
+                        ),
+                    )
+                else:
+                    loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+                    model.load_state_dict(loaded_checkpoint, strict=strict)
+
+                unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
             else:
                 loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
-                model.load_state_dict(loaded_checkpoint, strict=strict)
 
-            unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
-        else:
-            loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+                for param_name, param in loaded_checkpoint.items():
+                    # skip SCB parameter (for 8-bit serialization)
+                    if "SCB" in param_name:
+                        continue
 
-            for param_name, param in loaded_checkpoint.items():
-                # skip SCB parameter (for 8-bit serialization)
-                if "SCB" in param_name:
-                    continue
+                    if param_name not in model_keys:
+                        unexpected_keys.add(param_name)
+                        if not strict:
+                            continue  # Skip loading this parameter.
 
-                if param_name not in model_keys:
-                    unexpected_keys.add(param_name)
-                    if not strict:
-                        continue  # Skip loading this parameter.
+                    module_name = param_name
 
-                module_name = param_name
+                    while len(module_name) > 0 and module_name not in device_map:
+                        module_name = ".".join(module_name.split(".")[:-1])
+                    if module_name == "" and "" not in device_map:
+                        # TODO: group all errors and raise at the end.
+                        raise ValueError(f"{param_name} doesn't have any device set.")
+                    param_device = device_map[module_name]
+                    new_dtype = dtype
+                    if dtype is not None and torch.is_floating_point(param):
+                        if keep_in_fp32_modules is not None and dtype == torch.float16:
+                            proceed = False
+                            for key in keep_in_fp32_modules:
+                                if ((key in param_name) and (key + "." in param_name)) or key == param_name:
+                                    proceed = True
+                                    break
+                            if proceed:
+                                new_dtype = torch.float32
 
-                while len(module_name) > 0 and module_name not in device_map:
-                    module_name = ".".join(module_name.split(".")[:-1])
-                if module_name == "" and "" not in device_map:
-                    # TODO: group all errors and raise at the end.
-                    raise ValueError(f"{param_name} doesn't have any device set.")
-                param_device = device_map[module_name]
-                new_dtype = dtype
-                if dtype is not None and torch.is_floating_point(param):
-                    if keep_in_fp32_modules is not None and dtype == torch.float16:
-                        proceed = False
-                        for key in keep_in_fp32_modules:
-                            if ((key in param_name) and (key + "." in param_name)) or key == param_name:
-                                proceed = True
-                                break
-                        if proceed:
-                            new_dtype = torch.float32
+                    if "weight" in param_name and param_name.replace("weight", "SCB") in loaded_checkpoint.keys():
+                        if param.dtype == torch.int8:
+                            fp16_statistics = loaded_checkpoint[param_name.replace("weight", "SCB")]
+                    else:
+                        fp16_statistics = None
 
-                if "weight" in param_name and param_name.replace("weight", "SCB") in loaded_checkpoint.keys():
-                    if param.dtype == torch.int8:
-                        fp16_statistics = loaded_checkpoint[param_name.replace("weight", "SCB")]
-                else:
-                    fp16_statistics = None
-
-                if param_device == "disk":
-                    if offload_buffers or param_name not in buffer_names:
+                    if param_device == "disk":
+                        if offload_buffers or param_name not in buffer_names:
+                            if new_dtype is None:
+                                new_dtype = param.dtype
+                            if offload_8bit_bnb:
+                                quantize_and_offload_8bit(
+                                    model, param, param_name, new_dtype, offload_folder, offload_index, fp16_statistics
+                                )
+                                continue
+                            else:
+                                set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
+                            offload_weight(param, param_name, offload_folder, index=offload_index)
+                        else:
+                            # Buffers stay in memory unless `offload_buffers=True`, so they still need their value.
+                            set_module_tensor_to_device(model, param_name, "cpu", value=param, dtype=new_dtype)
+                    elif param_device == "cpu" and offload_state_dict:
                         if new_dtype is None:
                             new_dtype = param.dtype
                         if offload_8bit_bnb:
                             quantize_and_offload_8bit(
-                                model, param, param_name, new_dtype, offload_folder, offload_index, fp16_statistics
+                                model,
+                                param,
+                                param_name,
+                                new_dtype,
+                                state_dict_folder,
+                                state_dict_index,
+                                fp16_statistics,
                             )
-                            continue
                         else:
                             set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
-                        offload_weight(param, param_name, offload_folder, index=offload_index)
+                            offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
                     else:
-                        # Buffers stay in memory unless `offload_buffers=True`, so they still need their value.
-                        set_module_tensor_to_device(model, param_name, "cpu", value=param, dtype=new_dtype)
-                elif param_device == "cpu" and offload_state_dict:
-                    if new_dtype is None:
-                        new_dtype = param.dtype
-                    if offload_8bit_bnb:
-                        quantize_and_offload_8bit(
-                            model, param, param_name, new_dtype, state_dict_folder, state_dict_index, fp16_statistics
+                        set_module_tensor_to_device(
+                            model,
+                            param_name,
+                            param_device,
+                            value=param,
+                            dtype=new_dtype,
+                            fp16_statistics=fp16_statistics,
                         )
-                    else:
-                        set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
-                        offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
-                else:
-                    set_module_tensor_to_device(
-                        model,
-                        param_name,
-                        param_device,
-                        value=param,
-                        dtype=new_dtype,
-                        fp16_statistics=fp16_statistics,
-                    )
 
-        # Force Python to clean up.
-        del loaded_checkpoint
-        gc.collect()
+            # Force Python to clean up.
+            del loaded_checkpoint
+            gc.collect()
 
-    if not strict and len(unexpected_keys) > 0:
-        logger.warning(
-            f"Some weights of the model checkpoint at {checkpoint} were not used when"
-            f" initializing {model.__class__.__name__}: {unexpected_keys}. This may or may not be an issue - make sure that the checkpoint does not have unnecessary parameters, or that the model definition correctly corresponds to the checkpoint."
-        )
+        if not strict and len(unexpected_keys) > 0:
+            logger.warning(
+                f"Some weights of the model checkpoint at {checkpoint} were not used when"
+                f" initializing {model.__class__.__name__}: {unexpected_keys}. This may or may not be an issue - make sure that the checkpoint does not have unnecessary parameters, or that the model definition correctly corresponds to the checkpoint."
+            )
 
-    save_offload_index(offload_index, offload_folder)
+        save_offload_index(offload_index, offload_folder)
 
-    # Load back offloaded state dict on CPU
-    if offload_state_dict:
-        load_offloaded_weights(model, state_dict_index, state_dict_folder)
-        shutil.rmtree(state_dict_folder)
+        # Load back offloaded state dict on CPU
+        if offload_state_dict:
+            load_offloaded_weights(model, state_dict_index, state_dict_folder)
+    finally:
+        if offload_state_dict:
+            shutil.rmtree(state_dict_folder)
 
     retie_parameters(model, tied_params)
 
