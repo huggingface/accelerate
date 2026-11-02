@@ -264,6 +264,12 @@ device_map = infer_auto_device_map(my_model, max_memory={0: "10GiB", 1: "10GiB",
 
 </Tip>
 
+<Tip>
+
+    When `max_memory` is not passed, the `"cpu"` budget is the free RAM of the host. In a container or a Kubernetes pod, the process can use only its cgroup memory limit. Set `ACCELERATE_RESPECT_CGROUP_MEMORY=1` to cap the `"cpu"` budget at that limit minus the current cgroup usage.
+
+</Tip>
+
 Additionally, if you do some additional operations with your outputs without placing them back on the CPU (for instance inside the `generate` method of Transformers) and if you placed your inputs on a GPU, that GPU will consume more memory than the others (Accelerate always place the output back to the device of the input). Therefore if you would like to optimize the maximum batch size and you have many GPUs, give the first GPU less memory. For example, with BLOOM-176B on 8x80 A100 setup, the close-to-ideal map is:
 
 ```python
