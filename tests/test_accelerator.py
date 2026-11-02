@@ -17,13 +17,15 @@ import os
 import pickle
 import tempfile
 import time
+import warnings
+from contextlib import nullcontext
 from unittest import skip
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import psutil
 import torch
 from parameterized import parameterized
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
@@ -220,6 +222,51 @@ class AcceleratorTester(AccelerateTestCase):
         assert prepared_scheduler in accelerator._schedulers
         assert prepared_train_dl in accelerator._dataloaders
         assert prepared_valid_dl in accelerator._dataloaders
+
+    @parameterized.expand(itertools.product([False, True], ["none", "body", "warning"]))
+    def test_join_uneven_inputs_ignores_iterable_dataloaders(self, dispatch_batches, failure_mode):
+        class StreamingDataset(IterableDataset):
+            def __iter__(self):
+                return iter(range(8))
+
+        accelerator = Accelerator(cpu=True, dataloader_config=DataLoaderConfiguration(dispatch_batches=False))
+        # Prepare real sharded loaders without starting a distributed process group.
+        with patch.object(accelerator.state, "num_processes", 2):
+            map_dataloader = accelerator.prepare_data_loader(DataLoader(TensorDataset(torch.arange(8)), batch_size=2))
+            accelerator.dataloader_config.dispatch_batches = dispatch_batches
+            iterable_dataloader = accelerator.prepare_data_loader(DataLoader(StreamingDataset(), batch_size=2))
+        assert isinstance(iterable_dataloader, DataLoaderDispatcher if dispatch_batches else DataLoaderShard)
+        assert map_dataloader.batch_sampler.even_batches is True
+        assert not hasattr(iterable_dataloader.batch_sampler, "even_batches")
+
+        # Exercise context setup on CPU; the hardware guard and collective Join context are replaced.
+        with (
+            patch.object(Accelerator, "multi_device", new_callable=PropertyMock, return_value=True),
+            patch("accelerate.accelerator.Join") as join,
+            warnings.catch_warnings(),
+        ):
+            warning_message = "Overriding even_batches is only supported for map-style datasets"
+            if failure_mode == "warning":
+                warnings.simplefilter("error")
+                warning_context = self.assertRaisesRegex(UserWarning, warning_message)
+            else:
+                warning_context = self.assertWarnsRegex(UserWarning, warning_message)
+            with (
+                warning_context,
+                self.assertRaisesRegex(RuntimeError, "join-body-failure") if failure_mode == "body" else nullcontext(),
+            ):
+                with accelerator.join_uneven_inputs([], even_batches=False):
+                    assert map_dataloader.batch_sampler.even_batches is False
+                    assert not hasattr(iterable_dataloader.batch_sampler, "even_batches")
+                    if failure_mode == "body":
+                        raise RuntimeError("join-body-failure")
+
+        if failure_mode == "warning":
+            join.assert_not_called()
+        else:
+            join.assert_called_once_with([], enable=True, throw_on_early_termination=False)
+        assert map_dataloader.batch_sampler.even_batches is True
+        assert not hasattr(iterable_dataloader.batch_sampler, "even_batches")
 
     @require_non_hpu  # hpu does not support empty_cache
     def test_free_memory_dereferences_prepared_components(self):
