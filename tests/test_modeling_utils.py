@@ -857,6 +857,16 @@ class ModelingUtilsTester(unittest.TestCase):
         assert len(w) == 0
         assert device_map == {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
 
+    def test_infer_auto_device_map_keeps_buffers_of_split_modules(self):
+        model = NestedModelForTest()
+        model.model.register_buffer("scale", torch.ones(4))
+
+        # `model.model` does not fit on the CPU and gets split. Its own buffer must still get a device.
+        device_map = infer_auto_device_map(model, max_memory={"cpu": 200, "disk": "1GB"})
+        assert "model" not in device_map
+        assert "model.scale" in device_map
+        check_device_map(model, device_map)
+
     def test_infer_auto_device_map_with_buffer_check_and_multi_devices(self):
         model = ModelForTest()
         model.linear1.register_buffer("test_buffer1", torch.zeros(10, 2))
