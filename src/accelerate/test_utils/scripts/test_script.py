@@ -760,6 +760,9 @@ def test_split_between_processes_nested_dict():
                 assert torch.allclose(results["c"], data_copy["c"][-2:]), (
                     f"Did not obtain expected values on process 4, expected `{data['c'][-2:]}`, received: {results['c']}"
                 )
+        assert data["a"] is a
+        assert data["b"] is b
+        assert data["c"] is c
 
     state.wait_for_everyone()
 

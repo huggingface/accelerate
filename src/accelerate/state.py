@@ -497,6 +497,7 @@ class PartialState:
                             result += [inputs[-1]] * num_padding
                 return result
             elif isinstance(inputs, dict):
+                inputs = inputs.copy()
                 for key in inputs.keys():
                     inputs[key] = _split_values(inputs[key], start_index, end_index)
                 return inputs
