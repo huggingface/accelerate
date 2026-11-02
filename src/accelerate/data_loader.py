@@ -441,6 +441,11 @@ class DataLoaderAdapter:
         return self.dl_state_dict
 
     def load_state_dict(self, state_dict):
+        if "_accelerate_iteration" in state_dict:
+            state_dict = dict(state_dict)
+            iteration = state_dict.pop("_accelerate_iteration")
+            if hasattr(self, "iteration"):
+                self.iteration = iteration
         self.base_dataloader.load_state_dict(state_dict)
 
     @property
@@ -492,6 +497,10 @@ class DataLoaderAdapter:
             self.adjust_state_dict_for_prefetch()
             # Then tag if we are at the end of the dataloader
             self.dl_state_dict["_iterator_finished"] = self.end_of_dataloader
+            # Track the epoch so `set_epoch` reseeds the sampler correctly on resume; once the
+            # current epoch is exhausted, the next `__iter__` call starts the following epoch.
+            if hasattr(self, "iteration"):
+                self.dl_state_dict["_accelerate_iteration"] = self.iteration + int(self.end_of_dataloader)
 
 
 class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
