@@ -438,10 +438,21 @@ class DataLoaderAdapter:
         return getattr(self.base_dataloader, name)
 
     def state_dict(self):
-        return self.dl_state_dict
+        state_dict = dict(self.dl_state_dict)
+        # `DataLoaderShard`/`DataLoaderDispatcher` drive `set_epoch` from their own iteration counter at the start
+        # of every pass, so that counter must be checkpointed alongside the base dataloader's iterator state.
+        # Otherwise a resume that starts a new epoch reseeds the sampler with the wrong epoch and replays an
+        # already-completed permutation (see #4480).
+        if hasattr(self, "iteration"):
+            state_dict["_accelerate_epoch"] = self.iteration
+        return state_dict
 
     def load_state_dict(self, state_dict):
+        state_dict = dict(state_dict)
+        epoch = state_dict.pop("_accelerate_epoch", None)
         self.base_dataloader.load_state_dict(state_dict)
+        if epoch is not None:
+            self.iteration = epoch
 
     @property
     def __class__(self):
