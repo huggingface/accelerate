@@ -133,6 +133,32 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    @parameterized.expand(
+        itertools.product(
+            ["main_process_first", "local_main_process_first"],
+            [0, 1],
+            [None, RuntimeError, KeyboardInterrupt],
+        )
+    )
+    def test_first_process_barrier_on_exit(self, context_name, rank, exception_type):
+        state = PartialState(cpu=True)
+        error = exception_type("preprocessing failed") if exception_type is not None else None
+        with (
+            patch.object(state, "process_index", rank),
+            patch.object(state, "local_process_index", rank),
+            patch.object(state, "wait_for_everyone") as barrier,
+        ):
+            try:
+                with getattr(state, context_name)():
+                    self.assertEqual(barrier.call_count, int(rank != 0))
+                    if error is not None:
+                        raise error
+            except BaseException as caught:
+                self.assertIs(caught, error)
+            else:
+                self.assertIsNone(error)
+            barrier.assert_called_once_with()
+
     def test_partial_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to
