@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset, SubsetRandomSampler
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, Sampler, SubsetRandomSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -94,6 +94,16 @@ class SimpleBatchSampler(BatchSampler):
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+
+
+class UnsizedSampler(Sampler):
+    """A sampler selecting `num_samples` items without implementing `__len__`."""
+
+    def __init__(self, num_samples):
+        self.num_samples = num_samples
+
+    def __iter__(self):
+        return iter(range(self.num_samples))
 
 
 class DataLoaderTester(AccelerateTestCase):
@@ -663,6 +673,21 @@ class DataLoaderTester(AccelerateTestCase):
             pass
 
         assert dataloader.remainder == 2
+
+    def test_remainder_falls_back_to_dataset_length_without_sized_sampler(self):
+        # Regression test requested in the review of https://github.com/huggingface/accelerate/pull/4489:
+        # a sampler without `__len__` must keep using the dataset length, instead of the guarded
+        # sampler-length lookup leaving `remainder` at its -1 default.
+        sampler = UnsizedSampler(10)
+        with pytest.raises(TypeError):
+            len(sampler)
+
+        dataloader = prepare_data_loader(DataLoader(range(21), batch_size=4, sampler=sampler), num_processes=1)
+        for _ in dataloader:
+            pass
+
+        # The sampler selects 10 samples, but the dataset length still drives the remainder: 21 % 4 == 1
+        assert dataloader.remainder == 1
 
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
