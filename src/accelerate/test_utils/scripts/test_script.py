@@ -41,6 +41,7 @@ from accelerate.utils import (
     is_hpu_available,
     is_mps_available,
     is_pytest_available,
+    is_torchdata_stateful_dataloader_available,
     set_seed,
     synchronize_rng_states,
 )
@@ -307,6 +308,39 @@ def central_dl_preparation_check():
 
     if state.local_process_index == 0:
         print("Shuffled central dataloader passing.")
+
+
+def central_dl_stateful_resume_check():
+    if not is_torchdata_stateful_dataloader_available():
+        return
+
+    state = AcceleratorState()
+    batch_size = 4 * state.num_processes
+    for split_batches in (False, True):
+        dl = prepare_data_loader(
+            DataLoader(range(8 * batch_size * state.num_processes), batch_size=batch_size),
+            state.device,
+            state.num_processes,
+            state.process_index,
+            put_on_device=True,
+            dispatch_batches=True,
+            split_batches=split_batches,
+            use_stateful_dataloader=True,
+        )
+        batches = []
+        checkpoints = {}
+        for step, batch in enumerate(dl):
+            batches.append(batch.cpu().tolist())
+            if step in (0, 2):
+                checkpoints[step] = deepcopy(dl.state_dict())
+
+        for step, checkpoint in checkpoints.items():
+            dl.load_state_dict(checkpoint)
+            resumed = [batch.cpu().tolist() for batch in dl]
+            assert resumed == batches[step + 1 :], (
+                f"Wrong dispatched dataloader continuation with split_batches={split_batches} after step {step}: "
+                f"expected {batches[step + 1 :]}, got {resumed}"
+            )
 
 
 def custom_sampler_check():
@@ -906,6 +940,7 @@ def main():
     dl_preparation_check()
     if state.distributed_type != DistributedType.XLA:
         central_dl_preparation_check()
+        central_dl_stateful_resume_check()
         custom_sampler_check()
         check_seedable_sampler()
         check_seedable_sampler_with_data_seed()
