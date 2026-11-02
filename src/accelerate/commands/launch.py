@@ -1283,9 +1283,13 @@ def _validate_launch_command(args):
                             key = "dynamo_" + key
                         if hasattr(args, "nondefault") and key not in args.nondefault:
                             setattr(args, key, value)
-                elif (
-                    name not in ["compute_environment", "mixed_precision", "distributed_type"]
-                    and getattr(args, name, None) is None
+                elif name not in ["compute_environment", "mixed_precision", "distributed_type"] and (
+                    getattr(args, name, None) is None
+                    or (
+                        name in ["same_network", "enable_cpu_affinity"]
+                        and hasattr(args, "nondefault")
+                        and name not in args.nondefault
+                    )
                 ):
                     # Those args are handled separately
                     setattr(args, name, attr)
