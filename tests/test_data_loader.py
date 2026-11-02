@@ -722,6 +722,42 @@ class DataLoaderTester(AccelerateTestCase):
         # n_shards (2) == num_processes (2): should use native sharding, not IterableDatasetShard
         assert not isinstance(result.dataset, IterableDatasetShard)
 
+    def test_sized_iterable_dataset_shard_metadata_and_remainder(self):
+        """
+        Regression test for #4359: when dispatch_batches=False wraps a sized IterableDataset in
+        IterableDatasetShard, DataLoaderShard must report the unpadded dataset length and global
+        total_batch_size so that remainder (used by gather_for_metrics) is computed accurately.
+        """
+        dataset = SimpleIterableDataset(num_samples=5)
+
+        # split_batches=False: batch_size=2 across 2 processes -> total_batch_size=4, remainder=5 % 4 = 1
+        dataloader = DataLoader(dataset, batch_size=2)
+        prepared = prepare_data_loader(
+            dataloader, num_processes=2, process_index=0, dispatch_batches=False, split_batches=False
+        )
+        assert isinstance(prepared.dataset, IterableDatasetShard)
+        assert len(prepared.dataset) == 4
+        assert prepared.dataset.total_dataset_length == 5
+        assert prepared.total_dataset_length == 5
+        assert prepared.total_batch_size == 4
+
+        batches = list(prepared)
+        assert len(batches) == 2
+        assert prepared.remainder == 1
+
+        # split_batches=True: batch_size=4 split across 2 processes -> total_batch_size=4, remainder=5 % 4 = 1
+        dataloader_split = DataLoader(dataset, batch_size=4)
+        prepared_split = prepare_data_loader(
+            dataloader_split, num_processes=2, process_index=0, dispatch_batches=False, split_batches=True
+        )
+        assert isinstance(prepared_split.dataset, IterableDatasetShard)
+        assert prepared_split.total_dataset_length == 5
+        assert prepared_split.total_batch_size == 4
+
+        batches_split = list(prepared_split)
+        assert len(batches_split) == 2
+        assert prepared_split.remainder == 1
+
     def test_ensure_dataloader_gets_cleaned_up(self):
         # Ensure that the dataloader gets cleaned up properly
         class Dummy:
