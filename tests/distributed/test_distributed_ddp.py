@@ -14,7 +14,7 @@
 
 import os
 
-from parameterized import parameterized
+from parameterized import param, parameterized
 
 from accelerate.test_utils.testing import require_huggingface_suite, require_multi_gpu, slow
 
@@ -32,9 +32,10 @@ class DDPTrainingTest(DistributedTrainingCommon):
     def test_training(self, dtype):
         self.check_training(dtype, config_file=DDP_CONFIG_FILE)
 
-    @parameterized.expand(["fp16", "bf16"])
-    def test_training_mixed_precision(self, mixed_precision):
-        self.check_mixed_precision(mixed_precision, config_file=DDP_CONFIG_FILE)
+    # BF16 batch partitioning changes gradient norms; clipping amplifies the resulting loss drift.
+    @parameterized.expand(["fp16", param("bf16", atol=1e-2)])
+    def test_training_mixed_precision(self, mixed_precision, **kwargs):
+        self.check_mixed_precision(mixed_precision, config_file=DDP_CONFIG_FILE, **kwargs)
 
     def test_training_with_gradient_accumulation(self):
         self.check_gradient_accumulation(config_file=DDP_CONFIG_FILE)

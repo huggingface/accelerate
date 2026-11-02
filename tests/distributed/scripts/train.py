@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Train a tiny causal LM on WikiText and save the loss of each optimizer step to `losses.json`.
+"""Train a tiny causal LM on WikiText and save training and final evaluation losses to `losses.json`.
 
 Every run trains for `NUM_STEPS` optimizer steps of `GLOBAL_BATCH_SIZE` samples, however the samples of a step are split
 across processes and gradient accumulation steps. All samples have `SEQ_LEN` tokens, so they have the same number of
@@ -63,6 +63,14 @@ def main():
     dataloader = DataLoader(samples, batch_size=batch_size)
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, dtype=DTYPES[args.dtype])
+    if args.mixed_precision != "no":
+        expected_dtype = DTYPES[args.mixed_precision]
+
+        def check_compute_dtype(module, inputs, output):
+            assert output.dtype == expected_dtype, f"Expected {expected_dtype} computation, got {output.dtype}"
+
+        model.model.layers[0].self_attn.q_proj.register_forward_hook(check_compute_dtype)
+
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
@@ -76,6 +84,8 @@ def main():
         with accelerator.accumulate(model):
             loss = model(input_ids=batch, labels=batch).loss
             accelerator.backward(loss)
+            if accelerator.sync_gradients:
+                accelerator.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             optimizer.zero_grad()
         step_losses.append(loss.detach())
@@ -85,9 +95,20 @@ def main():
             if args.save_steps and len(losses) % args.save_steps == 0:
                 accelerator.save_state(os.path.join(args.output_dir, f"step_{len(losses)}"))
 
+    # Revisit the first batch to check whether training improved predictions on the same inputs.
+    # A different batch might simply be easier.
+    model.eval()
+    with torch.no_grad():
+        first_batch = samples[:GLOBAL_BATCH_SIZE].to(accelerator.device)
+        logits = model(input_ids=first_batch).logits
+        # Avoid rounding the scalar loss to the model's output dtype.
+        final_loss = torch.nn.functional.cross_entropy(
+            logits[:, :-1].float().reshape(-1, logits.size(-1)), first_batch[:, 1:].reshape(-1)
+        ).item()
+
     if accelerator.is_main_process:
         with open(os.path.join(args.output_dir, "losses.json"), "w") as f:
-            json.dump(losses, f)
+            json.dump({"losses": losses, "final_loss": final_loss}, f)
     accelerator.end_training()
 
 
