@@ -60,6 +60,7 @@ from ..utils import (
     is_pandas_available,
     is_peft_available,
     is_pytest_available,
+    is_runyard_available,
     is_schedulefree_available,
     is_sdaa_available,
     is_swanlab_available,
@@ -485,6 +486,13 @@ def require_trackio(test_case):
     Decorator marking a test that requires trackio installed. These tests are skipped when trackio isn't installed
     """
     return unittest.skipUnless(is_trackio_available(), "test requires trackio")(test_case)
+
+
+def require_runyard(test_case):
+    """
+    Decorator marking a test that requires runyard installed. These tests are skipped when runyard isn't installed
+    """
+    return unittest.skipUnless(is_runyard_available(), "test requires runyard")(test_case)
 
 
 def require_comet_ml(test_case):

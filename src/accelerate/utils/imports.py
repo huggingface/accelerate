@@ -276,6 +276,10 @@ def is_swanlab_available():
     return _is_package_available("swanlab")
 
 
+def is_runyard_available():
+    return _is_package_available("runyard")
+
+
 def is_trackio_available():
     return sys.version_info >= (3, 10) and _is_package_available("trackio")
 

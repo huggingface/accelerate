@@ -38,6 +38,11 @@ rendered properly in your Markdown viewer.
 [[autodoc]] tracking.TrackioTracker
     - __init__
 
+## RunyardTracker
+
+[[autodoc]] tracking.RunyardTracker
+    - __init__
+
 ## CometMLTracker
 
 [[autodoc]] tracking.CometMLTracker

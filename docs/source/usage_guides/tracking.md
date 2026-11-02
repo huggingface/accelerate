@@ -20,7 +20,7 @@ Accelerate provides a general tracking API that can be used to log useful items 
 
 ## Integrated Trackers
 
-Currently `Accelerate` supports eight trackers out-of-the-box:
+Currently `Accelerate` supports nine trackers out-of-the-box:
 
 - TensorBoard
 - WandB 
@@ -30,6 +30,7 @@ Currently `Accelerate` supports eight trackers out-of-the-box:
 - MLFlow
 - ClearML
 - DVCLive
+- Runyard
 
 To use any of them, pass in the selected type(s) to the `log_with` parameter in [`Accelerate`]:
 ```python

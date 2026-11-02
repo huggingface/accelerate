@@ -681,6 +681,7 @@ class LoggerType(BaseEnum):
         - **CLEARML** -- clearml as an experiment tracker
         - **DVCLIVE** -- dvclive as an experiment tracker
         - **SWANLAB** -- swanlab as an experiment tracker
+        - **RUNYARD** -- runyard as an experiment tracker
     """
 
     ALL = "all"
@@ -693,6 +694,7 @@ class LoggerType(BaseEnum):
     CLEARML = "clearml"
     DVCLIVE = "dvclive"
     SWANLAB = "swanlab"
+    RUNYARD = "runyard"
 
 
 class PrecisionType(str, BaseEnum):

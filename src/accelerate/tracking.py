@@ -35,6 +35,7 @@ from .utils import (
     is_comet_ml_available,
     is_dvclive_available,
     is_mlflow_available,
+    is_runyard_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_trackio_available,
@@ -72,6 +73,9 @@ if is_swanlab_available():
 
 if is_trackio_available():
     _available_trackers.append(LoggerType.TRACKIO)
+
+if is_runyard_available():
+    _available_trackers.append(LoggerType.RUNYARD)
 
 logger = get_logger(__name__)
 
@@ -1248,6 +1252,94 @@ class SwanLabTracker(GeneralTracker):
         logger.debug("SwanLab run closed")
 
 
+class RunyardTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports [runyard](https://github.com/cobanov/runyard), a lightweight self-hosted training
+    tracker. Should be initialized at the start of your script. The server address and API key come from the
+    `RUNYARD_SERVER` and `RUNYARD_API_KEY` environment variables.
+
+    Args:
+        run_name (`str`):
+            The name of the experiment run. Will be used as the `project` name when instantiating runyard.
+        **kwargs (additional keyword arguments, *optional*):
+            Additional key word arguments passed along to the `runyard.init` method, such as `name`, `tags` or
+            `notes`.
+    """
+
+    name = "runyard"
+    requires_logging_directory = False
+    main_process_only = False
+
+    def __init__(self, run_name: str, **kwargs):
+        super().__init__()
+        self.run_name = run_name
+        self.init_kwargs = kwargs
+
+    @on_main_process
+    def start(self):
+        import runyard
+
+        self.run = runyard.init(project=self.run_name, **self.init_kwargs)
+        logger.debug(f"Initialized runyard project {self.run_name}")
+        logger.debug(
+            "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
+        )
+
+    @property
+    def tracker(self):
+        return self.run
+
+    @on_main_process
+    def store_init_configuration(self, values: dict):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+
+        Args:
+            values (Dictionary `str` to `bool`, `str`, `float` or `int`):
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
+                `str`, `float`, `int`, or `None`.
+        """
+        self.run.config.update(values)
+        logger.debug("Stored initial configuration hyperparameters to runyard")
+
+    @on_main_process
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `values` to the current run.
+
+        Args:
+            values (Dictionary `str` to `float` or `int`):
+                Values to be logged as key-value pairs. Values that are not numbers are skipped with a warning.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+        """
+        self.run.log(values, step=step)
+        logger.debug("Successfully logged to runyard")
+
+    @on_main_process
+    def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (Dictionary `str` to `List` of `np.ndarray`, `PIL.Image` or `torch.Tensor`):
+                Values to be logged as key-value pairs. Each list is stored as one group of samples at that step.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+        """
+        for k, images in values.items():
+            self.run.image(k, list(images) if isinstance(images, (list, tuple)) else images, step=step)
+        logger.debug("Successfully logged images to runyard")
+
+    @on_main_process
+    def finish(self):
+        """
+        Closes `runyard` run
+        """
+        self.run.finish()
+        logger.debug("runyard run closed")
+
+
 LOGGER_TYPE_TO_CLASS = {
     "aim": AimTracker,
     "comet_ml": CometMLTracker,
@@ -1258,6 +1350,7 @@ LOGGER_TYPE_TO_CLASS = {
     "dvclive": DVCLiveTracker,
     "swanlab": SwanLabTracker,
     "trackio": TrackioTracker,
+    "runyard": RunyardTracker,
 }
 
 
@@ -1335,6 +1428,7 @@ def filter_trackers(
             - `"mlflow"`
             - `"dvclive"`
             - `"swanlab"`
+            - `"runyard"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
