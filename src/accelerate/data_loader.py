@@ -371,7 +371,7 @@ class DataLoaderStateMixin:
 
         - **end_of_dataloader** (`bool`) -- Whether at the last iteration or batch
         - **remainder** (`int`) -- The number of items that are remaining in the last batch, relative to the total
-          batch size
+          batch size. `-1` means the remainder is unknown (for example, the dataset length or batch size is unknown).
 
     <Tip warning={true}>
 
@@ -396,7 +396,9 @@ class DataLoaderStateMixin:
         with suppress(Exception):
             if not self._drop_last:
                 length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-                self.remainder = length % self.total_batch_size
+                total_batch_size = self.total_batch_size
+                if total_batch_size is not None:
+                    self.remainder = length % total_batch_size
         self.gradient_state._add_dataloader(self)
 
     def end(self):
@@ -522,9 +524,10 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
     **Available attributes:**
 
-        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
+        - **total_batch_size** (`int` or `None`) -- Total batch size of the dataloader across all processes.
             Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
-            number of processes
+            number of processes. Returns `None` when the batch sampler has no constant batch size. In that case,
+            the remainder is unknown and `gather_for_metrics` does not trim gathered samples.
 
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
@@ -631,6 +634,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
         while isinstance(batch_sampler, SkipBatchSampler):
             batch_sampler = batch_sampler.batch_sampler
+        if batch_sampler.batch_size is None:
+            return None
         return (
             batch_sampler.batch_size
             if getattr(batch_sampler, "split_batches", False)

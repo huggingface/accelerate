@@ -3045,7 +3045,8 @@ class Accelerator:
                 # `gather` unless the dataset has a remainder so log.
                 if self.gradient_state.remainder == -1:
                     logger.info(
-                        "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
+                        "The dataloader remainder is unknown, returning gathered tensors without trimming. "
+                        "You should remove any duplicated samples yourself."
                     )
                     return data
                 elif self.gradient_state.remainder > 0:
