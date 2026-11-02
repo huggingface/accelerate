@@ -626,6 +626,10 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             tensor = tensor.contiguous()
         return tensor
 
+    def _replicated(model, param_name, tensor):
+        tensor = _cast_and_contiguous(tensor, *_infer_parameter_dtype(model, param_name, tensor))
+        return tensor.to("cpu") if cpu_offload else tensor
+
     if accelerator.is_main_process:
         for param_name, sharded_param in meta_sharded_sd.items():
             if param_name not in full_sd:
@@ -634,6 +638,12 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                     f"Full state dict has {len(full_sd)} keys, sharded has {len(meta_sharded_sd)} keys."
                 )
             full_param = full_sd[param_name]
+            if not isinstance(sharded_param, DTensor):
+                # Not sharded by FSDP2 (buffers, ignored params): broadcast it whole and keep it replicated.
+                full_param = full_param.detach().to(accelerator.device)
+                dist.broadcast(full_param, src=0, group=dist.group.WORLD)
+                sharded_sd[param_name] = _replicated(model, param_name, full_param)
+                continue
             device_mesh = sharded_param.device_mesh
             full_param = full_param.detach().to(device_mesh.device_type)
             if isinstance(full_param, DTensor):
@@ -656,6 +666,11 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
     else:
         for param_name, sharded_param in meta_sharded_sd.items():
+            if not isinstance(sharded_param, DTensor):
+                full_tensor = torch.empty(sharded_param.size(), device=accelerator.device, dtype=sharded_param.dtype)
+                dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
+                sharded_sd[param_name] = _replicated(model, param_name, full_tensor)
+                continue
             device_mesh = sharded_param.device_mesh
             full_tensor = torch.empty(sharded_param.size(), device=device_mesh.device_type, dtype=sharded_param.dtype)
             dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
@@ -862,6 +877,10 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # We assume `transformers` models have a `tie_weights` method if they support it
         if hasattr(model, "tie_weights"):
             model.tie_weights()
+        # The move to `meta` replaced the parameter objects collected as `ignored_params` above, so `fully_shard` would
+        # no longer recognize them and would shard them. Collect them again, without moving them (they're on `meta`).
+        if "ignored_params" in fsdp2_kwargs:
+            fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(fsdp2_plugin.ignored_modules, model, None)
 
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
     if auto_wrap_policy_func is not None:
@@ -1042,7 +1061,8 @@ def get_parameters_from_modules(
         mapped_modules = []
         for name, module in model.named_modules():
             if reg.fullmatch(name):
-                module.to(device)
+                if device is not None:
+                    module.to(device)
                 mapped_modules.append(module)
         modules = mapped_modules
     for module in modules:
