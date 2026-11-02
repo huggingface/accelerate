@@ -537,9 +537,9 @@ def _gpu_broadcast(data, src=0):
 
 def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
     if isinstance(tensor, (list, tuple)):
-        return honor_type(tensor, (_tpu_broadcast(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
+        return honor_type(tensor, (_tpu_broadcast(t, src=src, name=f"{name}_{i}") for i, t in enumerate(tensor)))
     elif isinstance(tensor, Mapping):
-        return type(tensor)({k: _tpu_broadcast(v, name=f"{name}_{k}") for k, v in tensor.items()})
+        return type(tensor)({k: _tpu_broadcast(v, src=src, name=f"{name}_{k}") for k, v in tensor.items()})
     return xm.mesh_reduce(name, tensor, lambda x: x[src])
 
 
