@@ -133,6 +133,47 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    @parameterized.expand(
+        [
+            ("scalar", 3.0, 2.0),
+            ("vector", [3.0, 4.0], 2.0),
+            ("matrix", [[1.0, 2.0], [3.0, 4.0]], float("inf")),
+        ]
+    )
+    def test_clip_grad_norm_single_tensor(self, name, values, norm_type):
+        accelerator = Accelerator(cpu=True)
+        parameter = torch.nn.Parameter(torch.tensor(values))
+        reference = parameter.detach().clone().requires_grad_()
+        accelerator.backward(parameter.square().sum())
+        reference.square().sum().backward()
+
+        expected_norm = torch.nn.utils.clip_grad_norm_(reference, 1.0, norm_type=norm_type)
+        actual_norm = accelerator.clip_grad_norm_(parameter, 1.0, norm_type=norm_type)
+
+        torch.testing.assert_close(actual_norm, expected_norm)
+        torch.testing.assert_close(parameter.grad, reference.grad)
+
+    def test_clip_grad_norm_tensor_without_gradient(self):
+        accelerator = Accelerator(cpu=True)
+        parameter = torch.nn.Parameter(torch.tensor(3.0))
+        torch.testing.assert_close(accelerator.clip_grad_norm_(parameter, 1.0), torch.tensor(0.0))
+        self.assertIsNone(parameter.grad)
+
+    def test_clip_grad_norm_parameter_iterables(self):
+        accelerator = Accelerator(cpu=True)
+        for container in (list, tuple, iter):
+            with self.subTest(container=container):
+                parameter = torch.nn.Parameter(torch.tensor([3.0, 4.0]))
+                reference = parameter.detach().clone().requires_grad_()
+                accelerator.backward(parameter.square().sum())
+                reference.square().sum().backward()
+
+                expected_norm = torch.nn.utils.clip_grad_norm_([reference], 1.0)
+                actual_norm = accelerator.clip_grad_norm_(container([parameter]), 1.0)
+
+                torch.testing.assert_close(actual_norm, expected_norm)
+                torch.testing.assert_close(parameter.grad, reference.grad)
+
     def test_partial_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to

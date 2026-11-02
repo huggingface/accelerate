@@ -2898,6 +2898,8 @@ class Accelerator:
         ...     optimizer.step()
         ```
         """
+        if isinstance(parameters, torch.Tensor):
+            parameters = [parameters]
         if self.distributed_type == DistributedType.FSDP:
             self.unscale_gradients()
             parameters = [p for p in parameters]
