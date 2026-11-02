@@ -120,8 +120,7 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
     accessed as `model.transformer.h[0]`. The rest of the model (e.g. model.lm_head) is compiled separately.
 
     This allows us to speed up the compilation overhead / cold start of models like LLMs and Transformers in general.
-    See https://pytorch.org/tutorials/recipes/regional_compilation.html for more details. Container modules
-    (`ModuleList`, `ModuleDict`, `ParameterList`, `ParameterDict`) are never compiled themselves, only their children.
+    See https://pytorch.org/tutorials/recipes/regional_compilation.html for more details.
 
     Args:
         module (`torch.nn.Module`):
