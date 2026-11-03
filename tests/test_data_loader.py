@@ -754,6 +754,23 @@ class DataLoaderTester(AccelerateTestCase):
 
 class StatefulDataLoaderTester(AccelerateTestCase):
     @require_torchdata_stateful_dataloader
+    def test_stateful_checkpoint_after_load(self):
+        """Saving a loaded checkpoint before consuming a batch preserves its data cursor."""
+        source = StatefulDataLoader(range(24), batch_size=4)
+        source_iter = iter(source)
+        next(source_iter)
+        checkpoint = source.state_dict()
+        expected = torch.cat(list(source_iter))
+
+        loader = DataLoaderShard(range(24), batch_size=4, use_stateful_dataloader=True)
+        loader.load_state_dict(checkpoint)
+
+        restored = StatefulDataLoader(range(24), batch_size=4)
+        restored.load_state_dict(loader.state_dict())
+        actual = torch.cat(list(restored))
+        torch.testing.assert_close(actual, expected)
+
+    @require_torchdata_stateful_dataloader
     def test_skip_data_loader(self):
         dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2, use_stateful_dataloader=True)
         assert isinstance(dataloader, StatefulDataLoader)
