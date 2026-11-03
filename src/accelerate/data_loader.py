@@ -395,21 +395,29 @@ class DataLoaderStateMixin:
         self.reset()
         with suppress(Exception):
             if not self._drop_last:
-                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-                # A sized sampler can select fewer or more samples than the dataset contains
-                # (e.g. `SubsetRandomSampler` or `WeightedRandomSampler`), in which case it is
-                # the number of samples it selects that determines the size of the final batch.
-                # This lookup is guarded on its own: a sampler without `__len__` is not sized, in which
-                # case the dataset length must be kept as the fallback instead of leaving `remainder`
-                # unset (i.e. -1).
-                with suppress(Exception):
-                    batch_sampler = getattr(self.batch_sampler, "batch_sampler", self.batch_sampler)
-                    sampler = getattr(batch_sampler, "sampler", None)
-                    while isinstance(sampler, BatchSampler):
-                        sampler = getattr(sampler, "sampler", None)
-                    if sampler is not None:
-                        length = len(sampler)
-                self.remainder = length % self.total_batch_size
+                batch_sampler = getattr(self.batch_sampler, "batch_sampler", self.batch_sampler)
+                if getattr(batch_sampler, "drop_last", False):
+                    # A batch sampler that drops the last batch has already dropped the incomplete tail,
+                    # so the batch it yields last is complete and `gather_for_metrics` has nothing to trim.
+                    # `torch.utils.data.DataLoader` does not copy that flag onto the dataloader itself when
+                    # the batch sampler is passed explicitly (`dataloader.drop_last` stays `False`), so it
+                    # has to be read from the batch sampler.
+                    self.remainder = 0
+                else:
+                    length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+                    # A sized sampler can select fewer or more samples than the dataset contains
+                    # (e.g. `SubsetRandomSampler` or `WeightedRandomSampler`), in which case it is
+                    # the number of samples it selects that determines the size of the final batch.
+                    # This lookup is guarded on its own: a sampler without `__len__` is not sized, in which
+                    # case the dataset length must be kept as the fallback instead of leaving `remainder`
+                    # unset (i.e. -1).
+                    with suppress(Exception):
+                        sampler = getattr(batch_sampler, "sampler", None)
+                        while isinstance(sampler, BatchSampler):
+                            sampler = getattr(sampler, "sampler", None)
+                        if sampler is not None:
+                            length = len(sampler)
+                    self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 
     def end(self):
