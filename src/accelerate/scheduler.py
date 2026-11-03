@@ -70,9 +70,14 @@ class AcceleratedScheduler:
             # Split batches -> the training dataloader batch size is not changed so one step per training step
             self.scheduler.step(*args, **kwargs)
         else:
-            # Otherwise the training dataloader batch size was multiplied by `num_processes`, so we need to do
-            # num_processes steps per training step
-            num_processes = AcceleratorState().num_processes
+            # Otherwise the training dataloader batch size was multiplied by the number of data parallel processes, so
+            # we need to do that many steps per training step. Ranks in the same tp/cp group get the same batch (see
+            # `prepare_data_loader`), so they don't count as separate data parallel processes.
+            state = AcceleratorState()
+            num_processes = state.num_processes
+            parallelism_config = getattr(state, "parallelism_config", None)
+            if parallelism_config is not None:
+                num_processes //= parallelism_config.tp_size * parallelism_config.cp_size
             for _ in range(num_processes):
                 # Special case when using OneCycle and `drop_last` was not used
                 if hasattr(self.scheduler, "total_steps"):

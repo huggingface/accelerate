@@ -14,12 +14,15 @@
 
 import unittest
 from functools import partial
+from unittest.mock import Mock, patch
 
 import torch
 
 from accelerate import Accelerator, debug_launcher
+from accelerate.parallelism_config import ParallelismConfig
 from accelerate.state import AcceleratorState, GradientState
 from accelerate.test_utils import require_cpu, require_huggingface_suite
+from accelerate.test_utils.testing import require_transformers
 from accelerate.utils import GradientAccumulationPlugin
 
 
@@ -64,6 +67,23 @@ def lambda_test(num_processes=2, step_scheduler_with_optimizer=True, split_batch
         expected_lr = 1 - 2 / 10
     assert scheduler.get_last_lr()[0] == expected_lr, (
         f"Wrong lr found at second step, expected {expected_lr}, got {scheduler.get_last_lr()[0]}"
+    )
+
+
+def tp_cp_test(parallelism_config, num_processes=4, expected_steps=2):
+    accelerator = Accelerator()
+    model = torch.nn.Linear(2, 4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1.0)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda n: 1 - n / 10)
+    model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+
+    # Optimizer has stepped, on a run with `num_processes` processes laid out as `parallelism_config`
+    optimizer._is_overflow = False
+    state = Mock(num_processes=num_processes, parallelism_config=parallelism_config)
+    with patch("accelerate.scheduler.AcceleratorState", return_value=state):
+        scheduler.step()
+    assert scheduler.scheduler.last_epoch == expected_steps, (
+        f"Last Epoch ({scheduler.scheduler.last_epoch}) != Expected Steps ({expected_steps})"
     )
 
 
@@ -134,6 +154,15 @@ class SchedulerTester(unittest.TestCase):
     def test_one_cycle_scheduler_not_step_with_optimizer_multiprocess(self):
         AcceleratorState._reset_state(True)
         debug_launcher(partial(one_cycle_test, step_scheduler_with_optimizer=False))
+
+    @require_transformers
+    def test_scheduler_steps_once_per_data_parallel_process_with_tp_or_cp(self):
+        # tp/cp ranks get the same batch, so only data parallel processes add to the steps
+        AcceleratorState._reset_state(True)
+        debug_launcher(partial(tp_cp_test, ParallelismConfig(dp_shard_size=2, tp_size=2)), num_processes=1)
+        debug_launcher(partial(tp_cp_test, ParallelismConfig(dp_shard_size=2, cp_size=2)), num_processes=1)
+        debug_launcher(partial(tp_cp_test, ParallelismConfig(tp_size=4), expected_steps=1), num_processes=1)
+        debug_launcher(partial(tp_cp_test, ParallelismConfig(dp_replicate_size=4), expected_steps=4), num_processes=1)
 
     @require_huggingface_suite
     def test_accumulation(self):
