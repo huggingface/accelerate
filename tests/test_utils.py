@@ -350,6 +350,17 @@ class UtilsTester(unittest.TestCase):
         padded_tensor = pad_across_processes(tensor, dim=-4)
         assert padded_tensor is tensor
 
+    def test_pad_input_tensors_produces_a_multiple_of_num_processes(self):
+        # Any batch that is not a multiple of the process count must grow to the
+        # next multiple, and one that already is must stay untouched.
+        for batch_size, num_processes in [(7, 3), (20, 4), (5, 2), (9, 4), (1, 8)]:
+            batch = torch.rand(batch_size, 3)
+            result = pad_input_tensors(batch, batch_size, num_processes)
+
+            assert result.shape[0] % num_processes == 0
+            assert 0 <= result.shape[0] - batch_size < num_processes
+
+
     def test_slice_and_concatenate(self):
         # First base case: 2 processes, batch size of 1
         num_processes = 2
