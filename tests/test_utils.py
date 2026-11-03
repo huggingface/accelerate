@@ -719,3 +719,17 @@ def test_purge_env_vars_restores_previous_values():
 
     del os.environ["ACCELERATE_SOME_ENV_VAR"]
     del os.environ["ACCELERATE_ANOTHER_ENV_VAR"]
+
+
+def test_get_int_from_env_falls_back_on_invalid_values():
+    from accelerate.utils.environment import get_int_from_env
+
+    # An env variable that is set but is not an integer must not crash the launch
+    with patch.dict(os.environ, {"ACCELERATE_TEST_INT": ""}):
+        assert get_int_from_env(["ACCELERATE_TEST_INT"], 4) == 4
+
+    with patch.dict(os.environ, {"ACCELERATE_TEST_INT": "abc"}):
+        assert get_int_from_env(["ACCELERATE_TEST_INT"], 4) == 4
+
+    with patch.dict(os.environ, {"ACCELERATE_TEST_INT": "8"}):
+        assert get_int_from_env(["ACCELERATE_TEST_INT"], 4) == 8
