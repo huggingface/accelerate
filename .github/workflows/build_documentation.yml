@@ -9,7 +9,7 @@ on:
 
 jobs:
    build:
-    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@145b9d4f6ab65ad3af87c66773b2c43294e52446  # main
+    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@0f18554db6c17f5314928674ab7437754e6b43bb  # main
     with:
       commit_sha: ${{ github.sha }}
       package: accelerate
