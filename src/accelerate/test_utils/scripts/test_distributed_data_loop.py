@@ -434,7 +434,30 @@ def main():
     test_stateful_dataloader(accelerator)
     test_stateful_dataloader_save_state(accelerator)
 
+    accelerator.print("Test shard_iterable_dataset=False keeps an already sharded IterableDataset untouched")
+    test_shard_iterable_dataset_false_keeps_presharded_stream()
+
     accelerator.end_training()
+
+
+def test_shard_iterable_dataset_false_keeps_presharded_stream():
+    """
+    When each process already holds its own shard of an `IterableDataset`, `shard_iterable_dataset=False` must leave
+    that shard untouched, so every sample is seen exactly once across processes.
+    """
+    accelerator = Accelerator(dataloader_config=DataLoaderConfiguration(shard_iterable_dataset=False))
+    num_processes, rank = accelerator.num_processes, accelerator.process_index
+    dataset_size = 16
+
+    # Pre-sharded by hand: process `rank` only holds the values `rank, rank + num_processes, ...`
+    values = list(range(dataset_size))[rank::num_processes]
+    dataloader = accelerator.prepare(DataLoader(DummyIterableDataset(torch.as_tensor(values)), batch_size=4))
+
+    seen = []
+    for batch in dataloader:
+        seen.extend(accelerator.gather(batch).tolist())
+
+    assert sorted(seen) == list(range(dataset_size)), f"Expected every sample exactly once, got {sorted(seen)}"
 
 
 if __name__ == "__main__":
