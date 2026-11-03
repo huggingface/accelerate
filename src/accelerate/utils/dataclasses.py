@@ -1018,7 +1018,14 @@ class TorchDynamoPlugin(KwargsHandler):
         prefix = "ACCELERATE_DYNAMO_"
         if self.backend is None:
             self.backend = os.environ.get(prefix + "BACKEND", "no")
-        self.backend = DynamoBackend(self.backend.upper())
+        try:
+            self.backend = DynamoBackend(self.backend.upper())
+        except ValueError:
+            raise ValueError(
+                f"Invalid dynamo backend: {self.backend}. "
+                f"`backend` (or the {prefix}BACKEND environment variable) must be one of "
+                f"{[b.lower() for b in DynamoBackend]}."
+            ) from None
 
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")

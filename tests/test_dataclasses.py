@@ -17,6 +17,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from accelerate.parallelism_config import ParallelismConfig
+from accelerate.utils.dataclasses import TorchDynamoPlugin
 from accelerate.utils import patch_environment
 from accelerate.utils.constants import (
     BETA_SP_AVAILABLE_DEEPSPEED_VERSION,
@@ -255,3 +256,19 @@ class TestParallelismConfig:
 
     def test_tp_handler(self):
         assert True, "Tensor parallelism handler doesn't hold any logic yet"
+
+
+@pytest.mark.parametrize("backend", ["no", "eager", "inductor"])
+def test_torch_dynamo_plugin_accepts_a_valid_backend(backend):
+    assert TorchDynamoPlugin(backend=backend).backend == backend
+
+
+def test_torch_dynamo_plugin_names_an_invalid_backend():
+    with pytest.raises(ValueError, match="Invalid dynamo backend: bogus"):
+        TorchDynamoPlugin(backend="bogus")
+
+
+def test_torch_dynamo_plugin_names_an_invalid_backend_from_the_environment():
+    with patch_environment(ACCELERATE_DYNAMO_BACKEND="bogus"):
+        with pytest.raises(ValueError, match="ACCELERATE_DYNAMO_BACKEND"):
+            TorchDynamoPlugin()
