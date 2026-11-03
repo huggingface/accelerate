@@ -430,6 +430,10 @@ We will look at the changes needed in the code when using these.
 based on model, dataloaders, dummy optimizer and dummy schedulers provided to `prepare` method.
 Only the `auto` fields specified in above examples are handled by `prepare` method and the rest have to be explicitly specified by the user.
 
+For `scheduler.params.warmup_max_lr`, `"auto"` uses each parameter group's learning rate after the real optimizer is created.
+This preserves different learning rates across groups, including groups created by DeepSpeed optimizers such as Muon.
+An explicitly configured scalar or list is used as supplied.
+
 The `auto` values are calculated as:
 
 - `reduce_bucket_size`: `hidden_size * hidden_size`
