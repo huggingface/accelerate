@@ -74,7 +74,12 @@ def str_to_bool(value, to_bool: bool = False) -> Union[int, bool]:
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:
-        val = int(os.environ.get(e, -1))
+        try:
+            val = int(os.environ.get(e, -1))
+        except ValueError:
+            # Set but not an integer (e.g. an empty string exported by a
+            # container): fall through to the next key, then the default.
+            continue
         if val >= 0:
             return val
     return default
