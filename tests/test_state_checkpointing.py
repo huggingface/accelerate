@@ -16,6 +16,7 @@ import inspect
 import logging
 import os
 import random
+import re
 import shutil
 import tempfile
 import uuid
@@ -375,6 +376,62 @@ class CheckpointTest(AccelerateTestCase):
             assert not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
+
+    def test_checkpoint_deletion_with_parent_dir_digits(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_dir = os.path.join(tmpdir, "run1")
+            project_config = ProjectConfiguration(
+                project_dir=project_dir, automatic_checkpoint_naming=True, total_limit=2
+            )
+            accelerator = Accelerator(project_config=project_config)
+            model = accelerator.prepare(model)
+            for i in range(14):
+                with torch.no_grad():
+                    model.a.fill_(float(i))
+                    model.b.fill_(float(i * 10))
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+            ckpts_dir = os.path.join(project_dir, "checkpoints")
+            assert not os.path.exists(os.path.join(ckpts_dir, "checkpoint_0"))
+            assert not os.path.exists(os.path.join(ckpts_dir, "checkpoint_9"))
+            assert os.path.exists(os.path.join(ckpts_dir, "checkpoint_12"))
+            assert os.path.exists(os.path.join(ckpts_dir, "checkpoint_13"))
+
+            # Reset model parameters to verify load_state restores state from checkpoint_13
+            with torch.no_grad():
+                model.a.fill_(-1.0)
+                model.b.fill_(-1.0)
+
+            accelerator.load_state()
+            assert model.a.item() == 13.0
+            assert model.b.item() == 130.0
+
+    def test_checkpoint_sorting_windows_paths(self):
+        # Explicitly verify sorting with Windows-style path separators and parent directory digits
+        # to ensure regression coverage on all platforms including Linux CI (see #4454)
+        windows_folders = [
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_1",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_10",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_2",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_13",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_9",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_0",
+        ]
+
+        def _inner(folder):
+            return list(map(int, re.findall(r"[\\/]?([0-9]+)(?=[^\\/]*$)", folder)))[0]
+
+        windows_folders.sort(key=_inner)
+        expected = [
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_0",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_1",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_2",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_9",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_10",
+            r"C:\Users\runneradmin1\run2\checkpoints\checkpoint_13",
+        ]
+        assert windows_folders == expected
 
     @run_first
     @require_non_cpu
