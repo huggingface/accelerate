@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, Sampler, SequentialSampler, SubsetRandomSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -94,6 +94,16 @@ class SimpleBatchSampler(BatchSampler):
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+
+
+class UnsizedSampler(Sampler):
+    """A sampler selecting `num_samples` items without implementing `__len__`."""
+
+    def __init__(self, num_samples):
+        self.num_samples = num_samples
+
+    def __iter__(self):
+        return iter(range(self.num_samples))
 
 
 class DataLoaderTester(AccelerateTestCase):
@@ -630,6 +640,104 @@ class DataLoaderTester(AccelerateTestCase):
 
         assert [batch.tolist() for batch in resumed] == [[4, 5]]
         assert resumed.remainder == -1
+
+    def test_remainder_uses_sampler_length(self):
+        # Regression test for https://github.com/huggingface/accelerate/issues/4410:
+        # a sized sampler that selects fewer samples than the dataset contains must drive
+        # the final batch remainder, otherwise `gather_for_metrics` drops valid samples.
+        dataset = range(21)
+        sampler = SubsetRandomSampler(range(10), generator=torch.Generator().manual_seed(42))
+        dataloader = DataLoader(dataset, batch_size=4, sampler=sampler)
+
+        accelerator = Accelerator()
+        dataloader = accelerator.prepare(dataloader)
+
+        samples = []
+        for batch in dataloader:
+            samples.extend(accelerator.gather_for_metrics(batch).tolist())
+
+        assert sorted(samples) == list(range(10))
+        assert dataloader.remainder == 2
+
+    def test_remainder_uses_sampler_length_across_processes(self):
+        # Regression test for https://github.com/huggingface/accelerate/issues/4410:
+        # with several processes, computing the remainder from the dataset length instead
+        # of the sampler length leaves padding duplicates in the gathered last batch.
+        dataloader = prepare_data_loader(
+            DataLoader(range(21), batch_size=4, sampler=SubsetRandomSampler(range(10))),
+            num_processes=2,
+            process_index=0,
+        )
+
+        for _ in dataloader:
+            pass
+
+        assert dataloader.remainder == 2
+
+    def test_remainder_falls_back_to_dataset_length_without_sized_sampler(self):
+        # Regression test requested in the review of https://github.com/huggingface/accelerate/pull/4489:
+        # a sampler without `__len__` must keep using the dataset length, instead of the guarded
+        # sampler-length lookup leaving `remainder` at its -1 default.
+        sampler = UnsizedSampler(10)
+        with pytest.raises(TypeError):
+            len(sampler)
+
+        dataloader = prepare_data_loader(DataLoader(range(21), batch_size=4, sampler=sampler), num_processes=1)
+        for _ in dataloader:
+            pass
+
+        # The sampler selects 10 samples, but the dataset length still drives the remainder: 21 % 4 == 1
+        assert dataloader.remainder == 1
+
+    def test_remainder_ignores_batch_sampler_dropping_last_batch(self):
+        # Regression test for the second review of https://github.com/huggingface/accelerate/pull/4489:
+        # an explicit `BatchSampler(drop_last=True)` has already dropped the incomplete tail, so the
+        # batch it yields last is complete and `gather_for_metrics` must not trim valid samples off it.
+        # `torch.utils.data.DataLoader` does not copy `drop_last` from a batch sampler passed explicitly
+        # (`dataloader.drop_last` stays False), which is what made this case slip through.
+        dataset = range(10)
+        batch_sampler = BatchSampler(SequentialSampler(dataset), batch_size=4, drop_last=True)
+        dataloader = DataLoader(dataset, batch_sampler=batch_sampler)
+
+        assert dataloader.drop_last is False
+        # The batch sampler drops the incomplete tail, so 8 samples are iterated and none is padding.
+        assert [batch.tolist() for batch in dataloader] == [[0, 1, 2, 3], [4, 5, 6, 7]]
+
+        accelerator = Accelerator()
+        dataloader = accelerator.prepare(dataloader)
+
+        samples = []
+        for batch in dataloader:
+            samples.extend(accelerator.gather_for_metrics(batch).tolist())
+
+        assert samples == list(range(8))
+        assert dataloader.remainder == 0
+
+    def test_remainder_ignores_batch_sampler_dropping_last_batch_across_processes(self):
+        # Regression test for the second review of https://github.com/huggingface/accelerate/pull/4489:
+        # with two processes the gathered last batch of the case above holds the 8 valid samples and no
+        # padding, so it must not be trimmed to `len(sampler) % total_batch_size == 2` any more.
+        def make_loader():
+            dataset = range(10)
+            return DataLoader(
+                dataset, batch_sampler=BatchSampler(SequentialSampler(dataset), batch_size=4, drop_last=True)
+            )
+
+        shards, remainders = [], []
+        for process_index in range(2):
+            dataloader = prepare_data_loader(make_loader(), num_processes=2, process_index=process_index)
+            shards.append([batch.tolist() for batch in dataloader])
+            remainders.append(dataloader.remainder)
+
+        # Both shards only iterate complete batches, so none of them contains padding samples.
+        assert shards == [[[0, 1, 2, 3]], [[4, 5, 6, 7]]]
+        assert remainders == [0, 0]
+        # Emulating `gather_for_metrics` (no process group in this test): every process contributes its
+        # final batch and the result is trimmed to `remainder` items when it is positive -- that used to
+        # keep 2 of the 8 valid samples ("2 on two" in the review), and now keeps all 8.
+        gathered = [sample for shard in shards for batch in shard[-1:] for sample in batch]
+        returned = gathered[: remainders[0]] if remainders[0] > 0 else gathered
+        assert returned == list(range(8))
 
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
