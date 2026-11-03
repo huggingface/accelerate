@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numbers
 import random
 from typing import Optional, Union
 
@@ -49,6 +50,11 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
         deterministic (`bool`, *optional*, defaults to `False`):
             Whether to use deterministic algorithms where available. Can slow down training.
     """
+    if not isinstance(seed, numbers.Integral):
+        raise TypeError(f"`seed` must be an integer, but got an instance of `{type(seed).__name__}`.")
+    seed = int(seed)
+    if seed < 0:
+        raise ValueError(f"`seed` must be a non-negative integer, but got {seed}.")
     if device_specific:
         seed += AcceleratorState().process_index
     random.seed(seed)

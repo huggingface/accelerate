@@ -719,3 +719,28 @@ def test_purge_env_vars_restores_previous_values():
 
     del os.environ["ACCELERATE_SOME_ENV_VAR"]
     del os.environ["ACCELERATE_ANOTHER_ENV_VAR"]
+
+
+class SetSeedValidationTester(unittest.TestCase):
+    def test_invalid_seed_type(self):
+        from accelerate.utils.random import set_seed
+
+        with self.assertRaisesRegex(TypeError, "must be an integer"):
+            set_seed(42.5)
+
+        with self.assertRaisesRegex(TypeError, "must be an integer"):
+            set_seed("42")
+
+    def test_negative_seed(self):
+        from accelerate.utils.random import set_seed
+
+        with self.assertRaisesRegex(ValueError, "non-negative"):
+            set_seed(-1)
+
+    def test_valid_seeds(self):
+        from accelerate.utils.random import set_seed
+
+        import numpy as np
+
+        set_seed(np.int64(1234))
+        self.assertTrue(True)
