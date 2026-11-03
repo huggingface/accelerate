@@ -16,6 +16,7 @@ import inspect
 import os
 from dataclasses import dataclass
 
+import pytest
 import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
@@ -32,6 +33,7 @@ from accelerate.test_utils import (
 from accelerate.test_utils.testing import AccelerateTestCase, slow
 from accelerate.utils import (
     AutocastKwargs,
+    GradientAccumulationPlugin,
     KwargsHandler,
     ProfileKwargs,
     TorchDynamoPlugin,
@@ -200,6 +202,15 @@ def main():
     # Raise error at the end to make sure we don't stop at the first failure.
     if len(error_msg) > 0:
         raise ValueError(error_msg)
+
+
+def test_gradient_accumulation_plugin_rejects_non_positive_num_steps():
+    with pytest.raises(ValueError, match="num_steps"):
+        GradientAccumulationPlugin(num_steps=0)
+    with pytest.raises(ValueError, match="num_steps"):
+        GradientAccumulationPlugin(num_steps=-2)
+
+    assert GradientAccumulationPlugin(num_steps=2).num_steps == 2
 
 
 if __name__ == "__main__":

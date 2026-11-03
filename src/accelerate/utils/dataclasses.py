@@ -953,6 +953,13 @@ class GradientAccumulationPlugin(KwargsHandler):
         },
     )
 
+    def __post_init__(self):
+        if self.num_steps is not None and self.num_steps < 1:
+            raise ValueError(
+                f"`num_steps` must be a strictly positive integer, but got {self.num_steps}. "
+                "A non-positive value would make `Accelerator.step` fail with a `ZeroDivisionError`."
+            )
+
 
 @dataclass
 class TorchDynamoPlugin(KwargsHandler):
