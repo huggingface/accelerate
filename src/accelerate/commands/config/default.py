@@ -21,6 +21,7 @@ import torch
 from ...utils import (
     is_hpu_available,
     is_mlu_available,
+    is_mps_available,
     is_musa_available,
     is_neuron_available,
     is_npu_available,
@@ -127,6 +128,10 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
             config["distributed_type"] = "MULTI_NEURON"
         else:
             config["distributed_type"] = "NO"
+    elif is_mps_available():
+        config["num_processes"] = 1
+        config["use_cpu"] = False
+        config["distributed_type"] = "NO"
     else:
         num_xpus = 0
         config["use_cpu"] = True

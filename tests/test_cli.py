@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -23,6 +24,7 @@ from huggingface_hub.utils import GatedRepoError
 import accelerate.commands.env as accelerate_env_cmd
 import accelerate.commands.test as accelerate_test_cmd
 from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig, load_config_from_file
+from accelerate.commands.config.default import write_basic_config
 from accelerate.commands.estimate import add_timm_hub_prefix, estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command, launch_command_parser
 from accelerate.commands.to_fsdp2 import (
@@ -40,8 +42,9 @@ from accelerate.test_utils.testing import (
     require_transformers,
     run_command,
     run_first,
+    torch_device,
 )
-from accelerate.utils import TorchDynamoPlugin, patch_environment
+from accelerate.utils import DistributedType, TorchDynamoPlugin, patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
 
 
@@ -327,6 +330,19 @@ class ClusterConfigTester(unittest.TestCase):
         assert config.distributed_type == "MULTI_GPU"
         assert config.num_processes == 2
         assert config.enable_cpu_affinity is True
+
+    @unittest.skipUnless(torch_device in ("cpu", "mps"), "test requires a CPU or MPS machine")
+    @patch("torch.backends.mps.is_built", return_value=True)
+    @patch("torch.backends.mps.is_available", return_value=True)
+    def test_write_basic_config_mps(self, *_):
+        # On Apple Silicon the default config must not force training onto the CPU
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_file = write_basic_config(save_location=os.path.join(tmpdir, "default_config.yaml"))
+            config = load_config_from_file(str(config_file))
+
+        assert config.use_cpu is False
+        assert config.distributed_type == DistributedType.NO
+        assert config.num_processes == 1
 
     def test_sagemaker_config(self):
         config = SageMakerConfig(
