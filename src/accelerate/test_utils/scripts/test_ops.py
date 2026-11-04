@@ -112,6 +112,17 @@ def test_reduce_max(state):
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
 
+def test_reduce_mean_integer(state):
+    # For now runs on only two processes
+    if state.num_processes != 2:
+        return
+    tensor = torch.tensor([10 * (state.process_index + 1)], device=state.device)
+    reduced_tensor = reduce(tensor, "mean")
+    assert reduced_tensor.is_floating_point(), f"Expected float dtype, got {reduced_tensor.dtype}"
+    expected = torch.tensor([15.0], device=state.device)
+    assert torch.allclose(reduced_tensor.float(), expected), f"{reduced_tensor} != {expected}"
+
+
 def test_op_checker(state):
     # Must be in a distributed state, and gathering is currently not supported in TorchXLA.
     if state.distributed_type in [DistributedType.NO, DistributedType.XLA]:
@@ -182,6 +193,8 @@ def main():
     test_reduce_mean(state)
     state.print("testing reduce_max")
     test_reduce_max(state)
+    state.print("testing reduce_mean_integer")
+    test_reduce_mean_integer(state)
     state.print("testing op_checker")
     test_op_checker(state)
     state.print("testing sending tensors across devices")
