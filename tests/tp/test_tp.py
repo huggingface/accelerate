@@ -24,6 +24,7 @@ from accelerate.test_utils.testing import (
     path_in_accelerate_package,
     require_multi_device,
     require_non_torch_xla,
+    require_torch_min_version,
     require_tp,
     require_transformers,
     run_first,
@@ -80,3 +81,29 @@ class TPIntegrationTest(TempDirTestCase):
         )
         with patch_environment(omp_num_threads=4):
             execute_subprocess_async(cmd)
+
+
+@require_non_torch_xla
+@require_multi_device
+@require_torch_min_version(version="2.5.0")
+class TPParityTest(unittest.TestCase):
+    """Numerical parity of TP (and TP x FSDP2) prepared models against a single-device fp32 reference."""
+
+    parity_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tp_parity.py")
+
+    def _launch(self, num_processes, mode):
+        cmd = get_launch_command(num_processes=num_processes, num_machines=1, machine_rank=0)
+        cmd.extend([self.parity_script, mode])
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd)
+
+    def test_tp_parity(self):
+        self._launch(2, "tp")
+
+    @unittest.skipUnless(device_count >= 4, "TP (2) x FSDP dp_shard (2) requires at least 4 hardware accelerators")
+    def test_tp_fsdp2_parity(self):
+        self._launch(4, "tp_fsdp2")
+
+    @unittest.skipUnless(device_count >= 4, "TP (2) x FSDP dp_shard (2) requires at least 4 hardware accelerators")
+    def test_tp_fsdp2_refuses_cpu_ram_efficient_loading(self):
+        self._launch(4, "tp_fsdp2_cpu_ram_efficient_loading")

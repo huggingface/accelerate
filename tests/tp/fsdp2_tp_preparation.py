@@ -37,7 +37,7 @@ class LmHeadWrapper(torch.nn.Module):
 def build_simple_dataloader(tokenizer, seq_len=64, batch_size=2):
     """Build a simple dataloader for reproduction."""
     # Load small dataset
-    raw = load_dataset("wikitext", "wikitext-2-raw-v1", split="train[:1%]")
+    raw = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:1%]")
     raw = raw.filter(lambda x: len(tokenizer(x["text"])["input_ids"]) > 0)
     raw = raw.select(range(min(100, len(raw))))  # Use only 100 samples
 
@@ -77,7 +77,8 @@ def main():
         auto_wrap_policy="transformer_based_wrap",
         state_dict_type="SHARDED_STATE_DICT",
         activation_checkpointing=False,
-        cpu_ram_efficient_loading=True,
+        # Not supported with tensor parallelism: every rank loads its own TP shard
+        cpu_ram_efficient_loading=False,
     )
 
     accelerator = Accelerator(kwargs_handlers=[init_kwargs], parallelism_config=pc, fsdp_plugin=fsdp_plugin)
