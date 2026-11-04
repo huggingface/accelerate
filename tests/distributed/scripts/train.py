@@ -20,6 +20,7 @@ targets and the loss of a step doesn't depend on that split.
 """
 
 import argparse
+import inspect
 import json
 import os
 
@@ -29,6 +30,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate import Accelerator
+from accelerate.utils import DynamoBackend
 
 
 MODEL_NAME = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -88,6 +90,32 @@ def main():
     if accelerator.is_main_process:
         with open(os.path.join(args.output_dir, "losses.json"), "w") as f:
             json.dump(losses, f)
+
+        if accelerator.state.dynamo_plugin.backend != DynamoBackend.NO:
+            from torch._dynamo.utils import counters, graph_break_reasons
+            from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointWrapper
+            from torch.distributed.fsdp import FSDPModule
+
+            wrapper_file = inspect.getsourcefile(CheckpointWrapper)
+            # One Boolean per recorded graph-break reason, True if its stack includes the checkpoint-wrapper file.
+            # Summing these flags counts matching reasons, not stack frames. A match does not identify the cause.
+            checkpoint_wrapper_stack_matches = [
+                any(frame.filename == wrapper_file for frame in reason.user_stack) for reason in graph_break_reasons
+            ]
+            wrappers = [m for m in model.modules() if isinstance(m, CheckpointWrapper)]
+
+            compile_stats = {
+                "compiled_graphs": counters["stats"]["unique_graphs"],
+                "graph_breaks": dict(counters["graph_break"]),
+                "graph_breaks_with_checkpoint_wrapper": sum(checkpoint_wrapper_stack_matches),
+                "checkpoint_wrappers": len(wrappers),
+                "checkpoint_wrappers_with_compiled_callable": sum(w._compiled_call_impl is not None for w in wrappers),
+                "checkpoint_wrappers_sharded": sum(isinstance(w, FSDPModule) for w in wrappers),
+                "inner_modules_sharded": sum(isinstance(w._checkpoint_wrapped_module, FSDPModule) for w in wrappers),
+            }
+
+            with open(os.path.join(args.output_dir, "compile_stats.json"), "w") as f:
+                json.dump(compile_stats, f)
     accelerator.end_training()
 
 
