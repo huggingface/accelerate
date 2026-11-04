@@ -24,7 +24,7 @@ device_module = getattr(torch, torch_device, torch.cuda)
 
 def offloaded(module):
     """What `fsdp2_apply_ac` builds when `activation_checkpointing_offload` is on."""
-    return offload_wrapper(checkpoint_wrapper(module, preserve_rng_state=False))
+    return offload_wrapper(checkpoint_wrapper(module))
 
 
 class Block(nn.Module):
@@ -87,7 +87,7 @@ class ActivationCheckpointingOffloadTester(AccelerateTestCase):
             return held
 
         with_offload = held_after_forward(offloaded)
-        without = held_after_forward(lambda m: checkpoint_wrapper(m, preserve_rng_state=False))
+        without = held_after_forward(lambda m: checkpoint_wrapper(m))
         assert with_offload < without, f"offload held {with_offload} bytes, plain held {without}"
 
     def test_caller_can_still_read_the_input(self):
