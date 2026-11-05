@@ -1256,11 +1256,16 @@ def fallback_allocate(
         tied_param_groups = [
             tied_group
             for tied_group in tied_parameters
-            if any(name + "." in k + "." for k in tied_group) and not all(name + "." in k + "." for k in tied_group)
+            if any(k == name or k.startswith(name + ".") for k in tied_group)
+            and not all(k == name or k.startswith(name + ".") for k in tied_group)
         ]
 
         tied_params = sum(
-            [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups], []
+            [
+                [p for p in tied_group if p != name and not p.startswith(name + ".")]
+                for tied_group in tied_param_groups
+            ],
+            [],
         )
 
         module_size_with_ties, _, _ = get_module_size_with_ties(
@@ -1336,6 +1341,8 @@ def infer_auto_device_map(
     - if offload to the CPU is needed,we don't exceed the RAM available on the CPU.
     - if offload to the disk is needed, there is always room left on the CPU to put back the layer offloaded on disk
       that has the largest size.
+
+    Tied parameters are kept on the same device, with module membership determined by their fully qualified names.
 
     <Tip>
 
@@ -1414,7 +1421,8 @@ def infer_auto_device_map(
         tied_param_groups = [
             tied_group
             for tied_group in tied_parameters
-            if any(name + "." in k + "." for k in tied_group) and not all(name + "." in k + "." for k in tied_group)
+            if any(k == name or k.startswith(name + ".") for k in tied_group)
+            and not all(k == name or k.startswith(name + ".") for k in tied_group)
         ]
 
         if verbose and len(tied_param_groups) > 0:
@@ -1422,7 +1430,11 @@ def infer_auto_device_map(
 
         # Then we keep track of all the parameters that are tied to the current module, but not in the current module
         tied_params = sum(
-            [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_groups], []
+            [
+                [p for p in tied_group if p != name and not p.startswith(name + ".")]
+                for tied_group in tied_param_groups
+            ],
+            [],
         )
 
         if verbose and len(tied_params) > 0:
