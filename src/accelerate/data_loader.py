@@ -960,8 +960,11 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
 
     @property
     def total_batch_size(self):
+        batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
+        while isinstance(batch_sampler, SkipBatchSampler):
+            batch_sampler = batch_sampler.batch_sampler
         return (
-            self.dataset.batch_size if self.split_batches else (self.dataset.batch_size * self.dataset.num_processes)
+            batch_sampler.batch_size if self.split_batches else (batch_sampler.batch_size * self.state.num_processes)
         )
 
     @property

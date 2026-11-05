@@ -14,6 +14,7 @@
 
 import random
 import weakref
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -648,6 +649,39 @@ class DataLoaderTester(AccelerateTestCase):
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
+
+    @parameterized.expand([(False, 1, 4, 2), (False, 2, 8, 6), (True, 1, 4, 2), (True, 2, 4, 2)])
+    def test_dispatcher_total_batch_size(self, split_batches, num_processes, total_batch_size, remainder):
+        for dataset in (range(14), SimpleIterableDataset(14)):
+            with self.subTest(iterable=isinstance(dataset, IterableDataset)):
+                dataloader = prepare_data_loader(
+                    DataLoader(dataset, batch_size=4),
+                    device=torch.device("cpu"),
+                    put_on_device=True,
+                    dispatch_batches=True,
+                    split_batches=split_batches,
+                )
+                for loader in (dataloader, skip_first_batches(dataloader, num_batches=1)):
+                    # Reading metadata does not need an initialized distributed process group.
+                    with patch.object(loader.state, "num_processes", num_processes):
+                        assert loader.total_batch_size == total_batch_size
+                        loader.begin()
+                        try:
+                            assert loader.remainder == remainder
+                        finally:
+                            loader.end()
+
+    @parameterized.expand([(False, 1, 4), (False, 2, 8), (True, 1, 4), (True, 2, 4)])
+    def test_dispatcher_total_batch_size_with_batch_sampler_as_sampler(self, split_batches, num_processes, expected):
+        dataloader = DataLoaderDispatcher(
+            torch.arange(14),
+            sampler=BatchSampler(range(14), batch_size=4, drop_last=False),
+            batch_size=None,
+            split_batches=split_batches,
+        )
+        assert torch.cat(list(dataloader)).tolist() == list(range(14))
+        with patch.object(dataloader.state, "num_processes", num_processes):
+            assert dataloader.total_batch_size == expected
 
     def test_set_epoch_in_batch_sampler(self):
         # Ensure that set_epoch gets propagated to custom batch samplers that accept it
