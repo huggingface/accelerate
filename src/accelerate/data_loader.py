@@ -396,7 +396,18 @@ class DataLoaderStateMixin:
         with suppress(Exception):
             if not self._drop_last:
                 length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-                self.remainder = length % self.total_batch_size
+                batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
+                while hasattr(batch_sampler, "batch_sampler") or isinstance(
+                    getattr(batch_sampler, "sampler", None), BatchSampler
+                ):
+                    batch_sampler = getattr(batch_sampler, "batch_sampler", getattr(batch_sampler, "sampler", None))
+                if getattr(batch_sampler, "drop_last", False):
+                    self.remainder = 0
+                else:
+                    # Unsized samplers keep the dataset-length fallback.
+                    with suppress(TypeError):
+                        length = len(getattr(batch_sampler, "sampler", None))
+                    self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 
     def end(self):
@@ -565,9 +576,8 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
-        self.begin()
-
         self.set_epoch(self.iteration)
+        self.begin()
         dataloader_iter = self.base_dataloader.__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:

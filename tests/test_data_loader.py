@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, SubsetRandomSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -630,6 +630,35 @@ class DataLoaderTester(AccelerateTestCase):
 
         assert [batch.tolist() for batch in resumed] == [[4, 5]]
         assert resumed.remainder == -1
+
+    def test_gather_for_metrics_with_subset_sampler(self):
+        # Regression for #4410: the sampler selects fewer samples than the dataset contains.
+        accelerator = Accelerator(cpu=True)
+        sampler = SubsetRandomSampler(range(10), generator=torch.Generator().manual_seed(42))
+        dataloader = accelerator.prepare(DataLoader(range(21), batch_size=4, sampler=sampler))
+
+        samples = []
+        for batch in dataloader:
+            samples.extend(accelerator.gather_for_metrics(batch).tolist())
+
+        assert sorted(samples) == list(range(10))
+        assert dataloader.remainder == 2
+
+    def test_gather_for_metrics_with_changing_sampler_length(self):
+        class GrowingSampler(SubsetRandomSampler):
+            def set_epoch(self, epoch):
+                self.indices = range(5 + epoch)
+
+        accelerator = Accelerator(cpu=True)
+        dataloader = accelerator.prepare(DataLoader(range(21), batch_size=4, sampler=GrowingSampler(range(5))))
+
+        for count in (5, 6):
+            samples = []
+            for batch in dataloader:
+                samples.extend(accelerator.gather_for_metrics(batch).tolist())
+
+            assert sorted(samples) == list(range(count))
+            assert dataloader.remainder == count % 4
 
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
