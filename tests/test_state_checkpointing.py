@@ -15,11 +15,13 @@
 import inspect
 import logging
 import os
+import pickle
 import random
 import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from datetime import date
 
 import pytest
 import torch
@@ -33,6 +35,7 @@ from accelerate.test_utils import (
     execute_subprocess_async,
     require_non_cpu,
     require_non_torch_xla,
+    require_torch_min_version,
     run_first,
 )
 from accelerate.test_utils.testing import AccelerateTestCase
@@ -385,6 +388,34 @@ class CheckpointTest(AccelerateTestCase):
         env_kwargs = dict(use_safe_tensors=str(self.use_safetensors), omp_num_threads="1")
         with patch_environment(**env_kwargs):
             execute_subprocess_async(cmd)
+
+
+class CheckpointLoadKwargsTest(AccelerateTestCase):
+    @require_torch_min_version(version="2.4.0")
+    def test_load_state_with_model_extra_state(self):
+        class ModelWithExtraState(DummyModel):
+            def get_extra_state(self):
+                return self.trained_on
+
+            def set_extra_state(self, state):
+                self.trained_on = state
+
+        accelerator = Accelerator()
+        model = accelerator.prepare(ModelWithExtraState())
+        model.trained_on = date(2026, 1, 1)
+        saved_weight = model.a.detach().clone()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            accelerator.save_state(tmpdir, safe_serialization=False)
+            with torch.no_grad():
+                model.a.add_(1)
+            model.trained_on = date(2026, 10, 17)
+
+            with self.assertRaisesRegex(pickle.UnpicklingError, "Weights only load failed"):
+                accelerator.load_state(tmpdir)
+            accelerator.load_state(tmpdir, load_kwargs={"weights_only": False})
+
+        torch.testing.assert_close(model.a, saved_weight)
+        assert model.trained_on == date(2026, 1, 1)
 
 
 if __name__ == "__main__":
