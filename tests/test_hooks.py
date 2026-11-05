@@ -15,6 +15,7 @@
 import inspect
 import re
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -33,7 +34,7 @@ from accelerate.hooks import (
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_multi_device, require_non_hpu, torch_device
+from accelerate.test_utils import require_multi_device, require_non_cpu, require_non_hpu, torch_device
 from accelerate.utils import is_xpu_available
 from accelerate.utils.constants import SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING
 
@@ -281,6 +282,20 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear1.weight.device == torch.device("cpu")
         assert model.batchnorm.weight.device == torch.device("cpu")
         assert model.linear2.weight.device == torch.device("cpu")
+
+    @require_non_cpu
+    def test_align_devices_offload_does_not_clear_device_cache(self):
+        model = ModelForTest()
+        x = torch.randn(2, 3)
+        expected = model(x)
+        for module in [model.linear1, model.batchnorm, model.linear2]:
+            add_hook_to_module(module, AlignDevicesHook(execution_device=torch_device, offload=True))
+
+        # Emptying the device cache for every onloaded weight only slows down the forward
+        with patch("accelerate.utils.modeling.clear_device_cache") as clear_device_cache:
+            output = model(x)
+        clear_device_cache.assert_not_called()
+        torch.testing.assert_close(output.cpu(), expected)
 
     def test_attach_align_device_hook_as_cpu_offload(self):
         model = ModelForTest()

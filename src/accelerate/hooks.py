@@ -389,6 +389,8 @@ class AlignDevicesHook(ModelHook):
                 value=value,
                 fp16_statistics=fp16_statistics,
                 tied_params_map=self.tied_params_map,
+                # the cache is reused by the next weights, emptying it on every forward only slows things down
+                clear_cache=False,
             )
 
     @_compiler_disable
