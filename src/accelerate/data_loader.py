@@ -104,6 +104,7 @@ class BatchSamplerShard(BatchSampler):
     always yield a number of batches that is a round multiple of `num_processes` and that all have the same size.
     Depending on the value of the `drop_last` attribute of the batch sampler passed, it will either stop the iteration
     at the first batch that would be too small / not present on all processes or loop with indices from the beginning.
+    Padding leaves batches supplied by the underlying sampler unchanged.
 
     Args:
         batch_sampler (`torch.utils.data.sampler.BatchSampler`):
@@ -197,7 +198,7 @@ class BatchSamplerShard(BatchSampler):
             else:
                 # For degenerate cases where the dataset has less than num_process * batch_size samples
                 while len(initial_data) < self.batch_size:
-                    initial_data += initial_data
+                    initial_data = initial_data + initial_data
                 batch = batch + initial_data
                 yield batch[batch_length * self.process_index : batch_length * (self.process_index + 1)]
 
@@ -254,7 +255,7 @@ class BatchSamplerShard(BatchSampler):
                         cycle_index += 1
                     else:
                         end_index = cycle_index + self.batch_size - len(batch)
-                        batch += initial_data[cycle_index:end_index]
+                        batch = batch + initial_data[cycle_index:end_index]
                         if idx % self.num_processes == self.process_index:
                             yield batch
                         cycle_index = end_index
