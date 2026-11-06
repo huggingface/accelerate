@@ -1089,3 +1089,30 @@ class StatefulDataLoaderTester(AccelerateTestCase):
 
         gradient_state = GradientState()
         assert gradient_state.active_dataloader is None
+
+
+def test_batch_sampler_shard_does_not_mutate_sampler_batches():
+    # https://github.com/huggingface/accelerate/issues/4505
+    # A sampler that retains its own batches must come out of a prepared
+    # pass unchanged: padding belongs to the prepared view only.
+    import torch
+    from torch.utils.data import BatchSampler, DataLoader
+
+    from accelerate.data_loader import prepare_data_loader
+
+    class StoredBatchSampler(BatchSampler):
+        def __init__(self, n):
+            super().__init__(range(n), 4, False)
+            self.batches = list(super().__iter__())
+
+        def __iter__(self):
+            return iter(self.batches)
+
+    sampler = StoredBatchSampler(2)
+    raw = DataLoader(torch.arange(2), batch_sampler=sampler)
+    prepared = prepare_data_loader(raw, num_processes=2, process_index=0, split_batches=False)
+
+    list(prepared)
+
+    assert sampler.batches == [[0, 1]], sampler.batches
+    assert [list(b) for b in raw] == [[0, 1]], [list(b) for b in raw]
