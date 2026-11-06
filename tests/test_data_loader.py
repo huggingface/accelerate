@@ -107,6 +107,31 @@ class DataLoaderTester(AccelerateTestCase):
             assert [len(shard) for shard in batch_sampler_shards] == [len(e) for e in expected]
         assert batch_sampler_lists == expected
 
+    @parameterized.expand([(2, True), (7, False)])
+    def test_padding_preserves_original_loader_samples(self, num_samples, split_batches):
+        class StoredBatchSampler(BatchSampler):
+            def __init__(self):
+                super().__init__(range(num_samples), batch_size=4, drop_last=False)
+                self.batches = list(super().__iter__())
+
+            def __iter__(self):
+                return iter(self.batches)
+
+        original = DataLoader(torch.arange(num_samples), batch_sampler=StoredBatchSampler())
+        expected_shards = [[0, 1], [0, 1]] if split_batches else [[0, 1, 2, 3], [4, 5, 6, 0]]
+        for rank in range(2):
+            prepared = prepare_data_loader(
+                original,
+                device=torch.device("cpu"),
+                num_processes=2,
+                process_index=rank,
+                split_batches=split_batches,
+                even_batches=True,
+            )
+            for _ in range(2):
+                self.assertEqual(torch.cat(list(prepared)).tolist(), expected_shards[rank])
+                self.assertEqual(torch.cat(list(original)).tolist(), list(range(num_samples)))
+
     def test_batch_sampler_shards_with_no_splits(self):
         # Check the shards when the dataset is a round multiple of total batch size.
         batch_sampler = BatchSampler(range(24), batch_size=3, drop_last=False)
