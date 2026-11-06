@@ -197,7 +197,9 @@ class BatchSamplerShard(BatchSampler):
             else:
                 # For degenerate cases where the dataset has less than num_process * batch_size samples
                 while len(initial_data) < self.batch_size:
-                    initial_data += initial_data
+                    # Rebind instead of extending: initial_data may be the
+                    # sampler's own batch list, which must not change.
+                    initial_data = initial_data + initial_data
                 batch = batch + initial_data
                 yield batch[batch_length * self.process_index : batch_length * (self.process_index + 1)]
 
@@ -254,7 +256,9 @@ class BatchSamplerShard(BatchSampler):
                         cycle_index += 1
                     else:
                         end_index = cycle_index + self.batch_size - len(batch)
-                        batch += initial_data[cycle_index:end_index]
+                        # Rebind instead of extending: `batch` can still be
+                        # the sampler's own final batch list here.
+                        batch = batch + initial_data[cycle_index:end_index]
                         if idx % self.num_processes == self.process_index:
                             yield batch
                         cycle_index = end_index
