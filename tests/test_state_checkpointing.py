@@ -361,6 +361,70 @@ class CheckpointTest(AccelerateTestCase):
             assert a2 == model.a.item()
             assert b2 == model.b.item()
 
+    def test_automatic_loading_after_restart(self):
+        # A restarted process resumes with `load_state()`, trains and saves again; the next `load_state()` must
+        # resume that newest state, also when `total_limit` rotates out older checkpoints.
+        def start(tmpdir):
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, _ = dummy_dataloaders()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True, total_limit=2)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train_dataloader)
+            return accelerator, model, optimizer, train_dataloader
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            accelerator, model, optimizer, train_dataloader = start(tmpdir)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            train(2, model, train_dataloader, optimizer, accelerator)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            # First restart: resume from the latest checkpoint, train, save
+            accelerator, model, optimizer, train_dataloader = start(tmpdir)
+            accelerator.load_state()
+            train(2, model, train_dataloader, optimizer, accelerator)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            (a, b) = model.a.item(), model.b.item()
+            assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_2"))
+
+            # Second restart: the state saved after the first restart comes back
+            accelerator, model, optimizer, train_dataloader = start(tmpdir)
+            accelerator.load_state()
+            assert a == model.a.item()
+            assert b == model.b.item()
+
+    def test_explicit_loading_after_restart(self):
+        # A restarted process resumes an older checkpoint by path, trains and saves again; the next `load_state()` must
+        # resume that newest state.
+        def start(tmpdir):
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, _ = dummy_dataloaders()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True, total_limit=2)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train_dataloader)
+            return accelerator, model, optimizer, train_dataloader
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            accelerator, model, optimizer, train_dataloader = start(tmpdir)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            train(2, model, train_dataloader, optimizer, accelerator)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            accelerator, model, optimizer, train_dataloader = start(tmpdir)
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
+            train(3, model, train_dataloader, optimizer, accelerator)
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            (a, b) = model.a.item(), model.b.item()
+            assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_2"))
+
+            accelerator, model, optimizer, train_dataloader = start(tmpdir)
+            accelerator.load_state()
+            assert a == model.a.item()
+            assert b == model.b.item()
+
     def test_checkpoint_deletion(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
