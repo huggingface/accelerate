@@ -3815,6 +3815,19 @@ class Accelerator:
             logger.info(f"Loading in {len(custom_checkpoints)} custom states")
             for index, obj in enumerate(self._custom_objects):
                 load_custom_state(obj, input_dir, index)
+        if self.project_configuration.automatic_checkpoint_naming:
+            # Continue the automatic numbering after the newest existing checkpoint. A restarted process starts again at
+            # `iteration=0`: its next save would reuse a lower number (with `total_limit`, after rotating out the newest
+            # checkpoint), and a later `load_state()` would resume an older state.
+            checkpoints_dir = os.path.join(self.project_dir, "checkpoints")
+            if os.path.isdir(checkpoints_dir):
+                numbers = [
+                    int(match.group(1))
+                    for match in map(re.compile(r"checkpoint_(\d+)").fullmatch, os.listdir(checkpoints_dir))
+                    if match is not None
+                ]
+                if numbers:
+                    self.project_configuration.iteration = max(self.project_configuration.iteration, max(numbers) + 1)
 
     def free_memory(self, *objects):
         """
