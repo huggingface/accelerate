@@ -102,6 +102,17 @@ def test_reduce_mean(state):
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
 
+def test_reduce_mean_integer(state):
+    # For now runs on only two processes
+    if state.num_processes != 2:
+        return
+    tensor = create_tensor(state).long()
+    reduced_tensor = reduce(tensor, "mean")
+    assert reduced_tensor.is_floating_point(), f"{reduced_tensor.dtype} is not a floating point dtype"
+    truth_tensor = torch.tensor([2.0, 3]).to(state.device)
+    assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
+
+
 def test_reduce_max(state):
     # For now runs on only two processes
     if state.num_processes != 2:
@@ -180,6 +191,8 @@ def main():
     test_reduce_sum(state)
     state.print("testing reduce_mean")
     test_reduce_mean(state)
+    state.print("testing reduce_mean with integer tensors")
+    test_reduce_mean_integer(state)
     state.print("testing reduce_max")
     test_reduce_max(state)
     state.print("testing op_checker")
