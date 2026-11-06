@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+from functools import partial
 from types import MethodType
 from unittest import skip
 
 import torch
 from torch.utils.benchmark import Timer
+from torch.utils.checkpoint import checkpoint
 
 from accelerate.test_utils import require_huggingface_suite, require_non_cpu, require_non_hpu, slow, torch_device
 from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
@@ -170,6 +172,20 @@ class RegionalCompilationModel(torch.nn.Module):
         return x
 
 
+class CheckpointedRegionalCompilationBlock(RegionalCompilationBlock):
+    def __init__(self, use_reentrant):
+        super().__init__()
+        self.use_reentrant = use_reentrant
+
+    def __call__(self, *args, **kwargs):
+        return checkpoint(partial(super().__call__, **kwargs), *args, use_reentrant=self.use_reentrant)
+
+    def forward(self, x):
+        x = self.linear(x)
+        torch._dynamo.graph_break()
+        return x.sin()
+
+
 class RegionalCompilationRebindTester(unittest.TestCase):
     def _get_model_and_inputs(self):
         return RegionalCompilationModel(), torch.ones(1, 4)
@@ -207,3 +223,38 @@ class RegionalCompilationRebindTester(unittest.TestCase):
 
         assert not hasattr(model, "trace")
         assert compiled_model.trace == ("twin", "OptimizedModule")
+
+    def test_checkpointed_regions_compile_across_graph_breaks(self):
+        for use_reentrant in (True, False):
+            with self.subTest(use_reentrant=use_reentrant):
+                torch._dynamo.reset()
+                self.addCleanup(torch._dynamo.reset)
+                graphs = []
+
+                def backend(graph, example_inputs):
+                    graphs.append(graph)
+                    return graph.forward
+
+                model, inputs = self._get_model_and_inputs()
+                model.blocks = torch.nn.ModuleList(
+                    [CheckpointedRegionalCompilationBlock(use_reentrant) for _ in range(2)]
+                )
+                inputs.requires_grad_()
+                expected = model(inputs)
+                expected.sum().backward()
+                expected_input_grad = inputs.grad.clone()
+                expected_weight_grads = [block.linear.weight.grad.clone() for block in model.blocks]
+                model.zero_grad()
+                inputs.grad = None
+
+                compiled_model = compile_regions(model, backend=backend)
+                actual = compiled_model(inputs)
+                actual.sum().backward()
+
+                self.assertTrue(graphs, "Checkpointed blocks must reach the compilation backend")
+                torch.testing.assert_close(actual, expected)
+                torch.testing.assert_close(inputs.grad, expected_input_grad)
+                for block, expected_grad in zip(model.blocks, expected_weight_grads):
+                    torch.testing.assert_close(block.linear.weight.grad, expected_grad)
+                    self.assertFalse(hasattr(block.forward, "_torchdynamo_orig_callable"))
+                self.assertIs(extract_model_from_parallel(compiled_model, keep_torch_compile=False), model)
