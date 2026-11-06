@@ -3584,6 +3584,7 @@ class Accelerator:
 
         # Save the models taking care of FSDP and DeepSpeed nuances
         weights = []
+        gradients = []
         for i, model in enumerate(self._models):
             if self.distributed_type == DistributedType.FSDP:
                 logger.info("Saving FSDP model")
@@ -3600,6 +3601,12 @@ class Accelerator:
                 logger.info(f"Megatron-LM Model , Optimizer and Scheduler saved to output dir {output_dir}")
             else:
                 weights.append(self.get_state_dict(model, unwrap=False))
+                # Parameter gradients are not part of any state dict; without
+                # them a checkpoint taken mid gradient accumulation resumes
+                # with an incomplete gradient sum.
+                gradients.append(
+                    {name: param.grad for name, param in model.named_parameters() if param.grad is not None}
+                )
 
         # Save the optimizers taking care of FSDP and DeepSpeed nuances
         optimizers = []
@@ -3640,6 +3647,7 @@ class Accelerator:
             self.scaler,
             save_on_each_node=self.project_configuration.save_on_each_node,
             safe_serialization=safe_serialization,
+            gradients=gradients,
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
