@@ -15,9 +15,10 @@
 A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
+import copy
 import pickle
 import warnings
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from contextlib import contextmanager, nullcontext
 from functools import update_wrapper, wraps
 from typing import Any
@@ -152,7 +153,15 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-    if is_torch_tensor(tensor) or hasattr(tensor, "to"):
+    if isinstance(skip_keys, str):
+        skip_keys = [skip_keys]
+    elif skip_keys is None:
+        skip_keys = []
+
+    # A `Mapping` that also implements `.to()` (e.g. `transformers.BatchEncoding`) must support `skip_keys`
+    mapping_with_skipped_keys = isinstance(tensor, Mapping) and any(k in tensor for k in skip_keys)
+
+    if (is_torch_tensor(tensor) or hasattr(tensor, "to")) and not mapping_with_skipped_keys:
         # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
         if device == "npu":
             device = "npu:0"
@@ -177,16 +186,17 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             tensor, (send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys) for t in tensor)
         )
     elif isinstance(tensor, Mapping):
-        if isinstance(skip_keys, str):
-            skip_keys = [skip_keys]
-        elif skip_keys is None:
-            skip_keys = []
-        return type(tensor)(
-            {
-                k: t if k in skip_keys else send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys)
-                for k, t in tensor.items()
-            }
-        )
+        moved = {
+            k: t if k in skip_keys else send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys)
+            for k, t in tensor.items()
+        }
+        if mapping_with_skipped_keys and hasattr(tensor, "to") and isinstance(tensor, MutableMapping):
+            # The object has its own `.to()`, so it may carry state beyond its entries (e.g. the fast-tokenizer
+            # `encodings` of a `transformers.BatchEncoding`). Shallow-copy it instead of rebuilding it from scratch.
+            tensor = copy.copy(tensor)
+            tensor.update(moved)
+            return tensor
+        return type(tensor)(moved)
     else:
         return tensor
 
