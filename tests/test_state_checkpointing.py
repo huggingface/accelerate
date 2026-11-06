@@ -229,6 +229,40 @@ class CheckpointTest(AccelerateTestCase):
             self.check_adam_state(opt_state1, opt_state3, accelerator.distributed_type)
             assert ground_truth_rands == test_rands
 
+    def test_can_resume_training_mid_gradient_accumulation(self):
+        # https://github.com/huggingface/accelerate/issues/4503
+        # A checkpoint taken mid gradient accumulation window must persist the
+        # partial parameter gradients; otherwise the resumed run's next
+        # optimizer update uses an incomplete gradient sum and the final
+        # weights diverge from the uninterrupted run.
+        with tempfile.TemporaryDirectory() as tmpdir:
+
+            def make():
+                set_seed(0)
+                accelerator = Accelerator(cpu=True, gradient_accumulation_steps=3, project_dir=tmpdir)
+                model = torch.nn.Linear(1, 1, bias=False)
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+                model, optimizer = accelerator.prepare(model, optimizer)
+                return accelerator, model, optimizer
+
+            def train(save_at=None):
+                accelerator, model, optimizer = make()
+                save_dir = os.path.join(tmpdir, "mid_window")
+                for i, x in enumerate(torch.linspace(0.5, 3.0, 6)):
+                    if i == save_at:
+                        accelerator.save_state(save_dir, safe_serialization=self.use_safetensors)
+                        accelerator, model, optimizer = make()
+                        accelerator.load_state(save_dir)
+                    with accelerator.accumulate(model):
+                        accelerator.backward(model(x.view(1, 1)).pow(2).sum())
+                        optimizer.step()
+                        optimizer.zero_grad()
+                return model.weight.item()
+
+            uninterrupted = train()
+            resumed = train(save_at=4)
+            assert uninterrupted == resumed
+
     def test_can_resume_training_checkpoints_relative_path(self):
         # See #1983
         # This test is like test_can_resume_training but uses a relative path for the checkpoint and automatically

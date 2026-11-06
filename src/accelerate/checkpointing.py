@@ -22,6 +22,7 @@ from safetensors.torch import load_model
 from torch.amp import GradScaler
 
 from .utils import (
+    GRADIENTS_NAME,
     MODEL_NAME,
     OPTIMIZER_NAME,
     RNG_STATE_NAME,
@@ -66,6 +67,7 @@ def save_accelerator_state(
     scaler: Optional[GradScaler] = None,
     save_on_each_node: bool = False,
     safe_serialization: bool = True,
+    gradients: Optional[list[dict]] = None,
 ) -> Path:
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
@@ -115,6 +117,14 @@ def save_accelerator_state(
         output_optimizer_file = output_dir.joinpath(optimizer_name)
         save(state, output_optimizer_file, save_on_each_node=save_on_each_node, safe_serialization=False)
         logger.info(f"Optimizer state saved in {output_optimizer_file}")
+    # Partial gradients from an interrupted gradient accumulation window
+    for i, gradient_state in enumerate(gradients or []):
+        if not gradient_state:
+            continue
+        gradients_name = f"{GRADIENTS_NAME}.bin" if i == 0 else f"{GRADIENTS_NAME}_{i}.bin"
+        output_gradients_file = output_dir.joinpath(gradients_name)
+        save(gradient_state, output_gradients_file, save_on_each_node=save_on_each_node, safe_serialization=False)
+        logger.info(f"Partial gradient state saved in {output_gradients_file}")
     # Scheduler states
     for i, scheduler in enumerate(schedulers):
         state = scheduler.state_dict()
@@ -242,6 +252,23 @@ def load_accelerator_state(
             state_dict = load(input_model_file, map_location=map_location)
             model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
+
+    # Partial gradients from an interrupted gradient accumulation window.
+    # The file only exists when the checkpoint was taken mid window; restoring
+    # by parameter name keeps the accumulated sum intact across the resume.
+    for i, model in enumerate(models):
+        ending = f"_{i}" if i > 0 else ""
+        input_gradients_file = input_dir.joinpath(f"{GRADIENTS_NAME}{ending}.bin")
+        if not input_gradients_file.exists():
+            continue
+        gradient_state = load(input_gradients_file, map_location=map_location, **load_kwargs)
+        parameters = dict(model.named_parameters())
+        for name, gradient in gradient_state.items():
+            if name in parameters:
+                parameters[name].grad = gradient.to(device=parameters[name].device)
+            else:
+                logger.warning(f"Skipping gradient for unknown parameter {name}")
+        logger.info(f"Partial gradient state for model {i} loaded successfully")
 
     # Optimizer states
     for i, opt in enumerate(optimizers):

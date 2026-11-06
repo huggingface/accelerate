@@ -30,6 +30,7 @@ from .constants import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     WEIGHTS_PATTERN_NAME,
+    GRADIENTS_NAME,
 )
 from .dataclasses import (
     AORecipeKwargs,
