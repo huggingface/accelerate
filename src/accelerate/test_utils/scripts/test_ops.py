@@ -81,6 +81,20 @@ def test_pad_across_processes(state):
     if not state.is_main_process:
         assert padded_tensor.tolist() == list(range(0, state.num_processes)) + [0]
 
+    # Padding must keep the dtype, otherwise the padded ranks can no longer be gathered with the unpadded one.
+    for dtype in (torch.bool, torch.uint8, torch.int32, torch.float16):
+        if state.is_main_process:
+            tensor = torch.ones(state.num_processes + 1, dtype=dtype).to(state.device)
+        else:
+            tensor = torch.ones(state.num_processes, dtype=dtype).to(state.device)
+
+        padded_tensor = pad_across_processes(tensor)
+        assert padded_tensor.dtype == dtype, f"{padded_tensor.dtype} != {dtype}"
+        assert padded_tensor.shape == torch.Size([state.num_processes + 1])
+        gathered_tensor = gather(padded_tensor)
+        assert gathered_tensor.dtype == dtype, f"{gathered_tensor.dtype} != {dtype}"
+        assert gathered_tensor.shape == torch.Size([state.num_processes * (state.num_processes + 1)])
+
 
 def test_reduce_sum(state):
     # For now runs on only two processes
