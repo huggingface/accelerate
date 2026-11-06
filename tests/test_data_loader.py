@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -662,6 +662,30 @@ class DataLoaderTester(AccelerateTestCase):
         assert batch_sampler.epoch == 0
         dataloader.set_epoch(1)
         assert batch_sampler.epoch == 1
+
+    @parameterized.expand([(False, 0), (False, 1), (True, 0), (True, 1)])
+    def test_set_epoch_in_sharded_batch_sampler(self, split_batches, process_index):
+        dataset = list(range(32))
+        generator = torch.Generator()
+        sampler = RandomSampler(dataset, generator=generator)
+        batch_sampler = SimpleBatchSampler(sampler, batch_size=4, drop_last=False, generator=generator, seed=42)
+        dataloader = prepare_data_loader(
+            DataLoader(dataset, batch_sampler=batch_sampler),
+            num_processes=2,
+            process_index=process_index,
+            split_batches=split_batches,
+        )
+
+        for epoch in (0, 1, 5):
+            if epoch == 5:
+                dataloader.set_epoch(epoch)
+            expected = torch.randperm(32, generator=torch.Generator().manual_seed(42 + epoch)).reshape(-1, 4)
+            if split_batches:
+                expected = expected[:, process_index * 2 : (process_index + 1) * 2]
+            else:
+                expected = expected[process_index::2]
+
+            assert [batch.tolist() for batch in dataloader] == expected.tolist()
 
     def test_skip_first_batches_preserves_iteration(self):
         # Regression test: skip_first_batches must carry the DataLoaderShard's iteration
