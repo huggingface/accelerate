@@ -3601,12 +3601,6 @@ class Accelerator:
                 logger.info(f"Megatron-LM Model , Optimizer and Scheduler saved to output dir {output_dir}")
             else:
                 weights.append(self.get_state_dict(model, unwrap=False))
-                # Parameter gradients are not part of any state dict; without
-                # them a checkpoint taken mid gradient accumulation resumes
-                # with an incomplete gradient sum.
-                gradients.append(
-                    {name: param.grad for name, param in model.named_parameters() if param.grad is not None}
-                )
 
         # Save the optimizers taking care of FSDP and DeepSpeed nuances
         optimizers = []
@@ -3635,6 +3629,15 @@ class Accelerator:
         # accelerator.register_model_state_hook
         for hook in self._save_model_state_pre_hook.values():
             hook(self._models, weights, output_dir)
+
+        # Parameter gradients are not part of any state dict; without them a
+        # checkpoint taken mid gradient accumulation resumes with an
+        # incomplete gradient sum. Collected after the save hooks so the
+        # payloads stay aligned with whatever model list survives them.
+        gradients = []
+        for model in self._models:
+            grads = {name: param.grad for name, param in model.named_parameters() if param.grad is not None}
+            gradients.append({"model_name": get_pretty_name(model), "gradients": grads} if grads else {})
 
         save_location = save_accelerator_state(
             output_dir,

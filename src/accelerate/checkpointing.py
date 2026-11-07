@@ -117,14 +117,27 @@ def save_accelerator_state(
         output_optimizer_file = output_dir.joinpath(optimizer_name)
         save(state, output_optimizer_file, save_on_each_node=save_on_each_node, safe_serialization=False)
         logger.info(f"Optimizer state saved in {output_optimizer_file}")
-    # Partial gradients from an interrupted gradient accumulation window
-    for i, gradient_state in enumerate(gradients or []):
-        if not gradient_state:
-            continue
-        gradients_name = f"{GRADIENTS_NAME}.bin" if i == 0 else f"{GRADIENTS_NAME}_{i}.bin"
-        output_gradients_file = output_dir.joinpath(gradients_name)
-        save(gradient_state, output_gradients_file, save_on_each_node=save_on_each_node, safe_serialization=False)
-        logger.info(f"Partial gradient state saved in {output_gradients_file}")
+    # Partial gradients from an interrupted gradient accumulation window.
+    # Saved per process with the RNG-state pattern (mid-window ranks hold
+    # different local gradients, so a single main-process file would be
+    # restored onto every rank). Each payload embeds the model name so a
+    # hook that adds or removes models cannot shift gradients onto the
+    # wrong model. An empty payload removes a stale file left by an earlier
+    # save into the same directory (issue #4504, reviewer cases 1-2).
+    written_gradients = set()
+    for i, payload in enumerate(gradients or []):
+        output_gradients_file = output_dir.joinpath(f"{GRADIENTS_NAME}_{i}_{process_index}.pt")
+        if payload:
+            torch.save(payload, output_gradients_file)
+            written_gradients.add(output_gradients_file.name)
+            logger.info(f"Partial gradient state saved in {output_gradients_file}")
+        elif output_gradients_file.exists():
+            output_gradients_file.unlink()
+            logger.info(f"Stale partial gradient state removed from {output_gradients_file}")
+    for stale in output_dir.glob(f"{GRADIENTS_NAME}_*_{process_index}.pt"):
+        if stale.name not in written_gradients:
+            stale.unlink()
+            logger.info(f"Stale partial gradient state removed from {stale}")
     # Scheduler states
     for i, scheduler in enumerate(schedulers):
         state = scheduler.state_dict()
@@ -253,17 +266,28 @@ def load_accelerator_state(
             model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
-    # Partial gradients from an interrupted gradient accumulation window.
-    # The file only exists when the checkpoint was taken mid window; restoring
-    # by parameter name keeps the accumulated sum intact across the resume.
+    # Partial gradients from an interrupted gradient accumulation window,
+    # saved per process (mid-window ranks hold different local gradients).
+    # Payloads embed the model name; if a load hook removed a model and
+    # shifted the indices, match by name instead of applying blindly.
     for i, model in enumerate(models):
-        ending = f"_{i}" if i > 0 else ""
-        input_gradients_file = input_dir.joinpath(f"{GRADIENTS_NAME}{ending}.bin")
-        if not input_gradients_file.exists():
+        input_gradients_file = input_dir.joinpath(f"{GRADIENTS_NAME}_{i}_{process_index}.pt")
+        payload = None
+        if input_gradients_file.exists():
+            payload = torch.load(input_gradients_file, map_location=map_location, **load_kwargs)
+        if payload is not None and payload.get("model_name") != get_pretty_name(model):
+            for candidate in sorted(input_dir.glob(f"{GRADIENTS_NAME}_*_{process_index}.pt")):
+                if candidate == input_gradients_file:
+                    continue
+                shifted = torch.load(candidate, map_location=map_location, **load_kwargs)
+                if shifted.get("model_name") == get_pretty_name(model):
+                    payload = shifted
+                    break
+        if not payload:
+            logger.info(f"No partial gradient state for model {i}")
             continue
-        gradient_state = load(input_gradients_file, map_location=map_location, **load_kwargs)
         parameters = dict(model.named_parameters())
-        for name, gradient in gradient_state.items():
+        for name, gradient in payload.get("gradients", {}).items():
             if name in parameters:
                 parameters[name].grad = gradient.to(device=parameters[name].device)
             else:
