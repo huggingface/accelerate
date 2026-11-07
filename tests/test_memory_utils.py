@@ -126,6 +126,42 @@ class MemoryTest(unittest.TestCase):
         ]
         assert [bs, arg1] == [8, "hello"]
 
+    def test_memory_variadic_arguments(self):
+        calls = []
+
+        @find_executable_batch_size(starting_batch_size=16)
+        def training_loop(batch_size, *args, scale=1):
+            calls.append((batch_size, args, scale))
+            if batch_size > 8:
+                raise_fake_out_of_memory()
+            return batch_size, args, scale
+
+        assert training_loop("model", "optimizer", "data", scale=2) == (
+            8,
+            ("model", "optimizer", "data"),
+            2,
+        )
+        assert [batch_size for batch_size, _, _ in calls] == [16, 14, 12, 10, 9, 8]
+        assert all(args == ("model", "optimizer", "data") and scale == 2 for _, args, scale in calls)
+
+    def test_memory_variadic_bound_method(self):
+        class Trainer:
+            def train(self, batch_size, *args):
+                return batch_size, args
+
+        training_loop = find_executable_batch_size(Trainer().train, starting_batch_size=16)
+        assert training_loop("model", "optimizer", "data") == (
+            16,
+            ("model", "optimizer", "data"),
+        )
+
+    def test_memory_variadic_without_extra_arguments(self):
+        @find_executable_batch_size(starting_batch_size=16)
+        def training_loop(batch_size, *args):
+            return batch_size, args
+
+        assert training_loop() == (16, ())
+
     def test_start_zero(self):
         @find_executable_batch_size(starting_batch_size=0)
         def mock_training_loop_function(batch_size):

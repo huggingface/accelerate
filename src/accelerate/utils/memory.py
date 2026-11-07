@@ -170,9 +170,11 @@ def find_executable_batch_size(
     def decorator(*args, **kwargs):
         nonlocal batch_size
         clear_device_cache(garbage_collection=True)
-        params = list(inspect.signature(function).parameters.keys())
+        parameters = inspect.signature(function).parameters
+        params = list(parameters)
+        has_varargs = any(param.kind == inspect.Parameter.VAR_POSITIONAL for param in parameters.values())
         # Guard against user error
-        if len(params) < (len(args) + 1):
+        if not has_varargs and len(params) < (len(args) + 1):
             arg_str = ", ".join([f"{arg}={value}" for arg, value in zip(params[1:], args[1:])])
             raise TypeError(
                 f"Batch size was passed into `{function.__name__}` as the first argument when called."
