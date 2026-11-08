@@ -184,7 +184,9 @@ class BatchSamplerShard(BatchSampler):
         batch_length = self.batch_sampler.batch_size // self.num_processes
         for idx, batch in enumerate(self.batch_sampler):
             if idx == 0:
-                initial_data = batch
+                # Copy the first batch: the padding below may extend `initial_data` in place,
+                # and we must not mutate batches owned by the underlying sampler.
+                initial_data = list(batch)
             if len(batch) == self.batch_size:
                 # If the batch is full, we yield the part of it this process is responsible of.
                 yield batch[batch_length * self.process_index : batch_length * (self.process_index + 1)]
@@ -254,7 +256,9 @@ class BatchSamplerShard(BatchSampler):
                         cycle_index += 1
                     else:
                         end_index = cycle_index + self.batch_size - len(batch)
-                        batch += initial_data[cycle_index:end_index]
+                        # Build a new list instead of extending `batch` in place: `batch` may be
+                        # the last batch owned by the underlying sampler, which we must not mutate.
+                        batch = batch + initial_data[cycle_index:end_index]
                         if idx % self.num_processes == self.process_index:
                             yield batch
                         cycle_index = end_index

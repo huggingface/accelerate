@@ -442,6 +442,47 @@ class DataLoaderTester(AccelerateTestCase):
         assert list(shards[1]) == [[1, 2], [7, 8], [0]]
         assert list(shards[2]) == [[3, 4, 5], [9, 10, 11], [1, 2]]
 
+    def test_batch_sampler_shard_padding_does_not_mutate_sampler_batches(self):
+        """
+        Regression test for https://github.com/huggingface/accelerate/issues/4505.
+
+        ``BatchSamplerShard`` pads by looping back over the first batches. The previous
+        implementation extended sampler-owned lists in place (``initial_data += initial_data``
+        in ``_iter_with_split`` and ``batch += initial_data[...]`` in ``_iter_with_no_split``),
+        which mutated the batches retained by the underlying sampler and therefore changed the
+        samples yielded by the original, unprepared data loader. Padding must only extend copies.
+        """
+
+        class RetainingBatchSampler:
+            def __init__(self, batches, batch_size):
+                self.batches = [list(b) for b in batches]
+                self.batch_size = batch_size
+                self.drop_last = False
+
+            def __iter__(self):
+                return iter(self.batches)
+
+            def __len__(self):
+                return len(self.batches)
+
+        # --- split_batches=True: padding doubles the first batch ---
+        batches = [[0]]
+        sampler = RetainingBatchSampler(batches, batch_size=2)
+        before = [list(b) for b in sampler.batches]
+        shards = [BatchSamplerShard(sampler, 2, i, split_batches=True, even_batches=True) for i in range(2)]
+        assert list(shards[0]) == [[0]]
+        assert list(shards[1]) == [[0]]
+        assert sampler.batches == before, f"split_batches mutated sampler batches: {sampler.batches}"
+
+        # --- split_batches=False: padding extends the last partial batch ---
+        batches = [[0, 1], [2]]
+        sampler = RetainingBatchSampler(batches, batch_size=2)
+        before = [list(b) for b in sampler.batches]
+        shards = [BatchSamplerShard(sampler, 2, i, split_batches=False, even_batches=True) for i in range(2)]
+        assert list(shards[0]) == [[0, 1]]
+        assert list(shards[1]) == [[2, 0]]
+        assert sampler.batches == before, f"split_batches=False mutated sampler batches: {sampler.batches}"
+
     def test_split_batches_validates_dynamic_batch_size(self):
         """
         Tests that split_batches=True raises ValueError when batch_size is None.
