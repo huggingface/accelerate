@@ -482,6 +482,45 @@ class ModelingUtilsTester(unittest.TestCase):
             self.shard_test_model(model, tmp_dir)
             load_checkpoint_in_model(model, tmp_dir)
 
+    @parameterized.expand(
+        [
+            (saved_name, device, offload_state_dict)
+            for saved_name in ("a.weight", "z.weight")
+            for device in ("cpu", "meta")
+            for offload_state_dict in (False, True)
+        ]
+    )
+    def test_load_checkpoint_in_model_omitted_tied_weight(self, saved_name, device, offload_state_dict):
+        def make_model(device="cpu"):
+            model = nn.Sequential(
+                OrderedDict(
+                    [
+                        ("z", nn.Linear(4, 4, bias=False, device=device)),
+                        ("a", nn.Linear(4, 4, bias=False, device=device)),
+                    ]
+                )
+            )
+            model.a.weight = model.z.weight
+            return model
+
+        model = make_model()
+        with torch.no_grad():
+            model.z.weight.fill_(2.0)
+        inputs = torch.arange(4, dtype=torch.float32).unsqueeze(0)
+        expected = model(inputs)
+        restored = make_model(device)
+        with torch.no_grad():
+            restored.z.weight.zero_()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "model.safetensors")
+            save_file({saved_name: model.z.weight}, fname, metadata={"format": "pt"})
+            load_checkpoint_in_model(restored, fname, device_map={"": "cpu"}, offload_state_dict=offload_state_dict)
+
+        self.assertIs(restored.z.weight, restored.a.weight)
+        torch.testing.assert_close(restored.z.weight, model.z.weight)
+        torch.testing.assert_close(restored(inputs), expected)
+
     @require_non_cpu
     def test_load_checkpoint_in_model_one_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}

@@ -1964,6 +1964,7 @@ def load_checkpoint_in_model(
         state_dict_index = {}
 
     unexpected_keys = set()
+    loaded_keys = set()
     model_keys = set(model.state_dict().keys())
     buffer_names = [name for name, _ in model.named_buffers()]
     model_devices = {t.device for t in model.state_dict().values() if isinstance(t, torch.Tensor)}
@@ -2068,6 +2069,8 @@ def load_checkpoint_in_model(
                         fp16_statistics=fp16_statistics,
                     )
 
+        loaded_keys.update(loaded_checkpoint.keys())
+
         # Force Python to clean up.
         del loaded_checkpoint
         gc.collect()
@@ -2085,6 +2088,9 @@ def load_checkpoint_in_model(
         load_offloaded_weights(model, state_dict_index, state_dict_folder)
         shutil.rmtree(state_dict_folder)
 
+    # Prefer checkpoint values over initialized aliases omitted from the checkpoint.
+    for tied_group in tied_params:
+        tied_group.sort(key=lambda name: name not in loaded_keys)
     retie_parameters(model, tied_params)
 
 

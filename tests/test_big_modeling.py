@@ -24,8 +24,9 @@ from unittest import mock
 
 import torch
 import torch.nn as nn
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
+from accelerate import Accelerator
 from accelerate.big_modeling import (
     _refuse_recurrent_layers_under_sequence_parallelism,
     cpu_offload,
@@ -850,6 +851,26 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
+    def test_load_checkpoint_and_dispatch_omitted_tied_weight(self):
+        config = GPT2Config(vocab_size=17, n_positions=8, n_embd=8, n_layer=1, n_head=2)
+        model = GPT2LMHeadModel(config).eval()
+        inputs = torch.tensor([[1, 2, 3]])
+        with torch.no_grad():
+            expected = model(inputs).logits
+
+        for max_shard_size in ("10GB", "1KB"):
+            with self.subTest(max_shard_size=max_shard_size), TemporaryDirectory() as tmp_dir:
+                Accelerator(cpu=True).save_model(model, tmp_dir, max_shard_size=max_shard_size)
+                restored = GPT2LMHeadModel(config).eval()
+                with torch.no_grad():
+                    restored.transformer.wte.weight.zero_()
+                restored = load_checkpoint_and_dispatch(restored, tmp_dir, device_map={"": "cpu"})
+
+                self.assertIs(restored.lm_head.weight, restored.transformer.wte.weight)
+                torch.testing.assert_close(restored.transformer.wte.weight, model.transformer.wte.weight)
+                with torch.no_grad():
+                    torch.testing.assert_close(restored(inputs).logits, expected)
 
     def test_load_checkpoint_and_dispatch_device_map_none(self):
         model = ModelForTest()
