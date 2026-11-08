@@ -49,6 +49,7 @@ from accelerate.test_utils import (
     slow,
     torch_device,
 )
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import is_hpu_available, is_xpu_available, offload_state_dict
 from accelerate.utils.memory import clear_device_cache
 
@@ -160,6 +161,28 @@ class ModelWithUnusedSubModulesForTest(nn.Module):
 
     def forward(self, x):
         return self.linear4(self.linear3(self.batchnorm(self.linear2(self.linear1(x)))))
+
+
+class CheckpointTiedWeightsTester(AccelerateTestCase):
+    def test_load_checkpoint_and_dispatch_omitted_tied_weight(self):
+        config = GPT2Config(vocab_size=17, n_positions=8, n_embd=8, n_layer=1, n_head=2)
+        model = GPT2LMHeadModel(config).eval()
+        inputs = torch.tensor([[1, 2, 3]])
+        with torch.no_grad():
+            expected = model(inputs).logits
+
+        for max_shard_size in ("10GB", "1KB"):
+            with self.subTest(max_shard_size=max_shard_size), TemporaryDirectory() as tmp_dir:
+                Accelerator(cpu=True).save_model(model, tmp_dir, max_shard_size=max_shard_size)
+                restored = GPT2LMHeadModel(config).eval()
+                with torch.no_grad():
+                    restored.transformer.wte.weight.zero_()
+                restored = load_checkpoint_and_dispatch(restored, tmp_dir, device_map={"": "cpu"})
+
+                self.assertIs(restored.lm_head.weight, restored.transformer.wte.weight)
+                torch.testing.assert_close(restored.transformer.wte.weight, model.transformer.wte.weight)
+                with torch.no_grad():
+                    torch.testing.assert_close(restored(inputs).logits, expected)
 
 
 class BigModelingTester(unittest.TestCase):
@@ -851,26 +874,6 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
-
-    def test_load_checkpoint_and_dispatch_omitted_tied_weight(self):
-        config = GPT2Config(vocab_size=17, n_positions=8, n_embd=8, n_layer=1, n_head=2)
-        model = GPT2LMHeadModel(config).eval()
-        inputs = torch.tensor([[1, 2, 3]])
-        with torch.no_grad():
-            expected = model(inputs).logits
-
-        for max_shard_size in ("10GB", "1KB"):
-            with self.subTest(max_shard_size=max_shard_size), TemporaryDirectory() as tmp_dir:
-                Accelerator(cpu=True).save_model(model, tmp_dir, max_shard_size=max_shard_size)
-                restored = GPT2LMHeadModel(config).eval()
-                with torch.no_grad():
-                    restored.transformer.wte.weight.zero_()
-                restored = load_checkpoint_and_dispatch(restored, tmp_dir, device_map={"": "cpu"})
-
-                self.assertIs(restored.lm_head.weight, restored.transformer.wte.weight)
-                torch.testing.assert_close(restored.transformer.wte.weight, model.transformer.wte.weight)
-                with torch.no_grad():
-                    torch.testing.assert_close(restored(inputs).logits, expected)
 
     def test_load_checkpoint_and_dispatch_device_map_none(self):
         model = ModelForTest()
