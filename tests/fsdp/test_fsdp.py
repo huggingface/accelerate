@@ -17,6 +17,7 @@ import functools
 import os
 import tempfile
 from contextlib import nullcontext
+from pathlib import Path
 
 import torch
 from transformers import AutoModel
@@ -38,7 +39,14 @@ from accelerate.test_utils.testing import (
     run_first,
     slow,
 )
-from accelerate.utils import is_bf16_available, is_fp16_available, is_hpu_available, patch_environment, set_seed
+from accelerate.utils import (
+    is_bf16_available,
+    is_fp16_available,
+    is_hpu_available,
+    merge_fsdp_weights,
+    patch_environment,
+    set_seed,
+)
 from accelerate.utils.constants import (
     FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
@@ -170,6 +178,46 @@ class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
 
         assert scaler.state_dict() == expected
         assert optimizer.state
+
+
+class MergeFSDPWeightsTest(AccelerateTestCase):
+    """`merge_fsdp_weights` must not delete the merged weights along with the checkpoint directory."""
+
+    def _save_checkpoint(self, checkpoint_dir):
+        import torch.distributed.checkpoint as dcp
+
+        dcp.save({"model": torch.nn.Linear(4, 2).state_dict()}, checkpoint_id=str(checkpoint_dir))
+
+    def test_refuses_to_merge_inside_checkpoint_dir_that_is_removed(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_dir = Path(tmp_dir) / "pytorch_model_fsdp_0"
+            self._save_checkpoint(checkpoint_dir)
+
+            for output_path in (checkpoint_dir, checkpoint_dir / "merged"):
+                with self.assertRaises(ValueError):
+                    merge_fsdp_weights(checkpoint_dir, output_path, remove_checkpoint_dir=True)
+                assert checkpoint_dir.exists()
+                assert not (checkpoint_dir / "model.safetensors").exists()
+
+    def test_output_path_inside_checkpoint_dir_kept_when_not_removing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_dir = Path(tmp_dir) / "pytorch_model_fsdp_0"
+            self._save_checkpoint(checkpoint_dir)
+
+            merge_fsdp_weights(checkpoint_dir, checkpoint_dir, remove_checkpoint_dir=False)
+
+            assert (checkpoint_dir / "model.safetensors").exists()
+
+    def test_removes_checkpoint_dir_when_output_path_is_outside(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_dir = Path(tmp_dir) / "pytorch_model_fsdp_0"
+            output_path = Path(tmp_dir) / "merged"
+            self._save_checkpoint(checkpoint_dir)
+
+            merge_fsdp_weights(checkpoint_dir, output_path, remove_checkpoint_dir=True)
+
+            assert not checkpoint_dir.exists()
+            assert (output_path / "model.safetensors").exists()
 
 
 @require_non_cpu

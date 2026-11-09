@@ -502,6 +502,12 @@ def merge_fsdp_weights(
             Whether to save the merged weights with safetensors (recommended).
         remove_checkpoint_dir (`bool`, *optional*, defaults to `False`):
             Whether to remove the checkpoint directory after merging.
+
+    Raises:
+        ValueError:
+            If `checkpoint_dir` doesn't exist, or if `remove_checkpoint_dir=True` and `output_path` is
+            `checkpoint_dir` or one of its subdirectories (the merged weights would be deleted together with the
+            sharded checkpoints).
     """
     checkpoint_dir = Path(checkpoint_dir)
     from accelerate.state import PartialState
@@ -522,6 +528,15 @@ def merge_fsdp_weights(
             err += " However, a potential optimizer checkpoint directory exists."
             err += f"Please try passing in {checkpoint_dir}/optimizer_0 instead."
         raise ValueError(err)
+
+    # Verify that the merged weights won't be deleted along with the checkpoint directory
+    output_path = Path(output_path)
+    if remove_checkpoint_dir and output_path.resolve().is_relative_to(checkpoint_dir.resolve()):
+        raise ValueError(
+            f"The merged weights would be saved inside {checkpoint_dir}, which is removed afterwards when "
+            f"`remove_checkpoint_dir=True`. Please pass an `output_path` outside of the checkpoint directory or "
+            f"set `remove_checkpoint_dir=False`."
+        )
 
     # To setup `save` to work
     state = PartialState()
