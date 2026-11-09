@@ -35,7 +35,13 @@ import torch.utils.hooks as hooks
 from accelerate.utils.dataclasses import FP8BackendType
 
 from .big_modeling import _attach_context_parallel_hooks, _refuse_recurrent_layers_under_sequence_parallelism
-from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
+from .checkpointing import (
+    load_accelerator_state,
+    load_custom_state,
+    save_accelerator_state,
+    save_custom_state,
+)
+from .checkpointing import _gradient_key
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
@@ -3636,8 +3642,25 @@ class Accelerator:
         # payloads stay aligned with whatever model list survives them.
         gradients = []
         for model in self._models:
-            grads = {name: param.grad for name, param in model.named_parameters() if param.grad is not None}
-            gradients.append({"model_name": get_pretty_name(model), "gradients": grads} if grads else {})
+            # Only a save inside an accumulation window has a partial sum to keep. At a sync boundary the
+            # gradients were already consumed by the optimizer step (or zeroed with `set_to_none=False`),
+            # so writing them would bloat every normal checkpoint with a model-sized file and load would
+            # put already-consumed gradients back onto the parameters.
+            grads = (
+                {name: param.grad for name, param in model.named_parameters() if param.grad is not None}
+                if not self.gradient_state.sync_gradients
+                else {}
+            )
+            if grads:
+                gradients.append(
+                    {
+                        "model_name": get_pretty_name(model),
+                        "gradient_key": _gradient_key(model),
+                        "gradients": grads,
+                    }
+                )
+            else:
+                gradients.append({})
 
         save_location = save_accelerator_state(
             output_dir,

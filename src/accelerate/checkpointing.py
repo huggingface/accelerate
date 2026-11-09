@@ -56,6 +56,27 @@ from .state import PartialState
 logger = get_logger(__name__)
 
 
+def _gradient_key(model):
+    """
+    Stable, recreation-safe key that identifies a model's partial-gradient file.
+
+    Model weights are reloaded from the checkpoint *before* gradients are restored, so this key is
+    identical at save and load time for the same model. It folds in the parameter names, shapes, and a
+    sample of the parameter values: two models that share a class name (e.g. two `nn.Linear`) but were
+    trained differently have distinct weights, so the key disambiguates them even when their class name
+    collides and the model list shifts (a load hook removes or adds a model) between save and load.
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+    for name, param in sorted(model.named_parameters(), key=lambda kv: kv[0]):
+        h.update(name.encode("utf-8"))
+        h.update(str(tuple(param.shape)).encode("utf-8"))
+        flat = param.detach().cpu().reshape(-1)
+        h.update(flat[:64].numpy().tobytes())
+    return h.hexdigest()
+
+
 def save_accelerator_state(
     output_dir: str,
     model_states: list[dict],
@@ -270,19 +291,52 @@ def load_accelerator_state(
     # saved per process (mid-window ranks hold different local gradients).
     # Payloads embed the model name; if a load hook removed a model and
     # shifted the indices, match by name instead of applying blindly.
+    # Partial gradients from an interrupted gradient accumulation window, saved
+    # per process. Match each file to the right model:
+    #   1. by a stable, recreation-safe `gradient_key` (parameter signature + a
+    #      value sample) — this is the only reliable way to tell two models that
+    #      share a class name (e.g. two `nn.Linear`) apart when the model list
+    #      shifts (a load hook removed or added a model) between save and load;
+    #   2. then by position + name for anything still unmatched (value drift, or
+    #      two genuinely identical models whose key is not unique).
+    # A missing file or a name that no longer matches must never let one model
+    # load another's gradients.
+    gradient_files = sorted(input_dir.glob(f"{GRADIENTS_NAME}_*_{process_index}.pt"))
+    file_payloads = {f: torch.load(f, map_location=map_location, **load_kwargs) for f in gradient_files}
+    claimed = set()
+    model_payload = {}
+    # Pass 1: exact gradient_key match.
     for i, model in enumerate(models):
-        input_gradients_file = input_dir.joinpath(f"{GRADIENTS_NAME}_{i}_{process_index}.pt")
-        payload = None
-        if input_gradients_file.exists():
-            payload = torch.load(input_gradients_file, map_location=map_location, **load_kwargs)
-        if payload is not None and payload.get("model_name") != get_pretty_name(model):
-            for candidate in sorted(input_dir.glob(f"{GRADIENTS_NAME}_*_{process_index}.pt")):
-                if candidate == input_gradients_file:
-                    continue
-                shifted = torch.load(candidate, map_location=map_location, **load_kwargs)
-                if shifted.get("model_name") == get_pretty_name(model):
-                    payload = shifted
-                    break
+        key = _gradient_key(model)
+        for f, payload in file_payloads.items():
+            if f in claimed:
+                continue
+            if payload.get("gradient_key") == key:
+                model_payload[i] = payload
+                claimed.add(f)
+                break
+    # Pass 2: position + name match (the saved name agrees with the model now at that index).
+    for i, model in enumerate(models):
+        if i in model_payload:
+            continue
+        f = input_dir.joinpath(f"{GRADIENTS_NAME}_{i}_{process_index}.pt")
+        payload = file_payloads.get(f)
+        if payload is not None and payload.get("model_name") == get_pretty_name(model):
+            model_payload[i] = payload
+            claimed.add(f)
+            continue
+        # A displaced file (index shifted) is reassigned by name to an unclaimed model.
+        name = get_pretty_name(model)
+        for f2, payload in file_payloads.items():
+            if f2 in claimed:
+                continue
+            if payload.get("model_name") == name:
+                model_payload[i] = payload
+                claimed.add(f2)
+                break
+
+    for i, model in enumerate(models):
+        payload = model_payload.get(i)
         if not payload:
             logger.info(f"No partial gradient state for model {i}")
             continue

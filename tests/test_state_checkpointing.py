@@ -263,6 +263,119 @@ class CheckpointTest(AccelerateTestCase):
             resumed = train(save_at=4)
             assert uninterrupted == resumed
 
+    def test_save_at_sync_boundary_skips_consumed_gradients(self):
+        # Gradients left on the parameters after a completed optimizer step (no accumulation, or
+        # zero_grad(set_to_none=False)) are not a partial accumulation and must not be saved.
+        # https://github.com/huggingface/accelerate/pull/4504#discussion_r4507243257
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_dir = os.path.join(tmpdir, "ckpt")
+            accelerator = Accelerator(cpu=True, project_dir=tmpdir)
+            model = torch.nn.Linear(1, 1, bias=False)
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+            model, optimizer = accelerator.prepare(model, optimizer)
+            optimizer.zero_grad()
+            accelerator.backward(model(torch.tensor([1.0])).pow(2).sum())
+            optimizer.step()
+            assert model.weight.grad is not None
+            accelerator.save_state(save_dir, safe_serialization=self.use_safetensors)
+            assert not os.path.exists(os.path.join(save_dir, "gradients_0_0.pt"))
+
+            accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2, project_dir=tmpdir)
+            model = torch.nn.Linear(1, 1, bias=False)
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+            model, optimizer = accelerator.prepare(model, optimizer)
+            for x in (1.0, 2.0):
+                with accelerator.accumulate(model):
+                    accelerator.backward(model(torch.tensor([x])).pow(2).sum())
+                    optimizer.step()
+                    optimizer.zero_grad(set_to_none=False)
+            accelerator.save_state(save_dir, safe_serialization=self.use_safetensors)
+            assert not os.path.exists(os.path.join(save_dir, "gradients_0_0.pt"))
+
+    def test_two_same_named_models_keep_gradients_distinct(self):
+        # Reviewer follow-up (PR #4504): two nn.Linear models share the class name "Linear". Their
+        # partial gradients must stay matched to the right model; a name collision must not let one
+        # model load the other's gradients, and a model with no partial gradient must not steal one.
+        with tempfile.TemporaryDirectory() as tmpdir:
+
+            def make():
+                set_seed(0)
+                accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2, project_dir=tmpdir)
+                first = torch.nn.Linear(2, 2, bias=False)
+                second = torch.nn.Linear(2, 2, bias=False)
+                first, second = accelerator.prepare(first, second)
+                return accelerator, first, second
+
+            # Both models hold partial gradients at save (a single accumulate window so neither
+            # call reaches a sync boundary).
+            accelerator, first, second = make()
+            with accelerator.accumulate(first, second):
+                accelerator.backward((first(torch.randn(2, 2)) ** 2).sum())
+                accelerator.backward((second(torch.randn(2, 2)) ** 2).sum())
+            save_dir = os.path.join(tmpdir, "ckpt")
+            accelerator.save_state(save_dir, safe_serialization=self.use_safetensors)
+            saved_first = first.weight.grad.detach().clone()
+            saved_second = second.weight.grad.detach().clone()
+            assert not torch.equal(saved_first, saved_second)
+
+            accelerator, first, second = make()
+            accelerator.load_state(save_dir)
+            assert torch.equal(first.weight.grad, saved_first)
+            assert torch.equal(second.weight.grad, saved_second)
+
+            # Only the first model holds a partial gradient: the second must stay grad-free,
+            # not inherit the first model's gradient via the name collision.
+            accelerator, first, second = make()
+            with accelerator.accumulate(first):
+                accelerator.backward((first(torch.randn(2, 2)) ** 2).sum())
+            accelerator.save_state(save_dir, safe_serialization=self.use_safetensors)
+            accelerator, first, second = make()
+            accelerator.load_state(save_dir)
+            assert first.weight.grad is not None
+            assert second.weight.grad is None
+
+    def test_two_same_named_models_shift_keeps_gradients_matched(self):
+        # Reviewer follow-up (PR #4504): two nn.Linear models share the class name "Linear". If a load
+        # hook removes the first model, the survivor shifts to index 0 but must still receive its own
+        # (former index 1) partial gradients, not the removed model's. A name-only match would grab the
+        # removed model's file because the class name still collides.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_dir = os.path.join(tmpdir, "ckpt")
+
+            def make():
+                set_seed(0)
+                accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2, project_dir=tmpdir)
+                first = torch.nn.Linear(2, 2, bias=False)
+                second = torch.nn.Linear(2, 2, bias=False)
+                first, second = accelerator.prepare(first, second)
+                return accelerator, first, second
+
+            accelerator, first, second = make()
+            with accelerator.accumulate(first, second):
+                accelerator.backward((first(torch.randn(2, 2)) ** 2).sum())
+                accelerator.backward((second(torch.randn(2, 2)) ** 2).sum())
+            saved_second = second.weight.grad.detach().clone()
+            accelerator.save_state(save_dir)
+
+            accelerator, first, second = make()
+
+            def remove_first(models, input_dir):
+                models.pop(0)
+                for prefix in ("model", "pytorch_model"):
+                    base = os.path.join(input_dir, f"{prefix}.safetensors")
+                    shifted = os.path.join(input_dir, f"{prefix}_1.safetensors")
+                    if os.path.exists(shifted):
+                        os.replace(shifted, base)
+                    base_bin = os.path.join(input_dir, f"{prefix}.bin")
+                    shifted_bin = os.path.join(input_dir, f"{prefix}_1.bin")
+                    if os.path.exists(shifted_bin):
+                        os.replace(shifted_bin, base_bin)
+
+            accelerator.register_load_state_pre_hook(remove_first)
+            accelerator.load_state(save_dir)
+            assert second.weight.grad is not None
+            assert torch.equal(second.weight.grad, saved_second)
+
     def test_overwrite_checkpoint_removes_stale_gradients(self):
         # Reviewer case 2 (PR #4504): saving into an existing directory at a
         # window boundary (no grads) must remove the gradients file written
@@ -319,9 +432,8 @@ class CheckpointTest(AccelerateTestCase):
 
             # Save mid-window with both models holding partial gradients
             accelerator, first, second = make_pair()
-            with accelerator.accumulate(first):
+            with accelerator.accumulate(first, second):
                 accelerator.backward(first.a.pow(2).sum())
-            with accelerator.accumulate(second):
                 accelerator.backward(second.alpha.pow(3).sum())
             accelerator.save_state(save_dir)
             saved_second_grad = second.alpha.grad.detach().clone()
