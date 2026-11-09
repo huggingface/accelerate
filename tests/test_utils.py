@@ -62,6 +62,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
+from accelerate.utils.environment import check_cuda_fp8_capability, get_driver_version, get_gpu_info
 from accelerate.utils.operations import is_namedtuple
 
 
@@ -71,6 +72,42 @@ if is_torch_xla_available():
     from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
+
+
+@pytest.mark.parametrize("linesep", ["\n", "\r\n"])
+@pytest.mark.parametrize("num_gpus", [1, 2])
+def test_nvidia_smi_gpu_info(linesep, num_gpus):
+    names = ["NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 4080"][:num_gpus]
+    # universal_newlines=True normalizes subprocess output to LF, including on Windows.
+    output = "".join(f"{num_gpus}, {name}\n" for name in names)
+    with (
+        patch("accelerate.utils.environment.os.linesep", linesep),
+        patch("accelerate.utils.environment.subprocess.check_output", return_value=output),
+    ):
+        assert get_gpu_info() == (names, num_gpus)
+
+
+@pytest.mark.parametrize("linesep", ["\n", "\r\n"])
+@pytest.mark.parametrize("num_gpus", [1, 2])
+def test_nvidia_smi_driver_version(linesep, num_gpus):
+    with (
+        patch("accelerate.utils.environment.os.linesep", linesep),
+        patch("accelerate.utils.environment.subprocess.check_output", return_value="550.40.07\n" * num_gpus),
+    ):
+        assert get_driver_version() == "550.40.07"
+
+
+@pytest.mark.parametrize("linesep", ["\n", "\r\n"])
+@pytest.mark.parametrize("capability, expected", [("8.0", False), ("8.9", True)])
+def test_nvidia_smi_fp8_capability(linesep, capability, expected):
+    with (
+        patch("accelerate.utils.environment.os.linesep", linesep),
+        patch("accelerate.utils.environment.subprocess.check_output", return_value=f"{capability}\n{capability}\n"),
+        patch("torch.cuda.get_device_capability", return_value=(8, 9)) as get_device_capability,
+    ):
+        # Bypass the cache so each case exercises parsing without affecting other tests.
+        assert check_cuda_fp8_capability.__wrapped__() is expected
+        get_device_capability.assert_not_called()
 
 
 class UtilsTester(unittest.TestCase):

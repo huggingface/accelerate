@@ -174,7 +174,7 @@ def get_gpu_info():
         [_nvidia_smi(), "--query-gpu=count,name", "--format=csv,noheader"], universal_newlines=True
     )
     output = output.strip()
-    gpus = output.split(os.linesep)
+    gpus = output.splitlines()
     # Get names from output
     gpu_count = len(gpus)
     gpu_names = [gpu.split(",")[1].strip() for gpu in gpus]
@@ -191,7 +191,7 @@ def get_driver_version():
         [_nvidia_smi(), "--query-gpu=driver_version", "--format=csv,noheader"], universal_newlines=True
     )
     output = output.strip()
-    return output.split(os.linesep)[0]
+    return output.splitlines()[0]
 
 
 def check_cuda_p2p_ib_support():
@@ -237,7 +237,7 @@ def check_cuda_fp8_capability():
         )
         output = output.strip()
         # we take the first GPU's compute capability
-        compute_capability = tuple(map(int, output.split(os.linesep)[0].split(".")))
+        compute_capability = tuple(map(int, output.splitlines()[0].split(".")))
     except Exception:
         compute_capability = torch.cuda.get_device_capability()
 
