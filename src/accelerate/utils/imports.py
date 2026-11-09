@@ -89,10 +89,6 @@ def is_pytest_available():
     return _is_package_available("pytest")
 
 
-def is_msamp_available():
-    return _is_package_available("msamp", "ms-amp")
-
-
 def is_schedulefree_available():
     return _is_package_available("schedulefree")
 
@@ -157,10 +153,6 @@ def is_deepspeed_available():
     return _is_package_available("deepspeed")
 
 
-def is_pippy_available():
-    return is_torch_version(">=", "2.4.0")
-
-
 def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
     if is_torch_xla_available(check_is_tpu=True):
@@ -186,7 +178,7 @@ def is_fp16_available():
 
 def is_fp8_available():
     "Checks if fp8 is supported"
-    return is_msamp_available() or is_transformer_engine_available() or is_torchao_available()
+    return is_transformer_engine_available() or is_torchao_available()
 
 
 def is_4bit_bnb_available():
@@ -531,12 +523,6 @@ def deepspeed_required(func):
         return func(*args, **kwargs)
 
     return wrapper
-
-
-def is_weights_only_available():
-    # Weights only with allowlist was added in 2.4.0
-    # ref: https://github.com/pytorch/pytorch/pull/124331
-    return is_torch_version(">=", "2.4.0")
 
 
 def is_numpy_available(min_version="1.25.0"):

@@ -14,7 +14,6 @@
 
 import inspect
 import unittest
-from unittest import skip
 
 import torch
 
@@ -27,11 +26,8 @@ from accelerate.test_utils import (
     execute_subprocess_async,
     get_launch_command,
     path_in_accelerate_package,
-    require_huggingface_suite,
     require_multi_device,
     require_non_torch_xla,
-    require_pippy,
-    require_torchvision,
     run_first,
     torch_device,
 )
@@ -42,7 +38,6 @@ class MultiDeviceTester(unittest.TestCase):
     test_file_path = path_in_accelerate_package("test_utils", "scripts", "test_script.py")
     data_loop_file_path = path_in_accelerate_package("test_utils", "scripts", "test_distributed_data_loop.py")
     operation_file_path = path_in_accelerate_package("test_utils", "scripts", "test_ops.py")
-    pippy_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_pippy.py")
     merge_weights_file_path = path_in_accelerate_package("test_utils", "scripts", "test_merge_weights.py")
 
     @run_first
@@ -103,21 +98,6 @@ class MultiDeviceTester(unittest.TestCase):
             env_kwargs.update(cuda_visible_devices="0,1")
 
         with patch_environment(**env_kwargs):
-            execute_subprocess_async(cmd)
-
-    @run_first
-    @require_pippy
-    @require_torchvision
-    @require_multi_device
-    @require_huggingface_suite
-    @skip("Will soon deprecate pippy")
-    def test_pippy(self):
-        """
-        Checks the integration with the pippy framework
-        """
-        print(f"Found {device_count} {torch_device} devices")
-        cmd = get_launch_command(multi_gpu=True, num_processes=device_count) + [self.pippy_file_path]
-        with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 
 

@@ -15,8 +15,11 @@ import torch
 from torch import nn
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper, offload_wrapper
 
-from accelerate.test_utils import require_cuda
-from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate.test_utils import torch_device
+from accelerate.test_utils.testing import AccelerateTestCase, require_cuda_or_xpu
+
+
+device_module = getattr(torch, torch_device, torch.cuda)
 
 
 def offloaded(module):
@@ -44,7 +47,7 @@ class CapturingBlock(Block):
         return hidden_states + self.down(torch.nn.functional.silu(inner))
 
 
-@require_cuda
+@require_cuda_or_xpu
 class ActivationCheckpointingOffloadTester(AccelerateTestCase):
     @staticmethod
     def _grads(model, x):
@@ -54,8 +57,8 @@ class ActivationCheckpointingOffloadTester(AccelerateTestCase):
 
     def test_matches_unwrapped_gradients(self):
         torch.manual_seed(0)
-        blocks = [Block().cuda() for _ in range(3)]
-        x = torch.randn(2, 16, 64, device="cuda")
+        blocks = [Block().to(torch_device) for _ in range(3)]
+        x = torch.randn(2, 16, 64, device=torch_device)
         expected = self._grads(nn.Sequential(*blocks), x.clone())
         for block in blocks:
             block.zero_grad(set_to_none=True)
@@ -73,12 +76,12 @@ class ActivationCheckpointingOffloadTester(AccelerateTestCase):
 
         def held_after_forward(wrap):
             torch.manual_seed(0)
-            blocks = nn.Sequential(*[wrap(Block().cuda()) for _ in range(4)])
-            x = torch.randn(4, 512, 64, device="cuda", requires_grad=True)
-            torch.cuda.synchronize()
-            before = torch.cuda.memory_allocated()
+            blocks = nn.Sequential(*[wrap(Block().to(torch_device)) for _ in range(4)])
+            x = torch.randn(4, 512, 64, device=torch_device, requires_grad=True)
+            device_module.synchronize()
+            before = device_module.memory_allocated()
             out = blocks(x)  # keep `out` alive, so the graph it holds is counted
-            held = torch.cuda.memory_allocated() - before
+            held = device_module.memory_allocated() - before
             out.sum().backward()
             assert x.grad is not None
             return held
@@ -94,8 +97,8 @@ class ActivationCheckpointingOffloadTester(AccelerateTestCase):
         tensor objects it passes to the layers, and reading them before the backward pass must work.
         """
         torch.manual_seed(0)
-        block = offloaded(Block().cuda())
-        x = torch.randn(2, 32, 64, device="cuda", requires_grad=True)
+        block = offloaded(Block().to(torch_device))
+        x = torch.randn(2, 32, 64, device=torch_device, requires_grad=True)
         out = block(x)
         assert x.untyped_storage().size() > 0
         assert torch.isfinite(x.float().sum())
@@ -109,8 +112,8 @@ class ActivationCheckpointingOffloadTester(AccelerateTestCase):
 
     def test_captured_intermediate_keeps_gradient(self):
         torch.manual_seed(0)
-        block = offloaded(CapturingBlock().cuda())
+        block = offloaded(CapturingBlock().to(torch_device))
         captured = []
-        x = torch.randn(2, 16, 64, device="cuda", requires_grad=True)
+        x = torch.randn(2, 16, 64, device=torch_device, requires_grad=True)
         block(x, capture_list=captured).sum().backward()
         assert captured and captured[0].requires_grad

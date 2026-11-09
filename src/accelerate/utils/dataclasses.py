@@ -32,22 +32,16 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union, get_a
 import torch
 
 from .constants import (
-    BETA_CP_AVAILABLE_PYTORCH_VERSION,
-    BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
-    FSDP2_PYTORCH_VERSION,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
-    MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
-    XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
     is_cuda_available,
     is_hpu_available,
     is_mlu_available,
-    is_msamp_available,
     is_musa_available,
     is_neuron_available,
     is_npu_available,
@@ -161,14 +155,6 @@ class DistributedDataParallelKwargs(KwargsHandler):
     [wrapper](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) for more
     information on each argument.
 
-    <Tip warning={true}>
-
-    `gradient_as_bucket_view` is only available in PyTorch 1.7.0 and later versions.
-
-    `static_graph` is only available in PyTorch 1.11.0 and later versions.
-
-    </Tip>
-
     Example:
 
     ```python
@@ -246,13 +232,6 @@ class GradScalerKwargs(KwargsHandler):
     `torch.amp.GradScaler` or `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this
     [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument.
 
-    <Tip warning={true}>
-
-    `torch.cuda.amp.GradScaler` is only available in PyTorch 1.5.0 and later versions, and `torch.amp.GradScaler` is
-    only available in PyTorch 2.4.0 and later versions.
-
-    </Tip>
-
     Example:
 
     ```python
@@ -302,8 +281,6 @@ class InitProcessGroupKwargs(KwargsHandler):
 
 
 # Literals
-Backend = Literal["MSAMP", "TE"]
-OptLevel = Literal["O1", "O2"]
 FP8Format = Literal["HYBRID", "E4M3", "E5M2"]
 AmaxComputeAlgorithm = Literal["max", "most_recent"]
 
@@ -436,48 +413,6 @@ class TERecipeKwargs(KwargsHandler):
             self.use_mxfp8_block_scaling = parse_flag_from_env(env_prefix + "USE_MXFP8_BLOCK_SCALING")
 
 
-@dataclass
-class MSAMPRecipeKwargs(KwargsHandler):
-    """
-    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
-    training with `ms-amp`.
-    """
-
-    opt_level: OptLevel = None
-
-    def __post_init__(self):
-        env_prefix = "ACCELERATE_FP8_"
-        if self.opt_level is None:
-            self.opt_level = os.environ.get(env_prefix + "OPT_LEVEL", "O2")
-        if self.opt_level not in get_args(OptLevel):
-            raise ValueError(f"`opt_level` must be one of {' or '.join(get_args(OptLevel))}")
-
-
-@dataclass
-class FP8RecipeKwargs(TERecipeKwargs, MSAMPRecipeKwargs):
-    """
-    Deprecated. Please use one of the proper FP8 recipe kwargs classes such as `TERecipeKwargs` or `MSAMPRecipeKwargs`
-    instead.
-    """
-
-    backend: Backend = None
-
-    def __post_init__(self):
-        env_prefix = "ACCELERATE_FP8_"
-        warnings.warn(
-            "FP8RecipeKwargs is deprecated and will be removed in Accelerate v2.0.0. "
-            "Please use one of the proper FP8 recipe kwargs classes such as TERecipeKwargs or MSAMPRecipeKwargs instead.",
-            FutureWarning,
-        )
-        default_backend = "msamp" if is_msamp_available() else "te"
-        if self.backend is None:
-            self.backend = os.environ.get(env_prefix + "BACKEND", default_backend)
-        self.backend = self.backend.upper()
-        if self.backend not in get_args(Backend):
-            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine) to use `FP8RecipeKwargs`.")
-        super().__post_init__()
-
-
 # Literal
 ProfilerActivity = Literal["cpu", "xpu", "mtia", "cuda", "hpu"]
 
@@ -488,12 +423,6 @@ class ProfileKwargs(KwargsHandler):
     Use this object in your [`Accelerator`] to customize the initialization of the profiler. Please refer to the
     documentation of this [context manager](https://pytorch.org/docs/stable/profiler.html#torch.profiler.profile) for
     more information on each argument.
-
-    <Tip warning={true}>
-
-    `torch.profiler` is only available in PyTorch 1.8.1 and later versions.
-
-    </Tip>
 
     Example:
 
@@ -561,13 +490,11 @@ class ProfileKwargs(KwargsHandler):
         if is_hpu_available():
             profiler_activity_map["hpu"] = torch.profiler.ProfilerActivity.HPU
 
-        if is_torch_version(">=", XPU_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            if torch.xpu.is_available():
-                profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
+        if torch.xpu.is_available():
+            profiler_activity_map["xpu"] = torch.profiler.ProfilerActivity.XPU
 
-        if is_torch_version(">=", MITA_PROFILING_AVAILABLE_PYTORCH_VERSION):
-            if torch.mtia.is_available():
-                profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
+        if torch.mtia.is_available():
+            profiler_activity_map["mtia"] = torch.profiler.ProfilerActivity.MTIA
 
         if activity not in profiler_activity_map:
             raise ValueError(f"Invalid profiler activity: {activity}. Must be one of {list(profiler_activity_map)}.")
@@ -662,13 +589,11 @@ class FP8BackendType(str, enum.Enum):
     Values:
 
         - **TE** -- using TransformerEngine.
-        - **MSAMP** -- using msamp.
     """
 
     # Subclassing str as well as Enum allows the `FP8BackendType` to be JSON-serializable out of the box.
     NO = "NO"
     TE = "TE"
-    MSAMP = "MSAMP"
     AO = "AO"
 
 
@@ -1150,11 +1075,6 @@ class DeepSpeedPlugin:
         transformer_moe_cls_names (`str`, defaults to `None`):
             Comma-separated list of Transformers MoE layer class names (case-sensitive). For example,
             `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention`, `JetMoEBlock`, etc.
-        enable_msamp (`bool`, defaults to `None`):
-            Flag to indicate whether to enable MS-AMP backend for FP8 training.
-        msamp_opt_level (`Optional[Literal["O1", "O2"]]`, defaults to `None`):
-            Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one
-            of ['O1' or 'O2'].
     """
 
     hf_ds_config: Any = field(
@@ -1212,16 +1132,6 @@ class DeepSpeedPlugin:
             " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
         },
     )
-    enable_msamp: bool = field(
-        default=None,
-        metadata={"help": "Flag to indicate whether to enable MS-AMP backend for FP8 training."},
-    )
-    msamp_opt_level: Optional[Literal["O1", "O2"]] = field(
-        default=None,
-        metadata={
-            "help": "Optimization level for MS-AMP (defaults to 'O1'). Only applicable if `enable_msamp` is True. Should be one of ['O1' or 'O2']."
-        },
-    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -1255,12 +1165,6 @@ class DeepSpeedPlugin:
             self.zero3_save_16bit_model = (
                 os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false").lower() == "true"
             )
-        if self.enable_msamp is None:
-            self.enable_msamp = os.environ.get("ACCELERATE_FP8_BACKEND", None) == "MSAMP"
-
-        if self.msamp_opt_level is None:
-            self.msamp_opt_level = os.environ.get("ACCELERATE_FP8_OPT_LEVEL", "O1")
-
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
 
@@ -1318,7 +1222,7 @@ class DeepSpeedPlugin:
                     "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
             }
-            if self.gradient_clipping:
+            if self.gradient_clipping is not None:
                 config["gradient_clipping"] = self.gradient_clipping
             self.hf_ds_config = HfDeepSpeedConfig(config)
 
@@ -1340,19 +1244,6 @@ class DeepSpeedPlugin:
         # NOTE: Set to False by default, will be set to `True` automatically if it's the first plugin passed
         # to the `Accelerator`'s `deepspeed_plugin` param, *or* `AcceleratorState().enable_deepspeed_plugin(plugin_key)` is manually called
         self._set_selected(False)
-
-        # Ignore if it's already set
-        if self.enable_msamp and "msamp" not in self.deepspeed_config:
-            if self.zero_stage == 3:
-                raise NotImplementedError(
-                    "MS-AMP is not supported for ZeRO Stage 3. Please use ZeRO Stage 0, 1, or 2 instead."
-                )
-            if self.msamp_opt_level not in ["O1", "O2"]:
-                raise ValueError("Invalid optimization level for MS-AMP. Please use one of ['O1' or'O2'].")
-            self.deepspeed_config["msamp"] = {
-                "enabled": True,
-                "opt_level": self.msamp_opt_level,
-            }
 
     def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
         mismatches = [] if mismatches is None else mismatches
@@ -1425,13 +1316,6 @@ class DeepSpeedPlugin:
         elif mixed_precision in ("bf16", "fp8"):
             if "bf16" not in ds_config:
                 ds_config["bf16"] = {"enabled": True}
-
-        if mixed_precision == "fp8" and self.enable_msamp:
-            if "msamp" not in ds_config:
-                ds_config["msamp"] = {
-                    "enabled": True,
-                    "opt_level": self.msamp_opt_level,
-                }
 
         if mixed_precision != "no":
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
@@ -1830,10 +1714,6 @@ class FullyShardedDataParallelPlugin:
         if self.fsdp_version is None:
             self.fsdp_version = int(os.environ.get(env_prefix + "VERSION", "1"))
 
-        if self.fsdp_version == 2:
-            if not is_torch_version(">=", FSDP2_PYTORCH_VERSION):
-                raise ImportError(f"FSDP2 requires PyTorch >= {FSDP2_PYTORCH_VERSION}")
-
         if self.sharding_strategy is not None:
             # We cannot properly detect all of the cases, as by default `args.fsdp_sharding_strategy` is set to `fully_shard`
             # Therefore we issue a warning only if the user has explicitly set it inside their plugin
@@ -2087,7 +1967,13 @@ class FullyShardedDataParallelPlugin:
         default_transformer_cls_names_to_wrap = list(no_split_modules) if no_split_modules is not None else []
         if self.auto_wrap_policy == transformer_auto_wrap_policy:
             if self.transformer_cls_names_to_wrap is None:
-                self.transformer_cls_names_to_wrap = default_transformer_cls_names_to_wrap
+                # `_no_split_modules` can name classes this model doesn't instantiate (e.g. the ESMFold blocks of an
+                # `EsmModel`, or the audio layers of a Gemma 4 checkpoint without audio tower)
+                self.transformer_cls_names_to_wrap = [
+                    name
+                    for name in default_transformer_cls_names_to_wrap
+                    if get_module_class_from_name(model, name) is not None
+                ]
             transformer_cls_to_wrap = set()
             for layer_class in self.transformer_cls_names_to_wrap:
                 transformer_cls = get_module_class_from_name(model, layer_class)
@@ -2137,15 +2023,11 @@ class FullyShardedDataParallelPlugin:
             dtype_args = {"param_dtype": dtype, "reduce_dtype": dtype}
             if self.fsdp_version == 1:
                 dtype_args["buffer_dtype"] = buffer_type
-            else:
-                dtype_args["output_dtype"] = dtype
             # TODO(s1ro1): `cast_forward_inputs` for FSDP2?
             self.mixed_precision_policy = MixedPrecision(**dtype_args)
         elif isinstance(self.mixed_precision_policy, dict):
             # Check for incompatible types
-            valid_keys = ["param_dtype", "reduce_dtype"] + (
-                ["buffer_dtype"] if self.fsdp_version == 1 else ["output_dtype"]
-            )
+            valid_keys = ["param_dtype", "reduce_dtype"] + (["buffer_dtype"] if self.fsdp_version == 1 else [])
             missing_keys = [k for k in valid_keys if k not in self.mixed_precision_policy]
             invalid_values = [
                 k for k, v in self.mixed_precision_policy.items() if v not in mixed_precision_mapping.values()
@@ -2209,7 +2091,7 @@ class FullyShardedDataParallelPlugin:
 @dataclass
 class TorchTensorParallelPlugin:
     """
-    This plugin is used to enable tensor parallelism using PyTorch >= 2.0.
+    This plugin is used to enable tensor parallelism using PyTorch.
     """
 
     tp_size: int = field(
@@ -2235,12 +2117,6 @@ class TorchContextParallelConfig:
     )
 
     def __post_init__(self):
-        if not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION):
-            raise ValueError(
-                f"FSDP2-based Context parallelism is only available in PyTorch {BETA_CP_AVAILABLE_PYTORCH_VERSION} and later versions. "
-                "Please upgrade your PyTorch version."
-            )
-
         if self.cp_comm_strategy is None:
             self.cp_comm_strategy = os.environ.get("PARALLELISM_CONFIG_CP_COMM_STRATEGY", "allgather")
         if self.cp_comm_strategy not in ["allgather", "alltoall"]:
@@ -2318,12 +2194,6 @@ class TorchTensorParallelConfig:
     enable_async_tp: bool = False
 
     def __post_init__(self):
-        if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
-            raise ValueError(
-                f"Torch tensor parallelism is only available in PyTorch {BETA_TP_AVAILABLE_PYTORCH_VERSION} and later versions. "
-                "Please upgrade your PyTorch version."
-            )
-
         if not compare_versions("transformers", ">=", BETA_TP_AVAILABLE_TRANSFORMERS_VERSION):
             raise ValueError(f"TP requires transformers >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}")
 
