@@ -14,12 +14,15 @@
 
 import unittest
 from functools import partial
+from itertools import product
 
 import torch
+from parameterized import parameterized
 
 from accelerate import Accelerator, debug_launcher
 from accelerate.state import AcceleratorState, GradientState
 from accelerate.test_utils import require_cpu, require_huggingface_suite
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import GradientAccumulationPlugin
 
 
@@ -140,3 +143,41 @@ class SchedulerTester(unittest.TestCase):
         AcceleratorState._reset_state(True)
         debug_launcher(partial(accumulation_test, num_processes=1))
         debug_launcher(accumulation_test)
+
+
+class SchedulerOptimizerAssociationTester(AccelerateTestCase):
+    @parameterized.expand(product([False, True], ["prepare", "prepare_scheduler"], [0, 1], [False, True]))
+    def test_scheduler_tracks_only_its_optimizer(
+        self, scheduler_after_prepare, prepare_method, optimizer_index, overflow_own_optimizer
+    ):
+        accelerator = Accelerator(cpu=True)
+        # Use a real CPU scaler to exercise overflow without requiring a GPU.
+        accelerator.scaler = torch.amp.GradScaler("cpu")
+        parameters = [torch.nn.Parameter(torch.tensor([1.0])) for _ in range(2)]
+        optimizers = [torch.optim.SGD([p], lr=0.1) for p in parameters]
+        if not scheduler_after_prepare:
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizers[optimizer_index], step_size=1, gamma=0.1)
+        optimizers = accelerator.prepare(*optimizers)
+        if scheduler_after_prepare:
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizers[optimizer_index], step_size=1, gamma=0.1)
+        scheduler = getattr(accelerator, prepare_method)(scheduler)
+
+        overflow_index = optimizer_index if overflow_own_optimizer else 1 - optimizer_index
+        for index, (parameter, optimizer) in enumerate(zip(parameters, optimizers)):
+            loss = parameter.sum()
+            if index == overflow_index:
+                loss = loss * float("inf")
+            accelerator.scaler.scale(loss).backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        scheduler.step()
+
+        self.assertTrue(optimizers[overflow_index].step_was_skipped)
+        self.assertFalse(optimizers[1 - overflow_index].step_was_skipped)
+        expected_lr = 0.1 if overflow_own_optimizer else 0.01
+        self.assertAlmostEqual(scheduler.get_last_lr()[0], expected_lr)
+        self.assertAlmostEqual(parameters[optimizer_index].item(), 1.0 if overflow_own_optimizer else 0.9)
+        accelerator.scaler.scale(parameters[optimizer_index].sum()).backward()
+        optimizers[optimizer_index].step()
+        expected_parameter = 0.9 if overflow_own_optimizer else 0.89
+        torch.testing.assert_close(parameters[optimizer_index], torch.tensor([expected_parameter]))

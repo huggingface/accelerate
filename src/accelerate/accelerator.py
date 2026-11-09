@@ -2704,7 +2704,7 @@ class Accelerator:
         # We try to find the optimizer associated with `scheduler`, the default is the full list.
         optimizer = self._optimizers
         for opt in self._optimizers:
-            if getattr(scheduler, "optimizer", None) == opt.optimizer:
+            if getattr(scheduler, "optimizer", None) in (opt, opt.optimizer):
                 optimizer = opt
                 break
         scheduler = AcceleratedScheduler(
