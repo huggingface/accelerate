@@ -561,6 +561,16 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             accelerator.clip_grad_value_(model.parameters(), 1.0)
             assert model[0].weight.grad.full_tensor().tolist() == [[1.0, 0.5, -1.0, -0.5]] * 4
 
+    def test_prepare_model_without_optimizer(self):
+        """A model can be prepared without an optimizer, for evaluation, and is sharded."""
+        from torch.distributed.fsdp import FSDPModule
+
+        with patch_environment(**self.fsdp_envs[2]):
+            accelerator = Accelerator()
+            model = accelerator.prepare(torch.nn.Sequential(torch.nn.Linear(4, 4)))
+            assert isinstance(model, FSDPModule)
+            model(torch.ones(1, 4, device=accelerator.device))
+
     def test_param_mapping_error_handling(self):
         """Test FSDP2's defensive error handling for parameter mapping failures in tied/non-tied cases."""
         from unittest.mock import Mock, patch
