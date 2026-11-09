@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import inspect
 import re
 import unittest
@@ -460,6 +461,67 @@ class HooksModelTester(unittest.TestCase):
 
         with torch.no_grad():
             _ = test_model(inputs)
+
+    @parameterized.expand(
+        [
+            (storage_dtype, batch_first, separate_projections)
+            for storage_dtype in (torch.float16, torch.float8_e4m3fn)
+            for batch_first in (False, True)
+            for separate_projections in (False, True)
+        ]
+    )
+    def test_layerwise_upcasting_multihead_attention(self, storage_dtype, batch_first, separate_projections):
+        torch.manual_seed(0)
+        model = nn.MultiheadAttention(
+            8,
+            2,
+            batch_first=batch_first,
+            kdim=4 if separate_projections else None,
+            vdim=6 if separate_projections else None,
+        ).eval()
+        reference = copy.deepcopy(model).to(storage_dtype).to(torch.float32)
+        shape = (2, 3) if batch_first else (3, 2)
+        query = torch.randn(*shape, 8)
+        key = torch.randn(*shape, 4) if separate_projections else query
+        value = torch.randn(*shape, 6) if separate_projections else query
+
+        attach_layerwise_casting_hooks(model, storage_dtype=storage_dtype, compute_dtype=torch.float32)
+
+        with torch.no_grad():
+            for need_weights in (False, True):
+                expected, expected_weights = reference(query, key, value, need_weights=need_weights)
+                actual, actual_weights = model(query, key, value, need_weights=need_weights)
+                torch.testing.assert_close(actual, expected)
+                if need_weights:
+                    torch.testing.assert_close(actual_weights, expected_weights)
+                self.assertTrue(all(parameter.dtype == storage_dtype for parameter in model.parameters()))
+
+    @parameterized.expand(
+        [
+            (("attention",), None),
+            (("attention.out_proj",), None),
+            (None, (nn.MultiheadAttention,)),
+            (None, (nn.Linear,)),
+        ]
+    )
+    def test_layerwise_upcasting_multihead_attention_skipped(self, skip_modules_pattern, skip_modules_classes):
+        model = nn.ModuleDict({"attention": nn.MultiheadAttention(8, 2, batch_first=True)}).eval()
+        inputs = torch.randn(2, 3, 8)
+        with torch.no_grad():
+            expected, _ = model["attention"](inputs, inputs, inputs)
+
+        attach_layerwise_casting_hooks(
+            model,
+            storage_dtype=torch.float16,
+            compute_dtype=torch.float32,
+            skip_modules_pattern=skip_modules_pattern,
+            skip_modules_classes=skip_modules_classes,
+        )
+
+        self.assertTrue(all(parameter.dtype == torch.float32 for parameter in model.parameters()))
+        with torch.no_grad():
+            actual, _ = model["attention"](inputs, inputs, inputs)
+        torch.testing.assert_close(actual, expected)
 
     def test_cpu_offload_hook_moves_model(self):
         if not torch.cuda.is_available() and not is_xpu_available():

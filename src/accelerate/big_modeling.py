@@ -676,6 +676,9 @@ def attach_layerwise_casting_hooks(
     `torch.float8_e4m3fn` and upcasted to a higher precision like `torch.bfloat16` during forward pass and downcasted
     back to `torch.float8_e4m3fn` to realize memory savings.
 
+    `torch.nn.MultiheadAttention` is cast as a single unit because it reads its output projection weights directly.
+    Skipping any of its submodules skips the entire attention module.
+
     Args:
         module (`torch.nn.Module`):
             The module whose leaf modules will be cast to a high precision dtype for computation, and to a low
@@ -732,12 +735,16 @@ def _attach_layerwise_casting_hooks(
     non_blocking: bool = False,
     _prefix: str = "",
 ):
-    should_skip = (skip_modules_classes is not None and isinstance(module, skip_modules_classes)) or (
-        skip_modules_pattern is not None and any(re.search(pattern, _prefix) for pattern in skip_modules_pattern)
-    )
-    if should_skip:
-        logger.debug(f'Skipping layerwise casting for layer "{_prefix}"')
-        return
+    modules_to_check = module.named_modules() if isinstance(module, torch.nn.MultiheadAttention) else [("", module)]
+    for name, submodule in modules_to_check:
+        layer_name = ".".join(part for part in (_prefix, name) if part)
+        should_skip = (skip_modules_classes is not None and isinstance(submodule, skip_modules_classes)) or (
+            skip_modules_pattern is not None
+            and any(re.search(pattern, layer_name) for pattern in skip_modules_pattern)
+        )
+        if should_skip:
+            logger.debug(f'Skipping layerwise casting for layer "{_prefix}"')
+            return
 
     if isinstance(module, SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING):
         logger.debug(f'Applying layerwise casting to layer "{_prefix}"')

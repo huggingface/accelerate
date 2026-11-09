@@ -95,4 +95,6 @@ SUPPORTED_PYTORCH_LAYERS_FOR_UPCASTING = (
     torch.nn.ConvTranspose2d,
     torch.nn.ConvTranspose3d,
     torch.nn.Linear,
+    # MultiheadAttention reads out_proj weights directly, without calling its forward hooks.
+    torch.nn.MultiheadAttention,
 )
