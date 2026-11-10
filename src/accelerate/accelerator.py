@@ -1651,8 +1651,10 @@ class Accelerator:
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
-        # Apply AC if needed
-        if self.state.fsdp_plugin.activation_checkpointing:
+        # Apply AC if needed. A model already prepared, e.g. without its optimizer for evaluation, has it already
+        from torch.distributed.fsdp import FSDPModule
+
+        if self.state.fsdp_plugin.activation_checkpointing and not isinstance(model, FSDPModule):
             model = fsdp2_apply_ac(self, model)
 
         # Apply compile if needed, has to be *after* applying AC
