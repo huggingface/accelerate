@@ -23,7 +23,6 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     get_launch_command,
     path_in_accelerate_package,
-    require_fsdp2,
     require_multi_device,
     require_non_torch_xla,
     require_transformers,
@@ -100,7 +99,6 @@ class TorchUlyssesSPModelChecks(unittest.TestCase):
             _refuse_unsupported_attention_under_sequence_parallelism(model, 2)
 
 
-@require_fsdp2
 @run_first
 @require_non_torch_xla
 @require_multi_device
