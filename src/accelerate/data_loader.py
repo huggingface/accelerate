@@ -114,7 +114,8 @@ class BatchSamplerShard(BatchSampler):
             The index of the current process.
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the shards should be created by splitting a batch to give a piece of it on each process, or by
-            yielding different full batches on each process.
+            yielding different full batches on each process. Splitting preserves list or tuple batches, including when
+            padding the last batch, without modifying batches owned by the sampler.
 
             On two processes with a sampler of `[[0, 1, 2, 3], [4, 5, 6, 7]]`, this will result in:
 
@@ -186,7 +187,7 @@ class BatchSamplerShard(BatchSampler):
             if idx == 0:
                 # Copy the first batch: the padding below may extend `initial_data` in place,
                 # and we must not mutate batches owned by the underlying sampler.
-                initial_data = list(batch)
+                initial_data = batch[:]
             if len(batch) == self.batch_size:
                 # If the batch is full, we yield the part of it this process is responsible of.
                 yield batch[batch_length * self.process_index : batch_length * (self.process_index + 1)]

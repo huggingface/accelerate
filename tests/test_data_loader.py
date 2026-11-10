@@ -483,6 +483,22 @@ class DataLoaderTester(AccelerateTestCase):
         assert list(shards[1]) == [[2, 0]]
         assert sampler.batches == before, f"split_batches=False mutated sampler batches: {sampler.batches}"
 
+    def test_batch_sampler_shard_padding_keeps_tuple_batches(self):
+        class TupleBatchSampler:
+            batch_size = 4
+            drop_last = False
+
+            def __iter__(self):
+                return iter([(0, 1, 2, 3), (4, 5)])
+
+            def __len__(self):
+                return 2
+
+        sampler = TupleBatchSampler()
+        shards = [BatchSamplerShard(sampler, 2, i, split_batches=True, even_batches=True) for i in range(2)]
+        assert list(shards[0]) == [(0, 1), (4, 5)]
+        assert list(shards[1]) == [(2, 3), (0, 1)]
+
     def test_split_batches_validates_dynamic_batch_size(self):
         """
         Tests that split_batches=True raises ValueError when batch_size is None.
