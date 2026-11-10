@@ -29,10 +29,8 @@ from .utils import (
     get_gpu_info,
     is_mps_available,
     is_rocm_available,
-    is_torch_version,
     patch_environment,
 )
-from .utils.constants import ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION
 
 
 def test_launch():
@@ -246,8 +244,7 @@ def notebook_launcher(
                         monitor_interval=monitor_interval,
                         start_method=start_method,
                     )
-                    if is_torch_version(">=", ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION):
-                        launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template
+                    launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template
                     has_numa_options = any(field.name == "numa_options" for field in fields(LaunchConfig))
                     if has_numa_options:
                         from torch.numa.binding import AffinityMode, NumaOptions

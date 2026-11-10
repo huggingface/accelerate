@@ -19,19 +19,11 @@ import pytest
 from accelerate.parallelism_config import ParallelismConfig
 from accelerate.utils import patch_environment
 from accelerate.utils.constants import (
-    BETA_CP_AVAILABLE_PYTORCH_VERSION,
     BETA_SP_AVAILABLE_DEEPSPEED_VERSION,
-    BETA_SP_AVAILABLE_PYTORCH_VERSION,
-    BETA_TP_AVAILABLE_PYTORCH_VERSION,
     BETA_TP_AVAILABLE_TRANSFORMERS_VERSION,
 )
 from accelerate.utils.imports import is_deepspeed_available, is_transformers_available
-from accelerate.utils.versions import compare_versions, is_torch_version
-
-
-def _should_skip_cp_test(cp_size):
-    """Check if CP test should be skipped based on cp_size and torch version."""
-    return cp_size > 1 and not is_torch_version(">=", BETA_CP_AVAILABLE_PYTORCH_VERSION)
+from accelerate.utils.versions import compare_versions
 
 
 def _should_skip_sp_test(sp_size):
@@ -43,18 +35,10 @@ def _should_skip_sp_test(sp_size):
     return not compare_versions("deepspeed", ">=", BETA_SP_AVAILABLE_DEEPSPEED_VERSION)
 
 
-def _should_skip_torch_sp_test(sp_size):
-    """Check if a torch SP test should be skipped based on sp_size and torch version."""
-    return sp_size > 1 and not is_torch_version(">=", BETA_SP_AVAILABLE_PYTORCH_VERSION)
-
-
 def _should_skip_tp_test(tp_size):
-    """Check if TP test should be skipped based on tp_size, torch version, and transformers availability."""
+    """Check if TP test should be skipped based on tp_size and transformers availability."""
     if tp_size <= 1:
         return False
-
-    if not is_torch_version(">=", BETA_TP_AVAILABLE_PYTORCH_VERSION):
-        return True
 
     if not is_transformers_available():
         return True
@@ -120,11 +104,9 @@ class TestParallelismConfig:
         expected_dim_names,
     ):
         # Skip tests based on version requirements
-        if _should_skip_cp_test(cp_size):
-            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
         if _should_skip_tp_test(tp_size):
             pytest.skip(
-                f"tests with `tp_size>1` require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+                f"tests with `tp_size>1` require transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
             )
 
         config = ParallelismConfig(
@@ -160,11 +142,9 @@ class TestParallelismConfig:
     ):
         """Test build_device_mesh creates correct mesh and applies flattening."""
         # Skip tests based on version requirements
-        if _should_skip_cp_test(cp_size):
-            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
         if _should_skip_tp_test(tp_size):
             pytest.skip(
-                f"tests with `tp_size>1` require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+                f"tests with `tp_size>1` require transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
             )
 
         config = ParallelismConfig(
@@ -209,11 +189,9 @@ class TestParallelismConfig:
         tp_size,
         cp_size,
     ):
-        if _should_skip_cp_test(cp_size):
-            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
         if _should_skip_tp_test(tp_size):
             pytest.skip(
-                f"tests with `tp_size>1` require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+                f"tests with `tp_size>1` require transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
             )
 
         new_env = {
@@ -230,10 +208,6 @@ class TestParallelismConfig:
 
     def test_cp_torch_handler(self):
         """Test CP Torch/FSDP2 handler with various configurations."""
-
-        # Any cp_size > 1 requires torch >= BETA_CP_AVAILABLE_PYTORCH_VERSION, we use placeholder for this check as this test doesn't depend on a specific size
-        if _should_skip_cp_test(2):
-            pytest.skip(f"tests with `cp_size>1` require torch >= {BETA_CP_AVAILABLE_PYTORCH_VERSION}")
 
         from accelerate.utils import TorchContextParallelConfig
 
@@ -275,11 +249,9 @@ class TestParallelismConfig:
         self, dp_replicate_size, dp_shard_size, tp_size, sp_size, expected_shape, expected_dim_names
     ):
         """With `sp_backend="torch"`, `sp` is a real mesh dimension, folded into the FSDP and loss meshes."""
-        if _should_skip_torch_sp_test(sp_size):
-            pytest.skip(f"tests with `sp_backend='torch'` require torch >= {BETA_SP_AVAILABLE_PYTORCH_VERSION}")
         if _should_skip_tp_test(tp_size):
             pytest.skip(
-                f"tests with `tp_size>1` require torch >= {BETA_TP_AVAILABLE_PYTORCH_VERSION}, transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
+                f"tests with `tp_size>1` require transformers available and >= {BETA_TP_AVAILABLE_TRANSFORMERS_VERSION}"
             )
 
         config = ParallelismConfig(
@@ -309,9 +281,6 @@ class TestParallelismConfig:
 
     def test_sp_torch_handler(self):
         """Test the SP torch handler is created by default and checked against the backend."""
-        if _should_skip_torch_sp_test(2):
-            pytest.skip(f"tests with `sp_backend='torch'` require torch >= {BETA_SP_AVAILABLE_PYTORCH_VERSION}")
-
         from accelerate.utils import DeepSpeedSequenceParallelConfig, TorchSequenceParallelConfig
 
         pc = ParallelismConfig(sp_size=2, sp_backend="torch")
@@ -333,12 +302,11 @@ class TestParallelismConfig:
 
         from accelerate.utils import DistributedType, TorchSequenceParallelConfig
 
-        if not _should_skip_torch_sp_test(2):
-            pc = ParallelismConfig(sp_size=2)
-            assert pc.sp_backend == "torch" and isinstance(pc.sp_handler, TorchSequenceParallelConfig)
-            pc._resolve_backends(SimpleNamespace(distributed_type=DistributedType.FSDP))
-            assert pc.sp_backend == "torch"
-            assert isinstance(pc.sp_handler, TorchSequenceParallelConfig)
+        pc = ParallelismConfig(sp_size=2)
+        assert pc.sp_backend == "torch" and isinstance(pc.sp_handler, TorchSequenceParallelConfig)
+        pc._resolve_backends(SimpleNamespace(distributed_type=DistributedType.FSDP))
+        assert pc.sp_backend == "torch"
+        assert isinstance(pc.sp_handler, TorchSequenceParallelConfig)
 
         if not _should_skip_sp_test(2):
             from accelerate.utils import DeepSpeedSequenceParallelConfig

@@ -30,18 +30,15 @@ from safetensors.torch import save_file as safe_save_file
 from ..commands.config.default import write_basic_config  # noqa: F401
 from ..logging import get_logger
 from ..state import PartialState
-from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
 from .imports import (
     is_deepspeed_available,
     is_numpy_available,
     is_torch_distributed_available,
     is_torch_xla_available,
-    is_weights_only_available,
 )
 from .modeling import id_tensor_storage
 from .transformer_engine import convert_model
-from .versions import is_torch_version
 
 
 logger = get_logger(__name__)
@@ -55,9 +52,6 @@ def is_compiled_module(module: torch.nn.Module) -> bool:
     """
     Check whether the module was compiled with torch.compile()
     """
-    if not hasattr(torch, "_dynamo"):
-        return False
-
     return isinstance(module, torch._dynamo.eval_frame.OptimizedModule)
 
 
@@ -65,9 +59,6 @@ def has_compiled_regions(module: torch.nn.Module) -> bool:
     """
     Check whether the module has submodules that were compiled with `torch.compile()`.
     """
-    if not hasattr(torch, "_dynamo"):
-        return False
-
     if module._modules:
         for submodule in module.modules():
             if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
@@ -242,11 +233,7 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
     if not is_torch_distributed_available():
         return False
 
-    if is_torch_version(">=", "2.5.0"):
-        from torch.distributed.tensor import DTensor
-    else:
-        # from torch 2.0.0 (oldest supported accelerate torch version), DTensor is in torch.distributed._tensor
-        from torch.distributed._tensor import DTensor
+    from torch.distributed.tensor import DTensor
 
     return any(isinstance(p, DTensor) for p in model.parameters())
 
@@ -314,7 +301,7 @@ def extract_model_from_parallel(
 
         options += (DeepSpeedEngine,)
 
-    if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
+    if is_torch_distributed_available():
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
         options += (FSDP,)
@@ -478,19 +465,15 @@ def load(f, map_location=None, **kwargs):
             Additional keyword arguments to pass to `torch.load()`.
     """
     try:
-        if is_weights_only_available():
-            old_safe_globals = torch.serialization.get_safe_globals()
-            if "weights_only" not in kwargs:
-                kwargs["weights_only"] = True
-            torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS)
-        else:
-            kwargs.pop("weights_only", None)
+        old_safe_globals = torch.serialization.get_safe_globals()
+        if "weights_only" not in kwargs:
+            kwargs["weights_only"] = True
+        torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS)
         loaded_obj = torch.load(f, map_location=map_location, **kwargs)
     finally:
-        if is_weights_only_available():
-            torch.serialization.clear_safe_globals()
-            if old_safe_globals:
-                torch.serialization.add_safe_globals(old_safe_globals)
+        torch.serialization.clear_safe_globals()
+        if old_safe_globals:
+            torch.serialization.add_safe_globals(old_safe_globals)
     return loaded_obj
 
 

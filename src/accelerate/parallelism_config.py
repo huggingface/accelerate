@@ -24,7 +24,6 @@ from accelerate.utils.dataclasses import (
     TorchSequenceParallelConfig,
     TorchTensorParallelConfig,
 )
-from accelerate.utils.versions import is_torch_version
 
 
 if TYPE_CHECKING:
@@ -233,10 +232,7 @@ class ParallelismConfig:
         if self.sp_backend == "deepspeed" and self.sp_size > 1:
             return None
 
-        if is_torch_version(">=", "2.2.0"):
-            from torch.distributed.device_mesh import init_device_mesh
-        else:
-            raise RuntimeError("Building a device_mesh requires to have torch>=2.2.0")
+        from torch.distributed.device_mesh import init_device_mesh
 
         mesh = self._get_mesh()
         if len(mesh) == 0:

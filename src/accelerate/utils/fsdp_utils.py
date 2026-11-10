@@ -97,7 +97,7 @@ def _set_model_state_dict(model, state_dict, adapter_only=False, sd_options=None
 def _prepare_sd_options(fsdp_plugin):
     sd_options = None
 
-    # we use this only for FSDP2, as it requires torch >= 2.6.0 and this api requires torch >= 2.2.0
+    # we use this only for FSDP2
     if fsdp_plugin.fsdp_version == 2:
         from torch.distributed.checkpoint.state_dict import StateDictOptions
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
@@ -506,9 +506,6 @@ def merge_fsdp_weights(
     checkpoint_dir = Path(checkpoint_dir)
     from accelerate.state import PartialState
 
-    if not is_torch_version(">=", "2.3.0"):
-        raise ValueError("`merge_fsdp_weights` requires PyTorch >= 2.3.0`")
-
     # Verify that the checkpoint directory exists
     if not checkpoint_dir.exists():
         model_path_exists = (checkpoint_dir / "pytorch_model_fsdp_0").exists()
@@ -614,9 +611,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             submodule = model.get_submodule(base_param_name)
             old_param = getattr(submodule, local_param_name)
 
-        is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
         casting_dtype = None
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+        is_param_float8_e4m3fn = empty_param.dtype == torch.float8_e4m3fn
 
         if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
             casting_dtype = old_param.dtype

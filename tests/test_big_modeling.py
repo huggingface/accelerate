@@ -50,7 +50,6 @@ from accelerate.test_utils import (
 )
 from accelerate.utils import is_hpu_available, is_xpu_available, offload_state_dict
 from accelerate.utils.memory import clear_device_cache
-from accelerate.utils.versions import is_torch_version
 
 
 logger = logging.getLogger(__name__)
@@ -425,9 +424,7 @@ class BigModelingTester(unittest.TestCase):
         foo = torch.rand(n_vals, device=device_0)  # noqa: F841
 
         # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
-        oom_error = (
-            torch.OutOfMemoryError if is_torch_version(">=", "2.5.0") else torch_accelerator_module.OutOfMemoryError
-        )
+        oom_error = torch.OutOfMemoryError
         try:
             dispatch_model(model, device_map)
         except oom_error as e:
@@ -509,9 +506,7 @@ class BigModelingTester(unittest.TestCase):
 
         original_pointer = model.compute1._hf_hook.weights_map["weight"].data_ptr()
 
-        oom_error = (
-            torch.OutOfMemoryError if is_torch_version(">=", "2.5.0") else torch_accelerator_module.OutOfMemoryError
-        )
+        oom_error = torch.OutOfMemoryError
         with torch.no_grad():
             try:
                 output = model(x)
@@ -661,6 +656,21 @@ class BigModelingTester(unittest.TestCase):
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
+
+    @require_non_hpu  # hpu does not support device indexing "hpu:1"
+    @require_multi_device
+    def test_dispatch_model_multi_devices_compile_fullgraph(self):
+        # A sharded model only carries AlignDevicesHook, whose forward is plain device movement,
+        # so Dynamo must be able to capture it in a single graph.
+        model = BiggerModelForTest()
+        device_map = {"linear1": 0, "linear2": 0, "batchnorm": 1, "linear3": 1, "linear4": 1}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        dispatch_model(model, device_map)
+        output = torch.compile(model, fullgraph=True)(x)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_dispatch_model_copy(self):
