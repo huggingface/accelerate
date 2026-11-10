@@ -14,7 +14,7 @@
 
 import random
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -73,7 +73,10 @@ def _gradient_key(model):
         h.update(name.encode("utf-8"))
         h.update(str(tuple(param.shape)).encode("utf-8"))
         flat = param.detach().cpu().reshape(-1)
-        h.update(flat[:64].numpy().tobytes())
+        # Hash the raw bytes through a uint8 view: `numpy()` cannot represent
+        # bfloat16 (and a few other dtypes), and the key is computed on every
+        # load, so an exotic dtype must not break checkpoint loading.
+        h.update(bytes(flat[:64].contiguous().view(torch.uint8).tolist()))
     return h.hexdigest()
 
 
@@ -287,53 +290,68 @@ def load_accelerator_state(
             model.load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
-    # Partial gradients from an interrupted gradient accumulation window,
-    # saved per process (mid-window ranks hold different local gradients).
-    # Payloads embed the model name; if a load hook removed a model and
-    # shifted the indices, match by name instead of applying blindly.
     # Partial gradients from an interrupted gradient accumulation window, saved
     # per process. Match each file to the right model:
     #   1. by a stable, recreation-safe `gradient_key` (parameter signature + a
-    #      value sample) — this is the only reliable way to tell two models that
-    #      share a class name (e.g. two `nn.Linear`) apart when the model list
-    #      shifts (a load hook removed or added a model) between save and load;
-    #   2. then by position + name for anything still unmatched (value drift, or
-    #      two genuinely identical models whose key is not unique).
-    # A missing file or a name that no longer matches must never let one model
-    # load another's gradients.
+    #      value sample) -- but only when that key is UNIQUE among the saved
+    #      payloads. Two models with identical weights (two fresh `nn.Linear`
+    #      of the same shape) share one key, and no content key can tell their
+    #      gradients apart, so a shared key never claims a file;
+    #   2. then, within each model-name group, the k-th surviving model takes
+    #      the k-th saved payload of that name -- but only while the group's
+    #      payload count does not exceed its model count. More saved payloads
+    #      than models means a load hook removed one of the same-named models,
+    #      and nothing left in the checkpoint can say which survived; dropping
+    #      the group with a warning beats silently restoring a wrong gradient.
     gradient_files = sorted(input_dir.glob(f"{GRADIENTS_NAME}_*_{process_index}.pt"))
     file_payloads = {f: torch.load(f, map_location=map_location, **load_kwargs) for f in gradient_files}
     claimed = set()
     model_payload = {}
-    # Pass 1: exact gradient_key match.
+    # Pass 1: unique gradient_key match.
+    key_to_files: dict[Any, list] = {}
+    for f, payload in file_payloads.items():
+        key = payload.get("gradient_key")
+        if key is not None:
+            key_to_files.setdefault(key, []).append(f)
     for i, model in enumerate(models):
-        key = _gradient_key(model)
-        for f, payload in file_payloads.items():
-            if f in claimed:
-                continue
-            if payload.get("gradient_key") == key:
-                model_payload[i] = payload
-                claimed.add(f)
-                break
-    # Pass 2: position + name match (the saved name agrees with the model now at that index).
+        candidates = key_to_files.get(_gradient_key(model), [])
+        if len(candidates) == 1 and candidates[0] not in claimed:
+            model_payload[i] = file_payloads[candidates[0]]
+            claimed.add(candidates[0])
+    # Pass 2: ordinal match within each name group, refusal when ambiguous.
+    model_names = [get_pretty_name(model) for model in models]
+    model_name_counts: dict[str, int] = {}
+    for name in model_names:
+        model_name_counts[name] = model_name_counts.get(name, 0) + 1
+    payload_name_counts: dict[str, int] = {}
+    for payload in file_payloads.values():
+        name = payload.get("model_name")
+        if name is not None:
+            payload_name_counts[name] = payload_name_counts.get(name, 0) + 1
+    ambiguous_names = {
+        name
+        for name, count in payload_name_counts.items()
+        if count > model_name_counts.get(name, 0)
+    }
+    for name in sorted(ambiguous_names):
+        logger.warning(
+            f"{payload_name_counts[name]} partial gradient payloads are saved for model '{name}'"
+            f" but only {model_name_counts.get(name, 0)} of that name remain; a load hook removed"
+            f" one, so they cannot be told apart and are not restored"
+        )
+    name_queues: dict[str, list] = {}
+    for f, payload in file_payloads.items():
+        if f in claimed:
+            continue
+        name = payload.get("model_name")
+        if name is not None and name not in ambiguous_names:
+            name_queues.setdefault(name, []).append(payload)
     for i, model in enumerate(models):
         if i in model_payload:
             continue
-        f = input_dir.joinpath(f"{GRADIENTS_NAME}_{i}_{process_index}.pt")
-        payload = file_payloads.get(f)
-        if payload is not None and payload.get("model_name") == get_pretty_name(model):
-            model_payload[i] = payload
-            claimed.add(f)
-            continue
-        # A displaced file (index shifted) is reassigned by name to an unclaimed model.
-        name = get_pretty_name(model)
-        for f2, payload in file_payloads.items():
-            if f2 in claimed:
-                continue
-            if payload.get("model_name") == name:
-                model_payload[i] = payload
-                claimed.add(f2)
-                break
+        queue = name_queues.get(model_names[i])
+        if queue:
+            model_payload[i] = queue.pop(0)
 
     for i, model in enumerate(models):
         payload = model_payload.get(i)

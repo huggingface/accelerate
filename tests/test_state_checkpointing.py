@@ -376,6 +376,104 @@ class CheckpointTest(AccelerateTestCase):
             assert second.weight.grad is not None
             assert torch.equal(second.weight.grad, saved_second)
 
+    def test_identical_weight_models_load_their_own_gradients(self):
+        # Reviewer case (PR #4504): two nn.Linear(1, 1) models initialized to
+        # the same weight share one gradient_key, so the key can never claim
+        # their files; the ordinal fallback within the name group must still
+        # give each model its own partial gradient (2.0 vs 3.0 here).
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_dir = os.path.join(tmpdir, "ckpt")
+
+            def make_twins():
+                accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2, project_dir=tmpdir)
+                first = torch.nn.Linear(1, 1, bias=False)
+                second = torch.nn.Linear(1, 1, bias=False)
+                with torch.no_grad():
+                    first.weight.fill_(1.0)
+                    second.weight.fill_(1.0)
+                first, second = accelerator.prepare(first, second)
+                return accelerator, first, second
+
+            accelerator, first, second = make_twins()
+            with accelerator.accumulate(first, second):
+                accelerator.backward(first.weight.pow(2).sum())
+                accelerator.backward((3 * second.weight).sum())
+            accelerator.save_state(save_dir)
+
+            accelerator, first, second = make_twins()
+            accelerator.load_state(save_dir)
+            # backward() divides by the two accumulation steps: 2*1.0/2 and 3*1.0/2
+            assert first.weight.grad is not None
+            assert torch.allclose(first.weight.grad, torch.tensor(1.0))
+            assert second.weight.grad is not None
+            assert torch.allclose(second.weight.grad, torch.tensor(1.5))
+
+    def test_removed_identical_weight_model_leaves_gradients_unrestored(self):
+        # Reviewer case (PR #4504): with identical weights the two payloads
+        # share one gradient_key, and after a load hook removes one of the
+        # same-named models nothing in the checkpoint can say which survived.
+        # The old code handed the survivor the first payload (the removed
+        # model's gradients); now the ambiguous group is dropped with a
+        # warning instead of silently restoring a wrong gradient.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_dir = os.path.join(tmpdir, "ckpt")
+
+            def make_twins():
+                accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2, project_dir=tmpdir)
+                first = torch.nn.Linear(1, 1, bias=False)
+                second = torch.nn.Linear(1, 1, bias=False)
+                with torch.no_grad():
+                    first.weight.fill_(1.0)
+                    second.weight.fill_(1.0)
+                first, second = accelerator.prepare(first, second)
+                return accelerator, first, second
+
+            accelerator, first, second = make_twins()
+            with accelerator.accumulate(first, second):
+                accelerator.backward(first.weight.pow(2).sum())
+                accelerator.backward((3 * second.weight).sum())
+            accelerator.save_state(save_dir)
+
+            accelerator, first, second = make_twins()
+
+            def remove_first(models, input_dir):
+                models.pop(0)
+
+            accelerator.register_load_state_pre_hook(remove_first)
+            accelerator.load_state(save_dir)
+            # The survivor's own gradients (3.0) are indistinguishable from
+            # the removed model's (2.0) by any checkpoint content, so neither
+            # is restored -- never a silent wrong gradient.
+            assert second.weight.grad is None
+
+    def test_bfloat16_gradients_survive_checkpoint_roundtrip(self):
+        # Reviewer case (PR #4504): the gradient_key used to hash parameter
+        # bytes with `flat.numpy()`, which raises "Got unsupported ScalarType
+        # BFloat16" on load for any model carrying bfloat16 parameters -- even
+        # one with no gradient files at all. The key now hashes through a
+        # uint8 view, which works for every dtype.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_dir = os.path.join(tmpdir, "ckpt")
+
+            def make_bf16():
+                accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2, project_dir=tmpdir)
+                model = torch.nn.Linear(2, 2, bias=False).to(torch.bfloat16)
+                model = accelerator.prepare(model)
+                return accelerator, model
+
+            accelerator, model = make_bf16()
+            with accelerator.accumulate(model):
+                accelerator.backward(model.weight.pow(2).sum())
+            saved_grad = model.weight.grad.detach().clone()
+            assert saved_grad.dtype == torch.bfloat16
+            accelerator.save_state(save_dir)
+
+            accelerator, model = make_bf16()
+            accelerator.load_state(save_dir)
+            assert model.weight.grad is not None
+            assert model.weight.grad.dtype == torch.bfloat16
+            assert torch.equal(model.weight.grad, saved_grad)
+
     def test_overwrite_checkpoint_removes_stale_gradients(self):
         # Reviewer case 2 (PR #4504): saving into an existing directory at a
         # window boundary (no grads) must remove the gradients file written
