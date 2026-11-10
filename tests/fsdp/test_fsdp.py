@@ -781,6 +781,40 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
         finally:
             model[0].weight.__class__ = original_class
 
+    def test_fsdp2_no_state_dict_captured_when_cpu_ram_efficient_loading_false(self):
+        """Test that state_dict is not captured during fsdp2_prepare_model when cpu_ram_efficient_loading is False,
+        preventing unsharded parameters from being pinned in memory during sharding (#4511)."""
+        from unittest.mock import Mock, patch
+
+        from accelerate.utils.fsdp_utils import fsdp2_prepare_model
+
+        model = torch.nn.Sequential(torch.nn.Linear(4, 4))
+        state_dict_mock = Mock(side_effect=model.state_dict)
+        model.state_dict = state_dict_mock
+
+        mock_accelerator = Mock()
+        mock_accelerator.mixed_precision = "no"
+        mock_accelerator.torch_device_mesh = None
+        mock_accelerator.device = torch.device("cpu")
+        mock_accelerator.is_main_process = True
+
+        mock_plugin = Mock()
+        mock_plugin.mixed_precision_policy = None
+        mock_plugin.reshard_after_forward = True
+        mock_plugin.cpu_offload = None
+        mock_plugin.cpu_ram_efficient_loading = False
+        mock_plugin.ignored_modules = None
+        mock_accelerator.state.fsdp_plugin = mock_plugin
+
+        with (
+            patch("torch.distributed.fsdp.fully_shard"),
+            patch("accelerate.utils.fsdp_utils.is_compiled_module", return_value=False),
+            patch("accelerate.utils.fsdp_utils.fsdp2_prepare_auto_wrap_policy", return_value=None),
+        ):
+            fsdp2_prepare_model(mock_accelerator, model)
+
+        assert not state_dict_mock.called, "model.state_dict() should not be called when cpu_ram_efficient_loading is False"
+
     def test_compile_regions_fsdp2_preserves_block_class(self):
         """`compile_regions_fsdp2` must use in-place `module.compile()` so module classes are preserved.
 

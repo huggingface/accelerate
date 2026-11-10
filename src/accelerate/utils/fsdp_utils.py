@@ -848,7 +848,11 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             )
 
     # Capture after upcast so dtypes match what `fully_shard` will produce.
-    original_sd = model.state_dict()
+    # Only the CPU-RAM-efficient path reloads it; holding it otherwise keeps every
+    # unsharded parameter alive until all modules are sharded.
+    original_sd = None
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
+        original_sd = model.state_dict()
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
