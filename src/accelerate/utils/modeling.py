@@ -682,7 +682,8 @@ def compute_module_sizes(
             # so use their original size here
             size = tensor.numel() * dtype_byte_size(tensor.dtype)
         else:
-            size = tensor.numel() * min(dtype_size, dtype_byte_size(tensor.dtype))
+            # Floating-point tensors are converted to the requested dtype when loaded, including upcasts.
+            size = tensor.numel() * dtype_size
         name_parts = name.split(".")
         for idx in range(len(name_parts) + 1):
             module_sizes[".".join(name_parts[:idx])] += size

@@ -402,6 +402,36 @@ class ModelingUtilsTester(unittest.TestCase):
         module_sizes = compute_module_sizes(model)
         assert module_sizes == expected_sizes
 
+    @parameterized.expand(
+        [
+            (torch.float16, torch.float32),
+            (torch.bfloat16, torch.float32),
+            (torch.float32, torch.float64),
+            (torch.float32, torch.float16),
+            (torch.float16, "float32"),
+        ]
+    )
+    def test_compute_module_sizes_with_requested_dtype(self, original_dtype, dtype):
+        model = ModelForTest().to(dtype=original_dtype)
+        expected_model = ModelForTest().to(dtype=dtype if isinstance(dtype, torch.dtype) else torch.float32)
+
+        assert compute_module_sizes(model, dtype=dtype) == compute_module_sizes(expected_model)
+
+    def test_compute_module_sizes_with_requested_dtype_and_overrides(self):
+        model = ModelForTest().half()
+        expected_model = ModelForTest().float()
+        expected_model.linear1.half()
+        special_dtypes = {"linear1.weight": torch.float16, "linear1.bias": torch.float16}
+
+        assert compute_module_sizes(model, dtype=torch.float32, special_dtypes=special_dtypes) == compute_module_sizes(
+            expected_model
+        )
+
+    def test_infer_auto_device_map_with_upcast_dtype(self):
+        model = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 4)).half()
+        # The fp16 model occupies 80 bytes, but loading it in fp32 requires 160 bytes.
+        assert infer_auto_device_map(model, max_memory={"cpu": 120}, dtype=torch.float32) == {"": "disk"}
+
     def test_compute_module_total_buffer_size(self):
         model = ModelForTest()
         model.linear1.register_buffer("test_buffer", torch.zeros(10, 10))

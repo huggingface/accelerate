@@ -221,6 +221,34 @@ class BigModelingTester(unittest.TestCase):
         output = model(x)
         torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    def test_load_checkpoint_and_dispatch_with_upcast_dtype(self):
+        model = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 4), nn.Linear(4, 4)).half()
+        x = torch.randn(2, 4)
+        expected = copy.deepcopy(model).float()(x)
+        # The weights occupy 120 bytes in fp16, while loading them in fp32 requires 240 bytes.
+        cpu_budget = 200
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pytorch_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+            load_checkpoint_and_dispatch(
+                model,
+                checkpoint,
+                device_map="auto",
+                max_memory={"cpu": cpu_budget},
+                dtype=torch.float32,
+                offload_folder=tmp_dir,
+            )
+
+            cpu_bytes = sum(
+                tensor.numel() * tensor.element_size()
+                for tensor in model.state_dict().values()
+                if tensor.device.type == "cpu"
+            )
+            assert cpu_bytes <= cpu_budget
+            assert "disk" in model.hf_device_map.values()
+            torch.testing.assert_close(model(x), expected)
+
     def test_cpu_offload_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
         x = torch.randn(2, 3)
