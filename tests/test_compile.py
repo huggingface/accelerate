@@ -59,10 +59,10 @@ class RegionalCompilationTester(unittest.TestCase):
         assert compiled_model._orig_mod is model
 
         # Check that the compiled_model.transformer.h[i] and compiled_model.lm_head are compiled separately
-        assert compiled_model.transformer.h[0]._compiled_call_impl is not None
+        assert isinstance(compiled_model.transformer.h[0], torch._dynamo.eval_frame.OptimizedModule)
         assert isinstance(compiled_model.lm_head, torch._dynamo.eval_frame.OptimizedModule)
-        assert model.transformer.h[0]._compiled_call_impl is None
         assert compiled_model.transformer.h[0].attn.c_attn.weight is model.transformer.h[0].attn.c_attn.weight
+        assert model.transformer.h[0]._compiled_call_impl is None
         assert compiled_model.lm_head._orig_mod is model.lm_head
 
     def test_extract_model_keep_torch_compile(self):
@@ -205,7 +205,7 @@ class RegionalCompilationRebindTester(unittest.TestCase):
         compiled_model(inputs)
 
         assert not hasattr(model, "trace")
-        assert compiled_model.trace == ("twin", "RegionalCompilationBlock")
+        assert compiled_model.trace == ("twin", "OptimizedModule")
 
     def test_no_instance_bound_methods_is_a_no_op(self):
         model, inputs = self._get_model_and_inputs()
@@ -219,7 +219,7 @@ class RegionalCompilationRebindTester(unittest.TestCase):
         compiled_model(inputs)
 
         assert not hasattr(model, "trace")
-        assert compiled_model.trace == ("twin", "RegionalCompilationBlock")
+        assert compiled_model.trace == ("twin", "OptimizedModule")
 
     def test_checkpointed_blocks_are_compiled_across_graph_breaks(self):
         model, inputs = self._get_model_and_inputs()
