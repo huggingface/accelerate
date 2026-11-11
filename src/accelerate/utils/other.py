@@ -18,6 +18,7 @@ import re
 import socket
 from codecs import encode
 from collections import OrderedDict
+from copy import copy
 from functools import partial, reduce
 from types import MethodType
 from typing import Optional
@@ -57,11 +58,14 @@ def is_compiled_module(module: torch.nn.Module) -> bool:
 
 def has_compiled_regions(module: torch.nn.Module) -> bool:
     """
-    Check whether the module has submodules that were compiled with `torch.compile()`.
+    Check whether the module has submodules that were compiled with `torch.compile()` or `module.compile()`.
     """
     if module._modules:
         for submodule in module.modules():
-            if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
+            if (
+                isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule)
+                or submodule._compiled_call_impl is not None
+            ):
                 return True
 
     return False
@@ -119,25 +123,6 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
 
     >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
     >>> compiled_model = compile_regions(model, mode="reduce-overhead")
-    >>> compiled_model.transformer.h[0]
-    OptimizedModule(
-        (_orig_mod): GPT2Block(
-                (ln_1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
-                (attn): GPT2Attention(
-                (c_attn): Conv1D(nf=2304, nx=768)
-                (c_proj): Conv1D(nf=768, nx=768)
-                (attn_dropout): Dropout(p=0.1, inplace=False)
-                (resid_dropout): Dropout(p=0.1, inplace=False)
-            )
-            (ln_2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
-            (mlp): GPT2MLP(
-                (c_fc): Conv1D(nf=3072, nx=768)
-                (c_proj): Conv1D(nf=768, nx=3072)
-                (act): NewGELUActivation()
-                (dropout): Dropout(p=0.1, inplace=False)
-            )
-        )
-    )
     ```
     """
 
@@ -145,7 +130,12 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
         if is_repeated_blocks(module):
             new_module = torch.nn.ModuleList()
             for submodule in module:
-                new_module.append(torch.compile(submodule, **compile_kwargs))
+                # In-place compile of a shallow copy (sharing the parameters): the compiled `_call_impl` runs inside
+                # custom `__call__` wrappers like transformers' gradient checkpointing, so a graph break only splits
+                # the graph.
+                new_submodule = copy(submodule)
+                new_submodule.compile(**compile_kwargs)
+                new_module.append(new_submodule)
         elif has_repeated_blocks(module):
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)

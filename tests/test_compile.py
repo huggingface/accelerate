@@ -17,6 +17,7 @@ from unittest import skip
 
 import torch
 from torch.utils.benchmark import Timer
+from torch.utils.checkpoint import checkpoint
 
 from accelerate.test_utils import require_huggingface_suite, require_non_cpu, require_non_hpu, slow, torch_device
 from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
@@ -58,9 +59,10 @@ class RegionalCompilationTester(unittest.TestCase):
         assert compiled_model._orig_mod is model
 
         # Check that the compiled_model.transformer.h[i] and compiled_model.lm_head are compiled separately
-        assert isinstance(compiled_model.transformer.h[0], torch._dynamo.eval_frame.OptimizedModule)
+        assert compiled_model.transformer.h[0]._compiled_call_impl is not None
         assert isinstance(compiled_model.lm_head, torch._dynamo.eval_frame.OptimizedModule)
-        assert compiled_model.transformer.h[0]._orig_mod is model.transformer.h[0]
+        assert model.transformer.h[0]._compiled_call_impl is None
+        assert compiled_model.transformer.h[0].attn.c_attn.weight is model.transformer.h[0].attn.c_attn.weight
         assert compiled_model.lm_head._orig_mod is model.lm_head
 
     def test_extract_model_keep_torch_compile(self):
@@ -157,6 +159,17 @@ class RegionalCompilationBlock(torch.nn.Module):
         return self.linear(x)
 
 
+class CheckpointedRegionalCompilationBlock(RegionalCompilationBlock):
+    # Same structure as transformers' `GradientCheckpointingLayer`
+    def __call__(self, *args, **kwargs):
+        return checkpoint(super().__call__, *args, use_reentrant=False, **kwargs)
+
+    def forward(self, x):
+        x = self.linear(x)
+        torch._dynamo.graph_break()
+        return x.sin()
+
+
 class RegionalCompilationModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -192,7 +205,7 @@ class RegionalCompilationRebindTester(unittest.TestCase):
         compiled_model(inputs)
 
         assert not hasattr(model, "trace")
-        assert compiled_model.trace == ("twin", "OptimizedModule")
+        assert compiled_model.trace == ("twin", "RegionalCompilationBlock")
 
     def test_no_instance_bound_methods_is_a_no_op(self):
         model, inputs = self._get_model_and_inputs()
@@ -206,4 +219,20 @@ class RegionalCompilationRebindTester(unittest.TestCase):
         compiled_model(inputs)
 
         assert not hasattr(model, "trace")
-        assert compiled_model.trace == ("twin", "OptimizedModule")
+        assert compiled_model.trace == ("twin", "RegionalCompilationBlock")
+
+    def test_checkpointed_blocks_are_compiled_across_graph_breaks(self):
+        model, inputs = self._get_model_and_inputs()
+        model.blocks = torch.nn.ModuleList([CheckpointedRegionalCompilationBlock() for _ in range(2)])
+        model, inputs = model.to(torch_device), inputs.to(torch_device)
+        graphs = []
+
+        def recording_backend(graph_module, example_inputs):
+            graphs.append(graph_module)
+            return graph_module.forward
+
+        compiled_model = compile_regions(model, backend=recording_backend)
+        output = compiled_model(inputs)
+
+        assert graphs
+        torch.testing.assert_close(output, model(inputs))
