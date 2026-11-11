@@ -2145,8 +2145,29 @@ class DeepSpeedSequenceParallelConfig:
             "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3', 'sdpa', or a hub-hosted kernel (e.g. 'kernels-community/flash-attn2'). Defaults to `sdpa`."
         },
     )
+    sp_allow_recurrent_layers: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether to allow models with recurrent or linear attention layers under sequence parallelism. Defaults to `False`."
+        },
+    )
+    sp_disable_in_eval: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether to disable sequence parallelism during evaluation. Defaults to `True`."
+        },
+    )
 
     def __post_init__(self):
+        if self.sp_allow_recurrent_layers is None:
+            self.sp_allow_recurrent_layers = (
+                os.environ.get("PARALLELISM_CONFIG_SP_ALLOW_RECURRENT_LAYERS", "false").lower() == "true"
+            )
+
+        if self.sp_disable_in_eval is None:
+            self.sp_disable_in_eval = (
+                os.environ.get("PARALLELISM_CONFIG_SP_DISABLE_IN_EVAL", "true").lower() == "true"
+            )
         # sp_seq_length_is_variable and sp_seq_length are interconnected
         if self.sp_seq_length_is_variable is None:
             self.sp_seq_length_is_variable = (

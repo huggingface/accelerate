@@ -774,6 +774,9 @@ def _refuse_recurrent_layers_under_sequence_parallelism(model: nn.Module):
         model (`nn.Module`):
             The model about to be prepared for sequence parallelism.
     """
+    if getattr(model, "supports_sequence_parallel", False) or getattr(model, "supports_context_parallel", False):
+        return
+
     config = getattr(model, "config", None)
     config = config.get_text_config() if hasattr(config, "get_text_config") else config
     layer_types = getattr(config, "layer_types", None) or []

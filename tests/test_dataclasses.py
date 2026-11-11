@@ -249,6 +249,15 @@ class TestParallelismConfig:
         pc = ParallelismConfig(sp_backend="deepspeed", sp_size=2, sp_handler=sp_handler)
         assert pc.sp_handler is not None, "SP handler should be set"
         assert pc.sp_handler.sp_seq_length_is_variable is True, "by default we set to expect a variable seqlen"
+        assert pc.sp_handler.sp_allow_recurrent_layers is False, "by default recurrent layers are refused"
+        assert pc.sp_handler.sp_disable_in_eval is True, "by default SP is disabled in evaluation"
+
+        custom_sp_handler = DeepSpeedSequenceParallelConfig(
+            sp_allow_recurrent_layers=True,
+            sp_disable_in_eval=False,
+        )
+        assert custom_sp_handler.sp_allow_recurrent_layers is True
+        assert custom_sp_handler.sp_disable_in_eval is False
 
         with pytest.raises(ValueError, match="Invalid sp_attn_implementation"):
             DeepSpeedSequenceParallelConfig(sp_attn_implementation="foobar")

@@ -1159,3 +1159,13 @@ class RefuseRecurrentLayersTester(unittest.TestCase):
     def test_allows_models_without_layer_types(self):
         config = SimpleNamespace(get_text_config=lambda: config)
         _refuse_recurrent_layers_under_sequence_parallelism(SimpleNamespace(config=config))
+
+    def test_allows_recurrent_layers_with_supports_sequence_parallel(self):
+        model = self._model(["full_attention", "linear_attention"])
+        model.supports_sequence_parallel = True
+        _refuse_recurrent_layers_under_sequence_parallelism(model)
+
+    def test_allows_recurrent_layers_with_supports_context_parallel(self):
+        model = self._model(["full_attention", "linear_attention"])
+        model.supports_context_parallel = True
+        _refuse_recurrent_layers_under_sequence_parallelism(model)
