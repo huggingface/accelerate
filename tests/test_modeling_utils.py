@@ -18,7 +18,9 @@ import tempfile
 import unittest
 import warnings
 from collections import OrderedDict
+from types import SimpleNamespace
 from typing import Optional
+from unittest import mock
 
 import torch
 import torch.nn as nn
@@ -44,6 +46,7 @@ from accelerate.utils.modeling import (
     dtype_byte_size,
     find_tied_parameters,
     get_balanced_memory,
+    get_max_memory,
     get_module_size_with_ties,
     get_non_persistent_buffers,
     get_state_dict_offloaded_model,
@@ -1276,3 +1279,114 @@ class ModelingUtilsTester(unittest.TestCase):
         extracted_no_keep = extract_model_from_parallel(model, keep_torch_compile=False)
         assert hasattr(extracted_no_keep.linear2, "_orig_mod")
         torch.testing.assert_close(model(x), extracted_no_keep(x))
+
+    def test_get_max_memory_with_tpu_accelerator_memory_info(self):
+        """`get_max_memory()` discovers usable TPU devices via `torch.accelerator.get_memory_info`."""
+
+        def fake_tensor(val, device=None):
+            # Simulate single-process TorchTPU on a 4-device host where only device 0 is addressable
+            if getattr(device, "type", None) == "tpu" and getattr(device, "index", None) != 0:
+                raise RuntimeError("Accessing non-current TPU device is not supported yet")
+            return torch.zeros(1)
+
+        with (
+            mock.patch("accelerate.utils.modeling.is_npu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_mlu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_sdaa_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_musa_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_xpu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_hpu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_mps_available", return_value=False),
+            mock.patch("torch.cuda.is_available", return_value=False),
+            mock.patch(
+                "torch.device", side_effect=lambda dev_type, idx=None: SimpleNamespace(type=dev_type, index=idx)
+            ),
+            mock.patch("torch.tensor", side_effect=fake_tensor),
+            mock.patch("torch.accelerator", create=True) as accelerator,
+        ):
+            accelerator.is_available.return_value = True
+            accelerator.current_accelerator.return_value = SimpleNamespace(type="tpu")
+            accelerator.device_count.return_value = 4
+            accelerator.get_memory_info.side_effect = lambda idx: (32 * 1024**3, 32 * 1024**3)
+
+            max_memory = get_max_memory()
+            assert max_memory[0] == 32 * 1024**3
+            assert 1 not in max_memory
+            assert "cpu" in max_memory
+
+    def test_get_max_memory_with_tpu_device_properties_fallback(self):
+        """When `get_memory_info` and `mem_get_info` are absent, fall back to `get_device_properties`."""
+        fake_tpu_mod = SimpleNamespace(
+            get_device_properties=lambda idx: SimpleNamespace(hbm_bytes_per_device=16 * 1024**3)
+        )
+        fake_accelerator = SimpleNamespace(
+            is_available=lambda: True,
+            current_accelerator=lambda: SimpleNamespace(type="tpu"),
+            device_count=lambda: 1,
+            memory_allocated=lambda idx: 2 * 1024**3,
+        )
+        with (
+            mock.patch("accelerate.utils.modeling.is_npu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_mlu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_sdaa_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_musa_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_xpu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_hpu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_mps_available", return_value=False),
+            mock.patch("torch.cuda.is_available", return_value=False),
+            mock.patch(
+                "torch.device", side_effect=lambda dev_type, idx=None: SimpleNamespace(type=dev_type, index=idx)
+            ),
+            mock.patch("torch.tensor", return_value=torch.zeros(1)),
+            mock.patch("torch.get_device_module", return_value=fake_tpu_mod),
+            mock.patch("torch.accelerator", fake_accelerator),
+        ):
+            max_memory = get_max_memory()
+            assert max_memory[0] == 14 * 1024**3
+            assert "cpu" in max_memory
+
+    def test_get_max_memory_mps_does_not_double_count_via_torch_accelerator(self):
+        """MPS uses unified memory under `'mps'` and must not also populate integer index `0` via `torch.accelerator`."""
+        with (
+            mock.patch("accelerate.utils.modeling.is_npu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_mlu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_sdaa_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_musa_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_xpu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_hpu_available", return_value=False),
+            mock.patch("accelerate.utils.modeling.is_mps_available", return_value=True),
+            mock.patch("torch.cuda.is_available", return_value=False),
+            mock.patch("torch.accelerator", create=True) as accelerator,
+        ):
+            accelerator.is_available.return_value = True
+            accelerator.current_accelerator.return_value = SimpleNamespace(type="mps")
+            accelerator.device_count.return_value = 1
+            accelerator.get_memory_info.return_value = (8 * 1024**3, 16 * 1024**3)
+
+            max_memory = get_max_memory()
+            assert list(max_memory.keys()) == ["mps"]
+            accelerator.get_memory_info.assert_not_called()
+
+    def test_offload_weights_clears_tied_params_map_for_custom_accelerator(self):
+        from accelerate.hooks import AlignDevicesHook
+
+        module = nn.Linear(2, 2, bias=False)
+        ptr = module.weight.data_ptr()
+        tied_params_map = {ptr: {"tpu:0": torch.zeros(2, 2)}}
+        hook = AlignDevicesHook(execution_device=0, offload=True, tied_params_map=tied_params_map)
+        hook.tied_pointers_to_remove = {(ptr, 0)}
+
+        with (
+            mock.patch("accelerate.hooks.is_npu_available", return_value=False),
+            mock.patch("accelerate.hooks.is_mlu_available", return_value=False),
+            mock.patch("accelerate.hooks.is_sdaa_available", return_value=False),
+            mock.patch("accelerate.hooks.is_musa_available", return_value=False),
+            mock.patch("accelerate.hooks.is_hpu_available", return_value=False),
+            mock.patch("torch.cuda.is_available", return_value=False),
+            mock.patch("torch.accelerator", create=True) as accelerator,
+        ):
+            accelerator.is_available.return_value = True
+            accelerator.current_accelerator.return_value = SimpleNamespace(type="tpu")
+            hook._offload_weights(module)
+
+        assert "tpu:0" not in tied_params_map[ptr]

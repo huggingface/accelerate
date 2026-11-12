@@ -65,6 +65,8 @@ def clear_device_cache(garbage_collection: bool = False) -> None:
     elif is_neuron_available():
         # Not sure it actually does something, but adding for consistency with other backends
         torch.neuron.empty_cache()
+    elif not is_mps_available() and torch.accelerator.is_available() and hasattr(torch.accelerator, "empty_cache"):
+        torch.accelerator.empty_cache()
 
 
 def release_memory(*objects) -> list:

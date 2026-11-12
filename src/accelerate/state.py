@@ -756,6 +756,8 @@ class PartialState:
             return torch.device("xpu")
         elif is_neuron_available():
             return torch.device("neuron")
+        elif torch.accelerator.is_available():
+            return torch.accelerator.current_accelerator()
         else:
             return torch.device("cpu")
 
