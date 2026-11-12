@@ -92,15 +92,19 @@ def check_device_same(first_device, second_device):
     if first_device.type != second_device.type:
         return False
 
+    # An unindexed CUDA device means the current device, which may not be
+    # cuda:0 after torch.cuda.set_device() in multi-GPU training.
+    default_index = (
+        torch.cuda.current_device()
+        if first_device.type == "cuda"
+        and torch.cuda.is_available()
+        and (first_device.index is None or second_device.index is None)
+        else 0
+    )
     if first_device.type != "cpu" and first_device.index is None:
-        # In case the first_device is an torch accelerator device(e.g. cuda, xpu) and have
-        # the index attribute set to `None`, default it to `0`
-        first_device = torch.device(first_device.type, index=0)
-
+        first_device = torch.device(first_device.type, index=default_index)
     if second_device.type != "cpu" and second_device.index is None:
-        # In case the second_device is an torch accelerator device(e.g. cuda, xpu) and have
-        # the index attribute set to `None`, default it to `0`
-        second_device = torch.device(second_device.type, index=0)
+        second_device = torch.device(second_device.type, index=default_index)
 
     return first_device == second_device
 
