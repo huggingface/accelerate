@@ -710,6 +710,7 @@ def get_max_layer_size(
     definition of a layer being:
     - a module with no direct children (just parameters and buffers)
     - a module whose class name is in the list `no_split_module_classes`
+    - a parameter directly held by a module that can be split
 
     Args:
         modules (`List[Tuple[str, torch.nn.Module]]`):
@@ -737,6 +738,7 @@ def get_max_layer_size(
             elif size == max_size:
                 layer_names.append(module_name)
         else:
+            modules_children = list(module.named_parameters(recurse=False)) + modules_children
             modules_to_treat = [(f"{module_name}.{n}", v) for n, v in modules_children] + modules_to_treat
     return max_size, layer_names
 
@@ -1399,7 +1401,7 @@ def infer_auto_device_map(
         max_layer_names = [n for n in max_layer_names if n != name and not n.startswith(name + ".")]
         if len(max_layer_names) == 0:
             max_layer_size, max_layer_names = get_max_layer_size(
-                [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
+                modules_to_treat,
                 module_sizes,
                 no_split_module_classes,
             )
@@ -1512,7 +1514,7 @@ def infer_auto_device_map(
                 )
                 # Update the max layer size.
                 max_layer_size, max_layer_names = get_max_layer_size(
-                    [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
+                    modules_to_treat,
                     module_sizes,
                     no_split_module_classes,
                 )
@@ -1552,7 +1554,7 @@ def infer_auto_device_map(
                 modules_to_treat = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_treat
                 # Update the max layer size.
                 max_layer_size, max_layer_names = get_max_layer_size(
-                    [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
+                    modules_to_treat,
                     module_sizes,
                     no_split_module_classes,
                 )

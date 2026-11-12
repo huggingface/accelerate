@@ -801,9 +801,10 @@ class ModelingUtilsTester(unittest.TestCase):
         with torch.no_grad():
             model.b.w = model.a.p  # tie b.w to a.p
 
-        # 4KB fits `a` (and the tied `b.w`) but not `b` as a whole: `b` is split, which used to
-        # raise an IndexError when the tied parameter was looked up afterwards.
-        device_map = infer_auto_device_map(model, max_memory={0: 4096}, no_split_module_classes=[])
+        # Keep 512 bytes for `a` (and the tied `b.w`) plus 8192 bytes to bring back `b.p2`.
+        # The whole model needs 8832 bytes, so `b` is split, which used to raise an IndexError
+        # when the tied parameter was looked up afterwards.
+        device_map = infer_auto_device_map(model, max_memory={0: 8704}, no_split_module_classes=[])
 
         assert set(device_map) == {"a", "b.w", "b.p2", "b.sub"}
         assert device_map["a"] == 0
