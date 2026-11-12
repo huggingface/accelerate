@@ -42,6 +42,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     Conditionally will perform `step` and `zero_grad` if gradients should be synchronized when performing gradient
     accumulation.
 
+    Optimizer hooks registered on this wrapper are delegated to the underlying optimizer. Callbacks receive that
+    optimizer, and step hooks run only when an optimizer step is performed.
+
     Args:
         optimizer (`torch.optim.optimizer.Optimizer`):
             The optimizer to wrap.
@@ -108,6 +111,25 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def state_dict(self):
         return self.optimizer.state_dict()
+
+    # Register hooks on the optimizer that performs the actual steps and state operations.
+    def register_step_pre_hook(self, hook):
+        return self.optimizer.register_step_pre_hook(hook)
+
+    def register_step_post_hook(self, hook):
+        return self.optimizer.register_step_post_hook(hook)
+
+    def register_state_dict_pre_hook(self, hook, prepend=False):
+        return self.optimizer.register_state_dict_pre_hook(hook, prepend=prepend)
+
+    def register_state_dict_post_hook(self, hook, prepend=False):
+        return self.optimizer.register_state_dict_post_hook(hook, prepend=prepend)
+
+    def register_load_state_dict_pre_hook(self, hook, prepend=False):
+        return self.optimizer.register_load_state_dict_pre_hook(hook, prepend=prepend)
+
+    def register_load_state_dict_post_hook(self, hook, prepend=False):
+        return self.optimizer.register_load_state_dict_post_hook(hook, prepend=prepend)
 
     def zero_grad(self, set_to_none=None):
         if self.gradient_state.sync_gradients:
