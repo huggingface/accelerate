@@ -50,9 +50,7 @@ def make_model(widths, device, alternating=False):
 def test_buffer_uses_largest_instance_independently_of_module_order(device, widths, container):
     model = make_model(widths, device)
     budgets = {0: 10000, 1: 10000, "cpu": 10000}
-    balanced = get_balanced_memory(
-        model, max_memory=budgets, no_split_module_classes=container(["ResidualBlock"])
-    )
+    balanced = get_balanced_memory(model, max_memory=budgets, no_split_module_classes=container(["ResidualBlock"]))
     # 2,176 parameter bytes, a 1,024-byte largest block and a 272-byte mean leaf.
     # The existing 1.25 buffer multiplier gives 1,088 + 1,280 = 2,368 bytes.
     assert balanced == {0: 2368, 1: 10000, "cpu": 10000}
