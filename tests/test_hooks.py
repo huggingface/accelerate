@@ -14,6 +14,7 @@
 
 import inspect
 import re
+import types
 import unittest
 
 import torch
@@ -50,6 +51,13 @@ class ModelForTest(nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
+
+
+# Stands in for `bnb.nn.Linear8bitLt`: the hook only checks the class name and the `.state` attributes.
+class Linear8bitLt(nn.Linear):
+    def __init__(self, in_features, out_features):
+        super().__init__(in_features, out_features)
+        self.state = types.SimpleNamespace(CB=torch.zeros(2), SCB=torch.zeros(2), CxB=torch.zeros(2))
 
 
 class PreForwardHook(ModelHook):
@@ -281,6 +289,16 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear1.weight.device == torch.device("cpu")
         assert model.batchnorm.weight.device == torch.device("cpu")
         assert model.linear2.weight.device == torch.device("cpu")
+
+    def test_align_devices_hook_offload_clears_int8_state(self):
+        module = Linear8bitLt(3, 4)
+        add_hook_to_module(module, AlignDevicesHook(execution_device=torch_device, offload=True))
+
+        # The int8 state is released as soon as the weights are offloaded, before any forward pass
+        assert module.weight.device == torch.device("meta")
+        assert module.state.CB is None
+        assert module.state.SCB is None
+        assert module.state.CxB is None
 
     def test_attach_align_device_hook_as_cpu_offload(self):
         model = ModelForTest()

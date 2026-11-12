@@ -328,6 +328,10 @@ class AlignDevicesHook(ModelHook):
                     self.tied_params_names.add(name)
 
                 set_module_tensor_to_device(module, name, "meta")
+                if type(module).__name__ == "Linear8bitLt":
+                    module.state.CB = None
+                    module.state.SCB = None
+                    module.state.CxB = None
 
             if not self.offload_buffers and self.execution_device is not None:
                 for name, _ in module.named_buffers(recurse=self.place_submodules):
