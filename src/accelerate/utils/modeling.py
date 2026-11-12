@@ -1048,11 +1048,8 @@ def get_balanced_memory(
             for submodule_name in name.split("."):
                 submodule = getattr(submodule, submodule_name)
             class_name = submodule.__class__.__name__
-            if class_name in no_split_module_classes and class_name not in no_split_children:
-                no_split_children[class_name] = size
-
-            if set(no_split_children.keys()) == set(no_split_module_classes):
-                break
+            if class_name in no_split_module_classes:
+                no_split_children[class_name] = max(size, no_split_children.get(class_name, 0))
         buffer = max(no_split_children.values()) if len(no_split_children) > 0 else 0
     else:
         buffer = 0
