@@ -921,3 +921,24 @@ class AcceleratorTester(AccelerateTestCase):
         ):
             with assert_exception(ValueError, "CPU or disk offload"):
                 accelerator.prepare_model(model)
+
+    def test_partial_state_default_device_torch_accelerator(self):
+        PartialState._reset_state()
+        tpu_device = torch.device("meta")
+        with (
+            patch("accelerate.state.is_mps_available", return_value=False),
+            patch("accelerate.state.is_mlu_available", return_value=False),
+            patch("accelerate.state.is_sdaa_available", return_value=False),
+            patch("accelerate.state.is_musa_available", return_value=False),
+            patch("accelerate.state.is_npu_available", return_value=False),
+            patch("accelerate.state.is_hpu_available", return_value=False),
+            patch("accelerate.state.is_xpu_available", return_value=False),
+            patch("accelerate.state.is_neuron_available", return_value=False),
+            patch("torch.cuda.is_available", return_value=False),
+            patch("torch.accelerator", create=True) as accelerator,
+        ):
+            accelerator.is_available.return_value = True
+            accelerator.current_accelerator.return_value = tpu_device
+            state = PartialState()
+            assert state.device == tpu_device
+        PartialState._reset_state()

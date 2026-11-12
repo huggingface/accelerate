@@ -741,6 +741,35 @@ def get_max_layer_size(
     return max_size, layer_names
 
 
+def _get_accelerator_free_memory(acc_type: str, device_index: int) -> int:
+    """Query free device memory in bytes for a `torch.accelerator` backend (e.g. `tpu`)."""
+    if hasattr(torch.accelerator, "get_memory_info"):
+        try:
+            return torch.accelerator.get_memory_info(device_index)[0]
+        except NotImplementedError:
+            pass
+
+    dev_mod = torch.get_device_module(acc_type)
+    if hasattr(dev_mod, "mem_get_info"):
+        return dev_mod.mem_get_info(device_index)[0]
+
+    if hasattr(dev_mod, "get_device_properties"):
+        props = dev_mod.get_device_properties(device_index)
+        total = getattr(props, "hbm_bytes_per_device", None)
+        if total is None:
+            total = getattr(props, "total_memory", None)
+        if total is not None:
+            allocated = 0
+            if hasattr(torch.accelerator, "memory_allocated"):
+                try:
+                    allocated = torch.accelerator.memory_allocated(device_index)
+                except (NotImplementedError, RuntimeError):
+                    allocated = 0
+            return max(0, int(total) - int(allocated))
+
+    raise AttributeError(f"Cannot determine free memory for accelerator '{acc_type}' on device {device_index}.")
+
+
 def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None):
     """
     Get the maximum memory available if nothing is passed, converts string to int otherwise.
@@ -809,16 +838,12 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
-        elif torch.accelerator.is_available():
+        elif not is_mps_available() and torch.accelerator.is_available():
             acc_type = torch.accelerator.current_accelerator().type
             for i in range(torch.accelerator.device_count()):
                 try:
                     _ = torch.tensor(0, device=torch.device(acc_type, i))
-                    if hasattr(torch.accelerator, "get_memory_info"):
-                        max_memory[i] = torch.accelerator.get_memory_info(i)[0]
-                    else:
-                        dev_mod = torch.get_device_module(acc_type)
-                        max_memory[i] = dev_mod.mem_get_info(i)[0]
+                    max_memory[i] = _get_accelerator_free_memory(acc_type, i)
                 except Exception:
                     logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
                     continue
@@ -852,7 +877,7 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
         num_devices = torch.hpu.device_count()
     elif torch.cuda.is_available():
         num_devices = torch.cuda.device_count()
-    elif torch.accelerator.is_available():
+    elif not is_mps_available() and torch.accelerator.is_available():
         num_devices = torch.accelerator.device_count()
     else:
         num_devices = 0

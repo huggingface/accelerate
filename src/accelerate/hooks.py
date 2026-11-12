@@ -28,9 +28,11 @@ from .utils import (
     set_module_tensor_to_device,
 )
 from .utils.imports import (
+    is_hpu_available,
     is_mlu_available,
     is_musa_available,
     is_npu_available,
+    is_sdaa_available,
 )
 from .utils.memory import clear_device_cache
 from .utils.modeling import get_non_persistent_buffers
@@ -413,8 +415,16 @@ class AlignDevicesHook(ModelHook):
                     device = f"npu:{device}"
                 elif is_mlu_available():
                     device = f"mlu:{device}"
+                elif is_sdaa_available():
+                    device = f"sdaa:{device}"
                 elif is_musa_available():
                     device = f"musa:{device}"
+                elif is_hpu_available():
+                    device = "hpu"
+                elif torch.cuda.is_available():
+                    pass
+                elif torch.accelerator.is_available():
+                    device = f"{torch.accelerator.current_accelerator().type}:{device}"
             if device in self.tied_params_map[value_pointer]:
                 del self.tied_params_map[value_pointer][device]
         self.tied_pointers_to_remove = set()
