@@ -97,7 +97,7 @@ def test_equal_blocks_and_absent_classes_keep_existing_budgets(device, widths, c
 @pytest.mark.parametrize("second_device", [1, 2])
 def test_balanced_map_avoids_unnecessary_cpu_offload(device, second_device):
     model = make_model((1, 16, 16, 1), device)
-    budgets = {0: 2176, second_device: 1500, "cpu": 10000}
+    budgets = {0: 2112, second_device: 1500, "cpu": 10000}
     balanced = get_balanced_memory(model, max_memory=budgets, no_split_module_classes=["ResidualBlock"])
     device_map = infer_auto_device_map(
         model, max_memory=balanced, no_split_module_classes=["ResidualBlock"], clean_result=False
