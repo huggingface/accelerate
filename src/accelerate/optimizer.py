@@ -42,6 +42,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     Conditionally will perform `step` and `zero_grad` if gradients should be synchronized when performing gradient
     accumulation.
 
+    Hooks are registered on the underlying optimizer, which is passed to the callbacks. Step hooks run only when
+    the underlying optimizer's `step()` is called.
+
     Args:
         optimizer (`torch.optim.optimizer.Optimizer`):
             The optimizer to wrap.
@@ -100,6 +103,24 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def add_param_group(self, param_group):
         self.optimizer.add_param_group(param_group)
+
+    def register_step_pre_hook(self, hook):
+        return self.optimizer.register_step_pre_hook(hook)
+
+    def register_step_post_hook(self, hook):
+        return self.optimizer.register_step_post_hook(hook)
+
+    def register_state_dict_pre_hook(self, hook, prepend=False):
+        return self.optimizer.register_state_dict_pre_hook(hook, prepend=prepend)
+
+    def register_state_dict_post_hook(self, hook, prepend=False):
+        return self.optimizer.register_state_dict_post_hook(hook, prepend=prepend)
+
+    def register_load_state_dict_pre_hook(self, hook, prepend=False):
+        return self.optimizer.register_load_state_dict_pre_hook(hook, prepend=prepend)
+
+    def register_load_state_dict_post_hook(self, hook, prepend=False):
+        return self.optimizer.register_load_state_dict_post_hook(hook, prepend=prepend)
 
     def load_state_dict(self, state_dict):
         if self.accelerator_state.distributed_type == DistributedType.XLA and self.device_placement:
