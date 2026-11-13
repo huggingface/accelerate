@@ -105,7 +105,7 @@ These are tutorials from libraries that integrate with Accelerate:
 
 ### Kornia
 
-- [Fine-tuning vision models with Kornia's Trainer](https://kornia.readthedocs.io/en/latest/get-started/training.html)
+- [Fine-tuning vision models with Kornia's Trainer](https://kornia.readthedocs.io/en/latest/)
 
 ### PyTorch Accelerated 
 

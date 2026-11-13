@@ -20,8 +20,11 @@ defaults:
   run:
     shell: bash
 
+permissions: {}
+
 jobs:
   run-trainer-tests:
+    permissions: {}
     container:
       image: huggingface/accelerate:gpu-deepspeed-nightly
       options: --gpus all --shm-size "16gb"
@@ -68,6 +71,7 @@ jobs:
           pytest -sv tests/trainer
 
   run-skorch-tests:
+    permissions: {}
     container:
       image: huggingface/accelerate:gpu-nightly
       options: --gpus all --shm-size "16gb"

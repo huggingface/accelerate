@@ -40,21 +40,11 @@ FSDP_AUTO_WRAP_POLICY = ["TRANSFORMER_BASED_WRAP", "SIZE_BASED_WRAP", "NO_WRAP"]
 FSDP_BACKWARD_PREFETCH = ["BACKWARD_PRE", "BACKWARD_POST", "NO_PREFETCH"]
 FSDP_STATE_DICT_TYPE = ["FULL_STATE_DICT", "LOCAL_STATE_DICT", "SHARDED_STATE_DICT"]
 FSDP2_STATE_DICT_TYPE = ["SHARDED_STATE_DICT", "FULL_STATE_DICT"]
-FSDP_PYTORCH_VERSION = (
-    "2.1.0.a0+32f93b1"  # Technically should be 2.1.0, but MS-AMP uses this specific prerelease in their Docker image.
-)
-FSDP2_PYTORCH_VERSION = "2.6.0"
-DTENSOR_PYTORCH_VERSION = "2.5.0"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich", "mpich", "nossh", "slurm"]
 TORCH_DYNAMO_MODES = ["default", "reduce-overhead", "max-autotune"]
-ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION = "2.2.0"
-XPU_PROFILING_AVAILABLE_PYTORCH_VERSION = "2.4.0"
-MITA_PROFILING_AVAILABLE_PYTORCH_VERSION = "2.1.0"
-BETA_TP_AVAILABLE_PYTORCH_VERSION = "2.3.0"
 
 BETA_TP_AVAILABLE_TRANSFORMERS_VERSION = "4.52.0"
-BETA_CP_AVAILABLE_PYTORCH_VERSION = "2.6.0"
 BETA_SP_AVAILABLE_DEEPSPEED_VERSION = "0.18.2"
 
 STR_OPERATION_TO_FUNC = {">": op.gt, ">=": op.ge, "==": op.eq, "!=": op.ne, "<=": op.le, "<": op.lt}
@@ -85,6 +75,28 @@ TORCH_LAUNCH_PARAMS = [
     "master_addr",
     "master_port",
 ]
+
+# Names differ across distributed runtimes and device-visibility environment variables.
+TORCH_DISTRIBUTED_BACKENDS = {
+    "cuda": "nccl",
+    "mlu": "cncl",
+    "sdaa": "tccl",
+    "musa": "mccl",
+    "npu": "hccl",
+    "hpu": "hccl",
+    "xpu": "xccl",
+    "neuron": "neuron",
+}
+DEVICE_VISIBLE_DEVICES_ENV_VARS = {
+    "cuda": "CUDA_VISIBLE_DEVICES",
+    "xpu": "ZE_AFFINITY_MASK",
+    "mlu": "MLU_VISIBLE_DEVICES",
+    "sdaa": "SDAA_VISIBLE_DEVICES",
+    "musa": "MUSA_VISIBLE_DEVICES",
+    "npu": "ASCEND_RT_VISIBLE_DEVICES",
+    "hpu": "HABANA_VISIBLE_MODULES",
+    "neuron": "NEURON_RT_VISIBLE_CORES",
+}
 
 CUDA_DISTRIBUTED_TYPES = ["DEEPSPEED", "MULTI_GPU", "FSDP", "MEGATRON_LM", "TP"]
 TORCH_DISTRIBUTED_OPERATION_TYPES = CUDA_DISTRIBUTED_TYPES + [

@@ -37,6 +37,7 @@ from ..utils import (
     check_cuda_fp8_capability,
     compare_versions,
     gather,
+    get_torch_accelerator_backend,
     is_aim_available,
     is_bnb_available,
     is_clearml_available,
@@ -59,7 +60,6 @@ from ..utils import (
     is_npu_available,
     is_pandas_available,
     is_peft_available,
-    is_pippy_available,
     is_pytest_available,
     is_schedulefree_available,
     is_sdaa_available,
@@ -85,28 +85,13 @@ from ..utils import (
 def get_backend():
     if is_torch_xla_available():
         return "xla", torch.cuda.device_count(), torch.cuda.memory_allocated
-    elif is_cuda_available():
-        return "cuda", torch.cuda.device_count(), torch.cuda.memory_allocated
-    elif is_mps_available(min_version="2.0"):
-        return "mps", 1, torch.mps.current_allocated_memory
-    elif is_mps_available():
-        return "mps", 1, lambda: 0
-    elif is_mlu_available():
-        return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
-    elif is_sdaa_available():
-        return "sdaa", torch.sdaa.device_count(), torch.sdaa.memory_allocated
-    elif is_musa_available():
-        return "musa", torch.musa.device_count(), torch.musa.memory_allocated
-    elif is_npu_available():
-        return "npu", torch.npu.device_count(), torch.npu.memory_allocated
-    elif is_xpu_available():
-        return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
-    elif is_hpu_available():
-        return "hpu", torch.hpu.device_count(), torch.hpu.memory_allocated
-    elif is_neuron_available():
-        return "neuron", torch.neuron.device_count(), torch.neuron.memory_allocated
-    else:
+    # This runs at import time, including in notebook launchers before they fork.
+    device_type, device_module = get_torch_accelerator_backend()
+    if device_type is None:
         return "cpu", 1, lambda: 0
+    if device_type == "mps":
+        return "mps", 1, device_module.current_allocated_memory
+    return device_type, device_module.device_count(), device_module.memory_allocated
 
 
 torch_device, device_count, memory_allocated_func = get_backend()
@@ -254,10 +239,6 @@ def require_fp8(test_case):
         fp8_is_available = False
 
     return unittest.skipUnless(fp8_is_available, "test requires FP8 support")(test_case)
-
-
-def require_fsdp2(test_case):
-    return unittest.skipUnless(is_torch_version(">=", "2.5.0"), "test requires FSDP2 (torch >= 2.5.0)")(test_case)
 
 
 def require_peft(test_case):
@@ -456,8 +437,7 @@ def require_tp(test_case):
     Decorator marking a test that requires TP installed. These tests are skipped when TP isn't installed
     """
     return unittest.skipUnless(
-        is_torch_version(">=", "2.3.0") and compare_versions("transformers", ">=", "4.52.0"),
-        "test requires torch version >= 2.3.0 and transformers version >= 4.52.0",
+        compare_versions("transformers", ">=", "4.52.0"), "test requires transformers version >= 4.52.0"
     )(test_case)
 
 
@@ -540,14 +520,6 @@ def require_mlflow(test_case):
     Decorator marking a test that requires mlflow installed. These tests are skipped when mlflow isn't installed
     """
     return unittest.skipUnless(is_mlflow_available(), "test requires mlflow")(test_case)
-
-
-def require_pippy(test_case):
-    """
-    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed It is
-    also checked if the test is running on a Gaudi1 device which doesn't support pippy.
-    """
-    return unittest.skipUnless(is_pippy_available() and not is_habana_gaudi1(), "test requires pippy")(test_case)
 
 
 def require_import_timer(test_case):

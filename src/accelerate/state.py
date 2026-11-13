@@ -33,21 +33,18 @@ from .utils import (
     check_cuda_p2p_ib_support,
     deepspeed_required,
     get_cpu_distributed_information,
+    get_distributed_backend,
     get_int_from_env,
+    get_torch_accelerator_backend,
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
     is_habana_gaudi1,
-    is_hpu_available,
     is_mlu_available,
-    is_mps_available,
     is_musa_available,
-    is_neuron_available,
     is_npu_available,
     is_sdaa_available,
     is_torch_xla_available,
-    is_xccl_available,
-    is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
     set_numa_affinity,
@@ -403,13 +400,16 @@ class PartialState:
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
-            DistributedType.MULTI_CPU,
             DistributedType.MULTI_HPU,
             DistributedType.MULTI_NEURON,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
         ):
             torch.distributed.barrier(device_ids=[self.local_process_index])
+        elif self.distributed_type == DistributedType.MULTI_CPU:
+            # Don't pass `device_ids` on CPU: torch would then run the barrier on the machine's accelerator
+            # (e.g. MPS on macOS) rather than on the gloo/CPU process group, which fails or is not implemented.
+            torch.distributed.barrier()
         elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
@@ -487,7 +487,11 @@ class PartialState:
                             tensorized_result, pad_index=send_to_device(inputs[-1], self.device)
                         )
                     else:
-                        result += [inputs[-1]] * (num_samples_per_process + (1 if num_extras > 0 else 0) - len(result))
+                        num_padding = num_samples_per_process + (1 if num_extras > 0 else 0) - len(result)
+                        if isinstance(result, tuple):
+                            result += (inputs[-1],) * num_padding
+                        else:
+                            result += [inputs[-1]] * num_padding
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
@@ -716,41 +720,15 @@ class PartialState:
 
     @property
     def default_device(self) -> torch.device:
-        """
-        Returns the default device which is:
-        - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
-        - CUDA if `torch.cuda.is_available()`
-        - MLU if `is_mlu_available()`
-        - SDAA if `is_sdaa_available()`
-        - MUSA if `is_musa_available()`
-        - NPU if `is_npu_available()`
-        - HPU if `is_hpu_available()`
-        - NEURON if `is_neuron_available()`
-        - CPU otherwise
-        """
-        if is_mps_available():
+        """Return the current accelerator device, falling back to CPU when none is available."""
+        device_type, _ = get_torch_accelerator_backend()
+        if device_type == "mps":
             os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
             return torch.device("mps")
-        elif is_mlu_available():
-            return torch.device("mlu")
-        elif is_sdaa_available():
-            return torch.device("sdaa")
-        elif is_musa_available():
-            return torch.device("musa")
-        # NPU should be checked before CUDA when using `transfer_to_npu`
-        # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
-        elif is_npu_available():
-            return torch.device("npu")
-        elif is_hpu_available():
-            return torch.device("hpu")
-        elif torch.cuda.is_available():
-            return torch.device("cuda")
-        elif is_xpu_available():
-            return torch.device("xpu")
-        elif is_neuron_available():
-            return torch.device("neuron")
-        else:
+        elif device_type is None:
             return torch.device("cpu")
+        else:
+            return torch.device(device_type)
 
     def _prepare_backend(
         self, cpu: bool = False, sagemaker_dp=False, backend: str | None = None
@@ -767,35 +745,18 @@ class PartialState:
             distributed_type = DistributedType.XLA
 
         elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
-            if is_mlu_available():
-                backend = "cncl"
-                distributed_type = DistributedType.MULTI_MLU
-            elif is_sdaa_available():
-                backend = "tccl"
-                distributed_type = DistributedType.MULTI_SDAA
-            elif is_musa_available():
-                backend = "mccl"
-                distributed_type = DistributedType.MULTI_MUSA
-            # NPU should be checked before CUDA when using `transfer_to_npu`
-            # See issue #3020: https://github.com/huggingface/accelerate/issues/3020
-            elif is_npu_available():
-                backend = "hccl"
-                distributed_type = DistributedType.MULTI_NPU
-            elif is_hpu_available(init_hccl=True):
+            device_type, _ = get_torch_accelerator_backend()
+            default_backend = get_distributed_backend(device_type)
+            if default_backend is not None:
+                if device_type == "cuda":
+                    distributed_type = DistributedType.MULTI_GPU
+                else:
+                    distributed_type = DistributedType(f"MULTI_{device_type.upper()}")
                 if backend is None:
-                    backend = "hccl"
-                distributed_type = DistributedType.MULTI_HPU
-            elif torch.cuda.is_available():
-                if backend is None:
-                    backend = "nccl"
-                distributed_type = DistributedType.MULTI_GPU
-            elif is_xpu_available() and is_xccl_available():
-                if backend is None:
-                    backend = "xccl"
-                distributed_type = DistributedType.MULTI_XPU
-            elif is_neuron_available():
-                backend = "neuron"
-                distributed_type = DistributedType.MULTI_NEURON
+                    backend = default_backend
+                if device_type == "hpu":
+                    # Importing HCCL registers Habana's distributed backend.
+                    import habana_frameworks.torch.distributed.hccl  # noqa: F401
 
         if (
             distributed_type is None
@@ -832,14 +793,14 @@ class PartialState:
             )
         if device == "xla":
             self.device = xm.xla_device()
-        elif device == "hpu":
-            self.device = torch.device("hpu", torch.hpu.current_device())
-        elif device == "neuron":
-            self.device = torch.device("neuron", torch.neuron.current_device())
+            return
+
+        if device == "gpu":
+            device = "cuda"
+        device_module = torch.get_device_module(device)
+        if device in ("hpu", "neuron"):
+            self.device = torch.device(device, device_module.current_device())
         else:
-            if device == "gpu":
-                device = "cuda"
-            device_module = getattr(torch, device)
             device_index = self.local_process_index % device_module.device_count()
             self.device = torch.device(device, device_index)
             device_module.set_device(self.device)
@@ -932,7 +893,7 @@ class AcceleratorState:
                 # this is confusing, why is is_fp8_available only checks for library availability ?
                 if not is_fp8_available():
                     raise ValueError(
-                        "Using `fp8` precision requires `transformer_engine` or `MS-AMP` to be installed."
+                        "Using `fp8` precision requires `transformer_engine` or `torchao` to be installed."
                     )
                 elif torch.cuda.is_available() and not check_cuda_fp8_capability():
                     logger.warning(

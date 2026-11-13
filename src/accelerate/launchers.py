@@ -27,12 +27,10 @@ from .utils import (
     check_cuda_p2p_ib_support,
     get_current_device_type,
     get_gpu_info,
-    is_mps_available,
+    get_torch_accelerator_backend,
     is_rocm_available,
-    is_torch_version,
     patch_environment,
 )
-from .utils.constants import ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION
 
 
 def test_launch():
@@ -131,9 +129,7 @@ def notebook_launcher(
     try:
         mixed_precision = PrecisionType(mixed_precision.lower())
     except ValueError:
-        raise ValueError(
-            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
-        )
+        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
 
     if (in_colab or in_kaggle) and (
         (os.environ.get("TPU_NAME", None) is not None) or (os.environ.get("PJRT_DEVICE", "") == "TPU")
@@ -194,7 +190,7 @@ def notebook_launcher(
                 world_size=num_nodes * num_processes,
                 master_addr=master_addr,
                 master_port=use_port,
-                mixed_precision=mixed_precision,
+                accelerate_mixed_precision=mixed_precision.value,
             )
 
             # Check for CUDA P2P and IB issues
@@ -248,8 +244,7 @@ def notebook_launcher(
                         monitor_interval=monitor_interval,
                         start_method=start_method,
                     )
-                    if is_torch_version(">=", ELASTIC_LOG_LINE_PREFIX_TEMPLATE_PYTORCH_VERSION):
-                        launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template
+                    launch_config_kwargs["log_line_prefix_template"] = log_line_prefix_template
                     has_numa_options = any(field.name == "numa_options" for field in fields(LaunchConfig))
                     if has_numa_options:
                         from torch.numa.binding import AffinityMode, NumaOptions
@@ -272,13 +267,13 @@ def notebook_launcher(
 
         else:
             # No need for a distributed launch otherwise as it's either CPU, GPU, XPU or MPS.
-            if is_mps_available():
+            device_type, _ = get_torch_accelerator_backend()
+            if device_type == "mps":
                 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                 print("Launching training on MPS.")
-            elif torch.cuda.is_available():
-                print("Launching training on one GPU.")
-            elif torch.xpu.is_available():
-                print("Launching training on one XPU.")
+            elif device_type is not None:
+                device_name = "GPU" if device_type == "cuda" else device_type.upper()
+                print(f"Launching training on one {device_name}.")
             else:
                 print("Launching training on CPU.")
             function(*args)

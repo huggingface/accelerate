@@ -1,0 +1,114 @@
+name: Check PR description
+
+on:
+  # pull_request_target gives a token that can comment on and close pull requests from forks.
+  # The job never checks out or runs PR code: it reads PR metadata and the default-branch template as data.
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions: {}
+
+concurrency:
+  group: check-pr-description-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-pr-description:
+    permissions:
+      contents: read # Read the PR template from the default branch.
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // The pull request author on "opened", whoever reopened it on "reopened".
+            const sender = context.payload.sender;
+
+            if (sender.type === 'Bot') {
+              core.info(`Skipping: ${sender.login} is a bot.`);
+              return;
+            }
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              ...context.repo,
+              username: sender.login,
+            });
+            if (['admin', 'write'].includes(data.permission)) {
+              core.info(`Skipping: ${sender.login} has ${data.permission} access.`);
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            if (pr.state !== 'open') {
+              core.info('Skipping: the pull request is no longer open.');
+              return;
+            }
+
+            const { data: template } = await github.rest.repos.getContent({
+              ...context.repo,
+              path: '.github/PULL_REQUEST_TEMPLATE.md',
+              ref: context.payload.repository.default_branch,
+            });
+            const templateText = Buffer.from(template.content, 'base64').toString('utf8');
+            const getLines = (text) => text.replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
+            const normalizeLine = (line) => line.trim().replace(/^- \[[xX]\] /, '- [ ] ');
+            const lines = getLines(pr.body ?? '');
+            const templateLines = new Set(getLines(templateText).map(normalizeLine));
+            const isTemplateLine = (line) => templateLines.has(normalizeLine(line));
+            const description = lines
+              .filter((line) => !isTemplateLine(line))
+              .join('\n')
+              .trim();
+            const wordCount = description ? description.split(/\s+/).length : 0;
+            const maxWords = 250;
+
+            // Include subsections, stopping at the next heading of the same or higher level.
+            const start = lines.findIndex((line) => /^#+\s*use[ -]?cases?\b/i.test(line.trim()));
+            const level = start === -1 ? 0 : lines[start].trim().match(/^#+/)[0].length;
+            const rest = start === -1 ? [] : lines.slice(start + 1);
+            const end = rest.findIndex((line) => {
+              const heading = line.trim().match(/^(#+)\s/);
+              return heading && heading[1].length <= level;
+            });
+            const useCase = rest
+              .slice(0, end === -1 ? rest.length : end)
+              .filter((line) => !/^#+\s/.test(line.trim()) && !isTemplateLine(line))
+              .join('\n')
+              .trim();
+            const problems = [];
+            if (!useCase) {
+              problems.push(
+                '- The `## Use case` section is missing or empty. Explain how you use Accelerate, what fails or is missing for you, and link your project, model or code if it is public.',
+              );
+            }
+            if (wordCount > maxWords) {
+              problems.push(
+                `- The description has ${wordCount} words; the limit is ${maxWords}, excluding HTML comments and standard template text. Keep the problem, use case, and validation concise, and link longer logs or benchmark details.`,
+              );
+            }
+            if (problems.length === 0) {
+              core.info(`The description has a use case and is within the ${maxWords}-word limit (${wordCount} words).`);
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: pr.number,
+              body: [
+                'This pull request was closed because its description does not meet the contribution requirements:',
+                '',
+                ...problems,
+                '',
+                'Update the description, then leave a comment here. A maintainer will read it and decide whether to reopen this pull request.',
+                '',
+                'See the [pull request guidelines](https://github.com/huggingface/accelerate/blob/main/CONTRIBUTING.md#submitting-a-pull-request-pr) in the contributing guide.',
+              ].join('\n'),
+            });
+            await github.rest.pulls.update({
+              ...context.repo,
+              pull_number: pr.number,
+              state: 'closed',
+            });

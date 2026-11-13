@@ -34,6 +34,7 @@ from accelerate.utils import (
     DistributedType,
     gather,
     gather_object,
+    get_torch_accelerator_backend,
     is_bf16_available,
     is_cuda_available,
     is_datasets_available,
@@ -170,12 +171,19 @@ def rng_sync_check():
     state = AcceleratorState()
     synchronize_rng_states(["torch"])
     assert are_the_same_tensors(torch.get_rng_state()), "RNG states improperly synchronized on CPU."
-    if state.distributed_type == DistributedType.MULTI_GPU:
-        synchronize_rng_states(["cuda"])
-        assert are_the_same_tensors(torch.cuda.get_rng_state()), "RNG states improperly synchronized on GPU."
-    elif state.distributed_type == DistributedType.MULTI_XPU:
-        synchronize_rng_states(["xpu"])
-        assert are_the_same_tensors(torch.xpu.get_rng_state()), "RNG states improperly synchronized on XPU."
+    device_type, device_module = get_torch_accelerator_backend()
+    if state.device.type == device_type:
+        synchronize_rng_states([device_type])
+        if device_module is torch.accelerator:
+            # Remove the native fallback once our minimum PyTorch version is 2.14.
+            if hasattr(torch.accelerator, "random"):
+                rng_state = torch.accelerator.random.get_rng_state()
+            else:
+                device_module = torch.get_device_module(device_type)
+                rng_state = device_module.get_rng_state()
+        else:
+            rng_state = device_module.get_rng_state()
+        assert are_the_same_tensors(rng_state), f"RNG states improperly synchronized on {device_type}."
     generator = torch.Generator()
     synchronize_rng_states(["generator"], generator=generator)
     assert are_the_same_tensors(generator.get_state()), "RNG states improperly synchronized in generator."
@@ -701,6 +709,31 @@ def test_split_between_processes_list():
         assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
 
 
+def test_split_between_processes_tuple():
+    state = AcceleratorState()
+    even_data = tuple(range(0, (2 * state.num_processes)))
+    odd_data = tuple(range(0, (2 * state.num_processes) - 1))
+    for data in [even_data, odd_data]:
+        expected_output = list(data)
+
+        with state.split_between_processes(data, apply_padding=True) as results:
+            num_samples_per_device = math.ceil(len(data) / state.num_processes)
+            assert isinstance(results, tuple), (
+                f"Splitting a tuple should return a tuple. Process index: {state.process_index}; Type: {type(results)}"
+            )
+            assert len(results) == num_samples_per_device, (
+                f"Process {state.device} did not get the correct number of item(s). Process index: {state.process_index}; Length: {len(results)}"
+            )
+            results_per_process = list(results)
+
+        state.wait_for_everyone()
+
+        gathered_results = gather_object(results_per_process)
+        output = gathered_results[: len(data)]
+
+        assert expected_output == output, f"Gathered results is incorrect. Expected: {expected_output}; Got: {output}"
+
+
 def test_split_between_processes_nested_dict():
     state = AcceleratorState()
     a = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -846,6 +879,10 @@ def main():
         if state.process_index == 0:
             print("\n**Test split between processes as a list**")
         test_split_between_processes_list()
+
+        if state.process_index == 0:
+            print("\n**Test split between processes as a tuple**")
+        test_split_between_processes_tuple()
 
         if state.process_index == 0:
             print("\n**Test split between processes as a dict**")

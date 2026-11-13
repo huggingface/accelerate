@@ -15,8 +15,12 @@ env:
   TESTING_MOCKED_DATALOADERS: "1"
   IS_GITHUB_CI: "1"
 
+permissions: {}
+
 jobs:
   run-tests:
+    permissions:
+      contents: read
     runs-on:
       group: aws-general-8-plus
     strategy:
@@ -39,11 +43,11 @@ jobs:
           test_rest
         ]
     steps:
-    - uses: actions/checkout@v7
-    - name: Set up python 3.10
-      uses: actions/setup-python@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - name: Set up python 3.11
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
-        python-version: '3.10'
+        python-version: '3.11'
         cache: 'pip'
         cache-dependency-path: 'setup.py'
     
@@ -51,7 +55,7 @@ jobs:
       run: |
         if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
-        if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torchvision==0.20.1 torch==2.5.1; fi
+        if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torchvision==0.21.0 torch==2.6.0; fi
         pip install pytest-reportlog tabulate setuptools importlib_metadata
 
     - name: Show installed libraries

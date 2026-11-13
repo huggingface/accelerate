@@ -28,10 +28,10 @@ from ..state import AcceleratorState, PartialState
 from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import (
-    is_npu_available,
     is_torch_distributed_available,
     is_torch_xla_available,
 )
+from .modeling import normalize_device
 from .versions import is_torch_version
 
 
@@ -153,21 +153,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
     if is_torch_tensor(tensor) or hasattr(tensor, "to"):
-        # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
-        if device == "npu":
-            device = "npu:0"
-        try:
-            return tensor.to(device, non_blocking=non_blocking)
-        except TypeError:  # .to() doesn't accept non_blocking as kwarg
-            return tensor.to(device)
-        except AssertionError as error:
-            # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-            # This call is inside the try-block since is_npu_available is not supported by torch.compile.
-            if is_npu_available():
-                if isinstance(device, int):
-                    device = f"npu:{device}"
-            else:
-                raise error
+        device = normalize_device(device)
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
@@ -321,7 +307,11 @@ def _tpu_gather(tensor):
 
 def _gpu_gather(tensor):
     state = PartialState()
-    gather_op = torch.distributed.all_gather_into_tensor
+    # torch 2.13 renamed `all_gather_into_tensor` to `all_gather_single` and
+    # deprecated the old name; prefer the new one when it exists.
+    gather_op = getattr(torch.distributed, "all_gather_single", None)
+    if gather_op is None:
+        gather_op = torch.distributed.all_gather_into_tensor
 
     # NOTE: need manually synchronize to workaourd a INT64 collectives bug in oneCCL before torch 2.9.0
     if state.device.type == "xpu" and is_torch_version("<=", "2.8"):

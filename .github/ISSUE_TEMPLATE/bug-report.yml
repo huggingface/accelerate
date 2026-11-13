@@ -5,7 +5,7 @@ body:
     attributes: 
       value: | 
         Thanks for taking the time to submit a bug report! 🐛 
-        If this is not a bug related to the Accelerate library directly, but instead a general question about your code or the library specifically please use the [forums](https://discuss.huggingface.co/c/accelerate/18).
+        Please explain how you use Accelerate and include a minimal, runnable example that reproduces the problem.
 
   - type: textarea
     id: system-info
@@ -16,25 +16,25 @@ body:
       placeholder: accelerate version, OS, python version, numpy version, torch version, and accelerate's configuration
     validations:
       required: true
-  
-  - type: checkboxes
-    id: information-scripts-examples
+
+  - type: textarea
+    id: description
     attributes:
-      label: Information
-      description: 'The problem arises when using:'
-      options:
-        - label: "The official example scripts"
-        - label: "My own modified scripts"
+      label: Description
+      description: Describe the problem you encountered and the behavior you observed.
+    validations:
+      required: true
   
-  - type: checkboxes
-    id: information-tasks
+  - type: textarea
+    id: use-case
     attributes:
-      label: Tasks
-      description: "The tasks I am working on are:"
-      options:
-        - label: "One of the scripts in the examples/ folder of Accelerate or an officially supported `no_trainer` script in the `examples` folder of the `transformers` repo (such as `run_no_trainer_glue.py`)"
-        - label: "My own task or dataset (give details below)"
-  
+      label: Use case
+      description: |
+        Describe what you are doing with Accelerate and how this problem affects your workflow.
+        Link your project, model, or code if it is public.
+    validations:
+      required: true
+
   - type: textarea
     id: reproduction
     validations:

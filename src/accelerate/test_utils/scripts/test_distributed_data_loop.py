@@ -369,9 +369,21 @@ def test_stateful_dataloader_save_state(accelerator):
     _test_stateful_dataloader_save_state_resume(accelerator, iterable=False)
 
 
+def test_skip_first_batches_preserves_metric_samples(accelerator):
+    dataloader = accelerator.prepare(DataLoader(range(10), batch_size=2))
+    dataloader = accelerator.skip_first_batches(dataloader, num_batches=1)
+
+    gathered = []
+    for batch in dataloader:
+        gathered.extend(accelerator.gather_for_metrics(batch).tolist())
+    assert gathered == list(range(4, 10))
+
+
 def main():
     accelerator = create_accelerator()
     torch.manual_seed(accelerator.process_index)
+
+    test_skip_first_batches_preserves_metric_samples(accelerator)
 
     accelerator.print("Test that even_batches variable ensures uniform batches across processes")
     test_default_ensures_even_batch_sizes()
