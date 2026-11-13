@@ -189,7 +189,7 @@ def test_join_raises_warning_for_non_ddp_distributed(accelerator):
             pass
 
         assert issubclass(w[-1].category, UserWarning)
-        assert "only supported for multi-GPU" in str(w[-1].message)
+        assert "only supported for multi-process DDP" in str(w[-1].message)
 
 
 def test_join_can_override_even_batches():

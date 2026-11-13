@@ -1274,8 +1274,8 @@ class Accelerator:
 
         <Tip warning={true}>
 
-        `join_uneven_inputs` is only supported for Distributed Data Parallel training on multiple GPUs. For any other
-        configuration, this method will have no effect.
+        `join_uneven_inputs` supports Distributed Data Parallel training on multiple CPUs or accelerators. For any
+        other configuration, this method will have no effect.
 
         </Tip>
 
@@ -1302,7 +1302,7 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        if self.multi_device:
+        if self.multi_device or (self.use_distributed and self.distributed_type == DistributedType.MULTI_CPU):
             dl_even_batches_values = []
 
             if even_batches is not None:
@@ -1334,7 +1334,7 @@ class Accelerator:
             # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
             if self.distributed_type != DistributedType.NO:
                 warnings.warn(
-                    "Joining uneven inputs is only supported for multi-GPU training, as a result `join_uneven_inputs` will have no effect."
+                    "Joining uneven inputs is only supported for multi-process DDP training, as a result `join_uneven_inputs` will have no effect."
                 )
 
             with contextlib.nullcontext(joinables):
