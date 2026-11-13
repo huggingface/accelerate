@@ -8,20 +8,20 @@ body:
         Please explain how you use Accelerate and include a minimal, runnable example that reproduces the problem.
 
   - type: textarea
-    id: description
-    attributes:
-      label: Description
-      description: Describe the problem you encountered and the behavior you observed.
-    validations:
-      required: true
-
-  - type: textarea
     id: system-info
     attributes:
       label: System Info
       description: Please share your accelerate configuration with us. You can run the command `accelerate env` and copy-paste its outputs below
       render: Shell
       placeholder: accelerate version, OS, python version, numpy version, torch version, and accelerate's configuration
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the problem you encountered and the behavior you observed.
     validations:
       required: true
   
