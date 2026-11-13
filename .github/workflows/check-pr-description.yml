@@ -63,7 +63,7 @@ jobs:
               .join('\n')
               .trim();
             const wordCount = description ? description.split(/\s+/).length : 0;
-            const maxWords = 500;
+            const maxWords = 250;
 
             // Include subsections, stopping at the next heading of the same or higher level.
             const start = lines.findIndex((line) => /^#+\s*use[ -]?cases?\b/i.test(line.trim()));

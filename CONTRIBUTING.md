@@ -75,7 +75,7 @@ count as a use case. The check only verifies that the section has content; maint
 
 ### Description length
 
-Keep the PR description to **500 words or fewer**, excluding HTML comments and standard template text (headings,
+Keep the PR description to **250 words or fewer**, excluding HTML comments and standard template text (headings,
 checklist, reviewer guidance, and the maintainer mention). The limit covers all sections you write, including the
 summary, validation, and use case. Link longer logs, reproducer scripts, or benchmark details instead of pasting
 them in full.

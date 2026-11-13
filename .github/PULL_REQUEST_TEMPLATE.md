@@ -2,7 +2,7 @@
 
 <!--
 Keep the PR description short. Explain the problem and how the change addresses it in a few sentences.
-The limit is 500 words, excluding HTML comments and standard template text. Longer descriptions are closed automatically,
+The limit is 250 words, excluding HTML comments and standard template text. Longer descriptions are closed automatically,
 except for PRs opened or reopened by bots or contributors with write access. Link longer logs or benchmark details.
 Include relevant compatibility changes or dependencies.
 Link related issues or discussions; use "Fixes #123" only when this PR resolves that issue.
