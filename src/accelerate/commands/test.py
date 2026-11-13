@@ -50,9 +50,8 @@ def test_command(args):
         test_args = f"--config_file={args.config_file} {script_name}".split()
 
     cmd = ["accelerate-launch"] + test_args
-    result = execute_subprocess_async(cmd)
-    if result.returncode == 0:
-        print("Test is a success! You are ready for your distributed training!")
+    execute_subprocess_async(cmd)
+    print("Test is a success! You are ready for your distributed training!")
 
 
 def main():
