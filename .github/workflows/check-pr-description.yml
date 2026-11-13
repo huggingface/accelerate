@@ -1,0 +1,102 @@
+name: Check PR description
+
+on:
+  # pull_request_target gives a token that can comment on and close pull requests from forks.
+  # The job never checks out or runs the pull request code: it only reads the description.
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions: {}
+
+jobs:
+  check-pr-description:
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            // The pull request author on "opened", whoever reopened it on "reopened".
+            const sender = context.payload.sender;
+
+            if (sender.type === 'Bot') {
+              core.info(`Skipping: ${sender.login} is a bot.`);
+              return;
+            }
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              ...context.repo,
+              username: sender.login,
+            });
+            if (['admin', 'write'].includes(data.permission)) {
+              core.info(`Skipping: ${sender.login} has ${data.permission} access.`);
+              return;
+            }
+
+            // Ignore HTML comments, including the template instructions.
+            const lines = (pr.body ?? '').replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
+
+            // Exclude only standard template lines; additional text anywhere in the description still counts.
+            const templateLines = new Set([
+              '# What does this PR do?',
+              '## Validation',
+              '## Use case',
+              '## Before submitting',
+              '- [ ] I searched existing issues and PRs for overlapping work and linked any related discussion.',
+              '- [ ] I provided a concrete use case above.',
+              '- [ ] I reviewed every changed line, including any agent-generated code, and can explain the change.',
+              '- [ ] I added or updated only necessary tests and documentation, avoiding redundant test cases.',
+              '- [ ] I reported validation commands and results, including skipped or unrun tests.',
+              '- [ ] `make style` and `make quality` pass.',
+              '## Who can review?',
+              'Anyone in the community is free to review the PR once the tests have passed. Feel free to tag',
+              'members/contributors who may be interested in your PR.',
+              'cc @SunMarc',
+            ]);
+            const description = lines
+              .filter((line) => !templateLines.has(line.trim().replace(/^- \[[xX]\] /, '- [ ] ')))
+              .join('\n')
+              .trim();
+            const wordCount = description ? description.split(/\s+/).length : 0;
+            const maxWords = 500;
+
+            // Text under the "Use case" heading, up to the next heading.
+            const start = lines.findIndex((line) => /^#+\s*use[ -]?cases?\b/i.test(line.trim()));
+            const rest = start === -1 ? [] : lines.slice(start + 1);
+            const end = rest.findIndex((line) => /^#+\s/.test(line.trim()));
+            const useCase = rest.slice(0, end === -1 ? rest.length : end).join('\n').trim();
+            const problems = [];
+            if (!useCase) {
+              problems.push(
+                '- The `## Use case` section is missing or empty. Explain how you use Accelerate, what fails or is missing for you, and link your project, model or code if it is public.',
+              );
+            }
+            if (wordCount > maxWords) {
+              problems.push(
+                `- The description has ${wordCount} words; the limit is ${maxWords}, excluding HTML comments and standard template text. Keep the problem, use case, and validation concise, and link longer logs or benchmark details.`,
+              );
+            }
+            if (problems.length === 0) {
+              core.info(`The description has a use case and is within the ${maxWords}-word limit (${wordCount} words).`);
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: pr.number,
+              body: [
+                'This pull request was closed because its description does not meet the contribution requirements:',
+                '',
+                ...problems,
+                '',
+                'Update the description, then leave a comment here. A maintainer will read it and decide whether to reopen this pull request.',
+                '',
+                'See the [pull request guidelines](https://github.com/huggingface/accelerate/blob/main/CONTRIBUTING.md#submitting-a-pull-request-pr) in the contributing guide.',
+              ].join('\n'),
+            });
+            await github.rest.pulls.update({
+              ...context.repo,
+              pull_number: pr.number,
+              state: 'closed',
+            });

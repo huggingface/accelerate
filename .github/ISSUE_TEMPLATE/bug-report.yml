@@ -5,7 +5,7 @@ body:
     attributes: 
       value: | 
         Thanks for taking the time to submit a bug report! 🐛 
-        If this is not a bug related to the Accelerate library directly, but instead a general question about your code or the library specifically please use the [forums](https://discuss.huggingface.co/c/accelerate/18).
+        Please explain how you use Accelerate and include a minimal, runnable example that reproduces the problem.
 
   - type: textarea
     id: system-info
