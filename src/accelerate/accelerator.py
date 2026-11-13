@@ -1474,9 +1474,9 @@ class Accelerator:
                     optimizer_count += 1
 
             # This needs to be written as such, so that passing other objects other than models/optimizers doesn't raise an error
-            if (model_count < 1 and optimizer_count > 0) or (model_count > 0 and optimizer_count < 1):
+            if model_count < 1 and optimizer_count > 0:
                 raise ValueError(
-                    "When using FSDP2, a model and optimizer must be passed together to `Accelerator.prepare()`"
+                    "When using FSDP2, an optimizer must be passed together with its model to `Accelerator.prepare()`"
                     " as the optimizer needs to have its parameters modified after the model is converted."
                 )
             if model_count > 1:
@@ -1644,15 +1644,17 @@ class Accelerator:
             if isinstance(obj, torch.nn.Module):
                 model_index, model = i, obj
 
-        # Invariant: if we have a model, we also have an optimizer (checked in `prepare`)
+        # Invariant: if we have an optimizer, we also have a model (checked in `prepare`)
         if model_index is None:
             return tuple(result)
 
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
-        # Apply AC if needed
-        if self.state.fsdp_plugin.activation_checkpointing:
+        # Apply AC if needed. A model already prepared, e.g. without its optimizer for evaluation, has it already
+        from torch.distributed.fsdp import FSDPModule
+
+        if self.state.fsdp_plugin.activation_checkpointing and not isinstance(model, FSDPModule):
             model = fsdp2_apply_ac(self, model)
 
         # Apply compile if needed, has to be *after* applying AC
