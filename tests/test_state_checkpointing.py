@@ -96,6 +96,17 @@ def parameterized_custom_name_func(func, param_num, param):
 
 @parameterized_class(("use_safetensors",), [[True], [False]], class_name_func=parameterized_custom_name_func)
 class CheckpointTest(AccelerateTestCase):
+    def test_rng_state_restored(self):
+        accelerator = Accelerator()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+            expected_cpu = torch.rand(8)
+            expected_device = torch.rand(8, device=accelerator.device)
+
+            accelerator.load_state(tmpdir)
+            torch.testing.assert_close(torch.rand(8), expected_cpu, rtol=0, atol=0)
+            torch.testing.assert_close(torch.rand(8, device=accelerator.device), expected_device, rtol=0, atol=0)
+
     def check_adam_state(self, state1, state2, distributed_type):
         # For DistributedType.XLA, the `accelerator.save_state` function calls `xm._maybe_convert_to_cpu` before saving.
         # As a result, all tuple values are converted to lists. Therefore, we need to convert them back here.

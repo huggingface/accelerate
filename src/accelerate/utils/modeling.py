@@ -32,9 +32,8 @@ from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import (
-    is_hpu_available,
+    get_torch_accelerator_backend,
     is_mlu_available,
-    is_mps_available,
     is_musa_available,
     is_npu_available,
     is_peft_available,
@@ -207,6 +206,22 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     return tensor.device, storage_ptr, storage_size
 
 
+def normalize_device(device):
+    """Normalize integer device indices and accelerator-specific device names."""
+    # NPU needs an explicit index when initializing its context for the first time.
+    # See https://gitee.com/ascend/pytorch/issues/I8KECW.
+    if device == "npu":
+        return "npu:0"
+    if isinstance(device, int):
+        # Device conversion does not need an availability probe, which can break torch.compile.
+        device_type, _ = get_torch_accelerator_backend(check_available=False)
+        if device_type == "hpu":
+            return "hpu"
+        if device_type not in (None, "cuda"):
+            return f"{device_type}:{device}"
+    return device
+
+
 def set_module_tensor_to_device(
     module: nn.Module,
     tensor_name: str,
@@ -260,6 +275,8 @@ def set_module_tensor_to_device(
     is_buffer = tensor_name in module._buffers
     old_value = getattr(module, tensor_name)
 
+    device = normalize_device(device)
+
     # Treat the case where old_value (or a custom `value`, typically offloaded to RAM/disk) belongs to a tied group, and one of the weight
     # in the tied group has already been dispatched to the device, by avoiding reallocating memory on the device and just copying the pointer.
     if (
@@ -310,22 +327,6 @@ def set_module_tensor_to_device(
         ):
             device_quantization = device
             device = "cpu"
-        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if isinstance(device, int):
-            if is_npu_available():
-                device = f"npu:{device}"
-            elif is_mlu_available():
-                device = f"mlu:{device}"
-            elif is_sdaa_available():
-                device = f"sdaa:{device}"
-            elif is_musa_available():
-                device = f"musa:{device}"
-            elif is_hpu_available():
-                device = "hpu"
-            elif torch.cuda.is_available():
-                pass
-            elif torch.accelerator.is_available():
-                device = f"{torch.accelerator.current_accelerator().type}:{device}"
         if "xpu" in str(device) and not is_xpu_available():
             raise ValueError(f'{device} is not available, you should use device="cpu" instead')
         if value is None:
@@ -741,33 +742,41 @@ def get_max_layer_size(
     return max_size, layer_names
 
 
-def _get_accelerator_free_memory(acc_type: str, device_index: int) -> int:
-    """Query free device memory in bytes for a `torch.accelerator` backend (e.g. `tpu`)."""
-    if hasattr(torch.accelerator, "get_memory_info"):
+def get_accelerator_free_memory(device_type: str, device_module, device_index: int) -> int:
+    """Return free memory in bytes for a device using its native PyTorch module.
+
+    When `mem_get_info` is unavailable, estimate free memory from device capacity minus this
+    process's allocated memory. This estimate cannot account for allocations by other processes.
+
+    Args:
+        device_type (`str`):
+            The accelerator type, such as `"cuda"` or `"xpu"`.
+        device_module:
+            The native device module returned by [`get_torch_accelerator_backend`].
+        device_index (`int`):
+            The index of the device to query.
+    """
+    if hasattr(device_module, "mem_get_info"):
         try:
-            return torch.accelerator.get_memory_info(device_index)[0]
+            return device_module.mem_get_info(device_index)[0]
         except NotImplementedError:
             pass
 
-    dev_mod = torch.get_device_module(acc_type)
-    if hasattr(dev_mod, "mem_get_info"):
-        return dev_mod.mem_get_info(device_index)[0]
+    if hasattr(device_module, "get_device_properties") and hasattr(device_module, "memory_allocated"):
+        try:
+            properties = device_module.get_device_properties(device_index)
+            total_memory = getattr(properties, "total_memory", None)
+            if total_memory is None:
+                total_memory = getattr(properties, "hbm_bytes_per_device", None)
+            if total_memory is not None:
+                return max(0, int(total_memory) - device_module.memory_allocated(device_index))
+        except NotImplementedError:
+            pass
 
-    if hasattr(dev_mod, "get_device_properties"):
-        props = dev_mod.get_device_properties(device_index)
-        total = getattr(props, "hbm_bytes_per_device", None)
-        if total is None:
-            total = getattr(props, "total_memory", None)
-        if total is not None:
-            allocated = 0
-            if hasattr(torch.accelerator, "memory_allocated"):
-                try:
-                    allocated = torch.accelerator.memory_allocated(device_index)
-                except (NotImplementedError, RuntimeError):
-                    allocated = 0
-            return max(0, int(total) - int(allocated))
-
-    raise AttributeError(f"Cannot determine free memory for accelerator '{acc_type}' on device {device_index}.")
+    raise NotImplementedError(
+        f"Cannot determine free memory for accelerator '{device_type}' on device {device_index}. "
+        "Please pass an explicit `max_memory`."
+    )
 
 
 def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None):
@@ -776,79 +785,27 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
     """
     import psutil
 
+    device_type, device_module = get_torch_accelerator_backend()
+    # MPS shares host memory and is addressed by its name rather than an integer index.
+    num_devices = 0
+    if device_type not in (None, "mps"):
+        num_devices = device_module.device_count()
+
     if max_memory is None:
         max_memory = {}
         is_integrated_cuda = False
-        # Make sure device is initialized on each device to have the right memory info.
-        if is_npu_available():
-            for i in range(torch.npu.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("npu", i))
-                    max_memory[i] = torch.npu.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_mlu_available():
-            for i in range(torch.mlu.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("mlu", i))
-                    max_memory[i] = torch.mlu.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_sdaa_available():
-            for i in range(torch.sdaa.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("sdaa", i))
-                    max_memory[i] = torch.sdaa.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_musa_available():
-            for i in range(torch.musa.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("musa", i))
-                    max_memory[i] = torch.musa.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_xpu_available():
-            for i in range(torch.xpu.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("xpu", i))
-                    max_memory[i] = torch.xpu.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif is_hpu_available():
-            for i in range(torch.hpu.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device("hpu", i))
-                    max_memory[i] = torch.hpu.mem_get_info(i)[0]
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif torch.cuda.is_available():
-            for i in range(torch.cuda.device_count()):
-                try:
-                    _ = torch.tensor([0], device=i)
-                    max_memory[i] = torch.cuda.mem_get_info(i)[0]
-                    device_properties = torch.cuda.get_device_properties(i)
-                    is_integrated_cuda = is_integrated_cuda or getattr(device_properties, "is_integrated", False)
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
-        elif not is_mps_available() and torch.accelerator.is_available():
-            acc_type = torch.accelerator.current_accelerator().type
-            for i in range(torch.accelerator.device_count()):
-                try:
-                    _ = torch.tensor(0, device=torch.device(acc_type, i))
-                    max_memory[i] = _get_accelerator_free_memory(acc_type, i)
-                except Exception:
-                    logger.info(f"Device {i} seems unavailable, Proceeding to check subsequent devices.")
-                    continue
+        for i in range(num_devices):
+            try:
+                # Initialize each device before querying its available memory.
+                _ = torch.tensor(0, device=f"{device_type}:{i}")
+                max_memory[i] = get_accelerator_free_memory(device_type, device_module, i)
+                if device_type == "cuda":
+                    properties = device_module.get_device_properties(i)
+                    is_integrated_cuda = is_integrated_cuda or getattr(properties, "is_integrated", False)
+            except Exception as error:
+                logger.info(f"Could not determine memory for {device_type}:{i}: {error}")
         # MPS and integrated CUDA devices share host RAM, so exposing a separate CPU budget would double-count it.
-        if is_mps_available():
+        if device_type == "mps":
             max_memory["mps"] = psutil.virtual_memory().available
         elif not is_integrated_cuda:
             max_memory["cpu"] = psutil.virtual_memory().available
@@ -858,29 +815,8 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
         if isinstance(max_memory[key], str):
             max_memory[key] = convert_file_size_to_int(max_memory[key])
 
-    # Need to sort the device by type to make sure that we allocate the gpu first.
-    # As gpu/npu/xpu are represented by int, we need to sort them first.
-    gpu_devices = [k for k in max_memory.keys() if isinstance(k, int)]
-    gpu_devices.sort()
-    # check if gpu/npu/xpu devices are available and if not, throw a warning
-    if is_npu_available():
-        num_devices = torch.npu.device_count()
-    elif is_mlu_available():
-        num_devices = torch.mlu.device_count()
-    elif is_sdaa_available():
-        num_devices = torch.sdaa.device_count()
-    elif is_musa_available():
-        num_devices = torch.musa.device_count()
-    elif is_xpu_available():
-        num_devices = torch.xpu.device_count()
-    elif is_hpu_available():
-        num_devices = torch.hpu.device_count()
-    elif torch.cuda.is_available():
-        num_devices = torch.cuda.device_count()
-    elif not is_mps_available() and torch.accelerator.is_available():
-        num_devices = torch.accelerator.device_count()
-    else:
-        num_devices = 0
+    # Allocate accelerator devices first, in index order.
+    gpu_devices = sorted(k for k in max_memory if isinstance(k, int))
     for device in gpu_devices:
         if device >= num_devices or device < 0:
             logger.warning(f"Device {device} is not available, available devices are {list(range(num_devices))}")
@@ -1000,26 +936,7 @@ def get_balanced_memory(
     user_not_set_max_memory = max_memory is None
     max_memory = get_max_memory(max_memory)
 
-    if is_npu_available():
-        expected_device_type = "npu"
-    elif is_mlu_available():
-        expected_device_type = "mlu"
-    elif is_sdaa_available():
-        expected_device_type = "sdaa"
-    elif is_musa_available():
-        expected_device_type = "musa"
-    elif is_xpu_available():
-        expected_device_type = "xpu"
-    elif is_hpu_available():
-        expected_device_type = "hpu"
-    elif is_mps_available():
-        expected_device_type = "mps"
-    elif torch.cuda.is_available():
-        expected_device_type = "cuda"
-    elif torch.accelerator.is_available():
-        expected_device_type = torch.accelerator.current_accelerator().type
-    else:
-        expected_device_type = None
+    expected_device_type, _ = get_torch_accelerator_backend()
     # Integer keys always refer to accelerator devices, so they are counted directly: resolving them through
     # `torch.device` errors out on machines without an accelerator ("Cannot access accelerator device when
     # none is available.").
@@ -1720,12 +1637,7 @@ def load_state_dict(checkpoint_file, device_map=None):
             if len(set(device_map.values())) == 1:
                 device = list(device_map.values())[0]
                 # weights offloaded to disk are read on the CPU first
-                target_device = "cpu" if device == "disk" else device
-                if isinstance(device, int):
-                    if is_npu_available():
-                        target_device = f"npu:{device}"
-                    elif is_hpu_available():
-                        target_device = "hpu"
+                target_device = "cpu" if device == "disk" else normalize_device(device)
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1756,12 +1668,7 @@ def load_state_dict(checkpoint_file, device_map=None):
             else:
                 progress_bar = None
             for device in devices:
-                target_device = device
-                if isinstance(device, int):
-                    if is_npu_available():
-                        target_device = f"npu:{device}"
-                    elif is_hpu_available():
-                        target_device = "hpu"
+                target_device = normalize_device(device)
 
                 with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
                     for key in device_weights[device]:
@@ -2174,24 +2081,15 @@ def get_grad_scaler(distributed_type: DistributedType = None, **kwargs):
         import torch_xla.amp as xamp
 
         return xamp.GradScaler(**kwargs)
-    elif is_mlu_available():
-        return torch.mlu.amp.GradScaler(**kwargs)
-    elif is_sdaa_available():
-        return torch.sdaa.amp.GradScaler(**kwargs)
-    elif is_musa_available():
-        return torch.musa.amp.GradScaler(**kwargs)
-    elif is_npu_available():
-        return torch.npu.amp.GradScaler(**kwargs)
-    elif is_hpu_available():
-        return torch.amp.GradScaler("hpu", **kwargs)
-    elif is_xpu_available():
-        return torch.amp.GradScaler("xpu", **kwargs)
-    elif is_mps_available():
-        if not is_torch_version(">=", "2.8.0"):
-            raise ValueError("Grad Scaler with MPS device requires a Pytorch >= 2.8.0")
-        return torch.amp.GradScaler("mps", **kwargs)
-    else:
-        return torch.amp.GradScaler("cuda", **kwargs)
+    device_type, device_module = get_torch_accelerator_backend()
+    if device_type == "mps" and not is_torch_version(">=", "2.8.0"):
+        raise ValueError("Grad Scaler with MPS device requires a Pytorch >= 2.8.0")
+    # These extensions provide their own scaler implementation.
+    if device_type in ("mlu", "sdaa", "musa", "npu"):
+        return device_module.amp.GradScaler(**kwargs)
+    if device_type is None:
+        device_type = "cpu"
+    return torch.amp.GradScaler(device_type, **kwargs)
 
 
 def has_offloaded_params(module: torch.nn.Module) -> bool:

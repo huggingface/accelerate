@@ -37,6 +37,7 @@ from ..utils import (
     check_cuda_fp8_capability,
     compare_versions,
     gather,
+    get_torch_accelerator_backend,
     is_aim_available,
     is_bnb_available,
     is_clearml_available,
@@ -84,28 +85,13 @@ from ..utils import (
 def get_backend():
     if is_torch_xla_available():
         return "xla", torch.cuda.device_count(), torch.cuda.memory_allocated
-    elif is_cuda_available():
-        return "cuda", torch.cuda.device_count(), torch.cuda.memory_allocated
-    elif is_mps_available(min_version="2.0"):
-        return "mps", 1, torch.mps.current_allocated_memory
-    elif is_mps_available():
-        return "mps", 1, lambda: 0
-    elif is_mlu_available():
-        return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
-    elif is_sdaa_available():
-        return "sdaa", torch.sdaa.device_count(), torch.sdaa.memory_allocated
-    elif is_musa_available():
-        return "musa", torch.musa.device_count(), torch.musa.memory_allocated
-    elif is_npu_available():
-        return "npu", torch.npu.device_count(), torch.npu.memory_allocated
-    elif is_xpu_available():
-        return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
-    elif is_hpu_available():
-        return "hpu", torch.hpu.device_count(), torch.hpu.memory_allocated
-    elif is_neuron_available():
-        return "neuron", torch.neuron.device_count(), torch.neuron.memory_allocated
-    else:
+    # This runs at import time, including in notebook launchers before they fork.
+    device_type, device_module = get_torch_accelerator_backend()
+    if device_type is None:
         return "cpu", 1, lambda: 0
+    if device_type == "mps":
+        return "mps", 1, device_module.current_allocated_memory
+    return device_type, device_module.device_count(), device_module.memory_allocated
 
 
 torch_device, device_count, memory_allocated_func = get_backend()

@@ -76,6 +76,28 @@ TORCH_LAUNCH_PARAMS = [
     "master_port",
 ]
 
+# Names differ across distributed runtimes and device-visibility environment variables.
+TORCH_DISTRIBUTED_BACKENDS = {
+    "cuda": "nccl",
+    "mlu": "cncl",
+    "sdaa": "tccl",
+    "musa": "mccl",
+    "npu": "hccl",
+    "hpu": "hccl",
+    "xpu": "xccl",
+    "neuron": "neuron",
+}
+DEVICE_VISIBLE_DEVICES_ENV_VARS = {
+    "cuda": "CUDA_VISIBLE_DEVICES",
+    "xpu": "ZE_AFFINITY_MASK",
+    "mlu": "MLU_VISIBLE_DEVICES",
+    "sdaa": "SDAA_VISIBLE_DEVICES",
+    "musa": "MUSA_VISIBLE_DEVICES",
+    "npu": "ASCEND_RT_VISIBLE_DEVICES",
+    "hpu": "HABANA_VISIBLE_MODULES",
+    "neuron": "NEURON_RT_VISIBLE_CORES",
+}
+
 CUDA_DISTRIBUTED_TYPES = ["DEEPSPEED", "MULTI_GPU", "FSDP", "MEGATRON_LM", "TP"]
 TORCH_DISTRIBUTED_OPERATION_TYPES = CUDA_DISTRIBUTED_TYPES + [
     "MULTI_NPU",

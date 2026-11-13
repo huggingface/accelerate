@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from unittest import mock
 
 from torch import nn
 
@@ -23,7 +22,7 @@ from accelerate.test_utils import (
     require_non_torch_xla,
     torch_device,
 )
-from accelerate.utils.memory import clear_device_cache, find_executable_batch_size, release_memory
+from accelerate.utils.memory import find_executable_batch_size, release_memory
 
 
 def raise_fake_out_of_memory():
@@ -183,20 +182,3 @@ class MemoryTest(unittest.TestCase):
         assert memory_allocated_func() > starting_memory
         model = release_memory(model)
         assert memory_allocated_func() == starting_memory
-
-    def test_clear_device_cache_with_torch_accelerator(self):
-        with (
-            mock.patch("accelerate.utils.memory.is_xpu_available", return_value=False),
-            mock.patch("accelerate.utils.memory.is_mlu_available", return_value=False),
-            mock.patch("accelerate.utils.memory.is_sdaa_available", return_value=False),
-            mock.patch("accelerate.utils.memory.is_musa_available", return_value=False),
-            mock.patch("accelerate.utils.memory.is_npu_available", return_value=False),
-            mock.patch("accelerate.utils.memory.is_mps_available", return_value=False),
-            mock.patch("accelerate.utils.memory.is_cuda_available", return_value=False),
-            mock.patch("accelerate.utils.memory.is_hpu_available", return_value=False),
-            mock.patch("accelerate.utils.memory.is_neuron_available", return_value=False),
-            mock.patch("torch.accelerator", create=True) as accelerator,
-        ):
-            accelerator.is_available.return_value = True
-            clear_device_cache()
-            accelerator.empty_cache.assert_called_once_with()

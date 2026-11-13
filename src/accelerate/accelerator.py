@@ -92,14 +92,13 @@ from .utils import (
     get_mixed_precision_context_manager,
     get_model_tp_size,
     get_pretty_name,
+    get_torch_accelerator_backend,
     has_offloaded_params,
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
     is_lomo_available,
     is_megatron_lm_available,
-    is_mlu_available,
-    is_musa_available,
     is_npu_available,
     is_torch_xla_available,
     is_torchao_available,
@@ -360,14 +359,10 @@ class Accelerator:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
-            if is_mlu_available():
-                if compare_versions("deepspeed", "<", "0.15.2"):
-                    raise ImportError("DeepSpeed MLU version must be >= 0.15.2. Please update DeepSpeed.")
-            elif is_musa_available():
-                if compare_versions("deepspeed", "<", "0.14.3"):
-                    raise ImportError("DeepSpeed MUSA version must be >= 0.14.3. Please update DeepSpeed.")
-            elif compare_versions("deepspeed", "<", "0.9.3"):
-                raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
+            device_type, _ = get_torch_accelerator_backend()
+            minimum_version = {"mlu": "0.15.2", "musa": "0.14.3"}.get(device_type, "0.9.3")
+            if compare_versions("deepspeed", "<", minimum_version):
+                raise ImportError(f"DeepSpeed version must be >= {minimum_version}. Please update DeepSpeed.")
 
             self.deepspeed_engine_wrapped = None
 

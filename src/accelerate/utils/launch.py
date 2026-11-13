@@ -27,17 +27,11 @@ from ..commands.config.config_args import SageMakerConfig
 from ..utils import (
     DynamoBackend,
     PrecisionType,
+    get_torch_accelerator_backend,
     is_fp8_available,
-    is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
-    is_sdaa_available,
     is_torch_xla_available,
-    is_xpu_available,
 )
-from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
+from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS, DEVICE_VISIBLE_DEVICES_ENV_VARS
 from ..utils.other import get_free_port, is_port_in_use, merge_dicts
 from ..utils.versions import compare_versions
 from . import str_to_bool
@@ -134,22 +128,10 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> tuple[list[str]
     if args.debug:
         current_env["ACCELERATE_DEBUG_MODE"] = "true"
     if args.gpu_ids != "all" and args.gpu_ids is not None:
-        if is_xpu_available():
-            current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
-        elif is_mlu_available():
-            current_env["MLU_VISIBLE_DEVICES"] = args.gpu_ids
-        elif is_sdaa_available():
-            current_env["SDAA_VISIBLE_DEVICES"] = args.gpu_ids
-        elif is_musa_available():
-            current_env["MUSA_VISIBLE_DEVICES"] = args.gpu_ids
-        elif is_npu_available():
-            current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
-        elif is_hpu_available():
-            current_env["HABANA_VISIBLE_MODULES"] = args.gpu_ids
-        elif is_neuron_available():
-            current_env["NEURON_RT_VISIBLE_CORES"] = args.gpu_ids
-        else:
-            current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
+        device_type, _ = get_torch_accelerator_backend(check_available=False)
+        visible_devices_env_var = DEVICE_VISIBLE_DEVICES_ENV_VARS.get(device_type)
+        if visible_devices_env_var is not None:
+            current_env[visible_devices_env_var] = args.gpu_ids
     if num_machines > 1:
         assert args.main_process_ip is not None, (
             "When using multiple machines, you need to specify the main process IP."
@@ -260,22 +242,10 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> dict[str, str]:
         current_env["ACCELERATE_DEBUG_MODE"] = "true"
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
-        if is_xpu_available():
-            current_env["ZE_AFFINITY_MASK"] = gpu_ids
-        elif is_mlu_available():
-            current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
-        elif is_sdaa_available():
-            current_env["SDAA_VISIBLE_DEVICES"] = gpu_ids
-        elif is_musa_available():
-            current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
-        elif is_npu_available():
-            current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
-        elif is_hpu_available():
-            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
-        elif is_neuron_available():
-            current_env["NEURON_RT_VISIBLE_CORES"] = gpu_ids
-        else:
-            current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
+        device_type, _ = get_torch_accelerator_backend(check_available=False)
+        visible_devices_env_var = DEVICE_VISIBLE_DEVICES_ENV_VARS.get(device_type)
+        if visible_devices_env_var is not None:
+            current_env[visible_devices_env_var] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
     try:
         mixed_precision = PrecisionType(mixed_precision)
@@ -533,22 +503,10 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> tuple[list[str], dict
         current_env["ACCELERATE_DEBUG_MODE"] = "true"
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
-        if is_xpu_available():
-            current_env["ZE_AFFINITY_MASK"] = gpu_ids
-        elif is_mlu_available():
-            current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
-        elif is_sdaa_available():
-            current_env["SDAA_VISIBLE_DEVICES"] = gpu_ids
-        elif is_musa_available():
-            current_env["MUSA_VISIBLE_DEVICES"] = gpu_ids
-        elif is_npu_available():
-            current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
-        elif is_hpu_available():
-            current_env["HABANA_VISIBLE_MODULES"] = gpu_ids
-        elif is_neuron_available():
-            current_env["NEURON_RT_VISIBLE_CORES"] = gpu_ids
-        else:
-            current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
+        device_type, _ = get_torch_accelerator_backend(check_available=False)
+        visible_devices_env_var = DEVICE_VISIBLE_DEVICES_ENV_VARS.get(device_type)
+        if visible_devices_env_var is not None:
+            current_env[visible_devices_env_var] = gpu_ids
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
@@ -815,8 +773,10 @@ class PrepareForLaunch:
         elif self.distributed_type in (
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_MLU,
+            DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
             DistributedType.MULTI_NPU,
+            DistributedType.MULTI_HPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_NEURON,

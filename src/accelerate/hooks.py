@@ -24,15 +24,9 @@ from .utils import (
     PrefixedDataset,
     find_device,
     named_module_tensors,
+    normalize_device,
     send_to_device,
     set_module_tensor_to_device,
-)
-from .utils.imports import (
-    is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_npu_available,
-    is_sdaa_available,
 )
 from .utils.memory import clear_device_cache
 from .utils.modeling import get_non_persistent_buffers
@@ -52,9 +46,6 @@ def _compiler_disable(fn):
         return wrapper._compiled_fn(*args, **kwargs)
 
     return wrapper
-
-
-_accelerate_added_attributes = ["to", "cuda", "npu", "xpu", "mlu", "sdaa", "musa"]
 
 
 class ModelHook:
@@ -231,7 +222,10 @@ def remove_hook_from_module(module: nn.Module, recurse=False):
         delattr(module, "_old_forward")
 
     # Remove accelerate added warning hooks from dispatch_model
-    for attr in _accelerate_added_attributes:
+    added_attributes = [
+        name for name, value in module.__dict__.items() if getattr(value, "_accelerate_added_attribute", False)
+    ]
+    for attr in added_attributes:
         module.__dict__.pop(attr, None)
 
     if recurse:
@@ -360,6 +354,7 @@ class AlignDevicesHook(ModelHook):
     @_compiler_disable
     def _onload_weights(self, module):
         self.tied_pointers_to_remove = set()
+        execution_device = normalize_device(self.execution_device)
 
         for name, _ in named_module_tensors(
             module,
@@ -380,14 +375,14 @@ class AlignDevicesHook(ModelHook):
                 value is not None
                 and self.tied_params_map is not None
                 and value.data_ptr() in self.tied_params_map
-                and self.execution_device not in self.tied_params_map[value.data_ptr()]
+                and execution_device not in self.tied_params_map[value.data_ptr()]
             ):
-                self.tied_pointers_to_remove.add((value.data_ptr(), self.execution_device))
+                self.tied_pointers_to_remove.add((value.data_ptr(), execution_device))
 
             set_module_tensor_to_device(
                 module,
                 name,
-                self.execution_device,
+                execution_device,
                 value=value,
                 fp16_statistics=fp16_statistics,
                 tied_params_map=self.tied_params_map,
@@ -410,21 +405,6 @@ class AlignDevicesHook(ModelHook):
         # We may have loaded tied weights into self.tied_params_map (avoiding to load them several times in e.g. submodules): remove them from
         # this dictionary to allow the garbage collector to do its job.
         for value_pointer, device in self.tied_pointers_to_remove:
-            if isinstance(device, int):
-                if is_npu_available():
-                    device = f"npu:{device}"
-                elif is_mlu_available():
-                    device = f"mlu:{device}"
-                elif is_sdaa_available():
-                    device = f"sdaa:{device}"
-                elif is_musa_available():
-                    device = f"musa:{device}"
-                elif is_hpu_available():
-                    device = "hpu"
-                elif torch.cuda.is_available():
-                    pass
-                elif torch.accelerator.is_available():
-                    device = f"{torch.accelerator.current_accelerator().type}:{device}"
             if device in self.tied_params_map[value_pointer]:
                 del self.tied_params_map[value_pointer][device]
         self.tied_pointers_to_remove = set()
