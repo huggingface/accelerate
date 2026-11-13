@@ -65,6 +65,8 @@ def test_maximum_layer_scan_preserves_depth_first_order(dtype, device, reverse, 
             names = ["b", "a"]
     saved_modules = modules.copy()
     sizes = compute_module_sizes(model)
+    for name, _ in model.named_modules():
+        sizes.setdefault(name, 0)
     saved_sizes = dict(sizes)
 
     assert get_max_layer_size(modules, sizes, no_split) == (
@@ -115,7 +117,7 @@ def test_scan_driven_device_map_preserves_trained_checkpoint_continuation(tmp_pa
     )
     assert memory == {"cpu": 1024}
     assert set(device_map.values()) == {"cpu"}
-    restored = load_checkpoint_and_dispatch(restored, weights_file, device_map=device_map)
+    restored = load_checkpoint_and_dispatch(restored, str(weights_file), device_map=device_map)
     optimizer = torch.optim.SGD(restored.parameters(), lr=0.03, momentum=0.5)
     optimizer.load_state_dict(torch.load(optimizer_file, weights_only=True))
     assert all(parameter.device.type == "cpu" for parameter in restored.parameters())
