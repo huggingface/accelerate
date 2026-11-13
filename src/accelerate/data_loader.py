@@ -34,6 +34,7 @@ from .utils import (
     initialize_tensors,
     is_datasets_available,
     is_torchdata_stateful_dataloader_available,
+    recursively_apply,
     send_to_device,
     slice_tensors,
     synchronize_rng_states,
@@ -889,6 +890,8 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
                     process_index=self.state.process_index,
                     num_processes=self.state.num_processes,
                 )
+                # Keep only the prefix storage, and isolate it from in-place batch transforms.
+                first_batch = recursively_apply(torch.clone, first_batch)
 
             if batch is None:
                 raise ValueError(
