@@ -34,6 +34,7 @@ from accelerate.utils import (
     DistributedType,
     gather,
     gather_object,
+    get_torch_accelerator_backend,
     is_bf16_available,
     is_cuda_available,
     is_datasets_available,
@@ -170,12 +171,19 @@ def rng_sync_check():
     state = AcceleratorState()
     synchronize_rng_states(["torch"])
     assert are_the_same_tensors(torch.get_rng_state()), "RNG states improperly synchronized on CPU."
-    if state.distributed_type == DistributedType.MULTI_GPU:
-        synchronize_rng_states(["cuda"])
-        assert are_the_same_tensors(torch.cuda.get_rng_state()), "RNG states improperly synchronized on GPU."
-    elif state.distributed_type == DistributedType.MULTI_XPU:
-        synchronize_rng_states(["xpu"])
-        assert are_the_same_tensors(torch.xpu.get_rng_state()), "RNG states improperly synchronized on XPU."
+    device_type, device_module = get_torch_accelerator_backend()
+    if state.device.type == device_type:
+        synchronize_rng_states([device_type])
+        if device_module is torch.accelerator:
+            # Remove the native fallback once our minimum PyTorch version is 2.14.
+            if hasattr(torch.accelerator, "random"):
+                rng_state = torch.accelerator.random.get_rng_state()
+            else:
+                device_module = torch.get_device_module(device_type)
+                rng_state = device_module.get_rng_state()
+        else:
+            rng_state = device_module.get_rng_state()
+        assert are_the_same_tensors(rng_state), f"RNG states improperly synchronized on {device_type}."
     generator = torch.Generator()
     synchronize_rng_states(["generator"], generator=generator)
     assert are_the_same_tensors(generator.get_state()), "RNG states improperly synchronized in generator."

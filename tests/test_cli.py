@@ -171,6 +171,8 @@ class AccelerateLauncherTester(unittest.TestCase):
 
             args = self.parser.parse_args(["--cpu", str(self.test_file_path)])
             args, _, _ = _validate_launch_command(args)
+            assert args.num_processes == 1
+            assert not args.multi_gpu
             _, current_env = prepare_simple_launcher_cmd_env(args)
             assert current_env["KMP_AFFINITY"] == "granularity=fine,compact,1,0"
             assert current_env["KMP_BLOCKTIME"] == "1"

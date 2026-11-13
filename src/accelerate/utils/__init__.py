@@ -83,6 +83,8 @@ from .environment import (
 )
 from .imports import (
     deepspeed_required,
+    get_distributed_backend,
+    get_torch_accelerator_backend,
     is_4bit_bnb_available,
     is_8bit_bnb_available,
     is_aim_available,
@@ -148,6 +150,7 @@ from .modeling import (
     convert_file_size_to_int,
     dtype_byte_size,
     find_tied_parameters,
+    get_accelerator_free_memory,
     get_balanced_memory,
     get_grad_scaler,
     get_max_layer_size,
@@ -161,6 +164,7 @@ from .modeling import (
     load_offloaded_weights,
     load_state_dict,
     named_module_tensors,
+    normalize_device,
     retie_parameters,
     set_module_tensor_to_device,
 )

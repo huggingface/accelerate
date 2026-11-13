@@ -39,16 +39,11 @@ from .constants import (
 )
 from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
-    is_cuda_available,
+    get_torch_accelerator_backend,
     is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
     is_rocm_available,
     is_torchao_available,
     is_transformer_engine_available,
-    is_xpu_available,
 )
 from .versions import compare_versions, is_torch_version
 
@@ -1876,24 +1871,18 @@ class FullyShardedDataParallelPlugin:
             self.validate_mixed_precision_policy()
 
         if self.sync_module_states:
-            if is_npu_available():
-                device = torch.npu.current_device()
-            elif is_mlu_available():
-                device = torch.mlu.current_device()
-            elif is_musa_available():
-                device = torch.musa.current_device()
-            elif is_cuda_available():
-                device = torch.cuda.current_device()
-            elif is_xpu_available():
-                device = torch.xpu.current_device()
-            elif is_hpu_available():
-                device = torch.hpu.current_device()
-            elif is_neuron_available():
-                device = torch.neuron.current_device()
-            else:
+            device_type, device_module = get_torch_accelerator_backend()
+            if device_type is None:
+                device_type = "cpu"
+            if device_type in ("cpu", "mps"):
                 raise RuntimeError(
-                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', 'MLU', 'NPU', 'MUSA', or 'HPU'."
+                    f"FSDP parameter initialization with `sync_module_states=True` is not supported on {device_type}."
                 )
+            if device_module is torch.accelerator:
+                device_index = device_module.current_device_index()
+            else:
+                device_index = device_module.current_device()
+            device = torch.device(device_type, device_index)
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)

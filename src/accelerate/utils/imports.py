@@ -23,6 +23,7 @@ import torch
 from packaging import version
 from packaging.version import parse
 
+from .constants import TORCH_DISTRIBUTED_BACKENDS
 from .environment import parse_flag_from_env, patch_environment, str_to_bool
 from .versions import compare_versions, is_torch_version
 
@@ -157,14 +158,12 @@ def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
     if is_torch_xla_available(check_is_tpu=True):
         return not ignore_tpu
-    if is_cuda_available():
-        return torch.cuda.is_bf16_supported()
-    if is_mlu_available():
-        return torch.mlu.is_bf16_supported()
-    if is_xpu_available():
-        return torch.xpu.is_bf16_supported()
-    if is_mps_available():
+    device_type, device_module = get_torch_accelerator_backend()
+    if device_type == "mps":
         return torch.backends.mps.is_macos_or_newer(14, 0)
+    if device_type is not None:
+        if hasattr(device_module, "is_bf16_supported"):
+            return device_module.is_bf16_supported()
     return True
 
 
@@ -469,6 +468,58 @@ def is_neuron_available(check_device=False):
             return False
 
     return hasattr(torch, "neuron") and torch.neuron.is_available()
+
+
+def get_torch_accelerator_backend(check_available: bool = True):
+    """Return the accelerator type and API module, or `(None, None)` if none is detected.
+
+    An explicit set of backends uses native modules, such as `torch.cuda` or `torch.xpu`.
+    Other backends use the public `torch.accelerator` APIs.
+
+    Availability checks reuse the existing backend helpers when available.
+    Set `check_available=False` to discover the backend without probing device availability,
+    for example when selecting a launcher before forking.
+    """
+    try:
+        device = torch.accelerator.current_accelerator()
+    except RuntimeError as error:
+        # PyTorch 2.6 raises on CPU-only builds; later versions return None.
+        if "Cannot access accelerator device when none is available" not in str(error):
+            raise
+        device = None
+    if device is not None:
+        # Preserve backend-specific checks, including CUDA's NVML and MLU's CNDEV paths,
+        # which avoid initializing device runtimes before a fork when available.
+        availability_checks = {
+            "cuda": is_cuda_available,
+            "mps": is_mps_available,
+            "mlu": is_mlu_available,
+            "sdaa": is_sdaa_available,
+            "musa": is_musa_available,
+            "npu": is_npu_available,
+            "hpu": is_hpu_available,
+            "xpu": is_xpu_available,
+            "neuron": is_neuron_available,
+        }
+        availability_check = availability_checks.get(device.type, torch.accelerator.is_available)
+        if not check_available or availability_check():
+            # These backends still use their native APIs for compatibility with older PyTorch versions.
+            if device.type in {"cuda", "mps", "mlu", "sdaa", "musa", "npu", "hpu", "xpu", "neuron"}:
+                return device.type, torch.get_device_module(device.type)
+            return device.type, torch.accelerator
+    # These integrations may need their own discovery/registration before PyTorch sees them.
+    if is_hpu_available():
+        return "hpu", torch.hpu
+    if is_neuron_available():
+        return "neuron", torch.neuron
+    return None, None
+
+
+def get_distributed_backend(device_type: str | None) -> str | None:
+    """Return the device's default distributed backend, or `None` when unsupported."""
+    if device_type == "xpu" and not is_xccl_available():
+        return None
+    return TORCH_DISTRIBUTED_BACKENDS.get(device_type)
 
 
 def is_dvclive_available():

@@ -99,53 +99,17 @@ def are_libraries_initialized(*library_names: str) -> list[str]:
 
 
 def get_current_device_type() -> tuple[str, str]:
-    """
-    Determines the current device type and distributed type without initializing any device.
+    """Return the launcher device and distributed type without initializing an accelerator."""
+    from .imports import get_distributed_backend, get_torch_accelerator_backend
 
-    This is particularly important when using fork-based multiprocessing, as device initialization
-    before forking can cause errors.
-
-    The device detection order follows the same priority as state.py:_prepare_backend():
-    MLU -> SDAA -> MUSA -> NPU -> HPU -> CUDA -> XPU
-
-    Returns:
-        tuple[str, str]: A tuple of (device_type, distributed_type)
-            - device_type: The device string (e.g., "cuda", "npu", "xpu")
-            - distributed_type: The distributed type string (e.g., "MULTI_GPU", "MULTI_NPU")
-
-    Example:
-        ```python
-        >>> device_type, distributed_type = get_current_device_type()
-        >>> print(device_type)  # "cuda"
-        >>> print(distributed_type)  # "MULTI_GPU"
-        ```
-    """
-    from .imports import (
-        is_hpu_available,
-        is_mlu_available,
-        is_musa_available,
-        is_neuron_available,
-        is_npu_available,
-        is_sdaa_available,
-        is_xpu_available,
-    )
-
-    if is_mlu_available():
-        return "mlu", "MULTI_MLU"
-    elif is_sdaa_available():
-        return "sdaa", "MULTI_SDAA"
-    elif is_musa_available():
-        return "musa", "MULTI_MUSA"
-    elif is_npu_available():
-        return "npu", "MULTI_NPU"
-    elif is_hpu_available():
-        return "hpu", "MULTI_HPU"
-    elif is_xpu_available():
-        return "xpu", "MULTI_XPU"
-    elif is_neuron_available():
-        return "neuron", "MULTI_NEURON"
-    else:
-        return "cuda", "MULTI_GPU"
+    device_type, _ = get_torch_accelerator_backend(check_available=False)
+    if device_type is None:
+        return "cpu", "NO"
+    if get_distributed_backend(device_type) is None:
+        return device_type, "NO"
+    if device_type == "cuda":
+        return device_type, "MULTI_GPU"
+    return device_type, f"MULTI_{device_type.upper()}"
 
 
 def _nvidia_smi():

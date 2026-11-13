@@ -92,14 +92,13 @@ from .utils import (
     get_mixed_precision_context_manager,
     get_model_tp_size,
     get_pretty_name,
+    get_torch_accelerator_backend,
     has_offloaded_params,
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
     is_lomo_available,
     is_megatron_lm_available,
-    is_mlu_available,
-    is_musa_available,
     is_npu_available,
     is_torch_xla_available,
     is_torchao_available,
@@ -214,6 +213,7 @@ class Accelerator:
 
             - `"torch"`: the base torch random number generator
             - `"cuda"`: the CUDA random number generator (GPU only)
+            - Any registered PyTorch accelerator's device type: its device random number generator.
             - `"xla"`: the XLA random number generator (TPU only)
             - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
@@ -360,14 +360,10 @@ class Accelerator:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
-            if is_mlu_available():
-                if compare_versions("deepspeed", "<", "0.15.2"):
-                    raise ImportError("DeepSpeed MLU version must be >= 0.15.2. Please update DeepSpeed.")
-            elif is_musa_available():
-                if compare_versions("deepspeed", "<", "0.14.3"):
-                    raise ImportError("DeepSpeed MUSA version must be >= 0.14.3. Please update DeepSpeed.")
-            elif compare_versions("deepspeed", "<", "0.9.3"):
-                raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
+            device_type, _ = get_torch_accelerator_backend()
+            minimum_version = {"mlu": "0.15.2", "musa": "0.14.3"}.get(device_type, "0.9.3")
+            if compare_versions("deepspeed", "<", minimum_version):
+                raise ImportError(f"DeepSpeed version must be >= {minimum_version}. Please update DeepSpeed.")
 
             self.deepspeed_engine_wrapped = None
 
@@ -540,12 +536,13 @@ class Accelerator:
             and self.device.type != "cpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
+            supports_fp16 = torch.amp.is_autocast_available(self.device.type)
+            _, device_module = get_torch_accelerator_backend()
+            if hasattr(device_module, "get_amp_supported_dtype"):
+                supports_fp16 = supports_fp16 and torch.float16 in device_module.get_amp_supported_dtype()
+            if not supports_fp16 or is_torch_xla_available(check_is_tpu=True):
+                raise ValueError(f"fp16 mixed precision is not supported on {self.device.type!r}.")
             self.native_amp = True
-            supported_device = ("xpu", "cuda", "npu", "xla", "mlu", "musa", "hpu", "sdaa", "mps")
-            if self.device.type not in supported_device or is_torch_xla_available(check_is_tpu=True):
-                raise ValueError(
-                    f"fp16 mixed precision requires a device in {supported_device} (not {self.device.type!r})."
-                )
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
 
             # FSDP2 doesn't use ShardedGradScaler, don't want to modify `get_grad_scaler`, rather create a simple utility
@@ -1482,13 +1479,6 @@ class Accelerator:
             if model_count > 1:
                 raise ValueError("Only one model is supported when using FSDP2")
 
-        # If we're dealing with device placement, this deals with that by...
-        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
-
-        if tpu_should_fix_optimizer:
-            # 1. grabbing old model parameters
-            old_named_params = self._get_named_parameters(*args, drop_refs=False)
-
         if self.parallelism_config and self.parallelism_config.tp_enabled:
             args = self._prepare_tp(*args)
             for item in args:
@@ -1513,19 +1503,16 @@ class Accelerator:
         elif self.is_fsdp2:
             result = self._prepare_fsdp2(*args)
         else:
+            if self.device.type in ("tpu", "xla") and self.distributed_type != DistributedType.FSDP:
+                old_named_params = self._get_named_parameters(*args)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
-        if tpu_should_fix_optimizer:
-            # 2. grabbing new model parameters
-            new_named_params = self._get_named_parameters(*result)
-            # 3. building a map from the first to the second
-            mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
-            # 4. using that map to update the parameters of the optimizer
-            for obj in result:
-                if isinstance(obj, torch.optim.Optimizer):
-                    obj._switch_parameters(mapping)
+
+            # FSDP manages optimizer parameters itself.
+            if self.device.type in ("tpu", "xla") and self.distributed_type != DistributedType.FSDP:
+                self._remap_optimizer_parameters(old_named_params, *result)
 
         for item in result:
             if any(
@@ -1535,6 +1522,16 @@ class Accelerator:
                 item._is_accelerate_prepared = True
 
         return result if len(result) > 1 else result[0]
+
+    def _remap_optimizer_parameters(self, old_named_params, *args):
+        """Remap optimizer references after preparation. No-op if no parameter objects were replaced."""
+        new_named_params = self._get_named_parameters(*args)
+        mapping = {p: new_named_params[n] for n, p in old_named_params.items() if p is not new_named_params[n]}
+        if not mapping:
+            return
+        for obj in args:
+            if isinstance(obj, torch.optim.Optimizer):
+                obj._switch_parameters(mapping)
 
     def _prepare_tp(self, *args):
         # First pass: prepare everything except schedulers (first_pass=True) and the model, which is prepared separately
@@ -3868,34 +3865,38 @@ class Accelerator:
     def _get_named_parameters(self, *args, drop_refs=False):
         named_parameters = {}
         accessor_mapping = {}
-        for obj in args:
-            if isinstance(obj, torch.nn.Module):
-                obj = extract_model_from_parallel(obj)
-                if not drop_refs:
-                    named_parameters.update({n: p for n, p in obj.named_parameters()})
-                    continue
+        models = [obj for obj in args if isinstance(obj, torch.nn.Module)]
+        for index, model in enumerate(models):
+            model = extract_model_from_parallel(model, keep_torch_compile=False)
+            # Avoid parameter-name collisions when preparing multiple models together.
+            prefix = ""
+            if len(models) > 1:
+                prefix = str(index)
+            if not drop_refs:
+                named_parameters.update(model.named_parameters(prefix=prefix))
+                continue
 
-                # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
-                # the underlying pointer is actually hidden in `_tensor` attribute
-                if self.fp8_backend == FP8BackendType.AO:
-                    from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
+            # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
+            # the underlying pointer is actually hidden in `_tensor` attribute
+            if self.fp8_backend == FP8BackendType.AO:
+                from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
 
-                    accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
-                _is_dtensor_available = torch.distributed.is_available()
-                # we know we're in FSDP2 so DTensor is available
-                if _is_dtensor_available:
-                    from torch.distributed.tensor import DTensor
+                accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
+            _is_dtensor_available = torch.distributed.is_available()
+            # we know we're in FSDP2 so DTensor is available
+            if _is_dtensor_available:
+                from torch.distributed.tensor import DTensor
 
-                    accessor_mapping[DTensor] = "_local_tensor"
+                accessor_mapping[DTensor] = "_local_tensor"
 
-                named_parameters.update(
-                    {
-                        n: getattr(p, accessor_mapping[type(p)]).data_ptr()
-                        if type(p) in accessor_mapping
-                        else p.data_ptr()
-                        for n, p in obj.named_parameters()
-                    }
-                )
+            named_parameters.update(
+                {
+                    n: getattr(p, accessor_mapping[type(p)]).data_ptr()
+                    if type(p) in accessor_mapping
+                    else p.data_ptr()
+                    for n, p in model.named_parameters(prefix=prefix)
+                }
+            )
         return named_parameters
 
     def _get_devices(self, *args):
