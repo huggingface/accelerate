@@ -529,7 +529,12 @@ def gather_object(object: Any):
 
 def _gpu_broadcast(data, src=0):
     def _gpu_broadcast_one(tensor, src=0):
-        torch.distributed.broadcast(tensor, src=src)
+        contiguous_tensor = tensor.contiguous()
+        torch.distributed.broadcast(contiguous_tensor, src=src)
+        if contiguous_tensor is not tensor and torch.distributed.get_rank() != src:
+            # Keep the input view and its aliases while copying only the logical elements.
+            with torch.no_grad():
+                tensor.copy_(contiguous_tensor)
         return tensor
 
     return recursively_apply(_gpu_broadcast_one, data, error_on_other_type=True, src=src)
