@@ -1632,12 +1632,15 @@ def check_device_map(model: nn.Module, device_map: dict[str, Union[int, str, tor
         model (`torch.nn.Module`): The model to check the device map against.
         device_map (`Dict[str, Union[int, str, torch.device]]`): The device map to check.
     """
-    all_module_names = dict(model.named_modules())
-    invalid_keys = [k for k in device_map if k != "" and k not in all_module_names]
+    valid_names = {name for name, _ in model.named_modules()}
+    valid_names.update(name for name, _ in model.named_parameters(remove_duplicate=False))
+    valid_names.update(name for name, _ in model.named_buffers(remove_duplicate=False))
+    invalid_keys = [key for key in device_map if key not in valid_names]
 
     if invalid_keys:
         warnings.warn(
-            f"The following device_map keys do not match any submodules in the model: {invalid_keys}", UserWarning
+            f"The following device_map keys do not match any submodules, parameters, or buffers in the model: {invalid_keys}",
+            UserWarning,
         )
 
     all_model_tensors = [name for name, _ in model.state_dict().items()]

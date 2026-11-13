@@ -257,6 +257,8 @@ class AlignDevicesHook(ModelHook):
             Whether or not to include the associated module's buffers when offloading.
         place_submodules (`bool`, *optional*, defaults to `False`):
             Whether to place the submodules on `execution_device` during the `init_hook` event.
+        tensor_names (`set[str]`, *optional*):
+            If provided, restrict weight placement and offloading to these names relative to the module.
     """
 
     def __init__(
@@ -269,6 +271,7 @@ class AlignDevicesHook(ModelHook):
         place_submodules: bool = False,
         skip_keys: Optional[Union[str, list[str]]] = None,
         tied_params_map: Optional[dict[int, dict[torch.device, torch.Tensor]]] = None,
+        tensor_names: Optional[set[str]] = None,
     ):
         self.execution_device = execution_device
         self.offload = offload
@@ -277,6 +280,7 @@ class AlignDevicesHook(ModelHook):
         self.offload_buffers = offload_buffers
         self.place_submodules = place_submodules
         self.skip_keys = skip_keys
+        self.tensor_names = tensor_names
 
         # Will contain the input device when `io_same_device=True`.
         self.input_device = None
@@ -295,26 +299,33 @@ class AlignDevicesHook(ModelHook):
             f"place_submodules={self.place_submodules}, skip_keys={repr(self.skip_keys)})"
         )
 
+    def _named_tensors(self, module, **kwargs):
+        return (
+            (name, tensor)
+            for name, tensor in named_module_tensors(module, **kwargs)
+            if self.tensor_names is None or name in self.tensor_names
+        )
+
     def init_hook(self, module):
         # In case the AlignDevicesHook is on meta device, ignore tied weights as data_ptr() is then always zero.
         if self.execution_device == "meta" or self.execution_device == torch.device("meta"):
             self.tied_params_map = None
 
         if not self.offload and self.execution_device is not None:
-            for name, _ in named_module_tensors(module, recurse=self.place_submodules):
+            for name, _ in self._named_tensors(module, recurse=self.place_submodules):
                 set_module_tensor_to_device(module, name, self.execution_device, tied_params_map=self.tied_params_map)
         elif self.offload:
             self.original_devices = {
-                name: param.device for name, param in named_module_tensors(module, recurse=self.place_submodules)
+                name: param.device for name, param in self._named_tensors(module, recurse=self.place_submodules)
             }
             if self.weights_map is None:
                 self.weights_map = {
                     name: param.to("cpu")
-                    for name, param in named_module_tensors(
+                    for name, param in self._named_tensors(
                         module, include_buffers=self.offload_buffers, recurse=self.place_submodules
                     )
                 }
-            for name, _ in named_module_tensors(
+            for name, _ in self._named_tensors(
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules, remove_non_persistent=True
             ):
                 # When using disk offloading, we can not rely on `weights_map[name].data_ptr()` as the reference pointer,
@@ -331,11 +342,15 @@ class AlignDevicesHook(ModelHook):
 
             if not self.offload_buffers and self.execution_device is not None:
                 for name, _ in module.named_buffers(recurse=self.place_submodules):
+                    if self.tensor_names is not None and name not in self.tensor_names:
+                        continue
                     set_module_tensor_to_device(
                         module, name, self.execution_device, tied_params_map=self.tied_params_map
                     )
             elif self.offload_buffers and self.execution_device is not None:
                 for name in get_non_persistent_buffers(module, recurse=self.place_submodules):
+                    if self.tensor_names is not None and name not in self.tensor_names:
+                        continue
                     set_module_tensor_to_device(
                         module, name, self.execution_device, tied_params_map=self.tied_params_map
                     )
@@ -359,7 +374,7 @@ class AlignDevicesHook(ModelHook):
     def _onload_weights(self, module):
         self.tied_pointers_to_remove = set()
 
-        for name, _ in named_module_tensors(
+        for name, _ in self._named_tensors(
             module,
             include_buffers=self.offload_buffers,
             recurse=self.place_submodules,
@@ -393,7 +408,7 @@ class AlignDevicesHook(ModelHook):
 
     @_compiler_disable
     def _offload_weights(self, module):
-        for name, _ in named_module_tensors(
+        for name, _ in self._named_tensors(
             module,
             include_buffers=self.offload_buffers,
             recurse=self.place_submodules,
@@ -660,7 +675,31 @@ def attach_align_device_hook_on_blocks(
     if not isinstance(offload, Mapping):
         offload = {key: offload for key in execution_device.keys()}
 
-    if module_name in execution_device and module_name in offload and not offload[module_name]:
+    prefix = f"{module_name}." if module_name else ""
+    tensor_groups = {}
+    if module_name not in offload:
+        for name, _ in named_module_tensors(module):
+            full_name = prefix + name
+            if full_name in execution_device and full_name in offload:
+                placement = (execution_device[full_name], offload[full_name])
+                tensor_groups.setdefault(placement, set()).add(name)
+
+    if tensor_groups:
+        # A split module can have entries for its own tensors alongside separate child-module entries.
+        # These hooks must only manage the selected direct tensors, leaving each child's placement intact.
+        for (device, tensor_offload), names in tensor_groups.items():
+            hook = AlignDevicesHook(
+                execution_device=device,
+                offload=tensor_offload,
+                weights_map=PrefixedDataset(weights_map, prefix) if weights_map is not None else None,
+                offload_buffers=offload_buffers,
+                io_same_device=(module_name == ""),
+                skip_keys=skip_keys,
+                tied_params_map=tied_params_map,
+                tensor_names=names,
+            )
+            add_hook_to_module(module, hook, append=True)
+    elif module_name in execution_device and module_name in offload and not offload[module_name]:
         hook = AlignDevicesHook(
             execution_device=execution_device[module_name],
             offload_buffers=offload_buffers,
