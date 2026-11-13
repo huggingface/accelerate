@@ -106,7 +106,8 @@ class CheckpointTest(AccelerateTestCase):
         accelerator = Accelerator()
         devices = [accelerator.device]
         device_type, device_module = get_torch_accelerator_backend()
-        if device_type not in (None, "mps"):
+        # Unified backends and MPS save only the current device's RNG state.
+        if device_type not in (None, "mps") and device_module is not torch.accelerator:
             devices = [torch.device(device_type, i) for i in range(device_module.device_count())]
         with tempfile.TemporaryDirectory() as tmpdir:
             accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)

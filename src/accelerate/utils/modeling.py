@@ -742,41 +742,23 @@ def get_max_layer_size(
     return max_size, layer_names
 
 
-def get_accelerator_free_memory(device_type: str, device_module, device_index: int) -> int:
-    """Return free memory in bytes for a device using its native PyTorch module.
-
-    When `mem_get_info` is unavailable, estimate free memory from device capacity minus this
-    process's allocated memory. This estimate cannot account for allocations by other processes.
+def get_accelerator_free_memory(device_module, device_index: int) -> int:
+    """Return free memory in bytes using the selected PyTorch accelerator API.
 
     Args:
-        device_type (`str`):
-            The accelerator type, such as `"cuda"` or `"xpu"`.
         device_module:
-            The native device module returned by [`get_torch_accelerator_backend`].
+            The API module returned by [`get_torch_accelerator_backend`].
         device_index (`int`):
             The index of the device to query.
     """
-    if hasattr(device_module, "mem_get_info"):
-        try:
-            return device_module.mem_get_info(device_index)[0]
-        except NotImplementedError:
-            pass
-
-    if hasattr(device_module, "get_device_properties") and hasattr(device_module, "memory_allocated"):
-        try:
-            properties = device_module.get_device_properties(device_index)
-            total_memory = getattr(properties, "total_memory", None)
-            if total_memory is None:
-                total_memory = getattr(properties, "hbm_bytes_per_device", None)
-            if total_memory is not None:
-                return max(0, int(total_memory) - device_module.memory_allocated(device_index))
-        except NotImplementedError:
-            pass
-
-    raise NotImplementedError(
-        f"Cannot determine free memory for accelerator '{device_type}' on device {device_index}. "
-        "Please pass an explicit `max_memory`."
-    )
+    if device_module is torch.accelerator:
+        # get_memory_info was added in PyTorch 2.10.
+        # Remove the native fallback once our minimum PyTorch version is 2.10.
+        if hasattr(device_module, "get_memory_info"):
+            return device_module.get_memory_info(device_index)[0]
+        device = torch.accelerator.current_accelerator()
+        device_module = torch.get_device_module(device)
+    return device_module.mem_get_info(device_index)[0]
 
 
 def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None):
@@ -798,7 +780,7 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
             try:
                 # Initialize each device before querying its available memory.
                 _ = torch.tensor(0, device=f"{device_type}:{i}")
-                max_memory[i] = get_accelerator_free_memory(device_type, device_module, i)
+                max_memory[i] = get_accelerator_free_memory(device_module, i)
                 if device_type == "cuda":
                     properties = device_module.get_device_properties(i)
                     is_integrated_cuda = is_integrated_cuda or getattr(properties, "is_integrated", False)

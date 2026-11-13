@@ -471,9 +471,10 @@ def is_neuron_available(check_device=False):
 
 
 def get_torch_accelerator_backend(check_available: bool = True):
-    """Return the accelerator type and native device module, or `(None, None)` if none is detected.
+    """Return the accelerator type and API module, or `(None, None)` if none is detected.
 
-    The module is `torch.cuda`, `torch.xpu`, or the corresponding registered device module.
+    An explicit set of backends uses native modules, such as `torch.cuda` or `torch.xpu`.
+    Other backends use the public `torch.accelerator` APIs.
 
     Availability checks reuse the existing backend helpers when available.
     Set `check_available=False` to discover the backend without probing device availability,
@@ -502,9 +503,10 @@ def get_torch_accelerator_backend(check_available: bool = True):
         }
         availability_check = availability_checks.get(device.type, torch.accelerator.is_available)
         if not check_available or availability_check():
-            # We can switch to torch.accelerator once it covers the operations we need
-            # across all supported PyTorch versions and backends.
-            return device.type, torch.get_device_module(device.type)
+            # These backends still use their native APIs for compatibility with older PyTorch versions.
+            if device.type in {"cuda", "mps", "mlu", "sdaa", "musa", "npu", "hpu", "xpu", "neuron"}:
+                return device.type, torch.get_device_module(device.type)
+            return device.type, torch.accelerator
     # These integrations may need their own discovery/registration before PyTorch sees them.
     if is_hpu_available():
         return "hpu", torch.hpu

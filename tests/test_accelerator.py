@@ -221,6 +221,27 @@ class AcceleratorTester(AccelerateTestCase):
         assert prepared_train_dl in accelerator._dataloaders
         assert prepared_valid_dl in accelerator._dataloaders
 
+    def test_prepare_remaps_optimizer_parameters(self):
+        accelerator = Accelerator(mixed_precision="no")
+        model = torch.nn.Linear(2, 1, bias=False)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        old_parameter = model.weight
+
+        # Force device placement to replace parameters, as some accelerators do.
+        self.addCleanup(
+            torch.__future__.set_overwrite_module_params_on_conversion,
+            torch.__future__.get_overwrite_module_params_on_conversion(),
+        )
+        torch.__future__.set_overwrite_module_params_on_conversion(True)
+        model, optimizer = accelerator.prepare(model, optimizer)
+
+        self.assertIsNot(model.weight, old_parameter)
+        self.assertIs(optimizer.param_groups[0]["params"][0], model.weight)
+        before = model.weight.detach().clone()
+        accelerator.backward(model(torch.ones(2, 2, device=accelerator.device)).sum())
+        optimizer.step()
+        torch.testing.assert_close(model.weight, before - 0.2)
+
     @require_non_hpu  # hpu does not support empty_cache
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()

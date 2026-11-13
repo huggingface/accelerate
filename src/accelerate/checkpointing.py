@@ -150,7 +150,15 @@ def save_accelerator_state(
     device_type, device_module = get_torch_accelerator_backend()
     if device_type is not None:
         rng_key = f"torch_{device_type}_manual_seed"
-        if device_type == "mps":
+        if device_module is torch.accelerator:
+            # torch.accelerator.random was added in PyTorch 2.14.
+            # Remove the native fallback once our minimum PyTorch version is 2.14.
+            if hasattr(torch.accelerator, "random"):
+                states[rng_key] = torch.accelerator.random.get_rng_state()
+            else:
+                device_module = torch.get_device_module(device_type)
+                states[rng_key] = device_module.get_rng_state()
+        elif device_type == "mps":
             states[rng_key] = device_module.get_rng_state()
         else:
             states[rng_key] = device_module.get_rng_state_all()
@@ -282,7 +290,11 @@ def load_accelerator_state(
         device_type, device_module = get_torch_accelerator_backend()
         rng_key = f"torch_{device_type}_manual_seed"
         if device_type is not None and rng_key in states:
-            if device_type == "mps":
+            if device_module is torch.accelerator:
+                # torch.accelerator.random does not yet provide set_rng_state.
+                device_module = torch.get_device_module(device_type)
+                device_module.set_rng_state(states[rng_key])
+            elif device_type == "mps":
                 device_module.set_rng_state(states[rng_key])
             else:
                 device_module.set_rng_state_all(states[rng_key])

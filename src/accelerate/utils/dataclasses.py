@@ -1878,7 +1878,10 @@ class FullyShardedDataParallelPlugin:
                 raise RuntimeError(
                     f"FSDP parameter initialization with `sync_module_states=True` is not supported on {device_type}."
                 )
-            device_index = device_module.current_device()
+            if device_module is torch.accelerator:
+                device_index = device_module.current_device_index()
+            else:
+                device_index = device_module.current_device()
             device = torch.device(device_type, device_index)
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`

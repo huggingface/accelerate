@@ -50,8 +50,8 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
     torch.manual_seed(seed)
     # Seeding can happen before a notebook launcher forks, so keep device discovery lazy.
     device_type, device_module = get_torch_accelerator_backend(check_available=False)
-    # torch.manual_seed already seeds MPS, which has no manual_seed_all method.
-    if device_type not in (None, "mps"):
+    # torch.manual_seed already seeds MPS and registered custom backends.
+    if device_type not in (None, "mps") and device_module is not torch.accelerator:
         device_module.manual_seed_all(seed)
     if is_torch_xla_available():
         xm.set_rng_state(seed)
@@ -75,7 +75,16 @@ def synchronize_rng_state(rng_type: Union[str, RNGType], generator: Optional[tor
     else:
         device_type, device_module = get_torch_accelerator_backend()
         assert device_type == rng_type, f"Can't synchronize {rng_type.upper()} seeds without that device."
-        rng_state = device_module.get_rng_state()
+        if device_module is torch.accelerator:
+            # torch.accelerator.random was added in PyTorch 2.14.
+            # Remove the native fallback once our minimum PyTorch version is 2.14.
+            if hasattr(torch.accelerator, "random"):
+                rng_state = torch.accelerator.random.get_rng_state()
+            else:
+                device_module = torch.get_device_module(device_type)
+                rng_state = device_module.get_rng_state()
+        else:
+            rng_state = device_module.get_rng_state()
 
     # Broadcast the rng state from device 0 to other devices
     state = AcceleratorState()
@@ -107,6 +116,10 @@ def synchronize_rng_state(rng_type: Union[str, RNGType], generator: Optional[tor
         xm.set_rng_state(rng_state.item())
     elif rng_type == "generator":
         generator.set_state(rng_state)
+    elif device_module is torch.accelerator:
+        # torch.accelerator.random does not yet provide set_rng_state.
+        device_module = torch.get_device_module(rng_type)
+        device_module.set_rng_state(rng_state)
     else:
         device_module.set_rng_state(rng_state)
 
