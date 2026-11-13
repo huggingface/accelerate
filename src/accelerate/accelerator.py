@@ -3866,11 +3866,14 @@ class Accelerator:
     def _get_named_parameters(self, *args, drop_refs=False):
         named_parameters = {}
         accessor_mapping = {}
-        for obj in args:
+        model_count = sum(isinstance(obj, torch.nn.Module) for obj in args)
+        for index, obj in enumerate(args):
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
+                # Keep each model's parameters separate while preserving single-model names.
+                prefix = f"{index}." if model_count > 1 else ""
                 if not drop_refs:
-                    named_parameters.update({n: p for n, p in obj.named_parameters()})
+                    named_parameters.update({f"{prefix}{n}": p for n, p in obj.named_parameters()})
                     continue
 
                 # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
@@ -3888,7 +3891,7 @@ class Accelerator:
 
                 named_parameters.update(
                     {
-                        n: getattr(p, accessor_mapping[type(p)]).data_ptr()
+                        f"{prefix}{n}": getattr(p, accessor_mapping[type(p)]).data_ptr()
                         if type(p) in accessor_mapping
                         else p.data_ptr()
                         for n, p in obj.named_parameters()
