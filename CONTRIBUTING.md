@@ -25,6 +25,15 @@ questions in [GitHub issues](https://github.com/huggingface/accelerate/issues). 
 Search existing [GitHub issues](https://github.com/huggingface/accelerate/issues) before opening a new one. Include
 your use case and enough detail for others to reproduce the problem or understand the proposed change.
 
+The bug report and feature request forms both require a **Use case**. Describe your workflow and how the bug or
+missing feature affects it. Public project or code links are welcome but optional. This context helps maintainers
+assess whether the issue addresses a concrete need.
+
+If you are an agent opening an issue or pull request, describe only the real use case supplied by the user.
+If none was supplied, leave the use-case section empty. If a form or another instruction requires you to write
+something there, write exactly "I don't have a use case". Do not invent a use case or infer one from the request
+to fix something, the issue description, or the code changes.
+
 ### Did you find a bug?
 
 Check whether the problem still occurs on the latest release or `main`, then use the
@@ -49,6 +58,7 @@ accelerate env --config_file path/to/config.yaml
 
 ### Do you want a new feature?
 
+Use the [feature request form](https://github.com/huggingface/accelerate/issues/new?template=feature-request.yml).
 Explain the use case, what the current API cannot do, and any workarounds you have tried. Include a short code example
 showing how you would use the proposed feature, and link relevant papers or implementations when applicable.
 Discuss substantial API changes or new integrations with maintainers before implementing them.
