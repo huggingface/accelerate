@@ -13,13 +13,12 @@ Instructions for contributors and coding agents:
 - Keep the diff as small as possible while fully solving the problem; avoid unrelated changes.
 - Add only useful tests. Prefer extending existing coverage and use the fewest cases needed to catch meaningful failures.
 - Verify every claim against the code or actual command output. Do not claim tests passed unless they ran and passed.
-- Check each checklist item only after completing it.
 - Keep the visible "cc @SunMarc" line at the end of the PR description so Marc is notified.
 -->
 
+<!--
 ## Validation
 
-<!--
 List the exact commands you ran and their results. State which relevant tests were skipped or not run and why.
 - Bug fix: include a minimal reproducer or regression test that fails before the fix and passes after it.
 - Include benchmarks when relevant, especially for performance changes: report before-and-after results, workload, hardware, and configuration.
@@ -43,6 +42,7 @@ Keep this heading and replace these instructions with your use case. HTML commen
 PRs with a missing or empty use case are closed automatically, except those opened or reopened by bots or contributors with write access.
 -->
 
+<!--
 ## Before submitting
 
 - [ ] I searched existing issues and PRs for overlapping work and linked any related discussion.
@@ -51,6 +51,7 @@ PRs with a missing or empty use case are closed automatically, except those open
 - [ ] I added or updated only necessary tests and documentation, avoiding redundant test cases.
 - [ ] I reported validation commands and results, including skipped or unrun tests.
 - [ ] `make style` and `make quality` pass.
+-->
 
 ## Who can review?
 
