@@ -724,9 +724,9 @@ def get_max_layer_size(
     """
     max_size = 0
     layer_names = []
-    modules_to_treat = modules.copy()
+    modules_to_treat = list(reversed(modules))
     while len(modules_to_treat) > 0:
-        module_name, module = modules_to_treat.pop(0)
+        module_name, module = modules_to_treat.pop()
         modules_children = list(module.named_children()) if isinstance(module, torch.nn.Module) else []
         if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
             # No splitting this one so we compare to the max_size
@@ -737,7 +737,7 @@ def get_max_layer_size(
             elif size == max_size:
                 layer_names.append(module_name)
         else:
-            modules_to_treat = [(f"{module_name}.{n}", v) for n, v in modules_children] + modules_to_treat
+            modules_to_treat.extend((f"{module_name}.{n}", v) for n, v in reversed(modules_children))
     return max_size, layer_names
 
 
