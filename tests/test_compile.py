@@ -19,6 +19,7 @@ import torch
 from torch.utils.benchmark import Timer
 from torch.utils.checkpoint import checkpoint
 
+from accelerate.hooks import ModelHook, add_hook_to_module
 from accelerate.test_utils import require_huggingface_suite, require_non_cpu, require_non_hpu, slow, torch_device
 from accelerate.utils import compile_regions, extract_model_from_parallel, release_memory
 
@@ -220,6 +221,27 @@ class RegionalCompilationRebindTester(unittest.TestCase):
 
         assert not hasattr(model, "trace")
         assert compiled_model.trace == ("twin", "OptimizedModule")
+
+    def test_checkpointed_blocks_with_hooks_preserve_eval_state(self):
+        class Block(CheckpointedRegionalCompilationBlock):
+            def forward(self, x):
+                return super().forward(x) * (2 if self.training else 1)
+
+        model, inputs = self._get_model_and_inputs()
+        model.blocks = torch.nn.ModuleList([Block(), Block()])
+        for block in model.blocks:
+            add_hook_to_module(block, ModelHook())
+        expected = model.eval()(inputs)
+        model.train()
+        graphs = []
+
+        def recording_backend(graph_module, example_inputs):
+            graphs.append(graph_module)
+            return graph_module.forward
+
+        compiled_model = compile_regions(model, backend=recording_backend).eval()
+        torch.testing.assert_close(compiled_model(inputs), expected)
+        assert graphs
 
     def test_checkpointed_blocks_are_compiled_across_graph_breaks(self):
         model, inputs = self._get_model_and_inputs()

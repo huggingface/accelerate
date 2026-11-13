@@ -142,19 +142,38 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
     ```
     """
 
+    def _rebind_module_methods(module, new_module):
+        # Shallow copies keep methods and partials bound to the original module.
+        # Rebind them so forwards and hooks use the copy's state, including its training flag.
+        def rebind(value):
+            if isinstance(value, MethodType) and value.__self__ is module:
+                return MethodType(value.__func__, new_module)
+            if isinstance(value, partial):
+                args = tuple(new_module if arg is module else arg for arg in value.args)
+                kwargs = {key: new_module if arg is module else arg for key, arg in value.keywords.items()}
+                rebound = partial(rebind(value.func), *args, **kwargs)
+                rebound.__dict__.update(value.__dict__)
+                if hasattr(value, "__wrapped__"):
+                    rebound.__wrapped__ = rebind(value.__wrapped__)
+                return rebound
+            return value
+
+        # Includes the partial `forward` and bound `_old_forward` installed by Accelerate hooks.
+        for name, value in list(new_module.__dict__.items()):
+            new_module.__dict__[name] = rebind(value)
+
     def _compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
         if is_repeated_blocks(module):
             new_module = torch.nn.ModuleList()
             for submodule in module:
                 new_submodule = copy(submodule)
+                _rebind_module_methods(submodule, new_submodule)
                 new_submodule.compile(**compile_kwargs)
                 new_module.append(torch.compile(new_submodule, **compile_kwargs))
         elif has_repeated_blocks(module):
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
-            for name, value in list(new_module.__dict__.items()):
-                if hasattr(value, "__func__") and getattr(value, "__self__", None) is module:
-                    new_module.__dict__[name] = MethodType(value.__func__, new_module)
+            _rebind_module_methods(module, new_module)
             new_module._modules = {}
             for name, submodule in module.named_children():
                 new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
