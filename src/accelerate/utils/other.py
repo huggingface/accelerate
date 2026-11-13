@@ -146,9 +146,6 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
         if is_repeated_blocks(module):
             new_module = torch.nn.ModuleList()
             for submodule in module:
-                # The outer compile also covers custom `__call__` wrappers like transformers' gradient checkpointing.
-                # When a graph break inside one makes it fall back to eager, the in-place compiled copy (which shares
-                # the parameters) still runs compiled.
                 new_submodule = copy(submodule)
                 new_submodule.compile(**compile_kwargs)
                 new_module.append(torch.compile(new_submodule, **compile_kwargs))
