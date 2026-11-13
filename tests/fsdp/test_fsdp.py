@@ -172,6 +172,65 @@ class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
         assert optimizer.state
 
 
+class FSDP2CheckpointedLayerShardingTest(AccelerateTestCase):
+    """A layer called both through a checkpoint wrapper and directly must keep its own FSDP hooks."""
+
+    def setUp(self):
+        super().setUp()
+        import torch.distributed as dist
+
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+
+        dist.init_process_group("gloo", init_method=f"file://{tmp_dir.name}/store", rank=0, world_size=1)
+        self.addCleanup(dist.destroy_process_group)
+
+    def _prepare(self, model):
+        from types import SimpleNamespace
+
+        from torch.distributed.device_mesh import init_device_mesh
+
+        from accelerate import ParallelismConfig
+        from accelerate.utils.fsdp_utils import fsdp2_apply_ac, fsdp2_prepare_model
+
+        plugin = FullyShardedDataParallelPlugin(
+            fsdp_version=2,
+            auto_wrap_policy="TRANSFORMER_BASED_WRAP",
+            transformer_cls_names_to_wrap=["Linear"],
+            activation_checkpointing=True,
+            activation_checkpointing_offload=False,
+            reshard_after_forward=True,
+            cpu_offload=False,
+        )
+        # Set this after construction to avoid changing the process environment.
+        plugin.cpu_ram_efficient_loading = False
+
+        accelerator = SimpleNamespace(
+            state=SimpleNamespace(fsdp_plugin=plugin),
+            mixed_precision="no",
+            torch_device_mesh=init_device_mesh("cpu", (1,), mesh_dim_names=("dp_shard_cp",)),
+            parallelism_config=ParallelismConfig(),
+        )
+
+        plugin.set_auto_wrap_policy(model)
+        fsdp2_apply_ac(accelerator, model)
+        fsdp2_prepare_model(accelerator, model)
+        return model
+
+    def test_shared_layer_is_sharded(self):
+        from torch.distributed.fsdp import FSDPModule
+
+        shared = torch.nn.Linear(4, 4)
+        # Deformable DETR in Transformers v4.57.1 shares one Linear classification head across decoder levels
+        # when with_box_refine=False. These entries reproduce that shared registration.
+        # Checkpointing wraps only the first entry:
+        # model[0] -> checkpoint wrapper -> shared <- model[1]
+        # Calls through model[1] bypass the wrapper, so the shared layer needs its own FSDP hooks.
+        model = self._prepare(torch.nn.Sequential(shared, shared))
+        assert model[0]._checkpoint_wrapped_module is model[1]
+        assert isinstance(model[1], FSDPModule)
+
+
 @require_non_cpu
 @require_non_torch_xla
 class FSDPPluginIntegration(AccelerateTestCase):

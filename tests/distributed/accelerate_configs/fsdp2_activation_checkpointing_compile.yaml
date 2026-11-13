@@ -1,0 +1,9 @@
+distributed_type: FSDP
+dynamo_config:
+  dynamo_backend: INDUCTOR
+  dynamo_use_regional_compilation: true
+fsdp_config:
+  fsdp_version: 2
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_activation_checkpointing: true
+num_processes: 2
