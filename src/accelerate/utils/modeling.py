@@ -1718,7 +1718,9 @@ def load_state_dict(checkpoint_file, device_map=None):
                     )
 
             # all weights that haven't defined a device should be loaded on CPU
-            device_weights["cpu"].extend([k for k in weight_names if k not in sum(device_weights.values(), [])])
+            assigned_weights = {key for keys in device_weights.values() for key in keys}
+            device_weights["cpu"].extend(k for k in weight_names if k not in assigned_weights)
+            del assigned_weights
             tensors = {}
             if is_tqdm_available():
                 progress_bar = tqdm(
