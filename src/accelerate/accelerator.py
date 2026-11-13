@@ -213,6 +213,7 @@ class Accelerator:
 
             - `"torch"`: the base torch random number generator
             - `"cuda"`: the CUDA random number generator (GPU only)
+            - Any registered PyTorch accelerator's device type: its device random number generator.
             - `"xla"`: the XLA random number generator (TPU only)
             - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
@@ -535,12 +536,13 @@ class Accelerator:
             and self.device.type != "cpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
+            supports_fp16 = torch.amp.is_autocast_available(self.device.type)
+            _, device_module = get_torch_accelerator_backend()
+            if hasattr(device_module, "get_amp_supported_dtype"):
+                supports_fp16 = supports_fp16 and torch.float16 in device_module.get_amp_supported_dtype()
+            if not supports_fp16 or is_torch_xla_available(check_is_tpu=True):
+                raise ValueError(f"fp16 mixed precision is not supported on {self.device.type!r}.")
             self.native_amp = True
-            supported_device = ("xpu", "cuda", "npu", "xla", "mlu", "musa", "hpu", "sdaa", "mps")
-            if self.device.type not in supported_device or is_torch_xla_available(check_is_tpu=True):
-                raise ValueError(
-                    f"fp16 mixed precision requires a device in {supported_device} (not {self.device.type!r})."
-                )
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
 
             # FSDP2 doesn't use ShardedGradScaler, don't want to modify `get_grad_scaler`, rather create a simple utility

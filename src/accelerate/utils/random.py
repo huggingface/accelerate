@@ -60,19 +60,21 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
         torch.use_deterministic_algorithms(True)
 
 
-def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optional[torch.Generator] = None):
-    rng_type = RNGType(rng_type)
-    if rng_type == RNGType.TORCH:
+def synchronize_rng_state(rng_type: Union[str, RNGType], generator: Optional[torch.Generator] = None):
+    """Synchronize a built-in RNG or the current accelerator's RNG, identified by its device type."""
+    if isinstance(rng_type, RNGType):
+        rng_type = rng_type.value
+    if rng_type == "torch":
         rng_state = torch.get_rng_state()
-    elif rng_type == RNGType.XLA:
+    elif rng_type == "xla":
         assert is_torch_xla_available(), "Can't synchronize XLA seeds as torch_xla is unavailable."
         rng_state = torch.tensor(xm.get_rng_state())
-    elif rng_type == RNGType.GENERATOR:
+    elif rng_type == "generator":
         assert generator is not None, "Need a generator to synchronize its seed."
         rng_state = generator.get_state()
     else:
         device_type, device_module = get_torch_accelerator_backend()
-        assert device_type == rng_type.value, f"Can't synchronize {rng_type.value.upper()} seeds without that device."
+        assert device_type == rng_type, f"Can't synchronize {rng_type.upper()} seeds without that device."
         rng_state = device_module.get_rng_state()
 
     # Broadcast the rng state from device 0 to other devices
@@ -99,11 +101,11 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         torch.distributed.broadcast(rng_state, 0)
 
     # Set the broadcast rng state.
-    if rng_type == RNGType.TORCH:
+    if rng_type == "torch":
         torch.set_rng_state(rng_state)
-    elif rng_type == RNGType.XLA:
+    elif rng_type == "xla":
         xm.set_rng_state(rng_state.item())
-    elif rng_type == RNGType.GENERATOR:
+    elif rng_type == "generator":
         generator.set_state(rng_state)
     else:
         device_module.set_rng_state(rng_state)
@@ -111,4 +113,4 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
 
 def synchronize_rng_states(rng_types: list[Union[str, RNGType]], generator: Optional[torch.Generator] = None):
     for rng_type in rng_types:
-        synchronize_rng_state(RNGType(rng_type), generator=generator)
+        synchronize_rng_state(rng_type, generator=generator)
