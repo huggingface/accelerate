@@ -221,11 +221,13 @@ class AcceleratorTester(AccelerateTestCase):
         assert prepared_train_dl in accelerator._dataloaders
         assert prepared_valid_dl in accelerator._dataloaders
 
-    def test_prepare_remaps_optimizer_parameters(self):
-        accelerator = Accelerator(mixed_precision="no")
+    @parameterized.expand(["no", "eager"])
+    def test_remap_optimizer_parameters(self, dynamo_backend):
+        accelerator = Accelerator(mixed_precision="no", dynamo_backend=dynamo_backend)
         model = torch.nn.Linear(2, 1, bias=False)
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
         old_parameter = model.weight
+        old_named_params = accelerator._get_named_parameters(model)
 
         # Force device placement to replace parameters, as some accelerators do.
         self.addCleanup(
@@ -233,7 +235,9 @@ class AcceleratorTester(AccelerateTestCase):
             torch.__future__.get_overwrite_module_params_on_conversion(),
         )
         torch.__future__.set_overwrite_module_params_on_conversion(True)
-        model, optimizer = accelerator.prepare(model, optimizer)
+        model = accelerator.prepare_model(model)
+        optimizer = accelerator.prepare_optimizer(optimizer)
+        accelerator._remap_optimizer_parameters(old_named_params, model, optimizer)
 
         self.assertIsNot(model.weight, old_parameter)
         self.assertIs(optimizer.param_groups[0]["params"][0], model.weight)

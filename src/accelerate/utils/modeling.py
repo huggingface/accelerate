@@ -753,11 +753,19 @@ def get_accelerator_free_memory(device_module, device_index: int) -> int:
     """
     if device_module is torch.accelerator:
         # get_memory_info was added in PyTorch 2.10.
-        # Remove the native fallback once our minimum PyTorch version is 2.10.
+        # Remove these fallbacks once our minimum PyTorch version is 2.10.
         if hasattr(device_module, "get_memory_info"):
             return device_module.get_memory_info(device_index)[0]
         device = torch.accelerator.current_accelerator()
         device_module = torch.get_device_module(device)
+        if device.type == "tpu":
+            # TorchTPU has no native mem_get_info or memory_allocated API.
+            properties = device_module.get_device_properties(device_index)
+            total_memory = getattr(properties, "hbm_bytes_per_device", None)
+            if total_memory is None:
+                total_memory = properties.total_memory
+            allocated_memory = torch.accelerator.memory_allocated(device_index)
+            return max(0, int(total_memory) - allocated_memory)
     return device_module.mem_get_info(device_index)[0]
 
 

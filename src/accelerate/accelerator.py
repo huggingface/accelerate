@@ -1503,7 +1503,7 @@ class Accelerator:
         elif self.is_fsdp2:
             result = self._prepare_fsdp2(*args)
         else:
-            if self.distributed_type != DistributedType.FSDP:
+            if self.device.type in ("tpu", "xla") and self.distributed_type != DistributedType.FSDP:
                 old_named_params = self._get_named_parameters(*args)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
@@ -1511,7 +1511,7 @@ class Accelerator:
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
             # FSDP manages optimizer parameters itself.
-            if self.distributed_type != DistributedType.FSDP:
+            if self.device.type in ("tpu", "xla") and self.distributed_type != DistributedType.FSDP:
                 self._remap_optimizer_parameters(old_named_params, *result)
 
         for item in result:
@@ -3865,7 +3865,7 @@ class Accelerator:
         accessor_mapping = {}
         models = [obj for obj in args if isinstance(obj, torch.nn.Module)]
         for index, model in enumerate(models):
-            model = extract_model_from_parallel(model)
+            model = extract_model_from_parallel(model, keep_torch_compile=False)
             # Avoid parameter-name collisions when preparing multiple models together.
             prefix = ""
             if len(models) > 1:
