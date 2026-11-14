@@ -19,3 +19,27 @@ Refer to the [Troubleshooting guide](../basic_tutorials/troubleshooting#logging)
 how to use Accelerate's logger. 
 
 [[autodoc]] logging.get_logger
+
+## Library verbosity
+
+Use [`logging.set_verbosity`] to set the default level for Accelerate's internal loggers:
+
+```python
+from accelerate.logging import set_verbosity
+
+set_verbosity("warning")
+```
+
+Per-logger levels set through `log_level` or `ACCELERATE_LOG_LEVEL` take precedence.
+
+[[autodoc]] logging.get_verbosity
+
+[[autodoc]] logging.set_verbosity
+
+[[autodoc]] logging.set_verbosity_debug
+
+[[autodoc]] logging.set_verbosity_info
+
+[[autodoc]] logging.set_verbosity_warning
+
+[[autodoc]] logging.set_verbosity_error
