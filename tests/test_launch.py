@@ -143,6 +143,16 @@ def test_notebook_launcher_sets_accelerate_mixed_precision(monkeypatch):
     assert captured["bare"] is None
 
 
+def test_notebook_launcher_debug_mode_accepts_documented_values(monkeypatch):
+    # The docstring documents ACCELERATE_DEBUG_MODE="1", which used to skip the debug check.
+    debug_launches = []
+    monkeypatch.setenv("ACCELERATE_DEBUG_MODE", "1")
+    monkeypatch.setattr("torch.multiprocessing.start_processes", lambda *args, **kwargs: debug_launches.append(1))
+    monkeypatch.setattr("torch.distributed.launcher.api.elastic_launch", lambda config, entrypoint: lambda *a: None)
+    notebook_launcher(lambda: None, num_processes=2, use_port="29614")
+    assert len(debug_launches) == 1
+
+
 def test_notebook_launcher_invalid_precision_error():
     with pytest.raises(ValueError, match="Unknown mixed_precision mode"):
         notebook_launcher(lambda: None, num_processes=1, mixed_precision="bogus")

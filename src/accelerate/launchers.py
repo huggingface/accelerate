@@ -29,6 +29,7 @@ from .utils import (
     get_gpu_info,
     get_torch_accelerator_backend,
     is_rocm_available,
+    parse_flag_from_env,
     patch_environment,
 )
 
@@ -207,7 +208,7 @@ def notebook_launcher(
                 # XPU and ROCm require spawn instead of fork (HIP/XPU runtime is initialized in the parent,
                 # which breaks fork-based subprocesses).
                 start_method = "spawn" if device_type == "xpu" or is_rocm_available() else "fork"
-                if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
+                if parse_flag_from_env("ACCELERATE_DEBUG_MODE"):
                     launcher = PrepareForLaunch(test_launch, distributed_type=distributed_type)
                     try:
                         start_processes(launcher, args=(), nprocs=num_processes, start_method=start_method)
