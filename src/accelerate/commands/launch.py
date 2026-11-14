@@ -36,11 +36,14 @@ from accelerate.utils import (
     check_cuda_p2p_ib_support,
     convert_dict_to_env_variables,
     get_distributed_backend,
+    get_slurm_distributed_information,
+    get_slurm_master_addr,
     get_torch_accelerator_backend,
     is_bf16_available,
     is_deepspeed_available,
     is_rich_available,
     is_sagemaker_available,
+    is_slurm_available,
     is_torch_xla_available,
     patch_environment,
     prepare_deepspeed_cmd_env,
@@ -1215,6 +1218,41 @@ def _validate_launch_command(args):
     defaults = None
     warned = []
     mp_from_config_flag = False
+
+    # ===== SLURM environment auto-detection =====
+    # When running inside a SLURM scheduled job we can auto-populate several
+    # launch parameters so that users don't need to hard-code them.
+    slurm_info = None
+    if is_slurm_available():
+        slurm_info = get_slurm_distributed_information()
+        # --- machine_rank ---
+        if args.machine_rank is None:
+            args.machine_rank = slurm_info.node_id
+            warned.append(f"\t`--machine_rank` was inferred from SLURM_NODEID and set to `{args.machine_rank}`")
+        # --- num_machines ---
+        if args.num_machines is None:
+            args.num_machines = slurm_info.num_nodes
+            warned.append(f"\t`--num_machines` was inferred from SLURM_NNODES and set to `{args.num_machines}`")
+        # --- num_processes ---
+        if args.num_processes is None:
+            args.num_processes = slurm_info.world_size
+            warned.append(
+                f"\t`--num_processes` was inferred from SLURM environment and set to `{args.num_processes}`"
+            )
+        # --- main_process_ip ---
+        if args.main_process_ip is None:
+            master_addr = get_slurm_master_addr()
+            if master_addr is not None:
+                args.main_process_ip = master_addr
+                warned.append(f"\t`--main_process_ip` was inferred from SLURM and set to `{args.main_process_ip}`")
+        # --- main_process_port ---
+        if args.main_process_port is None:
+            # Use an env var if set; otherwise fall back to a sensible default for multi-node.
+            slurm_port = os.environ.get("MASTER_PORT")
+            if slurm_port is not None:
+                args.main_process_port = int(slurm_port)
+                warned.append(f"\t`--main_process_port` was taken from MASTER_PORT={slurm_port}")
+
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)

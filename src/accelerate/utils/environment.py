@@ -244,6 +244,203 @@ def get_cpu_distributed_information() -> CPUInformation:
     return CPUInformation(**information)
 
 
+def is_slurm_available() -> bool:
+    """
+    Detects whether the current environment is a SLURM (Simple Linux Utility for Resource Management)
+    scheduled job environment.
+
+    Checks for the presence of key SLURM environment variables that are set by `sbatch`/`srun`
+    when a job is submitted to a SLURM cluster.
+
+    Returns:
+        `True` if running inside a SLURM job, `False` otherwise.
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import is_slurm_available
+    >>> os.environ["SLURM_JOB_ID"] = "12345"
+    >>> is_slurm_available()
+    True
+    >>> del os.environ["SLURM_JOB_ID"]
+    >>> is_slurm_available()
+    False
+    ```
+    """
+    # SLURM sets SLURM_JOB_ID when inside a scheduled job.
+    # SLURM_PROCID and SLURM_NNODES are also commonly present in multi-node jobs.
+    slurm_indicators = ["SLURM_JOB_ID", "SLURM_PROCID", "SLURM_NNODES", "SLURM_NODEID"]
+    return any(os.environ.get(key) is not None for key in slurm_indicators)
+
+
+@dataclass
+class SlurmInformation:
+    """
+    Stores SLURM-specific information derived from environment variables.
+
+    Attributes:
+        job_id: The SLURM job ID (`SLURM_JOB_ID`).
+        num_nodes: Total number of nodes allocated to this job (`SLURM_NNODES`).
+        node_id: The rank of the current node (0-indexed, `SLURM_NODEID`).
+        num_tasks: Total number of tasks in the job (`SLURM_NTASKS`).
+        tasks_per_node: Number of tasks per node (`SLURM_NTASKS_PER_NODE`).
+        procid: Global process rank within SLURM (`SLURM_PROCID`).
+        local_gpus_per_node: Number of GPUs per node, derived from `SLURM_GPUS_PER_NODE`
+            or `SLURM_GPUS_ON_NODE` if available. May be `None` if not set.
+        node_list: The raw node list string (`SLURM_JOB_NODELIST`).
+        nodelist_filename: The path to the file containing expanded node list (`SLURM_NODELIST`).
+    """
+
+    job_id: Optional[str] = None
+    num_nodes: int = 1
+    node_id: int = 0
+    num_tasks: Optional[int] = None
+    tasks_per_node: Optional[int] = None
+    procid: Optional[int] = None
+    local_gpus_per_node: Optional[int] = None
+    node_list: Optional[str] = None
+    nodelist_filename: Optional[str] = None
+
+    @property
+    def world_size(self) -> int:
+        """
+        The total number of processes for distributed training.
+
+        Derived from `SLURM_NTASKS` (if set), or `num_nodes * gpus_per_node`.
+        Falls back to `1` when no SLURM variables are present.
+        """
+        if self.num_tasks is not None:
+            return self.num_tasks
+        if self.local_gpus_per_node is not None:
+            return self.num_nodes * self.local_gpus_per_node
+        return 1
+
+
+def get_slurm_distributed_information() -> SlurmInformation:
+    """
+    Extracts distributed-training-relevant information from SLURM environment variables.
+
+    When running under `srun`, SLURM sets several environment variables that describe the
+    job layout. This function parses them into a `SlurmInformation` dataclass so that
+    callers (e.g. `accelerate launch`) can auto-configure themselves.
+
+    Recognized SLURM variables:
+        - `SLURM_JOB_ID` -- job identifier
+        - `SLURM_NNODES` -- total nodes allocated
+        - `SLURM_NODEID` -- rank of this node (0-indexed)
+        - `SLURM_NTASKS` -- total task count across the whole job
+        - `SLURM_NTASKS_PER_NODE` -- tasks per node
+        - `SLURM_PROCID` -- global rank of the current SLURM task
+        - `SLURM_GPUS_PER_NODE` / `SLURM_GPUS_ON_NODE` -- GPUs allocated to each node
+        - `SLURM_JOB_NODELIST` / `SLURM_NODELIST` -- node allocation list
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import get_slurm_distributed_information, is_slurm_available
+    >>> os.environ.update({
+    ...     "SLURM_JOB_ID": "12345",
+    ...     "SLURM_NNODES": "2",
+    ...     "SLURM_NODEID": "0",
+    ...     "SLURM_NTASKS": "16",
+    ...     "SLURM_PROCID": "0",
+    ...     "SLURM_GPUS_PER_NODE": "8",
+    ... })
+    >>> info = get_slurm_distributed_information()
+    >>> info.num_nodes
+    2
+    >>> info.node_id
+    0
+    >>> info.world_size
+    16
+    ```
+    """
+    # Helper: return int from env var or None
+    def _int_or_none(key: str) -> Optional[int]:
+        val = os.environ.get(key)
+        if val is None:
+            return None
+        try:
+            return int(val)
+        except ValueError:
+            return None
+
+    job_id = os.environ.get("SLURM_JOB_ID")
+    num_nodes = _int_or_none("SLURM_NNODES") or 1
+    node_id = _int_or_none("SLURM_NODEID") or 0
+    num_tasks = _int_or_none("SLURM_NTASKS")
+    tasks_per_node = _int_or_none("SLURM_NTASKS_PER_NODE")
+    procid = _int_or_none("SLURM_PROCID")
+    # GPU count: several SLURM environments expose this differently.
+    local_gpus_per_node = _int_or_none("SLURM_GPUS_PER_NODE")
+    if local_gpus_per_node is None:
+        local_gpus_per_node = _int_or_none("SLURM_GPUS_ON_NODE")
+    # Fall back to counting devices if torch is available
+    if local_gpus_per_node is None:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                local_gpus_per_node = torch.cuda.device_count()
+        except Exception:
+            local_gpus_per_node = None
+
+    node_list = os.environ.get("SLURM_JOB_NODELIST")
+    nodelist_filename = os.environ.get("SLURM_NODELIST")
+
+    return SlurmInformation(
+        job_id=job_id,
+        num_nodes=num_nodes,
+        node_id=node_id,
+        num_tasks=num_tasks,
+        tasks_per_node=tasks_per_node,
+        procid=procid,
+        local_gpus_per_node=local_gpus_per_node,
+        node_list=node_list,
+        nodelist_filename=nodelist_filename,
+    )
+
+
+def get_slurm_master_addr() -> Optional[str]:
+    """
+    Determines the master node IP/hostname for a SLURM multi-node job.
+
+    Strategy (tried in order):
+        1. If `MASTER_ADDR` is already set in the environment, return it.
+        2. Otherwise, if we have a `SLURM_JOB_NODELIST` or `SLURM_NODELIST`, use
+           the hostname of the first node (requires the external `scontrol`
+           or `srun` binary to be available).
+        3. If all else fails, return `None` and let the caller decide.
+
+    Returns:
+        A string hostname/IP, or `None` if it cannot be determined.
+    """
+    # 1. Already set?
+    master_addr = os.environ.get("MASTER_ADDR")
+    if master_addr:
+        return master_addr
+
+    # 2. Try `scontrol show hostnames` to expand the SLURM node list and pick the first one
+    node_list_env = os.environ.get("SLURM_JOB_NODELIST") or os.environ.get("SLURM_NODELIST")
+    if node_list_env:
+        try:
+            result = subprocess.run(
+                ["scontrol", "show", "hostnames", node_list_env],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip().splitlines()[0]
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            # scontrol not available or timed out; fall through
+            pass
+
+    return None
+
+
 def _parse_cpu_list(cpu_list_str: str) -> list[int]:
     """Parse a Linux sysfs-style CPU list (e.g. "0-7,16-23") into a list of ints."""
     cpus = []

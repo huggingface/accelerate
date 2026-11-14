@@ -65,6 +65,7 @@ from .dataclasses import (
     add_model_config_to_megatron_parser,
 )
 from .environment import (
+    SlurmInformation,
     are_libraries_initialized,
     check_cuda_fp8_capability,
     check_cuda_p2p_ib_support,
@@ -74,6 +75,9 @@ from .environment import (
     get_current_device_type,
     get_gpu_info,
     get_int_from_env,
+    get_slurm_distributed_information,
+    get_slurm_master_addr,
+    is_slurm_available,
     parse_choice_from_env,
     parse_flag_from_env,
     patch_environment,
