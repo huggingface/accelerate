@@ -7,6 +7,16 @@ body:
         Please explain why you need this feature and check existing issues for related requests.
 
   - type: textarea
+    id: feature-request
+    attributes:
+      label: Feature request
+      description: |
+        Describe the behavior you would like Accelerate to support.
+        Include a short code example showing how you would use it, if applicable.
+    validations:
+      required: true
+
+  - type: textarea
     id: use-case
     attributes:
       label: Use case
@@ -15,20 +25,4 @@ body:
         Link your project, model, or code if it is public.
     validations:
       required: true
-
-  - type: textarea
-    id: proposed-change
-    attributes:
-      label: Proposed change
-      description: |
-        Describe the behavior you would like Accelerate to support.
-        Include a short code example showing how you would use it, if applicable.
-    validations:
-      required: true
-
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives or workarounds
-      description: Describe any alternatives or workarounds you have tried and their limitations.
 
