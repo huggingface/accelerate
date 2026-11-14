@@ -31,7 +31,6 @@ from accelerate.test_utils.testing import (
     get_launch_command,
     path_in_accelerate_package,
     require_fp16,
-    require_fsdp2,
     require_multi_device,
     require_non_cpu,
     require_non_torch_xla,
@@ -47,7 +46,7 @@ from accelerate.utils.constants import (
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
 )
-from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
+from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin, GradScalerKwargs
 from accelerate.utils.fsdp_utils import (
     _get_model_state_dict,
     _set_model_state_dict,
@@ -75,7 +74,6 @@ if is_bf16_available():
     dtypes.append(BF16)
 
 
-@require_fsdp2
 @require_peft
 class FSDP2PeftStateDictTest(AccelerateTestCase):
     """
@@ -134,7 +132,6 @@ class FSDP2PeftStateDictTest(AccelerateTestCase):
         assert restored == {0.5}
 
 
-@require_fsdp2
 class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
     """Checkpointing FSDP2 optimizer state must not step the fp16 `GradScaler`."""
 
@@ -547,13 +544,48 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert model._ignored_params == params_to_ignore
 
 
-@require_fsdp2
 @require_non_cpu
 @require_non_torch_xla
 class FSDP2PluginIntegration(FSDPPluginIntegration):
     def setUp(self):
         super().setUp()
         self.current_fsdp_version = 2
+
+    def test_clip_grad_value(self):
+        """`clip_grad_value_` must unscale FSDP2 gradients before clipping them."""
+        with patch_environment(**self.fsdp_envs[2]):
+            accelerator = Accelerator(mixed_precision="fp16", kwargs_handlers=[GradScalerKwargs(init_scale=8.0)])
+            model = torch.nn.Sequential(torch.nn.Linear(4, 4, bias=False))
+            model, _ = accelerator.prepare(model, torch.optim.SGD(model.parameters(), lr=0.1))
+            accelerator.backward(model(torch.tensor([[3.0, 0.5, -3.0, -0.5]], device=accelerator.device)).sum())
+            accelerator.clip_grad_value_(model.parameters(), 1.0)
+            assert model[0].weight.grad.full_tensor().tolist() == [[1.0, 0.5, -1.0, -0.5]] * 4
+
+    def test_prepare_model_without_optimizer(self):
+        """A model can be prepared without an optimizer, for evaluation, and is sharded."""
+        from torch.distributed.fsdp import FSDPModule
+
+        with patch_environment(**self.fsdp_envs[2]):
+            accelerator = Accelerator()
+            model = accelerator.prepare(torch.nn.Sequential(torch.nn.Linear(4, 4)))
+            assert isinstance(model, FSDPModule)
+            model(torch.ones(1, 4, device=accelerator.device))
+
+    def test_prepare_model_again_with_optimizer(self):
+        """A model prepared without an optimizer, for evaluation, can then be prepared with its optimizer for training,
+        without applying activation checkpointing a second time."""
+        env = self.fsdp_envs[2].copy()
+        env["FSDP_ACTIVATION_CHECKPOINTING"] = "true"
+        env["FSDP_AUTO_WRAP_POLICY"] = "TRANSFORMER_BASED_WRAP"
+        env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = "Linear"
+        with patch_environment(**env):
+            accelerator = Accelerator()
+            model = accelerator.prepare(torch.nn.Sequential(torch.nn.Linear(4, 4), torch.nn.Linear(4, 4)))
+            names = [name for name, _ in model.named_parameters()]
+            model, optimizer = accelerator.prepare(model, torch.optim.SGD(model.parameters(), lr=0.1))
+            assert [name for name, _ in model.named_parameters()] == names
+            accelerator.backward(model(torch.ones(1, 4, device=accelerator.device)).sum())
+            optimizer.step()
 
     def test_param_mapping_error_handling(self):
         """Test FSDP2's defensive error handling for parameter mapping failures in tied/non-tied cases."""
@@ -862,7 +894,6 @@ class FSDPIntegrationTest(TempDirTestCase):
 
         self.current_fsdp_version = 1
 
-    @require_fsdp2
     def test_fsdp2_mixed_precision_bf16_with_bf16_model_loaded(self):
         """FSDP2 + `mixed_precision=bf16` with the model loaded in bf16."""
         cmd = get_launch_command(
@@ -1044,7 +1075,6 @@ class FSDPIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_config)
 
 
-@require_fsdp2
 @run_first
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
 @require_non_torch_xla
@@ -1055,7 +1085,6 @@ class FSDP2IntegrationTest(FSDPIntegrationTest):
         super().setUp()
         self.current_fsdp_version = 2
 
-    @require_fsdp2
     @require_peft
     def test_peft_checkpointing(self):
         """Every rank's shard of the adapter must survive a `save_fsdp_model`/`load_fsdp_model` round-trip."""

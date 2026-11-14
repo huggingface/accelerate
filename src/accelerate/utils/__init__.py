@@ -14,7 +14,6 @@
 from ..parallelism_config import ParallelismConfig
 from .ao import convert_model_to_fp8_ao, filter_first_and_last_linear_layers, has_ao_layers
 from .constants import (
-    MITA_PROFILING_AVAILABLE_PYTORCH_VERSION,
     MODEL_NAME,
     OPTIMIZER_NAME,
     PROFILE_PATTERN_NAME,
@@ -31,7 +30,6 @@ from .constants import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     WEIGHTS_PATTERN_NAME,
-    XPU_PROFILING_AVAILABLE_PYTORCH_VERSION,
 )
 from .dataclasses import (
     AORecipeKwargs,
@@ -46,7 +44,6 @@ from .dataclasses import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
-    FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
     GradientAccumulationPlugin,
     GradScalerKwargs,
@@ -54,7 +51,6 @@ from .dataclasses import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
-    MSAMPRecipeKwargs,
     PrecisionType,
     ProfileKwargs,
     ProjectConfiguration,
@@ -87,6 +83,8 @@ from .environment import (
 )
 from .imports import (
     deepspeed_required,
+    get_distributed_backend,
+    get_torch_accelerator_backend,
     is_4bit_bnb_available,
     is_8bit_bnb_available,
     is_aim_available,
@@ -112,13 +110,11 @@ from .imports import (
     is_mlflow_available,
     is_mlu_available,
     is_mps_available,
-    is_msamp_available,
     is_musa_available,
     is_neuron_available,
     is_npu_available,
     is_pandas_available,
     is_peft_available,
-    is_pippy_available,
     is_pynvml_available,
     is_pytest_available,
     is_rich_available,
@@ -140,7 +136,6 @@ from .imports import (
     is_transformers_available,
     is_triton_available,
     is_wandb_available,
-    is_weights_only_available,
     is_xccl_available,
     is_xpu_available,
     torchao_required,
@@ -155,6 +150,7 @@ from .modeling import (
     convert_file_size_to_int,
     dtype_byte_size,
     find_tied_parameters,
+    get_accelerator_free_memory,
     get_balanced_memory,
     get_grad_scaler,
     get_max_layer_size,
@@ -168,6 +164,7 @@ from .modeling import (
     load_offloaded_weights,
     load_state_dict,
     named_module_tensors,
+    normalize_device,
     retie_parameters,
     set_module_tensor_to_device,
 )

@@ -50,7 +50,7 @@ from accelerate.test_utils.testing import (
     require_non_torch_xla,
     require_torchdata_stateful_dataloader,
 )
-from accelerate.utils import FP8RecipeKwargs, is_torchdata_stateful_dataloader_available, patch_environment
+from accelerate.utils import TERecipeKwargs, is_torchdata_stateful_dataloader_available, patch_environment
 from accelerate.utils.dataclasses import DataLoaderConfiguration
 from accelerate.utils.modeling import get_state_dict_from_offload, load_checkpoint_in_model
 from accelerate.utils.random import set_seed
@@ -220,6 +220,31 @@ class AcceleratorTester(AccelerateTestCase):
         assert prepared_scheduler in accelerator._schedulers
         assert prepared_train_dl in accelerator._dataloaders
         assert prepared_valid_dl in accelerator._dataloaders
+
+    @parameterized.expand(["no", "eager"])
+    def test_remap_optimizer_parameters(self, dynamo_backend):
+        accelerator = Accelerator(mixed_precision="no", dynamo_backend=dynamo_backend)
+        model = torch.nn.Linear(2, 1, bias=False)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        old_parameter = model.weight
+        old_named_params = accelerator._get_named_parameters(model)
+
+        # Force device placement to replace parameters, as some accelerators do.
+        self.addCleanup(
+            torch.__future__.set_overwrite_module_params_on_conversion,
+            torch.__future__.get_overwrite_module_params_on_conversion(),
+        )
+        torch.__future__.set_overwrite_module_params_on_conversion(True)
+        model = accelerator.prepare_model(model)
+        optimizer = accelerator.prepare_optimizer(optimizer)
+        accelerator._remap_optimizer_parameters(old_named_params, model, optimizer)
+
+        self.assertIsNot(model.weight, old_parameter)
+        self.assertIs(optimizer.param_groups[0]["params"][0], model.weight)
+        before = model.weight.detach().clone()
+        accelerator.backward(model(torch.ones(2, 2, device=accelerator.device)).sum())
+        optimizer.step()
+        torch.testing.assert_close(model.weight, before - 0.2)
 
     @require_non_hpu  # hpu does not support empty_cache
     def test_free_memory_dereferences_prepared_components(self):
@@ -600,7 +625,7 @@ class AcceleratorTester(AccelerateTestCase):
     @require_transformer_engine
     def test_can_unwrap_model_te(self):
         model, optimizer, *_ = create_components()
-        fp8_recipe = FP8RecipeKwargs(backend="TE")
+        fp8_recipe = TERecipeKwargs()
         accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[fp8_recipe])
         inputs = torch.randn(10, 2).to(torch_device)
         model, optimizer = accelerator.prepare(model, optimizer)

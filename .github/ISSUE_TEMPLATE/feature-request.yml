@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a feature for a concrete Accelerate use case
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please explain why you need this feature and check existing issues for related requests.
+
+  - type: textarea
+    id: feature-request
+    attributes:
+      label: Feature request
+      description: |
+        Describe the behavior you would like Accelerate to support.
+        Include a short code example showing how you would use it, if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: |
+        Describe what you want to do with Accelerate and how the missing feature affects your workflow.
+        Link your project, model, or code if it is public.
+    validations:
+      required: true
+

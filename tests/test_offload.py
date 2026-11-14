@@ -26,7 +26,6 @@ from accelerate.utils import (
     offload_state_dict,
     offload_weight,
 )
-from accelerate.utils.versions import is_torch_version
 
 
 class ModelForTest(nn.Module):
@@ -61,10 +60,7 @@ class OffloadTester(unittest.TestCase):
         # bfloat16 goes through int16. torch.randn(..., dtype=float8_*) isn't implemented, so
         # the tensors are produced the way they actually show up in practice: cast down from a
         # higher-precision tensor.
-        if is_torch_version(">=", "2.1.0"):
-            for name in ("float8_e4m3fn", "float8_e5m2"):
-                if hasattr(torch, name):
-                    dtypes.append(getattr(torch, name))
+        dtypes += [torch.float8_e4m3fn, torch.float8_e5m2]
 
         for dtype in dtypes:
             is_fp8 = str(dtype).startswith("torch.float8_")

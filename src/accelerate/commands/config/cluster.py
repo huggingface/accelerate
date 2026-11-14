@@ -19,20 +19,13 @@ import os
 from ...utils import (
     ComputeEnvironment,
     DistributedType,
+    get_torch_accelerator_backend,
     is_deepspeed_available,
     is_fp8_available,
-    is_hpu_available,
-    is_mlu_available,
     is_mps_available,
-    is_msamp_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
-    is_sdaa_available,
     is_torchao_available,
     is_transformer_engine_available,
     is_transformers_available,
-    is_xpu_available,
 )
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
@@ -682,22 +675,13 @@ def get_cluster_input():
         and not use_cpu
         and not use_mps
     ):
-        if is_npu_available():
-            machine_type = "NPU(s)"
-        elif is_mlu_available():
-            machine_type = "MLU(s)"
-        elif is_sdaa_available():
-            machine_type = "SDAA(s)"
-        elif is_musa_available():
-            machine_type = "MUSA(s)"
-        elif is_xpu_available():
-            machine_type = "XPU(s)"
-        elif is_hpu_available():
-            machine_type = "HPU(s)"
-        elif is_neuron_available():
-            machine_type = "Neuron cores"
-        else:
+        device_type, _ = get_torch_accelerator_backend()
+        if device_type is None:
+            machine_type = "CPU(s)"
+        elif device_type == "cuda":
             machine_type = "GPU(s)"
+        else:
+            machine_type = f"{device_type.upper()}(s)"
         gpu_ids = _ask_field(
             f"What {machine_type} (by id) should be used for training on this machine as a comma-separated list? [all]:",
             default="all",
@@ -801,13 +785,11 @@ def get_cluster_input():
             )
             if mixed_precision == "fp8":
                 if not is_fp8_available():
-                    raise ValueError(
-                        "FP8 (either torchao, Transformer Engine or MSAMP) is not installed on this machine."
-                    )
+                    raise ValueError("FP8 (either torchao or Transformer Engine) is not installed on this machine.")
                 fp8_config = {}
                 fp8_config["backend"] = _ask_options(
                     "Which FP8 backend do you want to use?",
-                    ["ao", "te", "msamp"],
+                    ["ao", "te"],
                     _convert_fp8_backend,
                 )
                 if fp8_config["backend"] == "TE":
@@ -869,16 +851,6 @@ def get_cluster_input():
                         fp8_config["override_linear_precision"] = (fprop, dgrad, wgrad)
                     else:
                         fp8_config["override_linear_precision"] = (False, False, False)
-
-                elif fp8_config["backend"] == "MSAMP":
-                    if not is_msamp_available():
-                        raise ValueError("MSAMP was selected, but it is not installed on this machine.")
-                    fp8_config["optimization_level"] = _ask_options(
-                        "Which optimization level should be used?",
-                        ["O1", "O2"],
-                        lambda x: "O1" if x == 0 else "O2",
-                        default=1,
-                    )
 
                 elif fp8_config["backend"] == "AO":
                     if not is_torchao_available():

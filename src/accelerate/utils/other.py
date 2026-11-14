@@ -18,6 +18,7 @@ import re
 import socket
 from codecs import encode
 from collections import OrderedDict
+from copy import copy
 from functools import partial, reduce
 from types import MethodType
 from typing import Optional
@@ -30,18 +31,15 @@ from safetensors.torch import save_file as safe_save_file
 from ..commands.config.default import write_basic_config  # noqa: F401
 from ..logging import get_logger
 from ..state import PartialState
-from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
 from .imports import (
     is_deepspeed_available,
     is_numpy_available,
     is_torch_distributed_available,
     is_torch_xla_available,
-    is_weights_only_available,
 )
 from .modeling import id_tensor_storage
 from .transformer_engine import convert_model
-from .versions import is_torch_version
 
 
 logger = get_logger(__name__)
@@ -55,9 +53,6 @@ def is_compiled_module(module: torch.nn.Module) -> bool:
     """
     Check whether the module was compiled with torch.compile()
     """
-    if not hasattr(torch, "_dynamo"):
-        return False
-
     return isinstance(module, torch._dynamo.eval_frame.OptimizedModule)
 
 
@@ -65,9 +60,6 @@ def has_compiled_regions(module: torch.nn.Module) -> bool:
     """
     Check whether the module has submodules that were compiled with `torch.compile()`.
     """
-    if not hasattr(torch, "_dynamo"):
-        return False
-
     if module._modules:
         for submodule in module.modules():
             if isinstance(submodule, torch._dynamo.eval_frame.OptimizedModule):
@@ -150,17 +142,38 @@ def compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Modul
     ```
     """
 
+    def _rebind_module_methods(module, new_module):
+        # Shallow copies keep methods and partials bound to the original module.
+        # Rebind them so forwards and hooks use the copy's state, including its training flag.
+        def rebind(value):
+            if isinstance(value, MethodType) and value.__self__ is module:
+                return MethodType(value.__func__, new_module)
+            if isinstance(value, partial):
+                args = tuple(new_module if arg is module else arg for arg in value.args)
+                kwargs = {key: new_module if arg is module else arg for key, arg in value.keywords.items()}
+                rebound = partial(rebind(value.func), *args, **kwargs)
+                rebound.__dict__.update(value.__dict__)
+                if hasattr(value, "__wrapped__"):
+                    rebound.__wrapped__ = rebind(value.__wrapped__)
+                return rebound
+            return value
+
+        # Includes the partial `forward` and bound `_old_forward` installed by Accelerate hooks.
+        for name, value in list(new_module.__dict__.items()):
+            new_module.__dict__[name] = rebind(value)
+
     def _compile_regions(module: torch.nn.Module, **compile_kwargs) -> torch.nn.Module:
         if is_repeated_blocks(module):
             new_module = torch.nn.ModuleList()
             for submodule in module:
-                new_module.append(torch.compile(submodule, **compile_kwargs))
+                new_submodule = copy(submodule)
+                _rebind_module_methods(submodule, new_submodule)
+                new_submodule.compile(**compile_kwargs)
+                new_module.append(torch.compile(new_submodule, **compile_kwargs))
         elif has_repeated_blocks(module):
             new_module = module.__class__.__new__(module.__class__)
             new_module.__dict__.update(module.__dict__)
-            for name, value in list(new_module.__dict__.items()):
-                if hasattr(value, "__func__") and getattr(value, "__self__", None) is module:
-                    new_module.__dict__[name] = MethodType(value.__func__, new_module)
+            _rebind_module_methods(module, new_module)
             new_module._modules = {}
             for name, submodule in module.named_children():
                 new_module.add_module(name, _compile_regions(submodule, **compile_kwargs))
@@ -242,11 +255,7 @@ def model_has_dtensor(model: torch.nn.Module) -> bool:
     if not is_torch_distributed_available():
         return False
 
-    if is_torch_version(">=", "2.5.0"):
-        from torch.distributed.tensor import DTensor
-    else:
-        # from torch 2.0.0 (oldest supported accelerate torch version), DTensor is in torch.distributed._tensor
-        from torch.distributed._tensor import DTensor
+    from torch.distributed.tensor import DTensor
 
     return any(isinstance(p, DTensor) for p in model.parameters())
 
@@ -314,7 +323,7 @@ def extract_model_from_parallel(
 
         options += (DeepSpeedEngine,)
 
-    if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
+    if is_torch_distributed_available():
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
         options += (FSDP,)
@@ -478,19 +487,15 @@ def load(f, map_location=None, **kwargs):
             Additional keyword arguments to pass to `torch.load()`.
     """
     try:
-        if is_weights_only_available():
-            old_safe_globals = torch.serialization.get_safe_globals()
-            if "weights_only" not in kwargs:
-                kwargs["weights_only"] = True
-            torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS)
-        else:
-            kwargs.pop("weights_only", None)
+        old_safe_globals = torch.serialization.get_safe_globals()
+        if "weights_only" not in kwargs:
+            kwargs["weights_only"] = True
+        torch.serialization.add_safe_globals(TORCH_SAFE_GLOBALS)
         loaded_obj = torch.load(f, map_location=map_location, **kwargs)
     finally:
-        if is_weights_only_available():
-            torch.serialization.clear_safe_globals()
-            if old_safe_globals:
-                torch.serialization.add_safe_globals(old_safe_globals)
+        torch.serialization.clear_safe_globals()
+        if old_safe_globals:
+            torch.serialization.add_safe_globals(old_safe_globals)
     return loaded_obj
 
 

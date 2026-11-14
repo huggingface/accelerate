@@ -236,7 +236,7 @@ def estimate_command_parser(subparsers=None):
     return parser
 
 
-def estimate_training_usage(bytes: int, mixed_precision: str, msamp_config: Optional[str] = None) -> dict:
+def estimate_training_usage(bytes: int, mixed_precision: str) -> dict:
     """
     Given an amount of `bytes` and `mixed_precision`, calculates how much training memory is needed for a batch size of
     1.
@@ -246,8 +246,6 @@ def estimate_training_usage(bytes: int, mixed_precision: str, msamp_config: Opti
             The size of the model being trained.
         mixed_precision (`str`):
             The mixed precision that would be ran.
-        msamp_config (`str`):
-            The msamp config to estimate the training memory for if `mixed_precision` is set to `"fp8"`.
     """
     memory_sizes = {"model": -1, "optimizer": -1, "gradients": -1, "step": -1}
     fp32_size = bytes
@@ -258,7 +256,7 @@ def estimate_training_usage(bytes: int, mixed_precision: str, msamp_config: Opti
         memory_sizes["gradients"] = fp32_size
         memory_sizes["optimizer"] = fp32_size * 2
         memory_sizes["step"] = fp32_size * 4
-    elif mixed_precision in ("float16", "bfloat16") or (mixed_precision == "fp8" and msamp_config is None):
+    elif mixed_precision in ("float16", "bfloat16", "fp8"):
         # With native `TransformersEngine`, there is no memory savings with FP8
         # With mixed precision training, the model has weights stored
         # in FP16 and FP32

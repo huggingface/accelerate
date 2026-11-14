@@ -22,14 +22,8 @@ from ..state import AcceleratorState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, RNGType
 from .imports import (
-    is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
-    is_sdaa_available,
+    get_torch_accelerator_backend,
     is_torch_xla_available,
-    is_xpu_available,
 )
 
 
@@ -54,23 +48,11 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if is_xpu_available():
-        torch.xpu.manual_seed_all(seed)
-    elif is_npu_available():
-        torch.npu.manual_seed_all(seed)
-    elif is_mlu_available():
-        torch.mlu.manual_seed_all(seed)
-    elif is_sdaa_available():
-        torch.sdaa.manual_seed_all(seed)
-    elif is_musa_available():
-        torch.musa.manual_seed_all(seed)
-    elif is_hpu_available():
-        torch.hpu.manual_seed_all(seed)
-    elif is_neuron_available():
-        torch.neuron.manual_seed_all(seed)
-    else:
-        torch.cuda.manual_seed_all(seed)
-    # ^^ safe to call this function even if cuda is not available
+    # Seeding can happen before a notebook launcher forks, so keep device discovery lazy.
+    device_type, device_module = get_torch_accelerator_backend(check_available=False)
+    # torch.manual_seed already seeds MPS and registered custom backends.
+    if device_type not in (None, "mps") and device_module is not torch.accelerator:
+        device_module.manual_seed_all(seed)
     if is_torch_xla_available():
         xm.set_rng_state(seed)
 
@@ -78,39 +60,31 @@ def set_seed(seed: int, device_specific: bool = False, deterministic: bool = Fal
         torch.use_deterministic_algorithms(True)
 
 
-def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optional[torch.Generator] = None):
-    # Get the proper rng state
-    if rng_type == RNGType.TORCH:
+def synchronize_rng_state(rng_type: Union[str, RNGType], generator: Optional[torch.Generator] = None):
+    """Synchronize a built-in RNG or the current accelerator's RNG, identified by its device type."""
+    if isinstance(rng_type, RNGType):
+        rng_type = rng_type.value
+    if rng_type == "torch":
         rng_state = torch.get_rng_state()
-    elif rng_type == RNGType.CUDA:
-        rng_state = torch.cuda.get_rng_state()
-    elif rng_type == RNGType.XLA:
+    elif rng_type == "xla":
         assert is_torch_xla_available(), "Can't synchronize XLA seeds as torch_xla is unavailable."
         rng_state = torch.tensor(xm.get_rng_state())
-    elif rng_type == RNGType.NPU:
-        assert is_npu_available(), "Can't synchronize NPU seeds on an environment without NPUs."
-        rng_state = torch.npu.get_rng_state()
-    elif rng_type == RNGType.MLU:
-        assert is_mlu_available(), "Can't synchronize MLU seeds on an environment without MLUs."
-        rng_state = torch.mlu.get_rng_state()
-    elif rng_type == RNGType.SDAA:
-        assert is_sdaa_available(), "Can't synchronize SDAA seeds on an environment without SDAAs."
-        rng_state = torch.sdaa.get_rng_state()
-    elif rng_type == RNGType.MUSA:
-        assert is_musa_available(), "Can't synchronize MUSA seeds on an environment without MUSAs."
-        rng_state = torch.musa.get_rng_state()
-    elif rng_type == RNGType.XPU:
-        assert is_xpu_available(), "Can't synchronize XPU seeds on an environment without XPUs."
-        rng_state = torch.xpu.get_rng_state()
-    elif rng_type == RNGType.HPU:
-        assert is_hpu_available(), "Can't synchronize HPU seeds on an environment without HPUs."
-        rng_state = torch.hpu.get_rng_state()
-    elif rng_type == RNGType.NEURON:
-        assert is_neuron_available(), "Can't synchronize Neuron seeds on an environment without Neuron Cores."
-        rng_state = torch.neuron.get_rng_state()
-    elif rng_type == RNGType.GENERATOR:
+    elif rng_type == "generator":
         assert generator is not None, "Need a generator to synchronize its seed."
         rng_state = generator.get_state()
+    else:
+        device_type, device_module = get_torch_accelerator_backend()
+        assert device_type == rng_type, f"Can't synchronize {rng_type.upper()} seeds without that device."
+        if device_module is torch.accelerator:
+            # torch.accelerator.random was added in PyTorch 2.14.
+            # Remove the native fallback once our minimum PyTorch version is 2.14.
+            if hasattr(torch.accelerator, "random"):
+                rng_state = torch.accelerator.random.get_rng_state()
+            else:
+                device_module = torch.get_device_module(device_type)
+                rng_state = device_module.get_rng_state()
+        else:
+            rng_state = device_module.get_rng_state()
 
     # Broadcast the rng state from device 0 to other devices
     state = AcceleratorState()
@@ -135,31 +109,21 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     elif state.distributed_type == DistributedType.MULTI_CPU:
         torch.distributed.broadcast(rng_state, 0)
 
-    # Set the broadcast rng state
-    if rng_type == RNGType.TORCH:
+    # Set the broadcast rng state.
+    if rng_type == "torch":
         torch.set_rng_state(rng_state)
-    elif rng_type == RNGType.CUDA:
-        torch.cuda.set_rng_state(rng_state)
-    elif rng_type == RNGType.NPU:
-        torch.npu.set_rng_state(rng_state)
-    elif rng_type == RNGType.MLU:
-        torch.mlu.set_rng_state(rng_state)
-    elif rng_type == RNGType.SDAA:
-        torch.sdaa.set_rng_state(rng_state)
-    elif rng_type == RNGType.MUSA:
-        torch.musa.set_rng_state(rng_state)
-    elif rng_type == RNGType.XPU:
-        torch.xpu.set_rng_state(rng_state)
-    elif rng_type == RNGType.HPU:
-        torch.hpu.set_rng_state(rng_state)
-    elif rng_type == RNGType.NEURON:
-        torch.neuron.set_rng_state(rng_state)
-    elif rng_type == RNGType.XLA:
+    elif rng_type == "xla":
         xm.set_rng_state(rng_state.item())
-    elif rng_type == RNGType.GENERATOR:
+    elif rng_type == "generator":
         generator.set_state(rng_state)
+    elif device_module is torch.accelerator:
+        # torch.accelerator.random does not yet provide set_rng_state.
+        device_module = torch.get_device_module(rng_type)
+        device_module.set_rng_state(rng_state)
+    else:
+        device_module.set_rng_state(rng_state)
 
 
 def synchronize_rng_states(rng_types: list[Union[str, RNGType]], generator: Optional[torch.Generator] = None):
     for rng_type in rng_types:
-        synchronize_rng_state(RNGType(rng_type), generator=generator)
+        synchronize_rng_state(rng_type, generator=generator)

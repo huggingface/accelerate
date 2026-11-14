@@ -17,9 +17,13 @@ rendered properly in your Markdown viewer.
 
 Below are functions and classes relative to the underlying FP8 implementation
 
-## FP8RecipeKwargs
+## TERecipeKwargs
 
-[[autodoc]] utils.FP8RecipeKwargs
+[[autodoc]] utils.TERecipeKwargs
+
+## AORecipeKwargs
+
+[[autodoc]] utils.AORecipeKwargs
 
 ## convert_model
 

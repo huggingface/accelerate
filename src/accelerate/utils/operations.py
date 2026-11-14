@@ -28,10 +28,10 @@ from ..state import AcceleratorState, PartialState
 from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import (
-    is_npu_available,
     is_torch_distributed_available,
     is_torch_xla_available,
 )
+from .modeling import normalize_device
 from .versions import is_torch_version
 
 
@@ -153,21 +153,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
     if is_torch_tensor(tensor) or hasattr(tensor, "to"):
-        # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
-        if device == "npu":
-            device = "npu:0"
-        try:
-            return tensor.to(device, non_blocking=non_blocking)
-        except TypeError:  # .to() doesn't accept non_blocking as kwarg
-            return tensor.to(device)
-        except AssertionError as error:
-            # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-            # This call is inside the try-block since is_npu_available is not supported by torch.compile.
-            if is_npu_available():
-                if isinstance(device, int):
-                    device = f"npu:{device}"
-            else:
-                raise error
+        device = normalize_device(device)
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
@@ -563,25 +549,18 @@ def gather_tensor_shape(tensor):
     """
     Grabs the shape of `tensor` only available on one process and returns a tensor of its shape
     """
-    # Allocate 80 bytes to store the shape
+    # Store the rank and dtype before the dimensions so zero-sized axes are preserved.
     max_tensor_dimension = 2**20
     state = PartialState()
-    base_tensor = torch.empty(max_tensor_dimension, dtype=torch.int, device=state.device)
+    base_tensor = torch.zeros(max_tensor_dimension, dtype=torch.int, device=state.device)
 
-    # Since PyTorch can't just send a tensor to another GPU without
-    # knowing its size, we store the size of the tensor with data
-    # in an allocation
     if tensor is not None:
-        shape = tensor.shape
-        tensor_dtype = TENSOR_TYPE_TO_INT[tensor.dtype]
-        base_tensor[: len(shape) + 1] = torch.tensor(list(shape) + [tensor_dtype], dtype=int)
-    # Perform a reduction to copy the size data onto all GPUs
+        metadata = [tensor.ndim, TENSOR_TYPE_TO_INT[tensor.dtype], *tensor.shape]
+        base_tensor[: len(metadata)] = torch.tensor(metadata, dtype=torch.int, device=state.device)
+    # Only the source contributes metadata to the sum.
     base_tensor = reduce(base_tensor, reduction="sum")
-    base_tensor = base_tensor[base_tensor.nonzero()]
-    # The last non-zero data contains the coded dtype the source tensor is
-    dtype = int(base_tensor[-1:][0])
-    base_tensor = base_tensor[:-1]
-    return base_tensor, dtype
+    ndim, dtype = base_tensor[:2].tolist()
+    return base_tensor[2 : ndim + 2], dtype
 
 
 def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
@@ -597,7 +576,7 @@ def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
     state = PartialState()
     shape, dtype = gather_tensor_shape(tensor)
     if tensor is None:
-        tensor = torch.zeros(shape, dtype=TENSOR_INT_TO_DTYPE[dtype]).to(state.device)
+        tensor = torch.zeros(tuple(shape.tolist()), dtype=TENSOR_INT_TO_DTYPE[dtype], device=state.device)
     return reduce(tensor, reduction="sum")
 
 

@@ -23,8 +23,6 @@ import sys
 from collections import deque
 from pathlib import Path
 
-import torch
-
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
@@ -37,18 +35,13 @@ from accelerate.utils import (
     _filter_args,
     check_cuda_p2p_ib_support,
     convert_dict_to_env_variables,
+    get_distributed_backend,
+    get_torch_accelerator_backend,
     is_bf16_available,
     is_deepspeed_available,
-    is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
     is_rich_available,
     is_sagemaker_available,
-    is_sdaa_available,
     is_torch_xla_available,
-    is_xpu_available,
     patch_environment,
     prepare_deepspeed_cmd_env,
     prepare_multi_gpu_env,
@@ -197,7 +190,7 @@ def launch_command_parser(subparsers=None):
         choices=["no", "fp16", "bf16", "fp8"],
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
-        "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
+        "BF16 training is only supported on Nvidia Ampere GPUs.",
     )
     resource_args.add_argument(
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
@@ -797,8 +790,8 @@ def launch_command_parser(subparsers=None):
     fp8_args.add_argument(
         "--fp8_backend",
         type=str,
-        choices=["ao", "te", "msamp"],
-        help="Choose a backend to train with FP8 (ao: torchao, te: TransformerEngine, msamp: MS-AMP)",
+        choices=["ao", "te"],
+        help="Choose a backend to train with FP8 (ao: torchao, te: TransformerEngine)",
     )
     fp8_args.add_argument(
         "--fp8_use_autocast_during_eval",
@@ -843,13 +836,6 @@ def launch_command_parser(subparsers=None):
         type=lambda x: tuple(map(str_to_bool, x.split(","))),
         default=(False, False, False),
         help="Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision. Should be passed in a comma-separated string of booleans (useful only when `--fp8_backend=te` is passed).",
-    )
-    fp8_args.add_argument(
-        "--fp8_opt_level",
-        type=str,
-        default="O2",
-        choices=["O1", "O2"],
-        help="What level of 8-bit collective communication should be used with MS-AMP (useful only when `--fp8_backend=msamp` is passed).",
     )
     fp8_args.add_argument(
         "--fp8_enable_fsdp_float8_all_gather",
@@ -1320,40 +1306,17 @@ def _validate_launch_command(args):
         if args.num_processes == -1:
             raise ValueError("You need to manually pass in `--num_processes` using this config yaml.")
     else:
+        device_count = 0
+        if not args.cpu:
+            device_type, device_module = get_torch_accelerator_backend()
+            if get_distributed_backend(device_type) is not None:
+                device_count = device_module.device_count()
         if args.num_processes is None:
-            if is_xpu_available():
-                args.num_processes = torch.xpu.device_count()
-            elif is_mlu_available():
-                args.num_processes = torch.mlu.device_count()
-            elif is_sdaa_available():
-                args.num_processes = torch.sdaa.device_count()
-            elif is_musa_available():
-                args.num_processes = torch.musa.device_count()
-            elif is_npu_available():
-                args.num_processes = torch.npu.device_count()
-            elif is_hpu_available():
-                args.num_processes = torch.hpu.device_count()
-            elif is_neuron_available():
-                args.num_processes = torch.neuron.device_count()
-            else:
-                args.num_processes = torch.cuda.device_count()
+            args.num_processes = max(device_count, 1)
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
         if args.debug is None:
             args.debug = False
-        if (
-            not args.multi_gpu
-            and args.num_processes > 1
-            and (
-                (is_xpu_available() and torch.xpu.device_count() > 1)
-                or (is_npu_available() and torch.npu.device_count() > 1)
-                or (is_hpu_available() and torch.hpu.device_count() > 1)
-                or (is_mlu_available() and torch.mlu.device_count() > 1)
-                or (is_sdaa_available() and torch.sdaa.device_count() > 1)
-                or (is_musa_available() and torch.musa.device_count() > 1)
-                or (is_neuron_available() and torch.neuron.device_count() > 1)
-                or (torch.cuda.is_available() and torch.cuda.device_count() > 1)
-            )
-        ):
+        if not args.multi_gpu and args.num_processes > 1 and device_count > 1:
             warned.append(
                 "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
                 "\t\tIf this was unintended please pass in `--num_processes=1`."

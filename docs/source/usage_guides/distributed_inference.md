@@ -15,13 +15,12 @@ rendered properly in your Markdown viewer.
 
 # Distributed inference
 
-Distributed inference can fall into three brackets:
+Distributed inference can fall into two brackets:
 
 1. Loading an entire model onto each GPU and sending chunks of a batch through each GPU's model copy at a time
 2. Loading parts of a model onto each GPU and processing a single input at one time
-3. Loading parts of a model onto each GPU and using what is called scheduled Pipeline Parallelism to combine the two prior techniques. 
 
-We're going to go through the first and the last bracket, showcasing how to do each as they are more realistic scenarios.
+This guide covers the first bracket. For the second, see [Big Model Inference](../concept_guides/big_model_inference).
 
 
 ## Sending chunks of a batch automatically to each loaded model
@@ -143,95 +142,3 @@ On the first GPU, the prompts will be `["a dog", "a cat"]`, and on the second GP
 Make sure to drop the final sample, as it will be a duplicate of the previous one.
 
 You can find more complex examples [here](https://github.com/huggingface/accelerate/tree/main/examples/inference/distributed) such as how to use it with LLMs.
-
-## Memory-efficient pipeline parallelism (experimental)
-
-This next part will discuss using *pipeline parallelism*. This is an **experimental** API that utilizes [torch.distributed.pipelining](https://pytorch.org/docs/stable/distributed.pipelining.html#) as a native solution. 
-
-The general idea with pipeline parallelism is: say you have 4 GPUs and a model big enough it can be *split* on four GPUs using `device_map="auto"`. With this method you can send in 4 inputs at a time (for example here, any amount works) and each model chunk will work on an input, then receive the next input once the prior chunk finished, making it *much* more efficient **and faster** than the method described earlier. Here's a visual taken from the PyTorch repository:
-
-![Pipeline parallelism example](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/accelerate/pipeline_parallel.png)
-
-To illustrate how you can use this with Accelerate, we have created an [example zoo](https://github.com/huggingface/accelerate/tree/main/examples/inference) showcasing a number of different models and situations. In this tutorial, we'll show this method for GPT2 across two GPUs.
-
-Before you proceed, please make sure you have the latest PyTorch version installed by running the following:
-
-```bash
-pip install torch
-```
-
-Start by creating the model on the CPU:
-
-```{python}
-from transformers import GPT2ForSequenceClassification, GPT2Config
-
-config = GPT2Config()
-model = GPT2ForSequenceClassification(config)
-model.eval()
-```
-
-Next you'll need to create some example inputs to use. These help `torch.distributed.pipelining` trace the model.
-
-<Tip warning={true}>
-    However you make this example will determine the relative batch size that will be used/passed
-    through the model at a given time, so make sure to remember how many items there are!
-</Tip>
-
-```{python}
-input = torch.randint(
-    low=0,
-    high=config.vocab_size,
-    size=(2, 1024),  # bs x seq_len
-    device="cpu",
-    dtype=torch.int64,
-    requires_grad=False,
-)
-```
-Next we need to actually perform the tracing and get the model ready. To do so, use the [`inference.prepare_pippy`] function and it will fully wrap the model for pipeline parallelism automatically:
-
-```{python}
-from accelerate.inference import prepare_pippy
-example_inputs = {"input_ids": input}
-model = prepare_pippy(model, example_args=(input,))
-```
-
-<Tip>
-
-    There are a variety of parameters you can pass through to `prepare_pippy`:
-    
-    * `split_points` lets you determine what layers to split the model at. By default we use wherever `device_map="auto" declares, such as `fc` or `conv1`.
-
-    * `num_chunks` determines how the batch will be split and sent to the model itself (so `num_chunks=1` with four split points/four GPUs will have a naive MP where a single input gets passed between the four layer split points)
-
-</Tip>
-
-From here, all that's left is to actually perform the distributed inference!
-
-<Tip warning={true}>
-
-When passing inputs, we highly recommend to pass them in as a tuple of arguments. Using `kwargs` is supported, however, this approach is experimental.
-</Tip>
-
-```{python}
-args = some_more_arguments
-with torch.no_grad():
-    output = model(*args)
-```
-
-When finished all the data will be on the last process only:
-
-```{python}
-from accelerate import PartialState
-if PartialState().is_last_process:
-    print(output)
-```
-
-<Tip>
-
-    If you pass in `gather_output=True` to [`inference.prepare_pippy`], the output will be sent
-    across to all the GPUs afterwards without needing the `is_last_process` check. This is 
-    `False` by default as it incurs a communication call.
-    
-</Tip>
-
-And that's it! To explore more, please check out the inference examples in the [Accelerate repo](https://github.com/huggingface/accelerate/tree/main/examples/inference/pippy) and our [documentation](../package_reference/inference) as we work to improving this integration. 

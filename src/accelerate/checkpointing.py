@@ -19,6 +19,7 @@ from typing import Optional
 import numpy as np
 import torch
 from safetensors.torch import load_model
+from torch.amp import GradScaler
 
 from .utils import (
     MODEL_NAME,
@@ -31,24 +32,12 @@ from .utils import (
     SCHEDULER_NAME,
     WEIGHTS_NAME,
     get_pretty_name,
-    is_cuda_available,
-    is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_sdaa_available,
-    is_torch_version,
+    get_torch_accelerator_backend,
     is_torch_xla_available,
-    is_xpu_available,
     load,
     save,
 )
 
-
-if is_torch_version(">=", "2.4.0"):
-    from torch.amp import GradScaler
-else:
-    from torch.cuda.amp import GradScaler
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -158,20 +147,21 @@ def save_accelerator_state(
     states["random_state"] = random.getstate()
     states["numpy_random_seed"] = np.random.get_state()
     states["torch_manual_seed"] = torch.get_rng_state()
-    if is_xpu_available():
-        states["torch_xpu_manual_seed"] = torch.xpu.get_rng_state_all()
-    if is_mlu_available():
-        states["torch_mlu_manual_seed"] = torch.mlu.get_rng_state_all()
-    elif is_sdaa_available():
-        states["torch_sdaa_manual_seed"] = torch.sdaa.get_rng_state_all()
-    elif is_musa_available():
-        states["torch_musa_manual_seed"] = torch.musa.get_rng_state_all()
-    if is_hpu_available():
-        states["torch_hpu_manual_seed"] = torch.hpu.get_rng_state_all()
-    if is_neuron_available():
-        states["torch_neuron_manual_seed"] = torch.neuron.get_rng_state_all()
-    if is_cuda_available():
-        states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
+    device_type, device_module = get_torch_accelerator_backend()
+    if device_type is not None:
+        rng_key = f"torch_{device_type}_manual_seed"
+        if device_module is torch.accelerator:
+            # torch.accelerator.random was added in PyTorch 2.14.
+            # Remove the native fallback once our minimum PyTorch version is 2.14.
+            if hasattr(torch.accelerator, "random"):
+                states[rng_key] = torch.accelerator.random.get_rng_state()
+            else:
+                device_module = torch.get_device_module(device_type)
+                states[rng_key] = device_module.get_rng_state()
+        elif device_type == "mps":
+            states[rng_key] = device_module.get_rng_state()
+        else:
+            states[rng_key] = device_module.get_rng_state_all()
     if is_torch_xla_available():
         states["xm_seed"] = xm.get_rng_state()
     output_states_file = output_dir.joinpath(states_name)
@@ -297,20 +287,17 @@ def load_accelerator_state(
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
-        if is_xpu_available():
-            torch.xpu.set_rng_state_all(states["torch_xpu_manual_seed"])
-        if is_mlu_available():
-            torch.mlu.set_rng_state_all(states["torch_mlu_manual_seed"])
-        elif is_sdaa_available():
-            torch.sdaa.set_rng_state_all(states["torch_sdaa_manual_seed"])
-        elif is_musa_available():
-            torch.musa.set_rng_state_all(states["torch_musa_manual_seed"])
-        if is_hpu_available():
-            torch.hpu.set_rng_state_all(states["torch_hpu_manual_seed"])
-        if is_neuron_available():
-            torch.neuron.set_rng_state_all(states["torch_neuron_manual_seed"])
-        if is_cuda_available():
-            torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
+        device_type, device_module = get_torch_accelerator_backend()
+        rng_key = f"torch_{device_type}_manual_seed"
+        if device_type is not None and rng_key in states:
+            if device_module is torch.accelerator:
+                # torch.accelerator.random does not yet provide set_rng_state.
+                device_module = torch.get_device_module(device_type)
+                device_module.set_rng_state(states[rng_key])
+            elif device_type == "mps":
+                device_module.set_rng_state(states[rng_key])
+            else:
+                device_module.set_rng_state_all(states[rng_key])
         if is_torch_xla_available():
             xm.set_rng_state(states["xm_seed"])
         logger.info("All random states loaded successfully")

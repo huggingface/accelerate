@@ -20,7 +20,6 @@ import unittest
 from collections import OrderedDict
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest import mock
 
 import torch
 import torch.nn as nn
@@ -50,7 +49,6 @@ from accelerate.test_utils import (
 )
 from accelerate.utils import is_hpu_available, is_xpu_available, offload_state_dict
 from accelerate.utils.memory import clear_device_cache
-from accelerate.utils.versions import is_torch_version
 
 
 logger = logging.getLogger(__name__)
@@ -425,9 +423,7 @@ class BigModelingTester(unittest.TestCase):
         foo = torch.rand(n_vals, device=device_0)  # noqa: F841
 
         # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
-        oom_error = (
-            torch.OutOfMemoryError if is_torch_version(">=", "2.5.0") else torch_accelerator_module.OutOfMemoryError
-        )
+        oom_error = torch.OutOfMemoryError
         try:
             dispatch_model(model, device_map)
         except oom_error as e:
@@ -509,9 +505,7 @@ class BigModelingTester(unittest.TestCase):
 
         original_pointer = model.compute1._hf_hook.weights_map["weight"].data_ptr()
 
-        oom_error = (
-            torch.OutOfMemoryError if is_torch_version(">=", "2.5.0") else torch_accelerator_module.OutOfMemoryError
-        )
+        oom_error = torch.OutOfMemoryError
         with torch.no_grad():
             try:
                 output = model(x)
@@ -809,18 +803,17 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
+    @require_non_cpu
     def test_dispatch_model_with_accelerator(self):
         model = ModelForTest()
         device_map = {"": 0}
-        with (
-            mock.patch("torch.cuda.is_available", return_value=False),
-            mock.patch("torch.accelerator", create=True) as accelerator,
-            mock.patch.object(model, "to") as mock_to,
-        ):
-            accelerator.is_available.return_value = True
-            accelerator.current_accelerator.return_value = SimpleNamespace(type="tpu")
-            dispatch_model(model, device_map)
-            mock_to.assert_called_once_with("tpu:0")
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        dispatch_model(model, device_map)
+        output = model(x.to(torch_device))
+        assert next(model.parameters()).device == torch.device(torch_device)
+        torch.testing.assert_close(expected, output.cpu(), atol=ATOL, rtol=RTOL)
 
     @require_non_cpu
     def test_dispatch_model_force_hooks(self):
