@@ -20,6 +20,48 @@ import os
 from .state import PartialState
 
 
+def get_verbosity() -> int:
+    """Return the effective logging level of the Accelerate library logger as an integer."""
+    return logging.getLogger("accelerate").getEffectiveLevel()
+
+
+def set_verbosity(verbosity: int | str) -> None:
+    """
+    Set the logging level of the Accelerate library logger.
+
+    This affects existing and future loggers in the `accelerate` namespace that inherit their level. Loggers with a
+    level set explicitly, including through `get_logger`'s `log_level` argument or `ACCELERATE_LOG_LEVEL`, retain that
+    level. The Python root logger and loggers outside the `accelerate` namespace are not modified.
+
+    Args:
+        verbosity (`int` or `str`):
+            A Python logging level, such as `logging.WARNING`, or a case-insensitive level name, such as `"warning"`.
+    """
+    if isinstance(verbosity, str):
+        verbosity = verbosity.upper()
+    logging.getLogger("accelerate").setLevel(verbosity)
+
+
+def set_verbosity_debug() -> None:
+    """Set the Accelerate library's verbosity to `DEBUG`."""
+    set_verbosity(logging.DEBUG)
+
+
+def set_verbosity_info() -> None:
+    """Set the Accelerate library's verbosity to `INFO`."""
+    set_verbosity(logging.INFO)
+
+
+def set_verbosity_warning() -> None:
+    """Set the Accelerate library's verbosity to `WARNING`."""
+    set_verbosity(logging.WARNING)
+
+
+def set_verbosity_error() -> None:
+    """Set the Accelerate library's verbosity to `ERROR`."""
+    set_verbosity(logging.ERROR)
+
+
 class MultiProcessAdapter(logging.LoggerAdapter):
     """
     An adapter to assist with logging in multiprocess.
@@ -101,7 +143,8 @@ def get_logger(name: str, log_level: str | None = None):
         name (`str`):
             The name for the logger, such as `__file__`
         log_level (`str`, *optional*):
-            The log level to use. If not passed, will default to the `LOG_LEVEL` environment variable, or `INFO` if not
+            The log level to use. If not passed, defaults to the `ACCELERATE_LOG_LEVEL` environment variable. If neither
+            is set, the logger's existing level is preserved, inheriting from its parent if no level has been set.
 
     Example:
 
