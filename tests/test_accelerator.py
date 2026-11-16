@@ -16,7 +16,6 @@ import json
 import os
 import pickle
 import tempfile
-import time
 from unittest import skip, skipIf
 from unittest.mock import patch
 
