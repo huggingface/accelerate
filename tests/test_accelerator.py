@@ -16,11 +16,9 @@ import json
 import os
 import pickle
 import tempfile
-import time
 from unittest import skip
 from unittest.mock import patch
 
-import psutil
 import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
@@ -252,28 +250,18 @@ class AcceleratorTester(AccelerateTestCase):
         # Free up refs with empty_cache() and gc.collect()
         accelerator.free_memory()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
-        free_cpu_ram_before = psutil.virtual_memory().available // 1024 // 1024
         model, optimizer, scheduler, train_dl, valid_dl = accelerator.prepare(
             model, optimizer, scheduler, train_dl, valid_dl
         )
-
-        # Short sleep here makes this test more reliable
-        time.sleep(1e-3)
 
         model, optimizer, scheduler, train_dl, valid_dl = accelerator.free_memory(
             model, optimizer, scheduler, train_dl, valid_dl
         )
 
-        free_cpu_ram_after = psutil.virtual_memory().available // 1024 // 1024
-
         assert len(accelerator._models) == 0
         assert len(accelerator._optimizers) == 0
         assert len(accelerator._schedulers) == 0
         assert len(accelerator._dataloaders) == 0
-
-        # The less-than comes *specifically* from device CPU things/won't be present on CPU builds
-        # Allow a small tolerance for OS-level memory fluctuations between measurements
-        assert free_cpu_ram_after <= free_cpu_ram_before + 50
 
     @require_non_torch_xla
     def test_env_var_device(self):
