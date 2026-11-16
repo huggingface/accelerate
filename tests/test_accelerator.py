@@ -378,6 +378,7 @@ class AcceleratorTester(AccelerateTestCase):
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_load_model_with_hooks(self, use_safetensors):
+        set_seed(42)
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
         accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
