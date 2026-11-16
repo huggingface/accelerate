@@ -37,17 +37,17 @@ SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), "scripts")
 TRAIN_SCRIPT = os.path.join(SCRIPTS_DIR, "train.py")
 
 
-def run_script(script, config_file=None, **script_args):
+def run_script(script, config_file=None, timeout=None, **script_args):
     """
     Run `script` with `accelerate launch` and the accelerate `config_file`, or on a single GPU with `python` if there is
-    none. `script_args` are passed to the script as `--key=value`.
+    none. `script_args` are passed to the script as `--key=value`. `timeout` limits the subprocess runtime in seconds.
     """
     if config_file:
         cmd = get_launch_command(config_file=config_file, main_process_port=get_torch_dist_unique_port())
     else:
         cmd = [sys.executable]
     cmd += [script] + [f"--{key}={value}" for key, value in script_args.items()]
-    execute_subprocess_async(cmd)
+    execute_subprocess_async(cmd, timeout=timeout)
 
 
 @functools.cache
