@@ -39,6 +39,7 @@ from .imports import (
     is_peft_available,
     is_sdaa_available,
     is_torch_xla_available,
+    is_torchao_available,
     is_xpu_available,
 )
 from .memory import clear_device_cache
@@ -423,6 +424,28 @@ def set_module_tensor_to_device(
         and device not in tied_params_map[value.data_ptr()]
     ):
         tied_params_map[value.data_ptr()][device] = new_value
+
+
+def _get_parameter_id(param):
+    """Return a key for matching model and optimizer parameters during preparation."""
+    if param.is_meta:
+        # Meta parameters all have a zero data pointer; their identities remain distinct.
+        return id(param)
+
+    if is_torchao_available():
+        from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
+
+        if isinstance(param, WeightWithDynamicFloat8CastTensor):
+            # The wrapper's data_ptr() returns zero; use the underlying tensor.
+            return param._tensor.data_ptr()
+
+    if torch.distributed.is_available():
+        from torch.distributed.tensor import DTensor
+
+        if isinstance(param, DTensor):
+            return param._local_tensor.data_ptr()
+
+    return param.data_ptr()
 
 
 def named_module_tensors(
