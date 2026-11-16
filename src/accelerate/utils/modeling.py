@@ -1628,6 +1628,9 @@ def load_state_dict(checkpoint_file, device_map=None):
                 device = list(device_map.values())[0]
                 # weights offloaded to disk are read on the CPU first
                 target_device = "cpu" if device == "disk" else normalize_device(device)
+                if torch.device(target_device).type == "tpu":
+                    # safetensors can't load onto TPU
+                    return {k: v.to(target_device) for k, v in safe_load_file(checkpoint_file).items()}
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1659,13 +1662,14 @@ def load_state_dict(checkpoint_file, device_map=None):
                 progress_bar = None
             for device in devices:
                 target_device = normalize_device(device)
+                load_device = "cpu" if torch.device(target_device).type == "tpu" else target_device
 
-                with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
+                with safe_open(checkpoint_file, framework="pt", device=load_device) as f:
                     for key in device_weights[device]:
                         if progress_bar is not None:
                             progress_bar.set_postfix(dev=device, refresh=False)
                             progress_bar.set_description(key)
-                        tensors[key] = f.get_tensor(key)
+                        tensors[key] = f.get_tensor(key).to(target_device)
                         if progress_bar is not None:
                             progress_bar.update()
             if progress_bar is not None:
