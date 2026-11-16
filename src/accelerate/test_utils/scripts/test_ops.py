@@ -18,6 +18,7 @@ import torch
 
 from accelerate import PartialState
 from accelerate.test_utils.testing import assert_exception
+from accelerate.utils import parse_flag_from_env
 from accelerate.utils.dataclasses import DistributedType
 from accelerate.utils.operations import (
     DistributedOperationException,
@@ -165,7 +166,9 @@ def _mp_fn(index):
 
 
 def main():
-    state = PartialState()
+    state = PartialState(cpu=parse_flag_from_env("ACCELERATE_USE_CPU"))
+    if torch.distributed.is_initialized():
+        assert state.num_processes == torch.distributed.get_world_size()
     state.print(f"State: {state}")
     state.print("testing gather")
     test_gather(state)
