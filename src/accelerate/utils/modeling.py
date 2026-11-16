@@ -803,11 +803,15 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
     num_devices = 0
     if device_type not in (None, "mps"):
         num_devices = device_module.device_count()
+    devices = list(range(num_devices))
+    if device_type == "tpu":
+        # A TPU process can only use one chip
+        devices = [torch.accelerator.current_device_index()]
 
     if max_memory is None:
         max_memory = {}
         is_integrated_cuda = False
-        for i in range(num_devices):
+        for i in devices:
             try:
                 # Initialize each device before querying its available memory.
                 _ = torch.tensor(0, device=f"{device_type}:{i}")
@@ -831,8 +835,8 @@ def get_max_memory(max_memory: Optional[dict[Union[int, str], Union[int, str]]] 
     # Allocate accelerator devices first, in index order.
     gpu_devices = sorted(k for k in max_memory if isinstance(k, int))
     for device in gpu_devices:
-        if device >= num_devices or device < 0:
-            logger.warning(f"Device {device} is not available, available devices are {list(range(num_devices))}")
+        if device not in devices:
+            logger.warning(f"Device {device} is not available, available devices are {devices}")
     # Add the other devices in the preset order if they are available
     all_devices = gpu_devices + [k for k in ["mps", "cpu", "disk"] if k in max_memory.keys()]
     # Raise an error if a device is not recognized
@@ -1651,6 +1655,9 @@ def load_state_dict(checkpoint_file, device_map=None):
                 device = list(device_map.values())[0]
                 # weights offloaded to disk are read on the CPU first
                 target_device = "cpu" if device == "disk" else normalize_device(device)
+                if torch.device(target_device).type == "tpu":
+                    # safetensors can't load onto TPU
+                    return {k: v.to(target_device) for k, v in safe_load_file(checkpoint_file).items()}
 
                 return safe_load_file(checkpoint_file, device=target_device)
 
@@ -1682,13 +1689,17 @@ def load_state_dict(checkpoint_file, device_map=None):
                 progress_bar = None
             for device in devices:
                 target_device = normalize_device(device)
+                load_device = "cpu" if torch.device(target_device).type == "tpu" else target_device
 
-                with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
+                with safe_open(checkpoint_file, framework="pt", device=load_device) as f:
                     for key in device_weights[device]:
                         if progress_bar is not None:
                             progress_bar.set_postfix(dev=device, refresh=False)
                             progress_bar.set_description(key)
-                        tensors[key] = f.get_tensor(key)
+                        tensor = f.get_tensor(key)
+                        if load_device != target_device:
+                            tensor = tensor.to(target_device)
+                        tensors[key] = tensor
                         if progress_bar is not None:
                             progress_bar.update()
             if progress_bar is not None:

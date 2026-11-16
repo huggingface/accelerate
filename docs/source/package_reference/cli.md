@@ -128,7 +128,7 @@ accelerate launch [arguments] {training_script} --{training_script-argument-1} -
 * `-m`, `--module` (`bool`) -- Change each process to interpret the launch script as a Python module, executing with the same behavior as 'python -m'.
 * `--no_python` (`bool`) -- Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.
 * `--debug` (`bool`) -- Whether to print out the torch.distributed stack trace when something fails.
-* `-q`, `--quiet` (`bool`) -- Silence subprocess errors from the launch stack trace to only show the relevant tracebacks. (Only applicable to DeepSpeed and single-process configurations).
+* `-q`, `--quiet` (`bool`) -- Show training errors without the launcher traceback, even with `--debug`. Applies to single-process, multi-GPU, and DeepSpeed launches.
 
 
 The rest of these arguments are configured through `accelerate config` and are read in from the specified `--config_file` (or default configuration) for their 

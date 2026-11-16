@@ -2131,6 +2131,18 @@ class DeepSpeedSequenceParallelConfig:
             "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3', 'sdpa', or a hub-hosted kernel (e.g. 'kernels-community/flash-attn2'). Defaults to `sdpa`."
         },
     )
+    sp_allow_recurrent_layers: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "If `True`, models with linear-attention (recurrent) layers are not refused. Set it only for a model whose linear-attention layers exchange their state across the sequence parallel ranks: stock ones restart it on every rank and give wrong gradients. The default is `False`."
+        },
+    )
+    sp_disable_in_eval: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "If `True`, sequence parallelism is turned off in eval mode and every rank runs the whole sequence. If `False`, it stays on, and the eval dataloader must be sharded like the train one. The default is `True`."
+        },
+    )
 
     def __post_init__(self):
         # sp_seq_length_is_variable and sp_seq_length are interconnected
@@ -2150,6 +2162,14 @@ class DeepSpeedSequenceParallelConfig:
 
         if self.sp_attn_implementation is None:
             self.sp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_SP_ATTN_IMPLEMENTATION", None)
+
+        if self.sp_allow_recurrent_layers is None:
+            self.sp_allow_recurrent_layers = (
+                os.environ.get("PARALLELISM_CONFIG_SP_ALLOW_RECURRENT_LAYERS", "false").lower() == "true"
+            )
+
+        if self.sp_disable_in_eval is None:
+            self.sp_disable_in_eval = os.environ.get("PARALLELISM_CONFIG_SP_DISABLE_IN_EVAL", "true").lower() == "true"
 
         _builtin_sp_attn = ["flash_attention_2", "flash_attention_3", "sdpa"]
         # Also allow hub-hosted flash attention kernels (e.g. "kernels-community/flash-attn2").

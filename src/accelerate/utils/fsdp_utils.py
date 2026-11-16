@@ -593,6 +593,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         full_sd (`dict`): The full state dict to load, can only be on rank 0
         cpu_offload (`bool`, defaults to `False`):
             If True, move sharded parameters to CPU after distribution. Required when FSDP CPU offloading is enabled.
+            Buffers and ignored parameters remain on the accelerator device.
     """
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, distribute_tensor
@@ -601,23 +602,16 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
 
-    # Rank 0 distributes the full state dict to other ranks
-    def _infer_parameter_dtype(model, param_name, empty_param):
-        try:
-            old_param = model.get_parameter_or_buffer(param_name)
-        except AttributeError:
-            # Need this for LORA, as there some params are not *parameters* of sorts
-            base_param_name, local_param_name = param_name.rsplit(".", 1)
-            submodule = model.get_submodule(base_param_name)
-            old_param = getattr(submodule, local_param_name)
+    def _get_target_contiguity_and_dtype(model, param_name, tensor):
+        module_name, _, tensor_name = param_name.rpartition(".")
+        # Also supports tensor attributes exposed by adapters.
+        target = getattr(model.get_submodule(module_name), tensor_name)
 
         casting_dtype = None
-        is_param_float8_e4m3fn = empty_param.dtype == torch.float8_e4m3fn
+        if tensor.dtype.is_floating_point and tensor.dtype != torch.float8_e4m3fn:
+            casting_dtype = target.dtype
 
-        if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-            casting_dtype = old_param.dtype
-
-        return old_param is not None and old_param.is_contiguous(), casting_dtype
+        return target is not None and target.is_contiguous(), casting_dtype
 
     def _cast_and_contiguous(tensor, to_contiguous, dtype):
         if dtype is not None:
@@ -626,50 +620,35 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             tensor = tensor.contiguous()
         return tensor
 
-    if accelerator.is_main_process:
-        for param_name, sharded_param in meta_sharded_sd.items():
+    for param_name, sharded_param in meta_sharded_sd.items():
+        is_sharded = isinstance(sharded_param, DTensor)
+        device = sharded_param.device_mesh.device_type if is_sharded else accelerator.device
+
+        if accelerator.is_main_process:
             if param_name not in full_sd:
                 raise KeyError(
                     f"Parameter '{param_name}' found in sharded model state dict but missing from full state dict. "
                     f"Full state dict has {len(full_sd)} keys, sharded has {len(meta_sharded_sd)} keys."
                 )
-            full_param = full_sd[param_name]
-            device_mesh = sharded_param.device_mesh
-            full_param = full_param.detach().to(device_mesh.device_type)
-            if isinstance(full_param, DTensor):
-                # dist.broadcast() only supports torch.Tensor.
-                # After prepare_tp(), model parameters may become DTensor.
-                # To broadcast such a parameter, convert it to a local tensor first.
-                full_param = full_param.to_local()
-            dist.broadcast(full_param, src=0, group=dist.group.WORLD)
-            sharded_tensor = distribute_tensor(full_param, device_mesh, sharded_param.placements)
-            to_contiguous, casting_dtype = _infer_parameter_dtype(
-                model,
-                param_name,
-                full_param,
-            )
-            sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
-            # When CPU offloading is enabled, FSDP2's lazy_init expects parameters on CPU
-            if cpu_offload:
-                sharded_tensor = sharded_tensor.to("cpu")
-            sharded_sd[param_name] = sharded_tensor
-    # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
-    else:
-        for param_name, sharded_param in meta_sharded_sd.items():
-            device_mesh = sharded_param.device_mesh
-            full_tensor = torch.empty(sharded_param.size(), device=device_mesh.device_type, dtype=sharded_param.dtype)
-            dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
-            sharded_tensor = distribute_tensor(full_tensor, device_mesh, sharded_param.placements)
-            to_contiguous, casting_dtype = _infer_parameter_dtype(
-                model,
-                param_name,
-                full_tensor,
-            )
-            sharded_tensor = _cast_and_contiguous(sharded_tensor, to_contiguous, casting_dtype)
-            # When CPU offloading is enabled, FSDP2's lazy_init expects parameters on CPU
-            if cpu_offload:
-                sharded_tensor = sharded_tensor.to("cpu")
-            sharded_sd[param_name] = sharded_tensor
+            full_tensor = full_sd[param_name].detach().to(device)
+            if isinstance(full_tensor, DTensor):
+                # Tensor parallelism can leave DTensors in the full state dict; broadcast requires a local tensor.
+                full_tensor = full_tensor.to_local()
+            full_tensor = full_tensor.contiguous()
+        else:
+            full_tensor = torch.empty(sharded_param.size(), device=device, dtype=sharded_param.dtype)
+
+        dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
+        tensor = (
+            distribute_tensor(full_tensor, sharded_param.device_mesh, sharded_param.placements)
+            if is_sharded
+            else full_tensor
+        )
+        tensor = _cast_and_contiguous(tensor, *_get_target_contiguity_and_dtype(model, param_name, full_tensor))
+        # FSDP only moves managed parameters back to the accelerator during forward.
+        if cpu_offload and is_sharded:
+            tensor = tensor.to("cpu")
+        sharded_sd[param_name] = tensor
 
     # we set `assign=True` because our params are on meta device
     model.load_state_dict(sharded_sd, assign=True)
@@ -790,12 +769,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         "mesh": mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)] if mesh is not None else None,
     }
 
-    # `ignored_params` is only supported in torch >= 2.7.0
-    if is_torch_version(">=", "2.7.0") and fsdp2_plugin.ignored_modules is not None:
-        fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(
-            fsdp2_plugin.ignored_modules, model, accelerator.device
-        )
-
     model_has_params4bit = False
     incompatible_params4bit = set()
     for name, param in model.named_parameters():
@@ -808,17 +781,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             # Default uint8 quant_storage cannot survive fully_shard's DTensor conversion.
             if (not param.requires_grad) and (not param.is_floating_point()) and (not param.is_complex()):
                 incompatible_params4bit.add(param)
-
-    if incompatible_params4bit and is_torch_version(">=", "2.7.0"):
-        ignored = set(fsdp2_kwargs.get("ignored_params", set()))
-        fsdp2_kwargs["ignored_params"] = ignored | incompatible_params4bit
-        if accelerator.is_main_process:
-            warnings.warn(
-                f"Found {len(incompatible_params4bit)} non-floating frozen Params4bit. "
-                "Excluding from FSDP2 sharding to prevent quant_state corruption."
-                "To enable memory-efficient sharding of 4-bit weights, set"
-                "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
-            )
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
@@ -851,6 +813,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     # Capture after upcast so dtypes match what `fully_shard` will produce.
     original_sd = model.state_dict()
 
+    ignored_modules_device = accelerator.device
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
         # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
@@ -859,16 +822,55 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
         # We move the model to meta device, as then sharding happens on meta device
         model = model.to(torch.device("meta"))
+        # Keep ignored modules on meta until their checkpoint tensors are loaded.
+        ignored_modules_device = None
         # We need to re-tie the weights, not exactly sure why, but if we don't do this, reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
         # We assume `transformers` models have a `tie_weights` method if they support it
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
+    # Collect after moving to meta and tying weights, which can replace the parameter objects.
+    # `ignored_params` is only supported in torch >= 2.7.0.
+    if is_torch_version(">=", "2.7.0") and fsdp2_plugin.ignored_modules is not None:
+        fsdp2_kwargs["ignored_params"] = get_parameters_from_modules(
+            fsdp2_plugin.ignored_modules, model, ignored_modules_device
+        )
+
+    if incompatible_params4bit and is_torch_version(">=", "2.7.0"):
+        ignored = set(fsdp2_kwargs.get("ignored_params", set()))
+        fsdp2_kwargs["ignored_params"] = ignored | incompatible_params4bit
+        if accelerator.is_main_process:
+            warnings.warn(
+                f"Found {len(incompatible_params4bit)} non-floating frozen Params4bit. "
+                "Excluding from FSDP2 sharding to prevent quant_state corruption."
+                "To enable memory-efficient sharding of 4-bit weights, set"
+                "bnb_4bit_quant_storage to a floating dtype (e.g. bf16)."
+            )
+
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
     if auto_wrap_policy_func is not None:
+        # Count all registered references; children() would skip duplicate entries.
+        module_ref_counts = defaultdict(int)
+        for parent in model.modules():
+            for child in parent._modules.values():
+                if child is not None:
+                    module_ref_counts[child] += 1
+
+        # Shard the wrapper to keep FSDP hooks outside compiled code.
+        # Shared inner modules still need their own hooks.
+        inner_modules_to_skip_sharding = {
+            module._checkpoint_wrapped_module
+            for module in model.modules()
+            if hasattr(module, "_checkpoint_wrapped_module")
+            and auto_wrap_policy_func(module)
+            and module_ref_counts[module._checkpoint_wrapped_module] == 1
+        }
+
         # We skip the model itself, as that one is always wrapped
         for module in get_module_children_bottom_up(model)[:-1]:
-            if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
+            if module in inner_modules_to_skip_sharding or isinstance(module, FSDPModule):
+                continue
+            if auto_wrap_policy_func(module):
                 fully_shard(module, **fsdp2_kwargs)
 
     # Carve embed + tail=[final_norm, lm_head] into their own units. Tail gets `False`
@@ -1030,6 +1032,7 @@ def get_parameters_from_modules(
 
     Args:
         modules (`Union[Iterable[torch.nn.Module], str]`): List of modules
+        device (`torch.device` or `None`): Device to move the modules to. `None` leaves them in place.
 
     Returns:
         `set[torch.nn.Parameter]`: List of parameters
@@ -1043,9 +1046,10 @@ def get_parameters_from_modules(
         mapped_modules = []
         for name, module in model.named_modules():
             if reg.fullmatch(name):
-                module.to(device)
                 mapped_modules.append(module)
         modules = mapped_modules
     for module in modules:
+        if device is not None:
+            module.to(device)
         parameters.extend(list(module.parameters()))
     return set(parameters)
