@@ -2370,12 +2370,13 @@ class Accelerator:
                         "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
                     )
 
-                _refuse_recurrent_layers_under_sequence_parallelism(model)
+                if not sp_handler.sp_allow_recurrent_layers:
+                    _refuse_recurrent_layers_under_sequence_parallelism(model)
 
                 kwagrs = {}
                 signature = inspect.signature(UlyssesSPAttentionHF.register_with_transformers)
                 if "disable_in_eval" in signature.parameters.keys():
-                    kwagrs["disable_in_eval"] = True
+                    kwagrs["disable_in_eval"] = sp_handler.sp_disable_in_eval
 
                 mpu = UlyssesSPAttentionHF.register_with_transformers(
                     model_name_or_path=model,

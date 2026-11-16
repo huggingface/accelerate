@@ -760,7 +760,8 @@ def _refuse_recurrent_layers_under_sequence_parallelism(model: nn.Module):
             f"{model.__class__.__name__}). Those layers carry a recurrent state along the sequence and "
             "bypass the attention interface, so sharding the sequence restarts the state on every rank "
             "and produces wrong gradients without failing. Use a full-attention model, or disable "
-            "sequence parallelism."
+            "sequence parallelism. If the model exchanges that state across the sequence parallel ranks "
+            "itself, set `DeepSpeedSequenceParallelConfig(sp_allow_recurrent_layers=True)`."
         )
 
 
