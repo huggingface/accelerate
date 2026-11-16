@@ -13,12 +13,13 @@
 # limitations under the License.
 
 import os
+import unittest
 
 from parameterized import parameterized
 
 from accelerate.test_utils.testing import require_huggingface_suite, require_multi_gpu, slow
 
-from .test_distributed import CONFIGS_DIR, DistributedTrainingCommon
+from .test_distributed import CONFIGS_DIR, SCRIPTS_DIR, DistributedTrainingCommon, run_script
 
 
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
@@ -41,3 +42,34 @@ class FSDP2TrainingTest(DistributedTrainingCommon):
 
     def test_training_and_can_resume_normally(self):
         self.check_resume(config_file=FSDP2_CONFIG_FILE)
+
+
+@slow
+@require_multi_gpu
+@require_huggingface_suite
+class FSDP2LoadingTest(unittest.TestCase):
+    cpu_ram_efficient_loading = False
+
+    def check_loading(self, **script_args):
+        run_script(
+            os.path.join(SCRIPTS_DIR, "load.py"),
+            config_file=FSDP2_CONFIG_FILE,
+            cpu_ram_efficient_loading=str(self.cpu_ram_efficient_loading).lower(),
+            timeout=180,
+            **script_args,
+        )
+
+    def test_loading(self):
+        self.check_loading()
+
+    def test_loading_with_cpu_offload(self):
+        self.check_loading(cpu_offload="true")
+
+    # Ignored parameters must stay on the accelerator even with CPU offload: FSDP does not move them back for forward.
+    @parameterized.expand(["false", "true"])
+    def test_loading_with_ignored_modules(self, cpu_offload):
+        self.check_loading(ignored_modules="true", cpu_offload=cpu_offload)
+
+
+class FSDP2RamEfficientLoadingTest(FSDP2LoadingTest):
+    cpu_ram_efficient_loading = True
