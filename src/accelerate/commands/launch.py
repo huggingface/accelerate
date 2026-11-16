@@ -18,10 +18,15 @@ import argparse
 import importlib
 import logging
 import os
+import signal
 import subprocess
 import sys
+import threading
 from collections import deque
+from contextlib import suppress
 from pathlib import Path
+
+import psutil
 
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
@@ -162,7 +167,7 @@ def launch_command_parser(subparsers=None):
         "--quiet",
         "-q",
         action="store_true",
-        help="Silence subprocess errors from the launch stack trace and only show the relevant tracebacks. (Only applicable to DeepSpeed and single-process configurations)",
+        help="Show training errors without the launcher traceback, even with --debug. Applies to single-process, multi-GPU, and DeepSpeed launches.",
     )
     # Hardware selection arguments
     hardware_args = parser.add_argument_group(
@@ -981,19 +986,65 @@ def launch_command_parser(subparsers=None):
     return parser
 
 
-def simple_launcher(args):
-    cmd, current_env = prepare_simple_launcher_cmd_env(args)
+def _terminate_process_tree(process):
+    processes = [process]
+    # Capture descendants before stopping their parent, including workers in separate sessions.
+    with suppress(psutil.NoSuchProcess):
+        processes.extend(process.children(recursive=True))
+    alive = processes
+    try:
+        for child in processes:
+            with suppress(psutil.NoSuchProcess):
+                child.terminate()
+        _, alive = psutil.wait_procs(processes, timeout=5)
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
+        for child in alive:
+            with suppress(psutil.NoSuchProcess):
+                child.kill()
+        psutil.wait_procs(alive, timeout=5)
+        process.wait()
 
+
+def _run_subprocess(cmd, current_env, quiet):
     # Tee the child's stderr: write it through as it arrives so output stays live, and keep the tail for the error.
-    process = subprocess.Popen(cmd, env=current_env, stderr=subprocess.PIPE)
+    process = psutil.Popen(cmd, env=current_env, stderr=subprocess.PIPE)
     tail = deque(maxlen=CHILD_STDERR_TAIL_CHUNKS)
-    while chunk := process.stderr.read1(CHILD_STDERR_CHUNK_SIZE):
-        sys.stderr.buffer.write(chunk)
-        sys.stderr.flush()
-        tail.append(chunk)
-    process.wait()
+
+    def copy_stderr():
+        while chunk := process.stderr.read1(CHILD_STDERR_CHUNK_SIZE):
+            sys.stderr.buffer.write(chunk)
+            sys.stderr.flush()
+            tail.append(chunk)
+
+    def handle_sigterm(signum, frame):
+        sys.exit(128 + signum)
+
+    reader = None
+    previous_sigterm = None
+    try:
+        if threading.current_thread() is threading.main_thread():
+            previous_sigterm = signal.signal(signal.SIGTERM, handle_sigterm)
+        copy_stderr()
+        process.wait()
+    except (KeyboardInterrupt, SystemExit) as error:
+        # Keep draining during shutdown so the child's cleanup cannot block on a full pipe.
+        reader = threading.Thread(target=copy_stderr, daemon=True)
+        reader.start()
+        _terminate_process_tree(process)
+        reader.join(timeout=5)
+        if isinstance(error, KeyboardInterrupt):
+            sys.exit(130)
+        raise
+    finally:
+        if previous_sigterm is not None:
+            signal.signal(signal.SIGTERM, previous_sigterm)
+        # A descendant can still hold the pipe open; do not block closing a pipe another thread is reading.
+        if reader is None or not reader.is_alive():
+            process.stderr.close()
     if process.returncode != 0:
-        if not args.quiet:
+        if not quiet:
             stderr = b"".join(tail).decode(errors="replace")
             raise subprocess.CalledProcessError(
                 returncode=process.returncode, cmd=cmd, stderr=stderr
@@ -1002,9 +1053,44 @@ def simple_launcher(args):
             sys.exit(1)
 
 
-def multi_gpu_launcher(args):
-    import torch.distributed.run as distrib_run
+def simple_launcher(args):
+    cmd, current_env = prepare_simple_launcher_cmd_env(args)
+    _run_subprocess(cmd, current_env, args.quiet)
 
+
+def _run_torchrun(args):
+    import torch.distributed.run as distrib_run
+    from torch.distributed.elastic.multiprocessing.api import SignalException
+    from torch.distributed.elastic.multiprocessing.errors import ChildFailedError
+
+    debug = getattr(args, "debug", False)
+    quiet = getattr(args, "quiet", False)
+    args = _filter_args(
+        args,
+        distrib_run.get_args_parser(),
+        ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
+    )
+    try:
+        distrib_run.run(args)
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except SignalException as error:
+        # The elastic agent has already shut down its workers before re-raising the signal.
+        sys.exit(128 + error.sigval)
+    except Exception as error:
+        if isinstance(error, ChildFailedError) and quiet:
+            print(error, file=sys.stderr)
+            sys.exit(1)
+        if is_rich_available() and debug and not quiet:
+            console = get_console()
+            console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
+            console.print_exception(suppress=[__file__], show_locals=False)
+            sys.exit(1)
+        else:
+            raise
+
+
+def multi_gpu_launcher(args):
     current_env = prepare_multi_gpu_env(args)
     if not check_cuda_p2p_ib_support():
         message = "Using RTX 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
@@ -1018,28 +1104,11 @@ def multi_gpu_launcher(args):
         if warn:
             logger.warning(message)
 
-    debug = getattr(args, "debug", False)
-    args = _filter_args(
-        args,
-        distrib_run.get_args_parser(),
-        ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
-    )
-
     with patch_environment(**current_env):
-        try:
-            distrib_run.run(args)
-        except Exception:
-            if is_rich_available() and debug:
-                console = get_console()
-                console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
-                console.print_exception(suppress=[__file__], show_locals=False)
-            else:
-                raise
+        _run_torchrun(args)
 
 
 def deepspeed_launcher(args):
-    import torch.distributed.run as distrib_run
-
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
     else:
@@ -1064,30 +1133,10 @@ def deepspeed_launcher(args):
             if len(valid_env_items) > 1:
                 f.writelines(valid_env_items)
 
-        process = subprocess.Popen(cmd, env=current_env)
-        process.wait()
-        if process.returncode != 0:
-            if not args.quiet:
-                raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
-            else:
-                sys.exit(1)
+        _run_subprocess(cmd, current_env, args.quiet)
     else:
-        debug = getattr(args, "debug", False)
-        args = _filter_args(
-            args,
-            distrib_run.get_args_parser(),
-            ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
-        )
         with patch_environment(**current_env):
-            try:
-                distrib_run.run(args)
-            except Exception:
-                if is_rich_available() and debug:
-                    console = get_console()
-                    console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
-                    console.print_exception(suppress=[__file__], show_locals=False)
-                else:
-                    raise
+            _run_torchrun(args)
 
 
 def tpu_launcher(args):
