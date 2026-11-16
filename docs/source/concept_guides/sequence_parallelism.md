@@ -115,12 +115,16 @@ accelerator = Accelerator(
 - `sp_size` is the degree of the sequence parallelism - in the above example it's 4, therefore 4 gpus will be used to process a single batch (while doing DP=4 over the same gpus)
 - `sp_seq_length` and `sp_seq_length_is_variable` are used to deal with sequence lengths. If `sp_seq_length_is_variable=True` the backend will work with a sequence length that may change between batches, in which case `sp_seq_length` value can be set to anything divisible by the sequence parallel degree or not set at all. In this case on every `forward` the sequence variables will be derived from input. If `False` then `seq_length` needs to match the batch's sequence length dimension, which then will have to be padded to be always the same. The default is `True`.
 - `sp_attn_implementation` is one of `sdpa`, `flash_attention_2` or `flash_attention_3`. This sequence parallel implementation uses `position_ids` instead of `attention_mask` therefore, `eager` can't work here until it supports working with `position_ids`. Also, please note that `sdpa` doesn't handle multiple samples combined into one correctly; it will attend to the whole sample as one. If the samples aren't combined, `sdpa` will work correctly. Therefore, Flash Attention should be the ideal choice as it always works.
+- `sp_allow_recurrent_layers`: models with linear-attention layers (e.g. Gated DeltaNet) are refused by default, because those layers carry a recurrent state along the sequence that each rank would restart from zero. Set it to `True` only if the model exchanges that state across the sequence parallel ranks itself. The default is `False`.
+- `sp_disable_in_eval`: if `True`, sequence parallelism is turned off in eval mode and every rank runs the whole sequence. Set it to `False` to keep it on for long evaluation sequences; the eval dataloader must then be sharded like the train one. The default is `True`.
 
 Instead of setting these values in `DeepSpeedSequenceParallelConfig` object, you can also use the environment variables to accomplish the same - here they are correspondingly to the end of the list above.
 - `PARALLELISM_CONFIG_SP_BACKEND`
 - `PARALLELISM_CONFIG_SP_SEQ_LENGTH`
 - `PARALLELISM_CONFIG_SP_SEQ_LENGTH_IS_VARIABLE`
 - `PARALLELISM_CONFIG_SP_ATTN_IMPLEMENTATION`
+- `PARALLELISM_CONFIG_SP_ALLOW_RECURRENT_LAYERS`
+- `PARALLELISM_CONFIG_SP_DISABLE_IN_EVAL`
 
 If not passed in the code, `sp_size` can be set via `--parallelism_config_sp_size` CLI argument. Same for other arguments. You can also do the accelerate config file style config, e.g., for 2 GPUs:
 
