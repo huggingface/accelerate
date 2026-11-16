@@ -538,11 +538,12 @@ class Accelerator:
             and self.device.type != "cpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
-            supports_fp16 = torch.amp.is_autocast_available(self.device.type)
+            # TorchTPU lacks `_amp_foreach_non_finite_check_and_unscale_`, so GradScaler can't work
+            supports_fp16 = torch.amp.is_autocast_available(self.device.type) and self.device.type != "tpu"
             _, device_module = get_torch_accelerator_backend()
             if hasattr(device_module, "get_amp_supported_dtype"):
                 supports_fp16 = supports_fp16 and torch.float16 in device_module.get_amp_supported_dtype()
-            if not supports_fp16 or is_torch_xla_available(check_is_tpu=True) or self.device.type == "tpu":
+            if not supports_fp16 or is_torch_xla_available(check_is_tpu=True):
                 raise ValueError(f"fp16 mixed precision is not supported on {self.device.type!r}.")
             self.native_amp = True
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
@@ -1836,10 +1837,13 @@ class Accelerator:
                     "If you want train the 8-bit or 4-bit model in CPU, please install bitsandbytes with multi-backend, see https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
                 )
         elif device_placement and not self.verify_device_map(model):
-            # `.to()` unties weights on TPU
-            tied_params = find_tied_parameters(model)
-            model = model.to(self.device)
-            retie_parameters(model, tied_params)
+            if self.device.type == "tpu":
+                # `.to()` unties weights on TPU
+                tied_params = find_tied_parameters(model)
+                model = model.to(self.device)
+                retie_parameters(model, tied_params)
+            else:
+                model = model.to(self.device)
         if not evaluation_mode:
             if self.multi_device and not (self.parallelism_config and self.parallelism_config.tp_enabled):
                 if model_has_dtensor(model):
