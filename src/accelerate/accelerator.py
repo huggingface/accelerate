@@ -1503,15 +1503,21 @@ class Accelerator:
         elif self.is_fsdp2:
             result = self._prepare_fsdp2(*args)
         else:
-            if self.device.type in ("tpu", "xla") and self.distributed_type != DistributedType.FSDP:
+            old_named_params = {}
+            if self.distributed_type == DistributedType.FSDP:
+                if self.state.fsdp_plugin.use_orig_params:
+                    # FSDP1 replaces meta parameters when materializing them, even with use_orig_params=True.
+                    old_named_params = {
+                        name: param for name, param in self._get_named_parameters(*args).items() if param.is_meta
+                    }
+            elif self.device.type in ("tpu", "xla"):
                 old_named_params = self._get_named_parameters(*args)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-            # FSDP manages optimizer parameters itself.
-            if self.device.type in ("tpu", "xla") and self.distributed_type != DistributedType.FSDP:
+            if old_named_params:
                 self._remap_optimizer_parameters(old_named_params, *result)
 
         for item in result:
@@ -1526,6 +1532,12 @@ class Accelerator:
     def _remap_optimizer_parameters(self, old_named_params, *args):
         """Remap optimizer references after preparation. No-op if no parameter objects were replaced."""
         new_named_params = self._get_named_parameters(*args)
+        if self.distributed_type == DistributedType.FSDP:
+            old_named_params = fsdp2_canonicalize_names(old_named_params)
+            new_named_params = fsdp2_canonicalize_names(new_named_params)
+            new_named_params = {
+                name.replace("_fsdp_wrapped_module.", ""): param for name, param in new_named_params.items()
+            }
         mapping = {p: new_named_params[n] for n, p in old_named_params.items() if p is not new_named_params[n]}
         if not mapping:
             return
@@ -1677,11 +1689,14 @@ class Accelerator:
                 for param_group in obj.param_groups:
                     for i, p in enumerate(param_group["params"]):
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
-                        # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
+                        # Keep a key to match each original parameter to its sharded replacement.
                         param_group["params"][i] = torch.empty(1, dtype=p.dtype, device=p.device)
-                        param_group["params"][i].data_ptr = (
-                            p._local_tensor.data_ptr() if isinstance(p, DTensor) else p.data_ptr()
-                        )
+                        if p.is_meta:
+                            param_group["params"][i].data_ptr = id(p)
+                        elif isinstance(p, DTensor):
+                            param_group["params"][i].data_ptr = p._local_tensor.data_ptr()
+                        else:
+                            param_group["params"][i].data_ptr = p.data_ptr()
 
         self._models.append(model)
 
@@ -3889,14 +3904,14 @@ class Accelerator:
 
                 accessor_mapping[DTensor] = "_local_tensor"
 
-            named_parameters.update(
-                {
-                    n: getattr(p, accessor_mapping[type(p)]).data_ptr()
-                    if type(p) in accessor_mapping
-                    else p.data_ptr()
-                    for n, p in model.named_parameters(prefix=prefix)
-                }
-            )
+            for name, param in model.named_parameters(prefix=prefix):
+                if param.is_meta:
+                    # Meta parameters all have a zero data pointer; their identities remain distinct.
+                    named_parameters[name] = id(param)
+                elif type(param) in accessor_mapping:
+                    named_parameters[name] = getattr(param, accessor_mapping[type(param)]).data_ptr()
+                else:
+                    named_parameters[name] = param.data_ptr()
         return named_parameters
 
     def _get_devices(self, *args):
