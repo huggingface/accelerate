@@ -1871,18 +1871,15 @@ class FullyShardedDataParallelPlugin:
             self.validate_mixed_precision_policy()
 
         if self.sync_module_states:
-            device_type, device_module = get_torch_accelerator_backend()
+            device_type, _ = get_torch_accelerator_backend()
             if device_type is None:
                 device_type = "cpu"
             if device_type in ("cpu", "mps"):
                 raise RuntimeError(
                     f"FSDP parameter initialization with `sync_module_states=True` is not supported on {device_type}."
                 )
-            if device_module is torch.accelerator:
-                device_index = device_module.current_device_index()
-            else:
-                device_index = device_module.current_device()
-            device = torch.device(device_type, device_index)
+            # Resolve the index when initializing parameters, after each rank has selected its device.
+            device = torch.device(device_type)
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)

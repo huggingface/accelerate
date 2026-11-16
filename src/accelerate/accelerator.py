@@ -122,7 +122,7 @@ from .utils import (
 from .utils.constants import (
     PROFILE_PATTERN_NAME,
 )
-from .utils.modeling import get_state_dict_offloaded_model
+from .utils.modeling import _get_parameter_id, get_state_dict_offloaded_model
 from .utils.other import compile_regions, compile_regions_deepspeed, compile_regions_fsdp2, is_compiled_module
 
 
@@ -1506,15 +1506,13 @@ class Accelerator:
         elif self.is_fsdp2:
             result = self._prepare_fsdp2(*args)
         else:
-            if self.device.type in ("tpu", "xla") and self.distributed_type != DistributedType.FSDP:
-                old_named_params = self._get_named_parameters(*args)
+            old_named_params = self._get_parameters_to_remap(*args)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-            # FSDP manages optimizer parameters itself.
-            if self.device.type in ("tpu", "xla") and self.distributed_type != DistributedType.FSDP:
+            if old_named_params:
                 self._remap_optimizer_parameters(old_named_params, *result)
 
         for item in result:
@@ -1526,9 +1524,27 @@ class Accelerator:
 
         return result if len(result) > 1 else result[0]
 
+    def _get_parameters_to_remap(self, *args):
+        """Collect original parameters that preparation may replace."""
+        if self.distributed_type == DistributedType.FSDP:
+            if not self.state.fsdp_plugin.use_orig_params:
+                return {}
+            # FSDP1's initialization callback can replace meta parameters even with use_orig_params=True.
+            return {name: param for name, param in self._get_named_parameters(*args).items() if param.is_meta}
+        if self.device.type in ("tpu", "xla"):
+            return self._get_named_parameters(*args)
+        return {}
+
     def _remap_optimizer_parameters(self, old_named_params, *args):
         """Remap optimizer references after preparation. No-op if no parameter objects were replaced."""
         new_named_params = self._get_named_parameters(*args)
+        if self.distributed_type == DistributedType.FSDP:
+            old_named_params = fsdp2_canonicalize_names(old_named_params)
+            new_named_params = fsdp2_canonicalize_names(new_named_params)
+            # FSDP1 adds this wrapper to parameter names; FSDP2 shards modules in place.
+            new_named_params = {
+                name.replace("_fsdp_wrapped_module.", ""): param for name, param in new_named_params.items()
+            }
         mapping = {p: new_named_params[n] for n, p in old_named_params.items() if p is not new_named_params[n]}
         if not mapping:
             return
@@ -1598,11 +1614,6 @@ class Accelerator:
         if not mapping:
             return result
 
-        def _get_tensor_address(p):
-            if isinstance(p, DTensor):
-                return p._local_tensor.data_ptr()
-            return p.data_ptr()
-
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
@@ -1610,7 +1621,7 @@ class Accelerator:
                     # After _prepare_tp(), parameter references are replaced with DTensor instances.
                     # Therefore, we remap the parameter references to their new DTensor addresses
                     # so that the optimizer can correctly update the model parameters.
-                    param_group["params"] = [mapping[_get_tensor_address(p)] for p in param_group["params"]]
+                    param_group["params"] = [mapping[_get_parameter_id(p)] for p in param_group["params"]]
 
         return result
 
@@ -1673,18 +1684,14 @@ class Accelerator:
         old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
 
         # Swap the optimizer parameters with empty, so `fully_shard` after will not allocate too much memory
-        from torch.distributed.tensor import DTensor
-
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
                     for i, p in enumerate(param_group["params"]):
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
-                        # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
+                        # Keep a key to match each original parameter to its sharded replacement.
                         param_group["params"][i] = torch.empty(1, dtype=p.dtype, device=p.device)
-                        param_group["params"][i].data_ptr = (
-                            p._local_tensor.data_ptr() if isinstance(p, DTensor) else p.data_ptr()
-                        )
+                        param_group["params"][i].data_ptr = _get_parameter_id(p)
 
         self._models.append(model)
 
@@ -3874,7 +3881,6 @@ class Accelerator:
 
     def _get_named_parameters(self, *args, drop_refs=False):
         named_parameters = {}
-        accessor_mapping = {}
         models = [obj for obj in args if isinstance(obj, torch.nn.Module)]
         for index, model in enumerate(models):
             model = extract_model_from_parallel(model, keep_torch_compile=False)
@@ -3886,27 +3892,8 @@ class Accelerator:
                 named_parameters.update(model.named_parameters(prefix=prefix))
                 continue
 
-            # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
-            # the underlying pointer is actually hidden in `_tensor` attribute
-            if self.fp8_backend == FP8BackendType.AO:
-                from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
-
-                accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
-            _is_dtensor_available = torch.distributed.is_available()
-            # we know we're in FSDP2 so DTensor is available
-            if _is_dtensor_available:
-                from torch.distributed.tensor import DTensor
-
-                accessor_mapping[DTensor] = "_local_tensor"
-
-            named_parameters.update(
-                {
-                    n: getattr(p, accessor_mapping[type(p)]).data_ptr()
-                    if type(p) in accessor_mapping
-                    else p.data_ptr()
-                    for n, p in model.named_parameters(prefix=prefix)
-                }
-            )
+            for name, param in model.named_parameters(prefix=prefix):
+                named_parameters[name] = _get_parameter_id(param)
         return named_parameters
 
     def _get_devices(self, *args):

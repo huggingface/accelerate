@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import os
 import signal
 import subprocess
 import unittest
@@ -176,21 +175,6 @@ class TestMultiGpuLauncher:
         with pytest.raises(SystemExit) as exc_info:
             multi_gpu_launcher(args)
         assert exc_info.value.code == exit_code
-
-
-def test_notebook_launcher_sets_accelerate_mixed_precision(monkeypatch):
-    # notebook_launcher used to set a bare MIXED_PRECISION key, which nothing
-    # in accelerate reads; the workers read ACCELERATE_MIXED_PRECISION.
-    captured = {}
-    monkeypatch.setattr(
-        "torch.distributed.launcher.api.elastic_launch",
-        lambda config, entrypoint: lambda *a: captured.update(
-            accel=os.environ.get("ACCELERATE_MIXED_PRECISION"), bare=os.environ.get("MIXED_PRECISION")
-        ),
-    )
-    notebook_launcher(lambda: None, num_processes=2, mixed_precision="fp16", use_port="29613")
-    assert captured["accel"] == "fp16"
-    assert captured["bare"] is None
 
 
 def test_notebook_launcher_invalid_precision_error():

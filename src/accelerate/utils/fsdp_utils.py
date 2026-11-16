@@ -662,7 +662,8 @@ def fsdp2_switch_optimizer_parameters(optimizer: torch.optim.Optimizer, mapping:
 
     Args:
         optimizer (`torch.optim.Optimizer`): Optimizer instance which contains the original model parameters
-        mapping (`dict`): Mapping from the original parameter (specified by `data_ptr`) to the sharded parameter
+        mapping (`dict`):
+            Mapping from the original parameter's data pointer (or identity for meta parameters) to the sharded parameter.
 
     Raises:
         KeyError:
