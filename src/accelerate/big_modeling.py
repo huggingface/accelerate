@@ -485,7 +485,13 @@ def dispatch_model(
             )
     else:
         device = normalize_device(list(devices)[0])
-        model.to(device)
+        if torch.device(device).type == "tpu":
+            # `.to()` unties weights on TPU
+            tied_params = find_tied_parameters(model)
+            model.to(device)
+            retie_parameters(model, tied_params)
+        else:
+            model.to(device)
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
     return model
