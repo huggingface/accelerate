@@ -1538,6 +1538,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.FSDP:
             old_named_params = fsdp2_canonicalize_names(old_named_params)
             new_named_params = fsdp2_canonicalize_names(new_named_params)
+            # FSDP1 adds this wrapper to parameter names; FSDP2 shards modules in place.
             new_named_params = {
                 name.replace("_fsdp_wrapped_module.", ""): param for name, param in new_named_params.items()
             }
