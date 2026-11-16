@@ -25,6 +25,16 @@ from .test_distributed import CONFIGS_DIR, SCRIPTS_DIR, DistributedTrainingCommo
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
 
 
+@require_multi_gpu
+class FSDP2ActivationCheckpointingTest(unittest.TestCase):
+    def test_activation_checkpointing_shards_the_wrapper(self):
+        """A checkpointed layer is sharded at its wrapper, unless it is also called without the wrapper."""
+        run_script(
+            os.path.join(SCRIPTS_DIR, "activation_checkpointing.py"),
+            config_file=FSDP2_CONFIG_FILE,
+        )
+
+
 @slow
 @require_multi_gpu
 @require_huggingface_suite
