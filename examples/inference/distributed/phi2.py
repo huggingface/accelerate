@@ -84,3 +84,4 @@ completions_gather = gather_object(completions_per_process)
 completions = completions_gather[: len(prompts)]
 
 distributed_state.print(completions)
+distributed_state.destroy_process_group()
