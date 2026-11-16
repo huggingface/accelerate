@@ -17,7 +17,7 @@ import os
 import pickle
 import tempfile
 import time
-from unittest import skip
+from unittest import skip, skipIf
 from unittest.mock import patch
 
 import psutil
@@ -640,6 +640,7 @@ class AcceleratorTester(AccelerateTestCase):
 
     @require_fp16
     @require_non_cpu
+    @skipIf(torch_device == "tpu", "fp16 is not supported on TPU")
     def test_can_unwrap_model_fp16(self):
         # test for a regression introduced in #872
         # before the fix, after unwrapping with keep_fp32_wrapper=False, there would be the following error:

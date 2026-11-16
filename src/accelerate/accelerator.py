@@ -542,7 +542,7 @@ class Accelerator:
             _, device_module = get_torch_accelerator_backend()
             if hasattr(device_module, "get_amp_supported_dtype"):
                 supports_fp16 = supports_fp16 and torch.float16 in device_module.get_amp_supported_dtype()
-            if not supports_fp16 or is_torch_xla_available(check_is_tpu=True):
+            if not supports_fp16 or is_torch_xla_available(check_is_tpu=True) or self.device.type == "tpu":
                 raise ValueError(f"fp16 mixed precision is not supported on {self.device.type!r}.")
             self.native_amp = True
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
