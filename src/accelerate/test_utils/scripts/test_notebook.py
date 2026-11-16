@@ -21,7 +21,7 @@ import time
 from pytest import mark, raises
 from torch.distributed.elastic.multiprocessing.errors import ChildFailedError
 
-from accelerate import PartialState, notebook_launcher
+from accelerate import Accelerator, PartialState, notebook_launcher
 from accelerate.test_utils import require_bnb
 from accelerate.utils import is_bnb_available, is_rocm_available, is_xpu_available
 
@@ -29,6 +29,13 @@ from accelerate.utils import is_bnb_available, is_rocm_available, is_xpu_availab
 def basic_function():
     # Just prints the PartialState
     print(f"PartialState:\n{PartialState()}")
+
+
+def mixed_precision_function():
+    # The workers read ACCELERATE_MIXED_PRECISION, not the bare MIXED_PRECISION key.
+    assert os.environ.get("ACCELERATE_MIXED_PRECISION") == "fp16"
+    assert "MIXED_PRECISION" not in os.environ
+    assert Accelerator().mixed_precision == "fp16"
 
 
 def tough_nut_function(queue):
@@ -77,6 +84,11 @@ def test_clean_cuda_fork():
     # Regression test for the CUDA-driver-loaded-in-parent bug that broke
     # notebook_launcher on accelerate >=1.9 and torch >=2.10 (see issue #3925).
     notebook_launcher(assert_clean_cuda_fork_function, (), num_processes=NUM_PROCESSES)
+
+
+@require_multi_process
+def test_mixed_precision():
+    notebook_launcher(mixed_precision_function, (), num_processes=NUM_PROCESSES, mixed_precision="fp16")
 
 
 @require_multi_process
@@ -131,6 +143,8 @@ def main():
     test_can_initialize()
     print("Test clean CUDA fork (regression test for #3925)")
     test_clean_cuda_fork()
+    print("Test mixed precision reaches notebook workers")
+    test_mixed_precision()
     print("Test static rendezvous backend")
     test_static_rdzv_backend()
     print("Test c10d rendezvous backend")
