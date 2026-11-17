@@ -103,7 +103,7 @@ def env_command(args):
         "System RAM": f"{psutil.virtual_memory().total / 1024**3:.2f} GB",
     }
     if pt_supa_available:
-        info["SUPA type"] = torch.get_device_module("supa").get_device_name()
+        info["SUPA type"] = torch.supa.get_device_name()
     elif pt_cuda_available:
         info["GPU type"] = torch.cuda.get_device_name()
     elif pt_xpu_available:
