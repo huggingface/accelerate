@@ -82,6 +82,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
     _statements = [
         " out of memory.",  # OOM for CUDA, HIP, XPU
         "MPS backend out of memory",  # MPS OOM
+        "Invalid buffer size:",  # MPS single allocation larger than the maximum buffer size
         "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",  # CUDNN SNAFU
         "DefaultCPUAllocator: can't allocate memory",  # CPU OOM
         "FATAL ERROR :: MODULE:PT_DEVMEM Allocation failed",  # HPU OOM
