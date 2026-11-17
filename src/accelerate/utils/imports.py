@@ -470,6 +470,21 @@ def is_neuron_available(check_device=False):
     return hasattr(torch, "neuron") and torch.neuron.is_available()
 
 
+@lru_cache
+def is_supa_available(check_device=False):
+    """Check for an available Biren SUPA backend registered with PyTorch."""
+    device = torch.accelerator.current_accelerator()
+    if device is None or device.type != "supa":
+        return False
+    if check_device:
+        try:
+            _ = torch.accelerator.device_count()
+            return torch.accelerator.is_available()
+        except RuntimeError:
+            return False
+    return torch.accelerator.is_available()
+
+
 def get_torch_accelerator_backend(check_available: bool = True):
     """Return the accelerator type and API module, or `(None, None)` if none is detected.
 
@@ -500,6 +515,7 @@ def get_torch_accelerator_backend(check_available: bool = True):
             "hpu": is_hpu_available,
             "xpu": is_xpu_available,
             "neuron": is_neuron_available,
+            "supa": is_supa_available,
         }
         availability_check = availability_checks.get(device.type, torch.accelerator.is_available)
         if not check_available or availability_check():

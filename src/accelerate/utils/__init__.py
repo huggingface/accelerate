@@ -122,6 +122,7 @@ from .imports import (
     is_sagemaker_available,
     is_schedulefree_available,
     is_sdaa_available,
+    is_supa_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_timm_available,

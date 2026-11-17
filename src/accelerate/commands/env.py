@@ -34,6 +34,7 @@ from ..utils import (
     is_neuron_available,
     is_npu_available,
     is_sdaa_available,
+    is_supa_available,
     is_xpu_available,
 )
 
@@ -63,9 +64,12 @@ def env_command(args):
     pt_npu_available = is_npu_available()
     pt_neuron_available = is_neuron_available()
     pt_mps_available = is_mps_available()
+    pt_supa_available = is_supa_available()
 
     accelerator = "N/A"
-    if pt_cuda_available:
+    if pt_supa_available:
+        accelerator = "SUPA"
+    elif pt_cuda_available:
         accelerator = "CUDA"
     elif pt_xpu_available:
         accelerator = "XPU"
@@ -98,7 +102,9 @@ def env_command(args):
         "PyTorch accelerator": accelerator,
         "System RAM": f"{psutil.virtual_memory().total / 1024**3:.2f} GB",
     }
-    if pt_cuda_available:
+    if pt_supa_available:
+        info["SUPA type"] = torch.supa.get_device_name()
+    elif pt_cuda_available:
         info["GPU type"] = torch.cuda.get_device_name()
     elif pt_xpu_available:
         info["XPU type"] = torch.xpu.get_device_name()

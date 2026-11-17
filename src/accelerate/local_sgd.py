@@ -74,6 +74,7 @@ class LocalSGD:
             DistributedType.MULTI_HPU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_SUPA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_NEURON,
         ]:
