@@ -470,7 +470,7 @@ def is_neuron_available(check_device=False):
     return hasattr(torch, "neuron") and torch.neuron.is_available()
 
 
-def _current_accelerator():
+def get_current_accelerator():
     """Return the current `torch.accelerator` device, or `None` if there is none."""
     try:
         return torch.accelerator.current_accelerator()
@@ -484,7 +484,7 @@ def _current_accelerator():
 @lru_cache
 def is_supa_available(check_device=False):
     """Check for an available Biren SUPA backend registered with PyTorch."""
-    device = _current_accelerator()
+    device = get_current_accelerator()
     if device is None or device.type != "supa":
         return False
     if check_device:
@@ -506,7 +506,7 @@ def get_torch_accelerator_backend(check_available: bool = True):
     Set `check_available=False` to discover the backend without probing device availability,
     for example when selecting a launcher before forking.
     """
-    device = _current_accelerator()
+    device = get_current_accelerator()
     if device is not None:
         # Preserve backend-specific checks, including CUDA's NVML and MLU's CNDEV paths,
         # which avoid initializing device runtimes before a fork when available.
