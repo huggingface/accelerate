@@ -398,6 +398,7 @@ class PartialState:
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_SUPA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_HPU,
@@ -787,7 +788,7 @@ class PartialState:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa", "neuron"):
+        if device not in ("cpu", "gpu", "mlu", "musa", "npu", "xpu", "xla", "hpu", "sdaa", "neuron", "supa"):
             raise ValueError(
                 f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
             )
@@ -949,6 +950,7 @@ class AcceleratorState:
                 DistributedType.MULTI_MLU,
                 DistributedType.MULTI_SDAA,
                 DistributedType.MULTI_MUSA,
+                DistributedType.MULTI_SUPA,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
                 DistributedType.MULTI_HPU,

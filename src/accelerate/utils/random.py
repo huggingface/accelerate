@@ -98,6 +98,7 @@ def synchronize_rng_state(rng_type: Union[str, RNGType], generator: Optional[tor
         or state.distributed_type == DistributedType.MULTI_MLU
         or state.distributed_type == DistributedType.MULTI_SDAA
         or state.distributed_type == DistributedType.MULTI_MUSA
+        or state.distributed_type == DistributedType.MULTI_SUPA
         or state.distributed_type == DistributedType.MULTI_NPU
         or state.distributed_type == DistributedType.MULTI_XPU
         or state.distributed_type == DistributedType.MULTI_HPU
