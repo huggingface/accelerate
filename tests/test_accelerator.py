@@ -131,6 +131,19 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    def test_clip_grad_norm_string_infinity(self):
+        accelerator = Accelerator(cpu=True)
+        parameter = torch.nn.Parameter(torch.zeros(2))
+        parameter.grad = torch.tensor([3.0, 4.0])
+        reference = torch.nn.Parameter(parameter.detach().clone())
+        reference.grad = parameter.grad.clone()
+
+        expected_norm = torch.nn.utils.clip_grad_norm_([reference], 1.0, norm_type="inf")
+        actual_norm = accelerator.clip_grad_norm_([parameter], 1.0, norm_type="inf")
+
+        torch.testing.assert_close(actual_norm, expected_norm)
+        torch.testing.assert_close(parameter.grad, reference.grad)
+
     def test_partial_state_after_reset(self):
         # Verifies that custom getattr errors will be thrown
         # if the state is reset, but only if trying to

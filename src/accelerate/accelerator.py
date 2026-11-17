@@ -2861,6 +2861,7 @@ class Accelerator:
                 self.scaler.unscale_(opt)
 
     def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2, foreach=None):
+        norm_type = float(norm_type)
         is_dtensor_available = torch.distributed.is_available()
         if not is_dtensor_available:
             return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type, foreach=foreach)
