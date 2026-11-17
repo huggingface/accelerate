@@ -304,6 +304,7 @@ def debug_launcher(function, args=(), num_processes=2):
         # torch.distributed will expect a few environment variable to be here. We set the ones common to each
         # process here (the other ones will be set be the launcher).
         # gloo's default interface selection (hostname-based) is flaky on CI runners, pin it to loopback
+        # (named `lo0` on macOS)
         with patch_environment(
             world_size=num_processes,
             master_addr="127.0.0.1",
@@ -311,7 +312,7 @@ def debug_launcher(function, args=(), num_processes=2):
             accelerate_mixed_precision="no",
             accelerate_debug_rdv_file=tmp_file.name,
             accelerate_use_cpu="yes",
-            gloo_socket_ifname="lo",
+            gloo_socket_ifname="lo0" if sys.platform == "darwin" else "lo",
         ):
             launcher = PrepareForLaunch(function, debug=True)
             start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
