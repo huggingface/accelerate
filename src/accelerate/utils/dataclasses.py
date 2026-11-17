@@ -533,6 +533,7 @@ class DistributedType(str, enum.Enum):
         - **MULTI_MLU** -- Distributed on multiple MLUs.
         - **MULTI_SDAA** -- Distributed on multiple SDAAs.
         - **MULTI_MUSA** -- Distributed on multiple MUSAs.
+        - **MULTI_SUPA** -- Distributed on multiple Biren SUPA devices.
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **MULTI_HPU** -- Distributed on multiple HPUs.
@@ -551,6 +552,7 @@ class DistributedType(str, enum.Enum):
     MULTI_MLU = "MULTI_MLU"
     MULTI_SDAA = "MULTI_SDAA"
     MULTI_MUSA = "MULTI_MUSA"
+    MULTI_SUPA = "MULTI_SUPA"
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
