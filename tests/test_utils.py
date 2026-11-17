@@ -53,6 +53,7 @@ from accelerate.utils import (
     extract_model_from_parallel,
     find_device,
     get_model_tp_size,
+    get_physical_cpu_count,
     has_offloaded_params,
     is_torch_xla_available,
     listify,
@@ -137,6 +138,13 @@ class UtilsTester(unittest.TestCase):
 
         tensor = torch.tensor([[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]])
         assert listify(tensor) == [[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]]
+
+    def test_physical_cpu_count_fallbacks(self):
+        # psutil returns None when it can't tell the number of physical cores, or of logical ones.
+        with patch("psutil.cpu_count", side_effect=lambda logical=True: 8 if logical else None):
+            assert get_physical_cpu_count() == 8
+        with patch("psutil.cpu_count", return_value=None):
+            assert get_physical_cpu_count() == 1
 
     def test_patch_environment(self):
         with patch_environment(aa=1, BB=2):

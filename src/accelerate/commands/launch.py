@@ -41,6 +41,7 @@ from accelerate.utils import (
     check_cuda_p2p_ib_support,
     convert_dict_to_env_variables,
     get_distributed_backend,
+    get_physical_cpu_count,
     get_torch_accelerator_backend,
     is_bf16_available,
     is_deepspeed_available,
@@ -1396,9 +1397,7 @@ def _validate_launch_command(args):
                 ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"],
                 max(int(args.num_processes / args.num_machines), 1),
             )
-            import psutil
-
-            threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
+            threads_per_process = int(get_physical_cpu_count() / local_size)
             if threads_per_process > 1:
                 args.num_cpu_threads_per_process = threads_per_process
                 warned.append(
