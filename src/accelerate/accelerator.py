@@ -3579,7 +3579,7 @@ class Accelerator:
             ):
 
                 def _inner(folder):
-                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+                    return list(map(int, re.findall(r"[\\/]?([0-9]+)(?=[^\\/]*$)", folder)))[0]
 
                 folders.sort(key=_inner)
                 logger.warning(
@@ -3740,7 +3740,7 @@ class Accelerator:
             folders = [os.path.join(input_dir, folder) for folder in os.listdir(input_dir)]
 
             def _inner(folder):
-                return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+                return list(map(int, re.findall(r"[\\/]?([0-9]+)(?=[^\\/]*$)", folder)))[0]
 
             folders.sort(key=_inner)
             input_dir = folders[-1]
