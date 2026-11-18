@@ -426,6 +426,16 @@ class UtilsTester(unittest.TestCase):
         compiled_convert_to_fp32 = torch.compile(convert_to_fp32, fullgraph=True)
         compiled_convert_to_fp32(torch.zeros([1], dtype=torch.bfloat16))
 
+    def test_convert_to_fp32_leaves_non_tensors(self):
+        # Not a tensor, but it has a dtype, like the paged KV cache that transformers models return
+        class Cache:
+            dtype = torch.bfloat16
+
+        cache = Cache()
+        output = convert_to_fp32({"logits": torch.zeros([1], dtype=torch.bfloat16), "cache": cache})
+        assert output["logits"].dtype == torch.float32
+        assert output["cache"] is cache
+
     def test_named_tuples(self):
         class QuantTensorBase(NamedTuple):
             value: torch.Tensor
