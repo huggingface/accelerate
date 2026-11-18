@@ -71,6 +71,16 @@ def str_to_bool(value, to_bool: bool = False) -> Union[int, bool]:
         raise ValueError(f"invalid truth value {value}")
 
 
+def get_physical_cpu_count() -> int:
+    """
+    Returns the number of physical CPU cores. `psutil` can't tell it on every machine, in which case this falls back
+    to the number of logical cores, then to 1.
+    """
+    import psutil
+
+    return psutil.cpu_count(logical=False) or psutil.cpu_count(logical=True) or 1
+
+
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:

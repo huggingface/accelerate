@@ -74,6 +74,7 @@ from .environment import (
     get_current_device_type,
     get_gpu_info,
     get_int_from_env,
+    get_physical_cpu_count,
     parse_choice_from_env,
     parse_flag_from_env,
     patch_environment,

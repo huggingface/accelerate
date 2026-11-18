@@ -35,6 +35,7 @@ from .utils import (
     get_cpu_distributed_information,
     get_distributed_backend,
     get_int_from_env,
+    get_physical_cpu_count,
     get_torch_accelerator_backend,
     is_datasets_available,
     is_deepspeed_available,
@@ -265,11 +266,7 @@ class PartialState:
                     self.distributed_type == DistributedType.MULTI_CPU
                     and get_int_from_env(["OMP_NUM_THREADS"], 0) == 0
                 ):
-                    import psutil
-
-                    num_cpu_threads_per_process = int(
-                        psutil.cpu_count(logical=False) / dist_information.local_world_size
-                    )
+                    num_cpu_threads_per_process = int(get_physical_cpu_count() / dist_information.local_world_size)
                     if num_cpu_threads_per_process == 0:
                         num_cpu_threads_per_process = 1
                     torch.set_num_threads(num_cpu_threads_per_process)
