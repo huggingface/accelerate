@@ -1089,3 +1089,34 @@ class StatefulDataLoaderTester(AccelerateTestCase):
 
         gradient_state = GradientState()
         assert gradient_state.active_dataloader is None
+
+    def test_dataloader_sampler_remainder(self):
+        from torch.utils.data import SubsetRandomSampler
+
+        dataset = range(21)
+        sampler = SubsetRandomSampler(range(10), generator=torch.Generator().manual_seed(42))
+        dataloader = DataLoader(dataset, batch_size=4, sampler=sampler)
+
+        accelerator = Accelerator(cpu=True)
+        prepared_loader = accelerator.prepare(dataloader)
+
+        # Test single process remainder calculation
+        prepared_loader.begin()
+        assert prepared_loader.total_dataset_length == 10
+        assert prepared_loader.remainder == 2
+        prepared_loader.end()
+
+        got = []
+        for batch in prepared_loader:
+            got.extend(accelerator.gather_for_metrics(batch).tolist())
+        assert len(got) == 10
+        assert sorted(got) == list(range(10))
+
+        # Test multi-process remainder calculation with BatchSamplerShard
+        bss = BatchSamplerShard(dataloader.batch_sampler, num_processes=2, process_index=0)
+        sharded_loader = DataLoaderShard(dataset, batch_sampler=bss)
+        sharded_loader.begin()
+        assert sharded_loader.total_dataset_length == 10
+        assert sharded_loader.total_batch_size == 8
+        assert sharded_loader.remainder == 2
+        sharded_loader.end()
