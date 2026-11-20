@@ -47,7 +47,7 @@ def test_command(args):
     if args.config_file is None:
         test_args = [script_name]
     else:
-        test_args = f"--config_file={args.config_file} {script_name}".split()
+        test_args = [f"--config_file={args.config_file}", script_name]
 
     cmd = ["accelerate-launch"] + test_args
     result = execute_subprocess_async(cmd)
