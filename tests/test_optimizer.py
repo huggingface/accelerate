@@ -34,6 +34,26 @@ class CPUOptimizerTester(AccelerateTestCase):
             self.fail(f"Accelerated optimizer pickling failed with {e}")
 
 
+class OptimizerHookTester(AccelerateTestCase):
+    def test_prepared_optimizer_step_post_hook(self):
+        # The wrapper does not call Optimizer.__init__, so the inherited register_* methods look for hook dicts
+        # that were never created. Forwarding them to the inner optimizer lets the hook run on real steps only.
+        model = torch.nn.Linear(1, 1, bias=False)
+        torch.nn.init.ones_(model.weight)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        accelerator = Accelerator(cpu=True, gradient_accumulation_steps=2)
+        model, optimizer = accelerator.prepare(model, optimizer)
+        calls = []
+        handle = optimizer.register_step_post_hook(lambda *_args: calls.append(1))
+        for _ in range(4):
+            with accelerator.accumulate(model):
+                accelerator.backward(model(torch.ones(1, 1)).sum())
+                optimizer.step()
+                optimizer.zero_grad()
+        assert calls == [1, 1]
+        handle.remove()
+
+
 @require_fp16
 @require_non_cpu
 class OptimizerTester(AccelerateTestCase):

@@ -149,6 +149,24 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             # the deepspeed optimizer further wraps the optimizer
             self.optimizer.optimizer.eval()
 
+    def register_step_pre_hook(self, hook):
+        return self.optimizer.register_step_pre_hook(hook)
+
+    def register_step_post_hook(self, hook):
+        return self.optimizer.register_step_post_hook(hook)
+
+    def register_state_dict_pre_hook(self, hook, prepend=False):
+        return self.optimizer.register_state_dict_pre_hook(hook, prepend=prepend)
+
+    def register_state_dict_post_hook(self, hook, prepend=False):
+        return self.optimizer.register_state_dict_post_hook(hook, prepend=prepend)
+
+    def register_load_state_dict_pre_hook(self, hook, prepend=False):
+        return self.optimizer.register_load_state_dict_pre_hook(hook, prepend=prepend)
+
+    def register_load_state_dict_post_hook(self, hook, prepend=False):
+        return self.optimizer.register_load_state_dict_post_hook(hook, prepend=prepend)
+
     def step(self, closure=None):
         if is_lomo_available():
             from lomo_optim import AdaLomo, Lomo
