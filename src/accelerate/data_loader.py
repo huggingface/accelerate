@@ -395,7 +395,12 @@ class DataLoaderStateMixin:
         self.reset()
         with suppress(Exception):
             if not self._drop_last:
-                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+                # Prefer the loader's length, which follows a sized sampler when one is set.
+                # `dataset.total_dataset_length` stays the fallback for wrappers that expose it there.
+                if hasattr(self, "total_dataset_length"):
+                    length = self.total_dataset_length
+                else:
+                    length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
                 self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 
@@ -640,6 +645,12 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
     @property
     def total_dataset_length(self):
+        sampler = self.get_sampler()
+        if sampler is not None:
+            try:
+                return len(sampler)
+            except TypeError:
+                pass
         if hasattr(self.dataset, "total_length"):
             return self.dataset.total_length
         else:
@@ -967,6 +978,12 @@ class DataLoaderDispatcher(DataLoaderAdapter, DataLoaderStateMixin):
 
     @property
     def total_dataset_length(self):
+        sampler = self.get_sampler()
+        if sampler is not None:
+            try:
+                return len(sampler)
+            except TypeError:
+                pass
         return len(self.dataset)
 
     def get_sampler(self):
@@ -993,11 +1010,11 @@ def get_sampler(dataloader):
         `torch.utils.data.Sampler`: The sampler associated to the dataloader
     """
     sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
-    if sampler_is_batch_sampler:
-        sampler = getattr(dataloader.sampler, "sampler", None)
-    else:
-        sampler = getattr(dataloader.batch_sampler, "sampler", None)
-    return sampler
+    batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
+    # BatchSamplerShard (and skip wrappers) nest the real batch sampler one level down.
+    while hasattr(batch_sampler, "batch_sampler"):
+        batch_sampler = batch_sampler.batch_sampler
+    return getattr(batch_sampler, "sampler", None)
 
 
 def prepare_data_loader(

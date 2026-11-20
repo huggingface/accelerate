@@ -18,7 +18,7 @@ import weakref
 import pytest
 import torch
 from parameterized import parameterized
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler, SubsetRandomSampler
 
 from accelerate import Accelerator, PartialState
 from accelerate.data_loader import (
@@ -750,6 +750,47 @@ class DataLoaderTester(AccelerateTestCase):
         assert accelerator_ref() is None
         assert dataloader_ref() is None
         assert gradient_state_ref() is None
+
+    def test_remainder_uses_sampler_length(self):
+        # A sized sampler can select fewer examples than the underlying dataset, or more when sampling
+        # with replacement. The last-batch remainder has to follow that count so gather_for_metrics
+        # neither drops real samples nor keeps the padding copies.
+        dataset = list(range(21))
+        sampler = SubsetRandomSampler(range(10), generator=torch.Generator().manual_seed(42))
+        dataloader = DataLoader(dataset, batch_size=4, sampler=sampler)
+        accelerator = Accelerator(cpu=True)
+        prepared = accelerator.prepare(dataloader)
+        prepared.begin()
+        assert prepared.total_dataset_length == 10
+        assert prepared.remainder == 2
+        prepared.end()
+
+        got = []
+        for batch in prepared:
+            got.extend(accelerator.gather_for_metrics(batch).tolist())
+        assert sorted(got) == list(range(10))
+
+        replacement = RandomSampler(
+            dataset, replacement=True, num_samples=10, generator=torch.Generator().manual_seed(0)
+        )
+        replacement_loader = accelerator.prepare(DataLoader(dataset, batch_size=4, sampler=replacement))
+        replacement_loader.begin()
+        assert replacement_loader.total_dataset_length == 10
+        assert replacement_loader.remainder == 2
+        replacement_loader.end()
+        gathered = []
+        for batch in replacement_loader:
+            gathered.extend(accelerator.gather_for_metrics(batch).tolist())
+        assert len(gathered) == 10
+
+        # Two processes: total batch size is 8, 10 % 8 == 2. Dataset length 21 would give remainder 5.
+        sharded = BatchSamplerShard(dataloader.batch_sampler, num_processes=2, process_index=0)
+        shard = DataLoaderShard(dataset, batch_sampler=sharded)
+        shard.begin()
+        assert shard.total_dataset_length == 10
+        assert shard.total_batch_size == 8
+        assert shard.remainder == 2
+        shard.end()
 
 
 class StatefulDataLoaderTester(AccelerateTestCase):
