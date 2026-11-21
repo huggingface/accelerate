@@ -55,6 +55,21 @@ class EnvCommandTester(unittest.TestCase):
         self.assertEqual(info["`accelerate` bash location"], "Not found")
 
 
+class TestCommandTester(unittest.TestCase):
+    @patch("accelerate.commands.test.execute_subprocess_async")
+    @patch("accelerate.commands.test.path_in_accelerate_package")
+    def test_config_and_script_paths_with_spaces(self, package_path, execute_subprocess):
+        config_path = "custom configs/cpu.yaml"
+        script_path = Path("package with spaces/test_script.py")
+        package_path.return_value = script_path
+        execute_subprocess.return_value.returncode = 0
+
+        args = accelerate_test_cmd.test_command_parser().parse_args(["--config_file", config_path])
+        accelerate_test_cmd.test_command(args)
+
+        execute_subprocess.assert_called_once_with(["accelerate-launch", f"--config_file={config_path}", script_path])
+
+
 class AccelerateLauncherTester(unittest.TestCase):
     """
     Test case for verifying the `accelerate launch` CLI operates correctly.
