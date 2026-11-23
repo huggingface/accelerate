@@ -396,7 +396,22 @@ class DataLoaderStateMixin:
         with suppress(Exception):
             if not self._drop_last:
                 length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-                self.remainder = length % self.total_batch_size
+                # The sampler may select fewer samples than the dataset holds (e.g. a
+                # `SubsetRandomSampler`), or more when sampling with replacement. The
+                # last-batch remainder must follow the sampler so `gather_for_metrics`
+                # neither drops real samples nor keeps distributed padding. Unsized
+                # samplers keep the dataset-length fallback.
+                batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
+                while hasattr(batch_sampler, "batch_sampler") or isinstance(
+                    getattr(batch_sampler, "sampler", None), BatchSampler
+                ):
+                    batch_sampler = getattr(batch_sampler, "batch_sampler", getattr(batch_sampler, "sampler", None))
+                if getattr(batch_sampler, "drop_last", False):
+                    self.remainder = 0
+                else:
+                    with suppress(TypeError):
+                        length = len(getattr(batch_sampler, "sampler", None))
+                    self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 
     def end(self):
@@ -566,9 +581,11 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
+        # `set_epoch` first: it may change the sampler (and hence its length), which
+        # `begin()` uses to compute the last-batch remainder.
+        self.set_epoch(self.iteration)
         self.begin()
 
-        self.set_epoch(self.iteration)
         dataloader_iter = self.base_dataloader.__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
