@@ -26,6 +26,7 @@ import warnings
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from functools import partial
+from pathlib import Path
 from types import MethodType
 from typing import Any, Callable, Union
 
@@ -167,6 +168,24 @@ except ImportError:
     from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
 logger = get_logger(__name__)
+
+
+def _sorted_checkpoint_dirs(checkpoints_dir: str) -> list[str]:
+    """
+    Returns the committed `checkpoint_<i>` folders in `checkpoints_dir`, sorted by checkpoint number.
+
+    Only folders named exactly `checkpoint_<i>` count as checkpoints: a staging directory left behind by a crash
+    during `save_state()` (`.checkpoint_<i>.tmp`) is not a committed checkpoint and must never be picked up for
+    loading or retention.
+    """
+    checkpoint_dirs = []
+    for folder in os.listdir(checkpoints_dir):
+        match = re.fullmatch(r"checkpoint_([0-9]+)", folder)
+        if match is not None:
+            checkpoint_dirs.append((int(match.group(1)), os.path.join(checkpoints_dir, folder)))
+    checkpoint_dirs.sort()
+    return [folder for _, folder in checkpoint_dirs]
+
 
 # Sentinel values for defaults
 _split_batches = object()
@@ -3536,7 +3555,9 @@ class Accelerator:
         If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled
         then checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater
         than `total_limit` then the oldest save is deleted. Each checkpoint is saved in separate folders named
-        `checkpoint_<iteration>`.
+        `checkpoint_<iteration>`. The checkpoint is first written to a temporary folder and renamed to its final name
+        only once all files have been written, so a crash during saving never leaves a partial checkpoint behind;
+        checkpoints beyond `total_limit` are deleted only after the new checkpoint has been committed.
 
         Otherwise they are just saved to `output_dir`.
 
@@ -3570,31 +3591,27 @@ class Accelerator:
         if self.project_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
         os.makedirs(output_dir, exist_ok=True)
+        checkpoint_dir = None
         if self.project_configuration.automatic_checkpoint_naming:
-            folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-            if (
-                self.project_configuration.total_limit is not None
-                and (len(folders) + 1 > self.project_configuration.total_limit)
-                and self.is_main_process
-            ):
-
-                def _inner(folder):
-                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
-
-                folders.sort(key=_inner)
-                logger.warning(
-                    f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
-                )
-                for folder in folders[: len(folders) + 1 - self.project_configuration.total_limit]:
-                    shutil.rmtree(folder)
-            output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
-            if os.path.exists(output_dir):
+            checkpoints_dir = output_dir
+            checkpoint_dir = os.path.join(checkpoints_dir, f"checkpoint_{self.save_iteration}")
+            if os.path.exists(checkpoint_dir):
                 raise ValueError(
-                    f"Checkpoint directory {output_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
+                    f"Checkpoint directory {checkpoint_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
                 )
+            # Write the new checkpoint into a staging directory first and rename it to `checkpoint_<i>` only
+            # once every file has been written (the commit point, below). A crash during the save can then never
+            # leave a partial `checkpoint_<i>` behind, and retention for `total_limit` only runs after the commit,
+            # so the previous checkpoint always survives a crashed save.
+            tmp_dir = os.path.join(checkpoints_dir, f".checkpoint_{self.save_iteration}.tmp")
+            # Remove a staging directory left behind by a crash during a save of the same iteration. Only the
+            # process(es) writing the shared files do this, matching `save()` in `checkpointing.py`.
+            if self.is_main_process or (self.project_configuration.save_on_each_node and self.is_local_main_process):
+                shutil.rmtree(tmp_dir, ignore_errors=True)
             self.wait_for_everyone()
+            output_dir = tmp_dir
         os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"Saving current state to {output_dir}")
+        logger.info(f"Saving current state to {checkpoint_dir or output_dir}")
 
         if self.distributed_type == DistributedType.XLA:
             # Finish running the previous step before checkpointing
@@ -3661,6 +3678,31 @@ class Accelerator:
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
+        if self.project_configuration.automatic_checkpoint_naming:
+            # Commit point: every process has finished writing, so the staged checkpoint is complete. The
+            # process(es) writing the shared files rename it to `checkpoint_<i>` (atomic on the same filesystem)
+            # and every process waits until the rename is done before returning from `save_state()`.
+            self.wait_for_everyone()
+            if (
+                self.is_main_process or (self.project_configuration.save_on_each_node and self.is_local_main_process)
+            ) and os.path.isdir(tmp_dir):
+                try:
+                    os.rename(tmp_dir, checkpoint_dir)
+                except FileNotFoundError:
+                    # Another local main process already committed the checkpoint (shared filesystem with
+                    # `save_on_each_node=True`); it is already in place.
+                    pass
+            self.wait_for_everyone()
+            save_location = Path(checkpoint_dir)
+            # Retention for `total_limit` runs only now that the new checkpoint is committed, so a crash during
+            # the save can no longer delete the previous checkpoint.
+            if self.project_configuration.total_limit is not None and self.is_main_process:
+                folders = _sorted_checkpoint_dirs(checkpoints_dir)
+                if len(folders) > self.project_configuration.total_limit:
+                    num_to_delete = len(folders) - self.project_configuration.total_limit
+                    logger.warning(f"Deleting {num_to_delete} checkpoints to make room for new checkpoint.")
+                    for folder in folders[:num_to_delete]:
+                        shutil.rmtree(folder)
         self.project_configuration.iteration += 1
         return save_location
 
@@ -3740,13 +3782,10 @@ class Accelerator:
             # Pick up from automatic checkpoint naming, newest checkpoint first.
             # If a checkpoint fails to load (e.g. it was left incomplete by a crash during
             # `save_state`), fall back to the newest checkpoint that loads successfully.
+            # Only committed `checkpoint_<i>` folders are considered; a staging directory left
+            # behind by a crash during `save_state()` (`.checkpoint_<i>.tmp`) is ignored.
             checkpoints_dir = os.path.join(self.project_dir, "checkpoints")
-            folders = [os.path.join(checkpoints_dir, folder) for folder in os.listdir(checkpoints_dir)]
-
-            def _inner(folder):
-                return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
-
-            folders.sort(key=_inner)
+            folders = _sorted_checkpoint_dirs(checkpoints_dir)
             if len(folders) == 0:
                 raise ValueError(f"No checkpoints found in {checkpoints_dir}")
             last_error = None

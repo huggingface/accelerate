@@ -20,6 +20,7 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from unittest import mock
 
 import pytest
 import torch
@@ -428,6 +429,141 @@ class CheckpointTest(AccelerateTestCase):
                 f.truncate(os.path.getsize(oldest) // 2)
             with self.assertRaises(Exception):
                 accelerator.load_state()
+
+    def test_crash_during_save_leaves_no_partial_checkpoint(self):
+        # Regression test for #4549 (silent case): a crash just before `random_states_0.pkl` is written leaves a
+        # folder that loads without an error but without the random states, so the fallback in `load_state()` never
+        # runs. With the commit point in `save_state()`, the interrupted save must never produce a `checkpoint_<i>`
+        # folder, and the restart must resume the previous complete checkpoint with its random states.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = torch.nn.Linear(4, 2)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            project_config = ProjectConfiguration(project_dir=tmpdir, automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+
+            def train_step():
+                accelerator.backward(model(torch.randn(8, 4)).pow(2).mean())
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+
+            # checkpoint_0 (step 1) and checkpoint_1 (step 2)
+            train_step()
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            train_step()
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            ckpt1_weights = (model.weight.detach().clone(), model.bias.detach().clone())
+            ckpt1_rng = torch.get_rng_state().clone()
+            assert scheduler.scheduler.last_epoch == 2
+            # Move the RNG state forward so a load that skips the random states is detectable
+            torch.randn(16)
+
+            # Step 3, then crash just before `random_states_0.pkl` is written
+            train_step()
+            assert scheduler.scheduler.last_epoch == 3
+            real_save = torch.save
+
+            def crashing_save(obj, f, *args, **kwargs):
+                if str(f).endswith("random_states_0.pkl"):
+                    raise RuntimeError("simulated crash during save_state")
+                return real_save(obj, f, *args, **kwargs)
+
+            with mock.patch("torch.save", side_effect=crashing_save), self.assertRaises(RuntimeError):
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            checkpoints_dir = os.path.join(tmpdir, "checkpoints")
+            # No partial `checkpoint_2` folder may exist: the interrupted save only leaves its staging directory.
+            assert not os.path.exists(os.path.join(checkpoints_dir, "checkpoint_2"))
+            assert os.path.isdir(os.path.join(checkpoints_dir, ".checkpoint_2.tmp"))
+
+            # Restart: load_state() must resume checkpoint_1, with its random states restored
+            set_seed(123)
+            model = torch.nn.Linear(4, 2)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            restart_accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, scheduler = restart_accelerator.prepare(model, optimizer, scheduler)
+            restart_accelerator.load_state()
+            assert scheduler.scheduler.last_epoch == 2
+            torch.testing.assert_close(model.weight.detach(), ckpt1_weights[0])
+            torch.testing.assert_close(model.bias.detach(), ckpt1_weights[1])
+            assert torch.equal(torch.get_rng_state(), ckpt1_rng)
+
+            # Saving again after the crashed save reuses the same iteration: the leftover staging directory is
+            # removed first and the new checkpoint_2 is committed.
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            assert os.path.isdir(os.path.join(checkpoints_dir, "checkpoint_2"))
+            assert not os.path.exists(os.path.join(checkpoints_dir, ".checkpoint_2.tmp"))
+
+            set_seed(123)
+            model = torch.nn.Linear(4, 2)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            restart_accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, scheduler = restart_accelerator.prepare(model, optimizer, scheduler)
+            restart_accelerator.load_state()
+            assert scheduler.scheduler.last_epoch == 3
+
+    def test_crash_during_save_with_total_limit_1_keeps_previous_checkpoint(self):
+        # Regression test for #4549 (`total_limit=1` case): retention used to delete the previous checkpoint before
+        # the new save started, so a crash during the save left only the partial folder and every restart failed.
+        # Retention now runs only after a save is committed, so the previous checkpoint must survive the crash.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = torch.nn.Linear(4, 2)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            project_config = ProjectConfiguration(project_dir=tmpdir, automatic_checkpoint_naming=True, total_limit=1)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+
+            def train_step():
+                accelerator.backward(model(torch.randn(8, 4)).pow(2).mean())
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+
+            # checkpoint_0 (step 1) and checkpoint_1 (step 2); total_limit=1 keeps only checkpoint_1
+            train_step()
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            train_step()
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            checkpoints_dir = os.path.join(tmpdir, "checkpoints")
+            assert sorted(os.listdir(checkpoints_dir)) == ["checkpoint_1"]
+            ckpt1_weights = (model.weight.detach().clone(), model.bias.detach().clone())
+            assert scheduler.scheduler.last_epoch == 2
+
+            # Step 3, then crash while writing `optimizer.bin` of checkpoint_2
+            train_step()
+            assert scheduler.scheduler.last_epoch == 3
+            real_save = torch.save
+
+            def crashing_save(obj, f, *args, **kwargs):
+                if str(f).endswith("optimizer.bin"):
+                    raise RuntimeError("simulated crash during save_state")
+                return real_save(obj, f, *args, **kwargs)
+
+            with mock.patch("torch.save", side_effect=crashing_save), self.assertRaises(RuntimeError):
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+
+            # The previous checkpoint must survive, and no partial checkpoint_2 may exist
+            assert os.path.isdir(os.path.join(checkpoints_dir, "checkpoint_1"))
+            assert not os.path.exists(os.path.join(checkpoints_dir, "checkpoint_2"))
+
+            # Restart: load_state() must resume checkpoint_1 instead of failing
+            set_seed(123)
+            model = torch.nn.Linear(4, 2)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            restart_accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, scheduler = restart_accelerator.prepare(model, optimizer, scheduler)
+            restart_accelerator.load_state()
+            assert scheduler.scheduler.last_epoch == 2
+            torch.testing.assert_close(model.weight.detach(), ckpt1_weights[0])
+            torch.testing.assert_close(model.bias.detach(), ckpt1_weights[1])
 
     def test_checkpoint_deletion(self):
         with tempfile.TemporaryDirectory() as tmpdir:
