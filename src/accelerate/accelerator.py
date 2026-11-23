@@ -3753,7 +3753,10 @@ class Accelerator:
                 The name of the folder all relevant weights and states were saved in. Can be `None` if
                 `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint. If the
                 latest checkpoint fails to load (e.g. it was left incomplete by a crash during saving),
-                earlier checkpoints are tried in order until one loads successfully.
+                earlier checkpoints are tried in order until one loads successfully. After a successful
+                load with automatic checkpoint naming, `project_configuration.iteration` is restored to one
+                past the highest existing checkpoint number, so the next save continues the numbering
+                instead of restarting at `checkpoint_0`.
             load_kwargs (`dict`, *optional*):
                 Additional keyword arguments for the underlying `load` function, such as optional arguments for
                 state_dict and optimizer on.
@@ -3792,6 +3795,17 @@ class Accelerator:
             for candidate_dir in folders[::-1]:
                 try:
                     self.load_state(candidate_dir, load_kwargs, **load_model_func_kwargs)
+                    # Restore the automatic checkpoint counter so the next save continues numbering after
+                    # the highest existing checkpoint instead of restarting at `checkpoint_0`: without this,
+                    # a restart would overwrite (or, with `total_limit` set, immediately lose) its own new
+                    # checkpoints to retention. The counter is one past the highest existing checkpoint
+                    # number, even when the load fell back to an older checkpoint.
+                    highest = max(int(os.path.basename(folder).rsplit("_", 1)[1]) for folder in folders)
+                    self.project_configuration.iteration = highest + 1
+                    logger.info(
+                        f"Restored checkpoint iteration to {self.project_configuration.iteration} "
+                        f"after loading from {candidate_dir}"
+                    )
                     return
                 except Exception as e:
                     last_error = e

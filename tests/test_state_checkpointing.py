@@ -565,6 +565,72 @@ class CheckpointTest(AccelerateTestCase):
             torch.testing.assert_close(model.weight.detach(), ckpt1_weights[0])
             torch.testing.assert_close(model.bias.detach(), ckpt1_weights[1])
 
+    def test_restart_restores_checkpoint_iteration_with_total_limit(self):
+        # Regression test for the follow-up to #4595 reported on #4597: `load_state()` did not restore
+        # `project_configuration.iteration`, so after a restart the next saves restarted numbering at
+        # `checkpoint_0` and, with `total_limit` set, retention deleted each new checkpoint as soon as it
+        # was committed, so training could never advance past the resumed step. A fresh
+        # `ProjectConfiguration` is used for each restart to simulate a new process (iteration starts at 0).
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_config = ProjectConfiguration(project_dir=tmpdir, automatic_checkpoint_naming=True, total_limit=2)
+            set_seed(42)
+            model = torch.nn.Linear(4, 2)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+
+            def train_step():
+                accelerator.backward(model(torch.randn(8, 4)).pow(2).mean())
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+
+            # Steps 1-4; total_limit=2 keeps only checkpoint_2 (step 3) and checkpoint_3 (step 4)
+            for _ in range(4):
+                train_step()
+                accelerator.save_state(safe_serialization=self.use_safetensors)
+            checkpoints_dir = os.path.join(tmpdir, "checkpoints")
+            assert sorted(os.listdir(checkpoints_dir)) == ["checkpoint_2", "checkpoint_3"]
+            assert scheduler.scheduler.last_epoch == 4
+            ckpt3_weights = (model.weight.detach().clone(), model.bias.detach().clone())
+
+            # Restart: load_state() must resume step 4 and restore the counter to one past the highest
+            # existing checkpoint (4), so the next saves are checkpoint_4 and checkpoint_5.
+            set_seed(123)
+            model = torch.nn.Linear(4, 2)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            restart_config = ProjectConfiguration(project_dir=tmpdir, automatic_checkpoint_naming=True, total_limit=2)
+            restart_accelerator = Accelerator(project_dir=tmpdir, project_config=restart_config)
+            model, optimizer, scheduler = restart_accelerator.prepare(model, optimizer, scheduler)
+            restart_accelerator.load_state()
+            assert scheduler.scheduler.last_epoch == 4
+            torch.testing.assert_close(model.weight.detach(), ckpt3_weights[0])
+            torch.testing.assert_close(model.bias.detach(), ckpt3_weights[1])
+            assert restart_accelerator.project_configuration.iteration == 4
+
+            # Steps 5 and 6 must be kept (not pruned right after being committed)
+            train_step()
+            restart_accelerator.save_state(safe_serialization=self.use_safetensors)
+            assert os.path.isdir(os.path.join(checkpoints_dir, "checkpoint_4"))
+            train_step()
+            restart_accelerator.save_state(safe_serialization=self.use_safetensors)
+            assert sorted(os.listdir(checkpoints_dir)) == ["checkpoint_4", "checkpoint_5"]
+            assert scheduler.scheduler.last_epoch == 6
+
+            # A further restart must resume step 6, not step 4
+            set_seed(123)
+            model = torch.nn.Linear(4, 2)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+            verify_config = ProjectConfiguration(project_dir=tmpdir, automatic_checkpoint_naming=True, total_limit=2)
+            verify_accelerator = Accelerator(project_dir=tmpdir, project_config=verify_config)
+            model, optimizer, scheduler = verify_accelerator.prepare(model, optimizer, scheduler)
+            verify_accelerator.load_state()
+            assert scheduler.scheduler.last_epoch == 6
+            assert verify_accelerator.project_configuration.iteration == 6
+
     def test_checkpoint_deletion(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
