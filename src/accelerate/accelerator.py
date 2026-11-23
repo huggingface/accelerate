@@ -3709,7 +3709,9 @@ class Accelerator:
         Args:
             input_dir (`str` or `os.PathLike`):
                 The name of the folder all relevant weights and states were saved in. Can be `None` if
-                `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint.
+                `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint. If the
+                latest checkpoint fails to load (e.g. it was left incomplete by a crash during saving),
+                earlier checkpoints are tried in order until one loads successfully.
             load_kwargs (`dict`, *optional*):
                 Additional keyword arguments for the underlying `load` function, such as optional arguments for
                 state_dict and optimizer on.
@@ -3735,15 +3737,30 @@ class Accelerator:
             if not os.path.isdir(input_dir):
                 raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         elif self.project_configuration.automatic_checkpoint_naming:
-            # Pick up from automatic checkpoint naming
-            input_dir = os.path.join(self.project_dir, "checkpoints")
-            folders = [os.path.join(input_dir, folder) for folder in os.listdir(input_dir)]
+            # Pick up from automatic checkpoint naming, newest checkpoint first.
+            # If a checkpoint fails to load (e.g. it was left incomplete by a crash during
+            # `save_state`), fall back to the newest checkpoint that loads successfully.
+            checkpoints_dir = os.path.join(self.project_dir, "checkpoints")
+            folders = [os.path.join(checkpoints_dir, folder) for folder in os.listdir(checkpoints_dir)]
 
             def _inner(folder):
                 return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
 
             folders.sort(key=_inner)
-            input_dir = folders[-1]
+            if len(folders) == 0:
+                raise ValueError(f"No checkpoints found in {checkpoints_dir}")
+            last_error = None
+            for candidate_dir in folders[::-1]:
+                try:
+                    self.load_state(candidate_dir, load_kwargs, **load_model_func_kwargs)
+                    return
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        f"Failed to load checkpoint from {candidate_dir} ({type(e).__name__}: {e}), "
+                        "trying the previous checkpoint."
+                    )
+            raise last_error
         else:
             raise ValueError("No input_dir provided and automatic checkpoint naming is disabled.")
         logger.info(f"Loading states from {input_dir}")

@@ -384,6 +384,51 @@ class CheckpointTest(AccelerateTestCase):
             assert a2 == model.a.item()
             assert b2 == model.b.item()
 
+    def test_automatic_loading_skips_incomplete_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            # Save checkpoint_0 and record its weights
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            (a0, b0) = model.a.item(), model.b.item()
+            train(2, model, train_dataloader, optimizer, accelerator)
+            (a1, b1) = model.a.item(), model.b.item()
+            # Save checkpoint_1, then simulate a torn write by truncating its model file
+            accelerator.save_state(safe_serialization=self.use_safetensors)
+            model_file = "model.safetensors" if self.use_safetensors else "pytorch_model.bin"
+            newest = os.path.join(tmpdir, "checkpoints", "checkpoint_1", model_file)
+            with open(newest, "r+b") as f:
+                f.truncate(os.path.getsize(newest) // 2)
+
+            # Loading with no path should skip the torn checkpoint_1 and load checkpoint_0
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            accelerator.load_state()
+            assert model.a.item() == a0
+            assert model.b.item() == b0
+            assert model.a.item() != a1
+            assert model.b.item() != b1
+
+            # If every checkpoint is incomplete, the load should still raise
+            oldest = os.path.join(tmpdir, "checkpoints", "checkpoint_0", model_file)
+            with open(oldest, "r+b") as f:
+                f.truncate(os.path.getsize(oldest) // 2)
+            with self.assertRaises(Exception):
+                accelerator.load_state()
+
     def test_checkpoint_deletion(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
