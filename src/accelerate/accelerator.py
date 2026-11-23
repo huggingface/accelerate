@@ -3737,6 +3737,22 @@ class Accelerator:
         self._load_model_state_pre_hook[handle.id] = hook
         return handle
 
+    def _restore_checkpoint_iteration(self, checkpoints_dir: str, loaded_dir: str | None = None) -> None:
+        """
+        Restore `project_configuration.iteration` to one past the highest existing `checkpoint_<i>` number in
+        `checkpoints_dir`, so the next automatic save continues the numbering instead of restarting at
+        `checkpoint_0`. The counter is one past the highest existing checkpoint number, even when the load fell
+        back to an older checkpoint: reusing the newer folder's number would make the next save raise
+        `already exists`.
+        """
+        folders = _sorted_checkpoint_dirs(checkpoints_dir)
+        if len(folders) == 0:
+            return
+        highest = max(int(os.path.basename(folder).rsplit("_", 1)[1]) for folder in folders)
+        self.project_configuration.iteration = highest + 1
+        loaded_from = f" after loading from {loaded_dir}" if loaded_dir is not None else ""
+        logger.info(f"Restored checkpoint iteration to {self.project_configuration.iteration}{loaded_from}")
+
     def load_state(self, input_dir: str | None = None, load_kwargs: dict | None = None, **load_model_func_kwargs):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
@@ -3756,7 +3772,9 @@ class Accelerator:
                 earlier checkpoints are tried in order until one loads successfully. After a successful
                 load with automatic checkpoint naming, `project_configuration.iteration` is restored to one
                 past the highest existing checkpoint number, so the next save continues the numbering
-                instead of restarting at `checkpoint_0`.
+                instead of restarting at `checkpoint_0`. The same applies to an explicit load of a checkpoint
+                from the project's own `checkpoints/` folder; explicit loads from anywhere else leave the
+                counter untouched.
             load_kwargs (`dict`, *optional*):
                 Additional keyword arguments for the underlying `load` function, such as optional arguments for
                 state_dict and optimizer on.
@@ -3794,18 +3812,10 @@ class Accelerator:
             last_error = None
             for candidate_dir in folders[::-1]:
                 try:
+                    # The recursive `load_state()` call restores the automatic checkpoint counter (one past
+                    # the highest existing checkpoint number) since `candidate_dir` is inside the project's
+                    # `checkpoints/` folder; see the end of this method.
                     self.load_state(candidate_dir, load_kwargs, **load_model_func_kwargs)
-                    # Restore the automatic checkpoint counter so the next save continues numbering after
-                    # the highest existing checkpoint instead of restarting at `checkpoint_0`: without this,
-                    # a restart would overwrite (or, with `total_limit` set, immediately lose) its own new
-                    # checkpoints to retention. The counter is one past the highest existing checkpoint
-                    # number, even when the load fell back to an older checkpoint.
-                    highest = max(int(os.path.basename(folder).rsplit("_", 1)[1]) for folder in folders)
-                    self.project_configuration.iteration = highest + 1
-                    logger.info(
-                        f"Restored checkpoint iteration to {self.project_configuration.iteration} "
-                        f"after loading from {candidate_dir}"
-                    )
                     return
                 except Exception as e:
                     last_error = e
@@ -3903,6 +3913,19 @@ class Accelerator:
             logger.info(f"Loading in {len(custom_checkpoints)} custom states")
             for index, obj in enumerate(self._custom_objects):
                 load_custom_state(obj, input_dir, index)
+
+        # An explicit load of a checkpoint from the project's own `checkpoints/` folder restores the
+        # automatic checkpoint counter the same way the automatic load path does: without this, the next
+        # save restarts numbering at `checkpoint_0`, which either raises `already exists` or, with
+        # `total_limit` set, is pruned by retention as soon as it is committed. Explicit loads from
+        # anywhere else leave the counter untouched.
+        if self.project_configuration.automatic_checkpoint_naming:
+            checkpoints_dir = os.path.abspath(os.path.join(self.project_dir, "checkpoints"))
+            loaded_dir = os.path.abspath(os.fspath(input_dir))
+            if os.path.dirname(loaded_dir) == checkpoints_dir and re.fullmatch(
+                r"checkpoint_[0-9]+", os.path.basename(loaded_dir)
+            ):
+                self._restore_checkpoint_iteration(checkpoints_dir, loaded_dir)
 
     def free_memory(self, *objects):
         """
