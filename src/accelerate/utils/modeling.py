@@ -1599,17 +1599,17 @@ def check_device_map(model: nn.Module, device_map: dict[str, Union[int, str, tor
             f"The following device_map keys do not match any submodules in the model: {invalid_keys}", UserWarning
         )
 
-    all_model_tensors = [name for name, _ in model.state_dict().items()]
-    for module_name in device_map.keys():
-        if module_name == "":
-            all_model_tensors.clear()
-            break
-        else:
-            all_model_tensors = [
-                name
-                for name in all_model_tensors
-                if not name == module_name and not name.startswith(module_name + ".")
-            ]
+    if "" in device_map:
+        return
+
+    # Check each tensor's ancestors instead of scanning all tensor names for every map entry.
+    all_model_tensors = []
+    for name in model.state_dict():
+        module_name = name
+        while module_name not in device_map and "." in module_name:
+            module_name = module_name.rpartition(".")[0]
+        if module_name not in device_map:
+            all_model_tensors.append(name)
     if len(all_model_tensors) > 0:
         non_covered_params = ", ".join(all_model_tensors)
         raise ValueError(

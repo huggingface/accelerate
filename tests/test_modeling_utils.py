@@ -422,6 +422,12 @@ class ModelingUtilsTester(unittest.TestCase):
 
         check_device_map(model, {"linear1": 0, "linear2": 1, "batchnorm": 1})
 
+        # A parent's mapping covers descendants, but similarly named siblings remain uncovered.
+        check_device_map(nn.Sequential(model), {"0": 0})
+        model.linear10 = nn.Linear(3, 4)
+        with self.assertRaisesRegex(ValueError, r"linear10\.weight, linear10\.bias"):
+            check_device_map(model, {"linear1": 0, "linear2": 1, "batchnorm": 1})
+
     def test_check_device_map_invalid_keys(self):
         model = ModelForTest()
 
