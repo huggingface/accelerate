@@ -26,6 +26,7 @@ import warnings
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from functools import partial
+from pathlib import Path
 from types import MethodType
 from typing import Any, Callable, Union
 
@@ -167,6 +168,24 @@ except ImportError:
     from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
 logger = get_logger(__name__)
+
+
+def _sorted_checkpoint_dirs(checkpoints_dir: str) -> list[str]:
+    """
+    Returns the committed `checkpoint_<i>` folders in `checkpoints_dir`, sorted by checkpoint number.
+
+    Only folders named exactly `checkpoint_<i>` count as checkpoints: a staging directory left behind by a crash
+    during `save_state()` (`.checkpoint_<i>.tmp`) is not a committed checkpoint and must never be picked up for
+    loading or retention.
+    """
+    checkpoint_dirs = []
+    for folder in os.listdir(checkpoints_dir):
+        match = re.fullmatch(r"checkpoint_([0-9]+)", folder)
+        if match is not None:
+            checkpoint_dirs.append((int(match.group(1)), os.path.join(checkpoints_dir, folder)))
+    checkpoint_dirs.sort()
+    return [folder for _, folder in checkpoint_dirs]
+
 
 # Sentinel values for defaults
 _split_batches = object()
@@ -3536,7 +3555,9 @@ class Accelerator:
         If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled
         then checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater
         than `total_limit` then the oldest save is deleted. Each checkpoint is saved in separate folders named
-        `checkpoint_<iteration>`.
+        `checkpoint_<iteration>`. The checkpoint is first written to a temporary folder and renamed to its final name
+        only once all files have been written, so a crash during saving never leaves a partial checkpoint behind;
+        checkpoints beyond `total_limit` are deleted only after the new checkpoint has been committed.
 
         Otherwise they are just saved to `output_dir`.
 
@@ -3570,31 +3591,27 @@ class Accelerator:
         if self.project_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
         os.makedirs(output_dir, exist_ok=True)
+        checkpoint_dir = None
         if self.project_configuration.automatic_checkpoint_naming:
-            folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-            if (
-                self.project_configuration.total_limit is not None
-                and (len(folders) + 1 > self.project_configuration.total_limit)
-                and self.is_main_process
-            ):
-
-                def _inner(folder):
-                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
-
-                folders.sort(key=_inner)
-                logger.warning(
-                    f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
-                )
-                for folder in folders[: len(folders) + 1 - self.project_configuration.total_limit]:
-                    shutil.rmtree(folder)
-            output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
-            if os.path.exists(output_dir):
+            checkpoints_dir = output_dir
+            checkpoint_dir = os.path.join(checkpoints_dir, f"checkpoint_{self.save_iteration}")
+            if os.path.exists(checkpoint_dir):
                 raise ValueError(
-                    f"Checkpoint directory {output_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
+                    f"Checkpoint directory {checkpoint_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
                 )
+            # Write the new checkpoint into a staging directory first and rename it to `checkpoint_<i>` only
+            # once every file has been written (the commit point, below). A crash during the save can then never
+            # leave a partial `checkpoint_<i>` behind, and retention for `total_limit` only runs after the commit,
+            # so the previous checkpoint always survives a crashed save.
+            tmp_dir = os.path.join(checkpoints_dir, f".checkpoint_{self.save_iteration}.tmp")
+            # Remove a staging directory left behind by a crash during a save of the same iteration. Only the
+            # process(es) writing the shared files do this, matching `save()` in `checkpointing.py`.
+            if self.is_main_process or (self.project_configuration.save_on_each_node and self.is_local_main_process):
+                shutil.rmtree(tmp_dir, ignore_errors=True)
             self.wait_for_everyone()
+            output_dir = tmp_dir
         os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"Saving current state to {output_dir}")
+        logger.info(f"Saving current state to {checkpoint_dir or output_dir}")
 
         if self.distributed_type == DistributedType.XLA:
             # Finish running the previous step before checkpointing
@@ -3661,6 +3678,31 @@ class Accelerator:
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
+        if self.project_configuration.automatic_checkpoint_naming:
+            # Commit point: every process has finished writing, so the staged checkpoint is complete. The
+            # process(es) writing the shared files rename it to `checkpoint_<i>` (atomic on the same filesystem)
+            # and every process waits until the rename is done before returning from `save_state()`.
+            self.wait_for_everyone()
+            if (
+                self.is_main_process or (self.project_configuration.save_on_each_node and self.is_local_main_process)
+            ) and os.path.isdir(tmp_dir):
+                try:
+                    os.rename(tmp_dir, checkpoint_dir)
+                except FileNotFoundError:
+                    # Another local main process already committed the checkpoint (shared filesystem with
+                    # `save_on_each_node=True`); it is already in place.
+                    pass
+            self.wait_for_everyone()
+            save_location = Path(checkpoint_dir)
+            # Retention for `total_limit` runs only now that the new checkpoint is committed, so a crash during
+            # the save can no longer delete the previous checkpoint.
+            if self.project_configuration.total_limit is not None and self.is_main_process:
+                folders = _sorted_checkpoint_dirs(checkpoints_dir)
+                if len(folders) > self.project_configuration.total_limit:
+                    num_to_delete = len(folders) - self.project_configuration.total_limit
+                    logger.warning(f"Deleting {num_to_delete} checkpoints to make room for new checkpoint.")
+                    for folder in folders[:num_to_delete]:
+                        shutil.rmtree(folder)
         self.project_configuration.iteration += 1
         return save_location
 
@@ -3695,6 +3737,22 @@ class Accelerator:
         self._load_model_state_pre_hook[handle.id] = hook
         return handle
 
+    def _restore_checkpoint_iteration(self, checkpoints_dir: str, loaded_dir: str | None = None) -> None:
+        """
+        Restore `project_configuration.iteration` to one past the highest existing `checkpoint_<i>` number in
+        `checkpoints_dir`, so the next automatic save continues the numbering instead of restarting at
+        `checkpoint_0`. The counter is one past the highest existing checkpoint number, even when the load fell
+        back to an older checkpoint: reusing the newer folder's number would make the next save raise
+        `already exists`.
+        """
+        folders = _sorted_checkpoint_dirs(checkpoints_dir)
+        if len(folders) == 0:
+            return
+        highest = max(int(os.path.basename(folder).rsplit("_", 1)[1]) for folder in folders)
+        self.project_configuration.iteration = highest + 1
+        loaded_from = f" after loading from {loaded_dir}" if loaded_dir is not None else ""
+        logger.info(f"Restored checkpoint iteration to {self.project_configuration.iteration}{loaded_from}")
+
     def load_state(self, input_dir: str | None = None, load_kwargs: dict | None = None, **load_model_func_kwargs):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
@@ -3709,7 +3767,15 @@ class Accelerator:
         Args:
             input_dir (`str` or `os.PathLike`):
                 The name of the folder all relevant weights and states were saved in. Can be `None` if
-                `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint.
+                `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint. If the
+                latest checkpoint fails to load (e.g. it was left incomplete by a crash during saving),
+                earlier checkpoints are tried in order until one loads successfully. In distributed runs, all
+                processes coordinate so they load the newest checkpoint that succeeds on every process. After
+                a successful load with automatic checkpoint naming, `project_configuration.iteration` is
+                restored to one past the highest existing checkpoint number, so the next save continues the
+                numbering instead of restarting at `checkpoint_0`. The same applies to an explicit load of a
+                checkpoint from the project's own `checkpoints/` folder; explicit loads from anywhere else
+                leave the counter untouched.
             load_kwargs (`dict`, *optional*):
                 Additional keyword arguments for the underlying `load` function, such as optional arguments for
                 state_dict and optimizer on.
@@ -3735,15 +3801,90 @@ class Accelerator:
             if not os.path.isdir(input_dir):
                 raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         elif self.project_configuration.automatic_checkpoint_naming:
-            # Pick up from automatic checkpoint naming
-            input_dir = os.path.join(self.project_dir, "checkpoints")
-            folders = [os.path.join(input_dir, folder) for folder in os.listdir(input_dir)]
+            # Pick up from automatic checkpoint naming, newest checkpoint first.
+            # If a checkpoint fails to load (e.g. it was left incomplete by a crash during
+            # `save_state`), fall back to the newest checkpoint that loads successfully.
+            # Only committed `checkpoint_<i>` folders are considered; a staging directory left
+            # behind by a crash during `save_state()` (`.checkpoint_<i>.tmp`) is ignored.
+            checkpoints_dir = os.path.join(self.project_dir, "checkpoints")
+            is_distributed = (
+                torch.distributed.is_available()
+                and torch.distributed.is_initialized()
+                and torch.distributed.get_world_size() > 1
+            )
+            if not is_distributed:
+                folders = _sorted_checkpoint_dirs(checkpoints_dir)
+                if len(folders) == 0:
+                    raise ValueError(f"No checkpoints found in {checkpoints_dir}")
+                newest_error = None
+                for candidate_dir in folders[::-1]:
+                    try:
+                        # The recursive `load_state()` call restores the automatic checkpoint counter (one past
+                        # the highest existing checkpoint number) since `candidate_dir` is inside the project's
+                        # `checkpoints/` folder; see the end of this method.
+                        self.load_state(candidate_dir, load_kwargs, **load_model_func_kwargs)
+                        return
+                    except Exception as e:
+                        if newest_error is None:
+                            newest_error = e
+                        logger.warning(
+                            f"Failed to load checkpoint from {candidate_dir} ({type(e).__name__}: {e}), "
+                            "trying the previous checkpoint."
+                        )
+                raise newest_error
 
-            def _inner(folder):
-                return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+            # In distributed runs, agree on the checkpoint index (not the path, since
+            # `save_on_each_node=True` may use per-node checkpoint directories) so ranks never
+            # silently diverge onto different checkpoints.
+            world_size = torch.distributed.get_world_size()
+            folders = _sorted_checkpoint_dirs(checkpoints_dir) if os.path.isdir(checkpoints_dir) else []
+            folders_by_index = {int(os.path.basename(folder).rsplit("_", 1)[1]): folder for folder in folders}
+            gathered_indices: list[list[int] | None] = [None] * world_size
+            torch.distributed.all_gather_object(gathered_indices, list(folders_by_index.keys()))
 
-            folders.sort(key=_inner)
-            input_dir = folders[-1]
+            if len(folders) == 0:
+                raise ValueError(f"No checkpoints found in {checkpoints_dir}")
+
+            common_indices = sorted(set.intersection(*(set(indices) for indices in gathered_indices)), reverse=True)
+            if len(common_indices) == 0:
+                raise ValueError(
+                    f"No common checkpoints found across all processes (local checkpoints in {checkpoints_dir}: "
+                    f"{sorted(folders_by_index.keys())})"
+                )
+
+            newest_error = None
+            for ckpt_idx in common_indices:
+                candidate_dir = folders_by_index[ckpt_idx]
+                local_ok = True
+                try:
+                    # The recursive `load_state()` call restores the automatic checkpoint counter (one past
+                    # the highest existing checkpoint number) since `candidate_dir` is inside the project's
+                    # `checkpoints/` folder; see the end of this method.
+                    self.load_state(candidate_dir, load_kwargs, **load_model_func_kwargs)
+                except Exception as e:
+                    local_ok = False
+                    if newest_error is None:
+                        newest_error = e
+                    logger.warning(
+                        f"Failed to load checkpoint from {candidate_dir} ({type(e).__name__}: {e}), "
+                        "trying the previous checkpoint."
+                    )
+
+                gathered_ok: list[bool | None] = [None] * world_size
+                torch.distributed.all_gather_object(gathered_ok, local_ok)
+                if all(gathered_ok):
+                    max_existing = max(idx for indices in gathered_indices for idx in indices)
+                    self.project_configuration.iteration = max(self.project_configuration.iteration, max_existing + 1)
+                    return
+                if local_ok:
+                    logger.warning(
+                        f"Loaded checkpoint from {candidate_dir}, but another process failed to load "
+                        f"checkpoint_{ckpt_idx}; trying the previous checkpoint."
+                    )
+
+            if newest_error is not None:
+                raise newest_error
+            raise RuntimeError(f"Failed to load a common checkpoint across all processes from {checkpoints_dir}.")
         else:
             raise ValueError("No input_dir provided and automatic checkpoint naming is disabled.")
         logger.info(f"Loading states from {input_dir}")
@@ -3833,6 +3974,19 @@ class Accelerator:
             logger.info(f"Loading in {len(custom_checkpoints)} custom states")
             for index, obj in enumerate(self._custom_objects):
                 load_custom_state(obj, input_dir, index)
+
+        # An explicit load of a checkpoint from the project's own `checkpoints/` folder restores the
+        # automatic checkpoint counter the same way the automatic load path does: without this, the next
+        # save restarts numbering at `checkpoint_0`, which either raises `already exists` or, with
+        # `total_limit` set, is pruned by retention as soon as it is committed. Explicit loads from
+        # anywhere else leave the counter untouched.
+        if self.project_configuration.automatic_checkpoint_naming:
+            checkpoints_dir = os.path.abspath(os.path.join(self.project_dir, "checkpoints"))
+            loaded_dir = os.path.abspath(os.fspath(input_dir))
+            if os.path.dirname(loaded_dir) == checkpoints_dir and re.fullmatch(
+                r"checkpoint_[0-9]+", os.path.basename(loaded_dir)
+            ):
+                self._restore_checkpoint_iteration(checkpoints_dir, loaded_dir)
 
     def free_memory(self, *objects):
         """
