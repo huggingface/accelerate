@@ -14,7 +14,9 @@
 import builtins
 import os
 import pickle
+import sys
 import tempfile
+import time
 import unittest
 import warnings
 from collections import UserDict, namedtuple
@@ -31,6 +33,7 @@ from accelerate.big_modeling import cpu_offload_with_hook
 from accelerate.hooks import attach_align_device_hook, remove_hook_from_module
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
+    execute_subprocess_async,
     require_huggingface_suite,
     require_non_cpu,
     require_non_torch_xla,
@@ -50,6 +53,7 @@ from accelerate.utils import (
     extract_model_from_parallel,
     find_device,
     get_model_tp_size,
+    get_physical_cpu_count,
     has_offloaded_params,
     is_torch_xla_available,
     listify,
@@ -134,6 +138,13 @@ class UtilsTester(unittest.TestCase):
 
         tensor = torch.tensor([[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]])
         assert listify(tensor) == [[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]]
+
+    def test_physical_cpu_count_fallbacks(self):
+        # psutil returns None when it can't tell the number of physical cores, or of logical ones.
+        with patch("psutil.cpu_count", side_effect=lambda logical=True: 8 if logical else None):
+            assert get_physical_cpu_count() == 8
+        with patch("psutil.cpu_count", return_value=None):
+            assert get_physical_cpu_count() == 1
 
     def test_patch_environment(self):
         with patch_environment(aa=1, BB=2):
@@ -423,6 +434,16 @@ class UtilsTester(unittest.TestCase):
         compiled_convert_to_fp32 = torch.compile(convert_to_fp32, fullgraph=True)
         compiled_convert_to_fp32(torch.zeros([1], dtype=torch.bfloat16))
 
+    def test_convert_to_fp32_leaves_non_tensors(self):
+        # Not a tensor, but it has a dtype, like the paged KV cache that transformers models return
+        class Cache:
+            dtype = torch.bfloat16
+
+        cache = Cache()
+        output = convert_to_fp32({"logits": torch.zeros([1], dtype=torch.bfloat16), "cache": cache})
+        assert output["logits"].dtype == torch.float32
+        assert output["cache"] is cache
+
     def test_named_tuples(self):
         class QuantTensorBase(NamedTuple):
             value: torch.Tensor
@@ -570,6 +591,36 @@ class UtilsTester(unittest.TestCase):
         assert result["inputs"][0].shape == torch.Size([6, 3])
         assert result["inputs"][1].shape == torch.Size([6, 4])
         assert result["labels"].shape == torch.Size([6, 1])
+
+
+class ExecuteSubprocessAsyncTester(unittest.TestCase):
+    def test_killed_by_signal_raises(self):
+        cmd = [sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"]
+        with self.assertRaises(RuntimeError):
+            execute_subprocess_async(cmd, echo=False)
+
+    def assert_stopped_on_timeout(self, cmd):
+        start = time.monotonic()
+        with self.assertRaises(TimeoutError):
+            execute_subprocess_async(cmd, timeout=10, quiet=True, echo=False)
+        self.assertLess(time.monotonic() - start, 30)
+
+    def test_timeout_stops_torchrun_workers(self):
+        # torchrun runs its workers in their own sessions and stops them itself on SIGTERM
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script = os.path.join(tmpdir, "sleep.py")
+            with open(script, "w") as f:
+                f.write("import time; time.sleep(120)")
+            self.assert_stopped_on_timeout(
+                [sys.executable, "-m", "torch.distributed.run", "--standalone", "--nproc_per_node=2", script]
+            )
+
+    def test_timeout_stops_single_process_launch(self):
+        # Like a single-process `accelerate launch`: the launcher dies on SIGTERM without passing it on to its script
+        launcher = (
+            "import subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)']).wait()"
+        )
+        self.assert_stopped_on_timeout([sys.executable, "-c", launcher])
 
 
 def set_dummy_accelerate_env_var():

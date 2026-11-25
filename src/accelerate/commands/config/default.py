@@ -16,17 +16,7 @@
 
 from pathlib import Path
 
-import torch
-
-from ...utils import (
-    is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
-    is_sdaa_available,
-    is_xpu_available,
-)
+from ...utils import get_distributed_backend, get_torch_accelerator_backend
 from .config_args import ClusterConfig, default_json_config_file
 from .config_utils import SubcommandHelpFormatter
 
@@ -63,75 +53,19 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         "compute_environment": "LOCAL_MACHINE",
         "mixed_precision": mixed_precision,
     }
-    if is_mlu_available():
-        num_mlus = torch.mlu.device_count()
-        config["num_processes"] = num_mlus
-        config["use_cpu"] = False
-        if num_mlus > 1:
-            config["distributed_type"] = "MULTI_MLU"
-        else:
-            config["distributed_type"] = "NO"
-    if is_sdaa_available():
-        num_sdaas = torch.sdaa.device_count()
-        config["num_processes"] = num_sdaas
-        config["use_cpu"] = False
-        if num_sdaas > 1:
-            config["distributed_type"] = "MULTI_SDAA"
-        else:
-            config["distributed_type"] = "NO"
-    elif is_musa_available():
-        num_musas = torch.musa.device_count()
-        config["num_processes"] = num_musas
-        config["use_cpu"] = False
-        if num_musas > 1:
-            config["distributed_type"] = "MULTI_MUSA"
-        else:
-            config["distributed_type"] = "NO"
-    elif is_hpu_available():
-        num_hpus = torch.hpu.device_count()
-        config["num_processes"] = num_hpus
-        config["use_cpu"] = False
-        if num_hpus > 1:
-            config["distributed_type"] = "MULTI_HPU"
-        else:
-            config["distributed_type"] = "NO"
-    elif torch.cuda.is_available():
-        num_gpus = torch.cuda.device_count()
-        config["num_processes"] = num_gpus
-        config["use_cpu"] = False
-        if num_gpus > 1:
-            config["distributed_type"] = "MULTI_GPU"
-        else:
-            config["distributed_type"] = "NO"
-    elif is_xpu_available():
-        num_xpus = torch.xpu.device_count()
-        config["num_processes"] = num_xpus
-        config["use_cpu"] = False
-        if num_xpus > 1:
-            config["distributed_type"] = "MULTI_XPU"
-        else:
-            config["distributed_type"] = "NO"
-    elif is_npu_available():
-        num_npus = torch.npu.device_count()
-        config["num_processes"] = num_npus
-        config["use_cpu"] = False
-        if num_npus > 1:
-            config["distributed_type"] = "MULTI_NPU"
-        else:
-            config["distributed_type"] = "NO"
-    elif is_neuron_available():
-        num_neuron_cores = torch.neuron.device_count()
-        config["num_processes"] = num_neuron_cores
-        config["use_cpu"] = False
-        if num_neuron_cores > 1:
-            config["distributed_type"] = "MULTI_NEURON"
-        else:
-            config["distributed_type"] = "NO"
-    else:
-        num_xpus = 0
-        config["use_cpu"] = True
-        config["num_processes"] = 1
-        config["distributed_type"] = "NO"
+    device_type, device_module = get_torch_accelerator_backend()
+    config["use_cpu"] = device_type is None
+    config["num_processes"] = 1
+    config["distributed_type"] = "NO"
+
+    if get_distributed_backend(device_type) is not None:
+        num_devices = device_module.device_count()
+        config["num_processes"] = max(num_devices, 1)
+        if num_devices > 1:
+            if device_type == "cuda":
+                config["distributed_type"] = "MULTI_GPU"
+            else:
+                config["distributed_type"] = f"MULTI_{device_type.upper()}"
     config["debug"] = False
     config["enable_cpu_affinity"] = False
     config = ClusterConfig(**config)

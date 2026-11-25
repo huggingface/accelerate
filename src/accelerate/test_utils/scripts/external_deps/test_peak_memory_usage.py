@@ -12,27 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import gc
 import json
 import os
 
-import torch
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import (
-    is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
-    is_sdaa_available,
-    is_xpu_available,
-)
+from accelerate.utils import get_torch_accelerator_backend
 from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
+from accelerate.utils.memory import clear_device_cache
 
 
 MAX_GPU_BATCH_SIZE = 16
@@ -47,75 +38,16 @@ def b2mb(x):
 # This context manager is used to track the peak memory usage of the process
 class TorchTracemalloc:
     def __enter__(self):
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.cuda.memory_allocated()
-        elif is_mlu_available():
-            torch.mlu.empty_cache()
-            torch.mlu.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.mlu.memory_allocated()
-        elif is_sdaa_available():
-            torch.sdaa.empty_cache()
-            torch.sdaa.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.sdaa.memory_allocated()
-        elif is_musa_available():
-            torch.musa.empty_cache()
-            torch.musa.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.musa.memory_allocated()
-        elif is_npu_available():
-            torch.npu.empty_cache()
-            torch.npu.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.npu.memory_allocated()
-        elif is_xpu_available():
-            torch.xpu.empty_cache()
-            torch.xpu.reset_peak_memory_stats()  # reset the peak gauge to zero
-            self.begin = torch.xpu.memory_allocated()
-        elif is_hpu_available():
-            # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
-            torch.hpu.reset_peak_memory_stats()  # reset the peak gauge to zero
-            self.begin = torch.hpu.memory_allocated()
-        elif is_neuron_available():
-            torch.neuron.empty_cache()
-            torch.neuron.reset_peak_memory_stats()  # reset the peak gauge to zero
-            self.begin = torch.neuron.memory_allocated()
+        clear_device_cache(garbage_collection=True)
+        _, self.device_module = get_torch_accelerator_backend()
+        self.device_module.reset_peak_memory_stats()
+        self.begin = self.device_module.memory_allocated()
         return self
 
     def __exit__(self, *exc):
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            self.end = torch.cuda.memory_allocated()
-            self.peak = torch.cuda.max_memory_allocated()
-        elif is_mlu_available():
-            torch.mlu.empty_cache()
-            self.end = torch.mlu.memory_allocated()
-            self.begin = torch.mlu.max_memory_allocated()
-        elif is_sdaa_available():
-            torch.sdaa.empty_cache()
-            self.end = torch.sdaa.memory_allocated()
-            self.begin = torch.sdaa.max_memory_allocated()
-        elif is_musa_available():
-            torch.musa.empty_cache()
-            self.end = torch.musa.memory_allocated()
-            self.begin = torch.musa.max_memory_allocated()
-        elif is_npu_available():
-            torch.npu.empty_cache()
-            self.end = torch.npu.memory_allocated()
-            self.peak = torch.npu.max_memory_allocated()
-        elif is_xpu_available():
-            torch.xpu.empty_cache()
-            self.end = torch.xpu.memory_allocated()
-            self.peak = torch.xpu.max_memory_allocated()
-        elif is_hpu_available():
-            # torch.hpu.empty_cache() # not available on hpu as it reserves all device memory for the current process
-            self.end = torch.hpu.memory_allocated()
-            self.peak = torch.hpu.max_memory_allocated()
-        elif is_neuron_available():
-            torch.neuron.empty_cache()
-            self.end = torch.neuron.memory_allocated()
-            self.peak = torch.neuron.max_memory_allocated()
+        clear_device_cache(garbage_collection=True)
+        self.end = self.device_module.memory_allocated()
+        self.peak = self.device_module.max_memory_allocated()
         self.used = b2mb(self.end - self.begin)
         self.peaked = b2mb(self.peak - self.begin)
         # print(f"delta used/peak {self.used:4d}/{self.peaked:4d}")

@@ -19,19 +19,13 @@ import os
 from ...utils import (
     ComputeEnvironment,
     DistributedType,
+    get_torch_accelerator_backend,
     is_deepspeed_available,
     is_fp8_available,
-    is_hpu_available,
-    is_mlu_available,
     is_mps_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
-    is_sdaa_available,
     is_torchao_available,
     is_transformer_engine_available,
     is_transformers_available,
-    is_xpu_available,
 )
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
@@ -70,6 +64,7 @@ def get_cluster_input():
             "multi-MUSA",
             "multi-NEURON",
             "TPU",
+            "multi-SUPA",
         ],
         _convert_distributed_mode,
     )
@@ -89,6 +84,7 @@ def get_cluster_input():
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
+        DistributedType.MULTI_SUPA,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_CPU,
@@ -220,6 +216,7 @@ def get_cluster_input():
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_SUPA,
             DistributedType.MULTI_NEURON,
             DistributedType.NO,
         ]
@@ -380,6 +377,7 @@ def get_cluster_input():
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
+        DistributedType.MULTI_SUPA,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_HPU,
         DistributedType.MULTI_NEURON,
@@ -633,6 +631,7 @@ def get_cluster_input():
         DistributedType.MULTI_MLU,
         DistributedType.MULTI_SDAA,
         DistributedType.MULTI_MUSA,
+        DistributedType.MULTI_SUPA,
         DistributedType.MULTI_NPU,
         DistributedType.MULTI_NEURON,
         DistributedType.XLA,
@@ -672,6 +671,7 @@ def get_cluster_input():
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_SUPA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_HPU,
@@ -681,22 +681,13 @@ def get_cluster_input():
         and not use_cpu
         and not use_mps
     ):
-        if is_npu_available():
-            machine_type = "NPU(s)"
-        elif is_mlu_available():
-            machine_type = "MLU(s)"
-        elif is_sdaa_available():
-            machine_type = "SDAA(s)"
-        elif is_musa_available():
-            machine_type = "MUSA(s)"
-        elif is_xpu_available():
-            machine_type = "XPU(s)"
-        elif is_hpu_available():
-            machine_type = "HPU(s)"
-        elif is_neuron_available():
-            machine_type = "Neuron cores"
-        else:
+        device_type, _ = get_torch_accelerator_backend()
+        if device_type is None:
+            machine_type = "CPU(s)"
+        elif device_type == "cuda":
             machine_type = "GPU(s)"
+        else:
+            machine_type = f"{device_type.upper()}(s)"
         gpu_ids = _ask_field(
             f"What {machine_type} (by id) should be used for training on this machine as a comma-separated list? [all]:",
             default="all",

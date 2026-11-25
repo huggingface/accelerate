@@ -561,6 +561,32 @@ class FSDP2PluginIntegration(FSDPPluginIntegration):
             accelerator.clip_grad_value_(model.parameters(), 1.0)
             assert model[0].weight.grad.full_tensor().tolist() == [[1.0, 0.5, -1.0, -0.5]] * 4
 
+    def test_prepare_model_without_optimizer(self):
+        """A model can be prepared without an optimizer, for evaluation, and is sharded."""
+        from torch.distributed.fsdp import FSDPModule
+
+        with patch_environment(**self.fsdp_envs[2]):
+            accelerator = Accelerator()
+            model = accelerator.prepare(torch.nn.Sequential(torch.nn.Linear(4, 4)))
+            assert isinstance(model, FSDPModule)
+            model(torch.ones(1, 4, device=accelerator.device))
+
+    def test_prepare_model_again_with_optimizer(self):
+        """A model prepared without an optimizer, for evaluation, can then be prepared with its optimizer for training,
+        without applying activation checkpointing a second time."""
+        env = self.fsdp_envs[2].copy()
+        env["FSDP_ACTIVATION_CHECKPOINTING"] = "true"
+        env["FSDP_AUTO_WRAP_POLICY"] = "TRANSFORMER_BASED_WRAP"
+        env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = "Linear"
+        with patch_environment(**env):
+            accelerator = Accelerator()
+            model = accelerator.prepare(torch.nn.Sequential(torch.nn.Linear(4, 4), torch.nn.Linear(4, 4)))
+            names = [name for name, _ in model.named_parameters()]
+            model, optimizer = accelerator.prepare(model, torch.optim.SGD(model.parameters(), lr=0.1))
+            assert [name for name, _ in model.named_parameters()] == names
+            accelerator.backward(model(torch.ones(1, 4, device=accelerator.device)).sum())
+            optimizer.step()
+
     def test_param_mapping_error_handling(self):
         """Test FSDP2's defensive error handling for parameter mapping failures in tied/non-tied cases."""
         from unittest.mock import Mock, patch

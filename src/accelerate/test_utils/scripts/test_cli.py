@@ -11,21 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import torch
 
-from accelerate.utils import is_xpu_available
+from accelerate.utils import get_torch_accelerator_backend
 
 
 def main():
-    accelerator_type = "GPU"
-    num_accelerators = 0
-    if torch.cuda.is_available():
-        num_accelerators = torch.cuda.device_count()
-        accelerator_type = "GPU"
-    elif is_xpu_available():
-        num_accelerators = torch.xpu.device_count()
-        accelerator_type = "XPU"
-    print(f"Successfully ran on {num_accelerators} {accelerator_type}s")
+    device_type, backend = get_torch_accelerator_backend()
+    num_devices = 1
+    if backend is not None:
+        num_devices = backend.device_count()
+
+    if device_type is None:
+        device_name = "CPU"
+    elif device_type == "cuda":
+        device_name = "GPU"
+    else:
+        device_name = device_type.upper()
+    print(f"Successfully ran on {num_devices} {device_name}(s)")
 
 
 if __name__ == "__main__":

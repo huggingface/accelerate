@@ -13,16 +13,19 @@
 # limitations under the License.
 
 import argparse
-import os
+import signal
 import subprocess
 import unittest
+from unittest.mock import Mock
 
 import pytest
+from torch.distributed.elastic.multiprocessing.api import SignalException
 
 from accelerate.commands.launch import (
     CHILD_STDERR_CHUNK_SIZE,
     CHILD_STDERR_TAIL_CHUNKS,
     launch_command_parser,
+    multi_gpu_launcher,
     simple_launcher,
 )
 from accelerate.launchers import notebook_launcher
@@ -105,6 +108,30 @@ def _simple_launcher_args(script, quiet=False):
 
 
 class TestSimpleLauncher:
+    @pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
+    def test_interrupt_stops_children(self, monkeypatch, sig):
+        process, worker = Mock(), Mock()
+        process.stderr.read1.return_value = b""
+        process.children.return_value = [worker]
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+        def interrupted_wait():
+            process.wait.side_effect = None
+            if sig == signal.SIGTERM:
+                signal.getsignal(sig)(sig, None)
+            raise KeyboardInterrupt
+
+        process.wait.side_effect = interrupted_wait
+        monkeypatch.setattr("accelerate.commands.launch.psutil.Popen", lambda *args, **kwargs: process)
+        monkeypatch.setattr("accelerate.commands.launch.psutil.wait_procs", lambda processes, timeout: (processes, []))
+        with pytest.raises(SystemExit) as exc_info:
+            simple_launcher(_simple_launcher_args("train.py"))
+        assert exc_info.value.code == 128 + sig
+        process.terminate.assert_called_once()
+        worker.terminate.assert_called_once()
+        assert process.wait.call_count == 2
+        assert signal.getsignal(signal.SIGTERM) == previous_sigterm
+
     def test_child_stderr_is_written_through_and_attached(self, tmp_path, capfd):
         script = tmp_path / "child.py"
         # Floods stderr before failing: the case that deadlocks a wait()-then-read launcher and buffers
@@ -128,19 +155,26 @@ class TestSimpleLauncher:
         assert "the real cause" in str(exc_info.value.__cause__)
 
 
-def test_notebook_launcher_sets_accelerate_mixed_precision(monkeypatch):
-    # notebook_launcher used to set a bare MIXED_PRECISION key, which nothing
-    # in accelerate reads; the workers read ACCELERATE_MIXED_PRECISION.
-    captured = {}
-    monkeypatch.setattr(
-        "torch.distributed.launcher.api.elastic_launch",
-        lambda config, entrypoint: lambda *a: captured.update(
-            accel=os.environ.get("ACCELERATE_MIXED_PRECISION"), bare=os.environ.get("MIXED_PRECISION")
-        ),
+class TestMultiGpuLauncher:
+    @pytest.mark.parametrize(
+        "error, exit_code",
+        [
+            (KeyboardInterrupt(), 130),
+            (SignalException("interrupted", signal.SIGINT), 130),
+            (SignalException("terminated", signal.SIGTERM), 143),
+        ],
     )
-    notebook_launcher(lambda: None, num_processes=2, mixed_precision="fp16", use_port="29613")
-    assert captured["accel"] == "fp16"
-    assert captured["bare"] is None
+    def test_interrupt_exits_cleanly(self, monkeypatch, error, exit_code):
+        def interrupted_run(args):
+            raise error
+
+        monkeypatch.setattr("accelerate.commands.launch.prepare_multi_gpu_env", lambda args: {})
+        monkeypatch.setattr("accelerate.commands.launch.check_cuda_p2p_ib_support", lambda: True)
+        monkeypatch.setattr("torch.distributed.run.run", interrupted_run)
+        args = argparse.Namespace(training_script="train.py", training_script_args=[], debug=True)
+        with pytest.raises(SystemExit) as exc_info:
+            multi_gpu_launcher(args)
+        assert exc_info.value.code == exit_code
 
 
 def test_notebook_launcher_invalid_precision_error():

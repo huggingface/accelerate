@@ -18,6 +18,7 @@ import os
 import pytest
 
 from accelerate import Accelerator
+from accelerate import logging as accelerate_logging
 from accelerate.logging import get_logger
 from accelerate.state import AcceleratorState
 
@@ -94,3 +95,28 @@ def test_custom_stacklevel(caplog):
     assert rec.lineno == lineno
     assert rec.funcName == test_custom_stacklevel.__name__
     assert rec.message == expected_message
+
+
+def test_set_verbosity(caplog):
+    with caplog.at_level(logging.WARNING, logger="accelerate"):
+        accelerate_logging.set_verbosity(logging.DEBUG)
+        assert accelerate_logging.get_verbosity() == logging.DEBUG
+        accelerate_logging.set_verbosity("error")
+        assert accelerate_logging.get_verbosity() == logging.ERROR
+
+
+@pytest.mark.usefixtures("accelerator")
+def test_verbosity_filters_logs(caplog, monkeypatch):
+    monkeypatch.delenv("ACCELERATE_LOG_LEVEL", raising=False)
+    logger = get_logger("accelerate.test_verbosity")
+    root_level = logging.getLogger().level
+    with caplog.at_level(logging.WARNING, logger="accelerate"):
+        accelerate_logging.set_verbosity_error()
+        logger.warning("hidden warning")
+        assert not caplog.records
+
+        accelerate_logging.set_verbosity_warning()
+        logger.warning("visible warning")
+        assert len(caplog.records) == 1
+        assert caplog.records[0].name == logger.name
+        assert logging.getLogger().level == root_level

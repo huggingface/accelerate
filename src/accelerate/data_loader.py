@@ -509,6 +509,7 @@ class DataLoaderShard(DataLoaderAdapter, DataLoaderStateMixin):
 
             - `"torch"`: the base torch random number generator
             - `"cuda"`: the CUDA random number generator (GPU only)
+            - Any registered PyTorch accelerator's device type: its device random number generator.
             - `"xla"`: the XLA random number generator (TPU only)
             - `"generator"`: an optional `torch.Generator`
         synchronized_generator (`torch.Generator`, *optional*):
@@ -1051,6 +1052,7 @@ def prepare_data_loader(
 
             - `"torch"`: the base torch random number generator
             - `"cuda"`: the CUDA random number generator (GPU only)
+            - Any registered PyTorch accelerator's device type: its device random number generator.
             - `"xla"`: the XLA random number generator (TPU only)
             - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.

@@ -63,6 +63,15 @@ def main():
     dataloader = DataLoader(samples, batch_size=batch_size)
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, dtype=DTYPES[args.dtype])
+    if args.mixed_precision != "no":
+        # The losses of a run that stays in fp32 are within the tolerance of the reference, so check the compute dtype.
+        expected_dtype = DTYPES[args.mixed_precision]
+
+        def check_compute_dtype(module, inputs, output):
+            assert output.dtype == expected_dtype, f"Expected {expected_dtype} computation, got {output.dtype}"
+
+        model.model.layers[0].self_attn.q_proj.register_forward_hook(check_compute_dtype)
+
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
@@ -76,6 +85,9 @@ def main():
         with accelerator.accumulate(model):
             loss = model(input_ids=batch, labels=batch).loss
             accelerator.backward(loss)
+            # DeepSpeed clips at 1.0 by default, so every setup clips the same way.
+            if accelerator.sync_gradients:
+                accelerator.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             optimizer.zero_grad()
         step_losses.append(loss.detach())

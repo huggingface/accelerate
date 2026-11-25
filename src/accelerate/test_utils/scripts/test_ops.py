@@ -18,6 +18,7 @@ import torch
 
 from accelerate import PartialState
 from accelerate.test_utils.testing import assert_exception
+from accelerate.utils import parse_flag_from_env
 from accelerate.utils.dataclasses import DistributedType
 from accelerate.utils.operations import (
     DistributedOperationException,
@@ -150,12 +151,13 @@ def test_op_checker(state):
 def test_copy_tensor_to_devices(state):
     if state.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.XLA]:
         return
-    if state.is_main_process:
-        tensor = torch.tensor([1, 2, 3], dtype=torch.int).to(state.device)
-    else:
-        tensor = None
-    tensor = copy_tensor_to_devices(tensor)
-    assert torch.allclose(tensor, torch.tensor([1, 2, 3], dtype=torch.int, device=state.device))
+    for source in (0, state.num_processes - 1):
+        for shape in [(2, 3), (), (0, 3), (2, 0, 3)]:
+            for dtype in [torch.float32, torch.bfloat16, torch.int64]:
+                expected = torch.full(shape, 3, dtype=dtype, device=state.device)
+                tensor = expected.clone() if state.process_index == source else None
+                tensor = copy_tensor_to_devices(tensor)
+                torch.testing.assert_close(tensor, expected)
 
 
 def _mp_fn(index):
@@ -164,7 +166,9 @@ def _mp_fn(index):
 
 
 def main():
-    state = PartialState()
+    state = PartialState(cpu=parse_flag_from_env("ACCELERATE_USE_CPU"))
+    if torch.distributed.is_initialized():
+        assert state.num_processes == torch.distributed.get_world_size()
     state.print(f"State: {state}")
     state.print("testing gather")
     test_gather(state)

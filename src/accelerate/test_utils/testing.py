@@ -22,12 +22,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from functools import partial
 from pathlib import Path
 from typing import Optional, Union
 from unittest import mock
 
+import psutil
 import torch
 
 import accelerate
@@ -37,6 +38,7 @@ from ..utils import (
     check_cuda_fp8_capability,
     compare_versions,
     gather,
+    get_torch_accelerator_backend,
     is_aim_available,
     is_bnb_available,
     is_clearml_available,
@@ -84,28 +86,13 @@ from ..utils import (
 def get_backend():
     if is_torch_xla_available():
         return "xla", torch.cuda.device_count(), torch.cuda.memory_allocated
-    elif is_cuda_available():
-        return "cuda", torch.cuda.device_count(), torch.cuda.memory_allocated
-    elif is_mps_available(min_version="2.0"):
-        return "mps", 1, torch.mps.current_allocated_memory
-    elif is_mps_available():
-        return "mps", 1, lambda: 0
-    elif is_mlu_available():
-        return "mlu", torch.mlu.device_count(), torch.mlu.memory_allocated
-    elif is_sdaa_available():
-        return "sdaa", torch.sdaa.device_count(), torch.sdaa.memory_allocated
-    elif is_musa_available():
-        return "musa", torch.musa.device_count(), torch.musa.memory_allocated
-    elif is_npu_available():
-        return "npu", torch.npu.device_count(), torch.npu.memory_allocated
-    elif is_xpu_available():
-        return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
-    elif is_hpu_available():
-        return "hpu", torch.hpu.device_count(), torch.hpu.memory_allocated
-    elif is_neuron_available():
-        return "neuron", torch.neuron.device_count(), torch.neuron.memory_allocated
-    else:
+    # This runs at import time, including in notebook launchers before they fork.
+    device_type, device_module = get_torch_accelerator_backend()
+    if device_type is None:
         return "cpu", 1, lambda: 0
+    if device_type == "mps":
+        return "mps", 1, device_module.current_allocated_memory
+    return device_type, device_module.device_count(), device_module.memory_allocated
 
 
 torch_device, device_count, memory_allocated_func = get_backend()
@@ -734,6 +721,17 @@ async def _read_stream(stream, callback):
             break
 
 
+def _get_process_and_children(p):
+    # Once the process has exited and been reaped, its PID may already belong to another process
+    if p.returncode is not None:
+        return []
+    try:
+        process = psutil.Process(p.pid)
+        return [process, *process.children(recursive=True)]
+    except psutil.NoSuchProcess:
+        return []
+
+
 async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=False, echo=False) -> _RunOutput:
     if echo:
         print("\nRunning: ", " ".join(cmd))
@@ -764,18 +762,31 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
         if not quiet:
             print(label, line, file=pipe)
 
-    # XXX: the timeout doesn't seem to make any difference here
-    await asyncio.wait(
-        [
-            asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
-            asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
-        ],
-        timeout=timeout,
-    )
-    return _RunOutput(await p.wait(), out, err)
+    tasks = [
+        asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
+        asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
+        asyncio.create_task(p.wait()),
+    ]
+    _, pending = await asyncio.wait(tasks, timeout=timeout)
+    if pending:
+        procs = _get_process_and_children(p)
+        for proc in procs:
+            with suppress(psutil.NoSuchProcess):
+                proc.terminate()
+        _, pending = await asyncio.wait(pending, timeout=60)
+        for proc in procs + _get_process_and_children(p):
+            with suppress(psutil.NoSuchProcess):
+                proc.kill()
+        for task in pending:
+            task.cancel()
+        raise TimeoutError(
+            f"'{' '.join(cmd)}' timed out after {timeout} seconds\n\n"
+            f"The combined stderr from workers follows:\n" + "\n".join(err)
+        )
+    return _RunOutput(p.returncode, out, err)
 
 
-def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
+def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=None, quiet=False, echo=True) -> _RunOutput:
     # Cast every path in `cmd` to a string
     for i, c in enumerate(cmd):
         if isinstance(c, Path):
@@ -784,7 +795,8 @@ def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet
     result = asyncio.run(_stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo))
 
     cmd_str = " ".join(cmd)
-    if result.returncode > 0:
+    # A negative return code means the process was killed by a signal (e.g. segfault or OOM killer)
+    if result.returncode != 0:
         stderr = "\n".join(result.stderr)
         raise RuntimeError(
             f"'{cmd_str}' failed with returncode {result.returncode}\n\n"

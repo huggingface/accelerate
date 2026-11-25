@@ -38,15 +38,11 @@ from .utils import (
     extract_submodules_state_dict,
     find_tied_parameters,
     get_balanced_memory,
+    get_torch_accelerator_backend,
     infer_auto_device_map,
     is_bnb_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
-    is_sdaa_available,
-    is_xpu_available,
     load_checkpoint_in_model,
+    normalize_device,
     offload_state_dict,
     parse_flag_from_env,
     retie_parameters,
@@ -470,24 +466,14 @@ def dispatch_model(
                         raise RuntimeError("You can't move a model that has some modules offloaded to cpu or disk.")
                 return fn(*args, **kwargs)
 
+            wrapper._accelerate_added_attribute = True
             return wrapper
 
-        # Make sure to update _accelerate_added_attributes in hooks.py if you add any hook
+        # Mark wrappers so remove_hook_from_module can restore methods for any backend.
         model.to = add_warning(model.to, model)
-        if is_npu_available():
-            model.npu = add_warning(model.npu, model)
-        elif is_mlu_available():
-            model.mlu = add_warning(model.mlu, model)
-        elif is_sdaa_available():
-            model.sdaa = add_warning(model.sdaa, model)
-        elif is_musa_available():
-            model.musa = add_warning(model.musa, model)
-        elif is_xpu_available():
-            model.xpu = add_warning(model.xpu, model)
-        elif is_neuron_available():
-            model.neuron = add_warning(model.neuron, model)
-        else:
-            model.cuda = add_warning(model.cuda, model)
+        device_type, _ = get_torch_accelerator_backend()
+        if device_type is not None and hasattr(model, device_type):
+            setattr(model, device_type, add_warning(getattr(model, device_type), model))
 
         # Check if we are using multi-gpus with RTX 4000 series
         use_multi_gpu = len([device for device in set(device_map.values()) if device not in ("cpu", "disk")]) > 1
@@ -498,24 +484,14 @@ def dispatch_model(
                 "Please make sure to update your driver to the latest version which resolves this."
             )
     else:
-        device = list(devices)[0]
-        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if isinstance(device, int):
-            if is_npu_available():
-                device = f"npu:{device}"
-            elif is_mlu_available():
-                device = f"mlu:{device}"
-            elif is_sdaa_available():
-                device = f"sdaa:{device}"
-            elif is_musa_available():
-                device = f"musa:{device}"
-            elif is_neuron_available():
-                device = f"neuron:{device}"
-            elif torch.cuda.is_available():
-                pass
-            elif torch.accelerator.is_available():
-                device = f"{torch.accelerator.current_accelerator().type}:{device}"
-        model.to(device)
+        device = normalize_device(list(devices)[0])
+        if torch.device(device).type == "tpu":
+            # `.to()` unties weights on TPU
+            tied_params = find_tied_parameters(model)
+            model.to(device)
+            retie_parameters(model, tied_params)
+        else:
+            model.to(device)
     # Convert OrderedDict back to dict for easier usage
     model.hf_device_map = dict(device_map)
     return model
@@ -784,7 +760,8 @@ def _refuse_recurrent_layers_under_sequence_parallelism(model: nn.Module):
             f"{model.__class__.__name__}). Those layers carry a recurrent state along the sequence and "
             "bypass the attention interface, so sharding the sequence restarts the state on every rank "
             "and produces wrong gradients without failing. Use a full-attention model, or disable "
-            "sequence parallelism."
+            "sequence parallelism. If the model exchanges that state across the sequence parallel ranks "
+            "itself, set `DeepSpeedSequenceParallelConfig(sp_allow_recurrent_layers=True)`."
         )
 
 

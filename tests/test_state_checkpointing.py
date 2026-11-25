@@ -36,7 +36,13 @@ from accelerate.test_utils import (
     run_first,
 )
 from accelerate.test_utils.testing import AccelerateTestCase
-from accelerate.utils import DistributedType, ProjectConfiguration, patch_environment, set_seed
+from accelerate.utils import (
+    DistributedType,
+    ProjectConfiguration,
+    get_torch_accelerator_backend,
+    patch_environment,
+    set_seed,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -96,6 +102,23 @@ def parameterized_custom_name_func(func, param_num, param):
 
 @parameterized_class(("use_safetensors",), [[True], [False]], class_name_func=parameterized_custom_name_func)
 class CheckpointTest(AccelerateTestCase):
+    def test_rng_state_restored(self):
+        accelerator = Accelerator()
+        devices = [accelerator.device]
+        device_type, device_module = get_torch_accelerator_backend()
+        # Unified backends and MPS save only the current device's RNG state.
+        if device_type not in (None, "mps") and device_module is not torch.accelerator:
+            devices = [torch.device(device_type, i) for i in range(device_module.device_count())]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            accelerator.save_state(tmpdir, safe_serialization=self.use_safetensors)
+            expected_cpu = torch.rand(8)
+            expected_devices = [torch.rand(8, device=device) for device in devices]
+
+            accelerator.load_state(tmpdir)
+            torch.testing.assert_close(torch.rand(8), expected_cpu, rtol=0, atol=0)
+            for device, expected in zip(devices, expected_devices):
+                torch.testing.assert_close(torch.rand(8, device=device), expected, rtol=0, atol=0)
+
     def check_adam_state(self, state1, state2, distributed_type):
         # For DistributedType.XLA, the `accelerator.save_state` function calls `xm._maybe_convert_to_cpu` before saving.
         # As a result, all tuple values are converted to lists. Therefore, we need to convert them back here.

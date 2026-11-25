@@ -39,16 +39,11 @@ from .constants import (
 )
 from .environment import parse_flag_from_env, str_to_bool
 from .imports import (
-    is_cuda_available,
+    get_torch_accelerator_backend,
     is_hpu_available,
-    is_mlu_available,
-    is_musa_available,
-    is_neuron_available,
-    is_npu_available,
     is_rocm_available,
     is_torchao_available,
     is_transformer_engine_available,
-    is_xpu_available,
 )
 from .versions import compare_versions, is_torch_version
 
@@ -538,6 +533,7 @@ class DistributedType(str, enum.Enum):
         - **MULTI_MLU** -- Distributed on multiple MLUs.
         - **MULTI_SDAA** -- Distributed on multiple SDAAs.
         - **MULTI_MUSA** -- Distributed on multiple MUSAs.
+        - **MULTI_SUPA** -- Distributed on multiple Biren SUPA devices.
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **MULTI_HPU** -- Distributed on multiple HPUs.
@@ -556,6 +552,7 @@ class DistributedType(str, enum.Enum):
     MULTI_MLU = "MULTI_MLU"
     MULTI_SDAA = "MULTI_SDAA"
     MULTI_MUSA = "MULTI_MUSA"
+    MULTI_SUPA = "MULTI_SUPA"
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
@@ -1876,24 +1873,15 @@ class FullyShardedDataParallelPlugin:
             self.validate_mixed_precision_policy()
 
         if self.sync_module_states:
-            if is_npu_available():
-                device = torch.npu.current_device()
-            elif is_mlu_available():
-                device = torch.mlu.current_device()
-            elif is_musa_available():
-                device = torch.musa.current_device()
-            elif is_cuda_available():
-                device = torch.cuda.current_device()
-            elif is_xpu_available():
-                device = torch.xpu.current_device()
-            elif is_hpu_available():
-                device = torch.hpu.current_device()
-            elif is_neuron_available():
-                device = torch.neuron.current_device()
-            else:
+            device_type, _ = get_torch_accelerator_backend()
+            if device_type is None:
+                device_type = "cpu"
+            if device_type in ("cpu", "mps"):
                 raise RuntimeError(
-                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', 'MLU', 'NPU', 'MUSA', or 'HPU'."
+                    f"FSDP parameter initialization with `sync_module_states=True` is not supported on {device_type}."
                 )
+            # Resolve the index when initializing parameters, after each rank has selected its device.
+            device = torch.device(device_type)
             # Create a function that will be used to initialize the parameters of the model
             # when using `sync_module_states`
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
@@ -2145,6 +2133,18 @@ class DeepSpeedSequenceParallelConfig:
             "help": "Attention implementation to use. Can be one of 'flash_attention_2', 'flash_attention_3', 'sdpa', or a hub-hosted kernel (e.g. 'kernels-community/flash-attn2'). Defaults to `sdpa`."
         },
     )
+    sp_allow_recurrent_layers: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "If `True`, models with linear-attention (recurrent) layers are not refused. Set it only for a model whose linear-attention layers exchange their state across the sequence parallel ranks: stock ones restart it on every rank and give wrong gradients. The default is `False`."
+        },
+    )
+    sp_disable_in_eval: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "If `True`, sequence parallelism is turned off in eval mode and every rank runs the whole sequence. If `False`, it stays on, and the eval dataloader must be sharded like the train one. The default is `True`."
+        },
+    )
 
     def __post_init__(self):
         # sp_seq_length_is_variable and sp_seq_length are interconnected
@@ -2164,6 +2164,14 @@ class DeepSpeedSequenceParallelConfig:
 
         if self.sp_attn_implementation is None:
             self.sp_attn_implementation = os.environ.get("PARALLELISM_CONFIG_SP_ATTN_IMPLEMENTATION", None)
+
+        if self.sp_allow_recurrent_layers is None:
+            self.sp_allow_recurrent_layers = (
+                os.environ.get("PARALLELISM_CONFIG_SP_ALLOW_RECURRENT_LAYERS", "false").lower() == "true"
+            )
+
+        if self.sp_disable_in_eval is None:
+            self.sp_disable_in_eval = os.environ.get("PARALLELISM_CONFIG_SP_DISABLE_IN_EVAL", "true").lower() == "true"
 
         _builtin_sp_attn = ["flash_attention_2", "flash_attention_3", "sdpa"]
         # Also allow hub-hosted flash attention kernels (e.g. "kernels-community/flash-attn2").

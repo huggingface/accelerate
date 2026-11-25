@@ -81,6 +81,7 @@ from .utils import (
     convert_outputs_to_fp32,
     ensure_weights_retied,
     extract_model_from_parallel,
+    find_tied_parameters,
     fsdp2_apply_ac,
     fsdp2_canonicalize_names,
     fsdp2_prepare_model,
@@ -92,14 +93,13 @@ from .utils import (
     get_mixed_precision_context_manager,
     get_model_tp_size,
     get_pretty_name,
+    get_torch_accelerator_backend,
     has_offloaded_params,
     is_bf16_available,
     is_bitsandbytes_multi_backend_available,
     is_deepspeed_available,
     is_lomo_available,
     is_megatron_lm_available,
-    is_mlu_available,
-    is_musa_available,
     is_npu_available,
     is_torch_xla_available,
     is_torchao_available,
@@ -113,6 +113,7 @@ from .utils import (
     recursively_apply,
     reduce,
     release_memory,
+    retie_parameters,
     save,
     save_fsdp_model,
     save_fsdp_optimizer,
@@ -121,7 +122,7 @@ from .utils import (
 from .utils.constants import (
     PROFILE_PATTERN_NAME,
 )
-from .utils.modeling import get_state_dict_offloaded_model
+from .utils.modeling import _get_parameter_id, get_state_dict_offloaded_model
 from .utils.other import compile_regions, compile_regions_deepspeed, compile_regions_fsdp2, is_compiled_module
 
 
@@ -214,6 +215,7 @@ class Accelerator:
 
             - `"torch"`: the base torch random number generator
             - `"cuda"`: the CUDA random number generator (GPU only)
+            - Any registered PyTorch accelerator's device type: its device random number generator.
             - `"xla"`: the XLA random number generator (TPU only)
             - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
@@ -360,14 +362,10 @@ class Accelerator:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
-            if is_mlu_available():
-                if compare_versions("deepspeed", "<", "0.15.2"):
-                    raise ImportError("DeepSpeed MLU version must be >= 0.15.2. Please update DeepSpeed.")
-            elif is_musa_available():
-                if compare_versions("deepspeed", "<", "0.14.3"):
-                    raise ImportError("DeepSpeed MUSA version must be >= 0.14.3. Please update DeepSpeed.")
-            elif compare_versions("deepspeed", "<", "0.9.3"):
-                raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
+            device_type, _ = get_torch_accelerator_backend()
+            minimum_version = {"mlu": "0.15.2", "musa": "0.14.3"}.get(device_type, "0.9.3")
+            if compare_versions("deepspeed", "<", minimum_version):
+                raise ImportError(f"DeepSpeed version must be >= {minimum_version}. Please update DeepSpeed.")
 
             self.deepspeed_engine_wrapped = None
 
@@ -540,12 +538,14 @@ class Accelerator:
             and self.device.type != "cpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
+            # TorchTPU lacks `_amp_foreach_non_finite_check_and_unscale_`, so GradScaler can't work
+            supports_fp16 = torch.amp.is_autocast_available(self.device.type) and self.device.type != "tpu"
+            _, device_module = get_torch_accelerator_backend()
+            if hasattr(device_module, "get_amp_supported_dtype"):
+                supports_fp16 = supports_fp16 and torch.float16 in device_module.get_amp_supported_dtype()
+            if not supports_fp16 or is_torch_xla_available(check_is_tpu=True):
+                raise ValueError(f"fp16 mixed precision is not supported on {self.device.type!r}.")
             self.native_amp = True
-            supported_device = ("xpu", "cuda", "npu", "xla", "mlu", "musa", "hpu", "sdaa", "mps")
-            if self.device.type not in supported_device or is_torch_xla_available(check_is_tpu=True):
-                raise ValueError(
-                    f"fp16 mixed precision requires a device in {supported_device} (not {self.device.type!r})."
-                )
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
 
             # FSDP2 doesn't use ShardedGradScaler, don't want to modify `get_grad_scaler`, rather create a simple utility
@@ -622,6 +622,7 @@ class Accelerator:
             DistributedType.MULTI_MLU,
             DistributedType.MULTI_SDAA,
             DistributedType.MULTI_MUSA,
+            DistributedType.MULTI_SUPA,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_HPU,
@@ -1474,20 +1475,13 @@ class Accelerator:
                     optimizer_count += 1
 
             # This needs to be written as such, so that passing other objects other than models/optimizers doesn't raise an error
-            if (model_count < 1 and optimizer_count > 0) or (model_count > 0 and optimizer_count < 1):
+            if model_count < 1 and optimizer_count > 0:
                 raise ValueError(
-                    "When using FSDP2, a model and optimizer must be passed together to `Accelerator.prepare()`"
+                    "When using FSDP2, an optimizer must be passed together with its model to `Accelerator.prepare()`"
                     " as the optimizer needs to have its parameters modified after the model is converted."
                 )
             if model_count > 1:
                 raise ValueError("Only one model is supported when using FSDP2")
-
-        # If we're dealing with device placement, this deals with that by...
-        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
-
-        if tpu_should_fix_optimizer:
-            # 1. grabbing old model parameters
-            old_named_params = self._get_named_parameters(*args, drop_refs=False)
 
         if self.parallelism_config and self.parallelism_config.tp_enabled:
             args = self._prepare_tp(*args)
@@ -1513,19 +1507,14 @@ class Accelerator:
         elif self.is_fsdp2:
             result = self._prepare_fsdp2(*args)
         else:
+            old_named_params = self._get_parameters_to_remap(*args)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
-        if tpu_should_fix_optimizer:
-            # 2. grabbing new model parameters
-            new_named_params = self._get_named_parameters(*result)
-            # 3. building a map from the first to the second
-            mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
-            # 4. using that map to update the parameters of the optimizer
-            for obj in result:
-                if isinstance(obj, torch.optim.Optimizer):
-                    obj._switch_parameters(mapping)
+
+            if old_named_params:
+                self._remap_optimizer_parameters(old_named_params, *result)
 
         for item in result:
             if any(
@@ -1535,6 +1524,34 @@ class Accelerator:
                 item._is_accelerate_prepared = True
 
         return result if len(result) > 1 else result[0]
+
+    def _get_parameters_to_remap(self, *args):
+        """Collect original parameters that preparation may replace."""
+        if self.distributed_type == DistributedType.FSDP:
+            if not self.state.fsdp_plugin.use_orig_params:
+                return {}
+            # FSDP1's initialization callback can replace meta parameters even with use_orig_params=True.
+            return {name: param for name, param in self._get_named_parameters(*args).items() if param.is_meta}
+        if self.device.type in ("tpu", "xla"):
+            return self._get_named_parameters(*args)
+        return {}
+
+    def _remap_optimizer_parameters(self, old_named_params, *args):
+        """Remap optimizer references after preparation. No-op if no parameter objects were replaced."""
+        new_named_params = self._get_named_parameters(*args)
+        if self.distributed_type == DistributedType.FSDP:
+            old_named_params = fsdp2_canonicalize_names(old_named_params)
+            new_named_params = fsdp2_canonicalize_names(new_named_params)
+            # FSDP1 adds this wrapper to parameter names; FSDP2 shards modules in place.
+            new_named_params = {
+                name.replace("_fsdp_wrapped_module.", ""): param for name, param in new_named_params.items()
+            }
+        mapping = {p: new_named_params[n] for n, p in old_named_params.items() if p is not new_named_params[n]}
+        if not mapping:
+            return
+        for obj in args:
+            if isinstance(obj, torch.optim.Optimizer):
+                obj._switch_parameters(mapping)
 
     def _prepare_tp(self, *args):
         # First pass: prepare everything except schedulers (first_pass=True) and the model, which is prepared separately
@@ -1598,11 +1615,6 @@ class Accelerator:
         if not mapping:
             return result
 
-        def _get_tensor_address(p):
-            if isinstance(p, DTensor):
-                return p._local_tensor.data_ptr()
-            return p.data_ptr()
-
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
@@ -1610,7 +1622,7 @@ class Accelerator:
                     # After _prepare_tp(), parameter references are replaced with DTensor instances.
                     # Therefore, we remap the parameter references to their new DTensor addresses
                     # so that the optimizer can correctly update the model parameters.
-                    param_group["params"] = [mapping[_get_tensor_address(p)] for p in param_group["params"]]
+                    param_group["params"] = [mapping[_get_parameter_id(p)] for p in param_group["params"]]
 
         return result
 
@@ -1644,15 +1656,17 @@ class Accelerator:
             if isinstance(obj, torch.nn.Module):
                 model_index, model = i, obj
 
-        # Invariant: if we have a model, we also have an optimizer (checked in `prepare`)
+        # Invariant: if we have an optimizer, we also have a model (checked in `prepare`)
         if model_index is None:
             return tuple(result)
 
         # Needs to be done first, to make sure AC + fully_shard will work as expected
         self.state.fsdp_plugin.set_auto_wrap_policy(model)
 
-        # Apply AC if needed
-        if self.state.fsdp_plugin.activation_checkpointing:
+        # Apply AC if needed. A model already prepared, e.g. without its optimizer for evaluation, has it already
+        from torch.distributed.fsdp import FSDPModule
+
+        if self.state.fsdp_plugin.activation_checkpointing and not isinstance(model, FSDPModule):
             model = fsdp2_apply_ac(self, model)
 
         # Apply compile if needed, has to be *after* applying AC
@@ -1671,18 +1685,14 @@ class Accelerator:
         old_named_params = fsdp2_canonicalize_names(self._get_named_parameters(*tuple(result), drop_refs=True))
 
         # Swap the optimizer parameters with empty, so `fully_shard` after will not allocate too much memory
-        from torch.distributed.tensor import DTensor
-
         for obj in result:
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
                     for i, p in enumerate(param_group["params"]):
                         # We drop a reference to the original param here, so that _move_states_to_device triggers a reallocation
-                        # We reassign the data_ptr to the original param, so that we preserve the mapping to the new ones
+                        # Keep a key to match each original parameter to its sharded replacement.
                         param_group["params"][i] = torch.empty(1, dtype=p.dtype, device=p.device)
-                        param_group["params"][i].data_ptr = (
-                            p._local_tensor.data_ptr() if isinstance(p, DTensor) else p.data_ptr()
-                        )
+                        param_group["params"][i].data_ptr = _get_parameter_id(p)
 
         self._models.append(model)
 
@@ -1835,7 +1845,13 @@ class Accelerator:
                     "If you want train the 8-bit or 4-bit model in CPU, please install bitsandbytes with multi-backend, see https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
                 )
         elif device_placement and not self.verify_device_map(model):
-            model = model.to(self.device)
+            if self.device.type == "tpu":
+                # `.to()` unties weights on TPU
+                tied_params = find_tied_parameters(model)
+                model = model.to(self.device)
+                retie_parameters(model, tied_params)
+            else:
+                model = model.to(self.device)
         if not evaluation_mode:
             if self.multi_device and not (self.parallelism_config and self.parallelism_config.tp_enabled):
                 if model_has_dtensor(model):
@@ -2362,12 +2378,13 @@ class Accelerator:
                         "UlyssesSPAttentionHF currently works with HF Transformers and expects the model object to have a config attribute but this model doesn't have one."
                     )
 
-                _refuse_recurrent_layers_under_sequence_parallelism(model)
+                if not sp_handler.sp_allow_recurrent_layers:
+                    _refuse_recurrent_layers_under_sequence_parallelism(model)
 
                 kwagrs = {}
                 signature = inspect.signature(UlyssesSPAttentionHF.register_with_transformers)
                 if "disable_in_eval" in signature.parameters.keys():
-                    kwagrs["disable_in_eval"] = True
+                    kwagrs["disable_in_eval"] = sp_handler.sp_disable_in_eval
 
                 mpu = UlyssesSPAttentionHF.register_with_transformers(
                     model_name_or_path=model,
@@ -2845,6 +2862,7 @@ class Accelerator:
                 self.scaler.unscale_(opt)
 
     def _clip_grad_norm_dtensor_aware(self, parameters, max_norm, norm_type=2, foreach=None):
+        norm_type = float(norm_type)
         is_dtensor_available = torch.distributed.is_available()
         if not is_dtensor_available:
             return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type, foreach=foreach)
@@ -3865,35 +3883,19 @@ class Accelerator:
 
     def _get_named_parameters(self, *args, drop_refs=False):
         named_parameters = {}
-        accessor_mapping = {}
-        for obj in args:
-            if isinstance(obj, torch.nn.Module):
-                obj = extract_model_from_parallel(obj)
-                if not drop_refs:
-                    named_parameters.update({n: p for n, p in obj.named_parameters()})
-                    continue
+        models = [obj for obj in args if isinstance(obj, torch.nn.Module)]
+        for index, model in enumerate(models):
+            model = extract_model_from_parallel(model, keep_torch_compile=False)
+            # Avoid parameter-name collisions when preparing multiple models together.
+            prefix = ""
+            if len(models) > 1:
+                prefix = str(index)
+            if not drop_refs:
+                named_parameters.update(model.named_parameters(prefix=prefix))
+                continue
 
-                # we need this bit as `WeightWithDynamic...` returns 0 when `data_ptr()` is called,
-                # the underlying pointer is actually hidden in `_tensor` attribute
-                if self.fp8_backend == FP8BackendType.AO:
-                    from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
-
-                    accessor_mapping[WeightWithDynamicFloat8CastTensor] = "_tensor"
-                _is_dtensor_available = torch.distributed.is_available()
-                # we know we're in FSDP2 so DTensor is available
-                if _is_dtensor_available:
-                    from torch.distributed.tensor import DTensor
-
-                    accessor_mapping[DTensor] = "_local_tensor"
-
-                named_parameters.update(
-                    {
-                        n: getattr(p, accessor_mapping[type(p)]).data_ptr()
-                        if type(p) in accessor_mapping
-                        else p.data_ptr()
-                        for n, p in obj.named_parameters()
-                    }
-                )
+            for name, param in model.named_parameters(prefix=prefix):
+                named_parameters[name] = _get_parameter_id(param)
         return named_parameters
 
     def _get_devices(self, *args):

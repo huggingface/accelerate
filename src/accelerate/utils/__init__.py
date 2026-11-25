@@ -74,6 +74,7 @@ from .environment import (
     get_current_device_type,
     get_gpu_info,
     get_int_from_env,
+    get_physical_cpu_count,
     parse_choice_from_env,
     parse_flag_from_env,
     patch_environment,
@@ -83,6 +84,8 @@ from .environment import (
 )
 from .imports import (
     deepspeed_required,
+    get_distributed_backend,
+    get_torch_accelerator_backend,
     is_4bit_bnb_available,
     is_8bit_bnb_available,
     is_aim_available,
@@ -120,6 +123,7 @@ from .imports import (
     is_sagemaker_available,
     is_schedulefree_available,
     is_sdaa_available,
+    is_supa_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_timm_available,
@@ -148,6 +152,7 @@ from .modeling import (
     convert_file_size_to_int,
     dtype_byte_size,
     find_tied_parameters,
+    get_accelerator_free_memory,
     get_balanced_memory,
     get_grad_scaler,
     get_max_layer_size,
@@ -161,6 +166,7 @@ from .modeling import (
     load_offloaded_weights,
     load_state_dict,
     named_module_tensors,
+    normalize_device,
     retie_parameters,
     set_module_tensor_to_device,
 )

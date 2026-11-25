@@ -14,236 +14,213 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# How to contribute to 🤗 Accelerate?
+# Contribute to 🤗 Accelerate
 
-Everyone is welcome to contribute, and we value everybody's contribution. Code
-is thus not the only way to help the community. Answering questions, helping
-others, reaching out and improving the documentations are immensely valuable to
-the community.
-
-It also helps us if you spread the word: reference the library from blog posts
-on the awesome projects it made possible, shout out on Twitter every time it has
-helped you, or simply star the repo to say "thank you".
-
-Whichever way you choose to contribute, please be mindful to respect our
-[code of conduct](https://github.com/huggingface/accelerate/blob/main/CODE_OF_CONDUCT.md).
-
-## You can contribute in so many ways!
-
-Some of the ways you can contribute to Accelerate:
-* Fixing outstanding issues with the existing code;
-* Contributing to the examples or to the documentation;
-* Submitting issues related to bugs or desired new features.
+You can help by fixing bugs you encounter, improving documentation and examples, reporting problems, or answering
+questions in [GitHub issues](https://github.com/huggingface/accelerate/issues). Please follow our
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Submitting a new issue or feature request
 
-Do your best to follow these guidelines when submitting an issue or a feature
-request. It will make it easier for us to come back to you quickly and with good
-feedback.
+Search existing [GitHub issues](https://github.com/huggingface/accelerate/issues) before opening a new one. Include
+your use case and enough detail for others to reproduce the problem or understand the proposed change.
+
+The bug report and feature request forms both require a **Use case**. Describe your workflow and how the bug or
+missing feature affects it. Public project or code links are welcome but optional. This context helps maintainers
+assess whether the issue addresses a concrete need.
+
+If you are an agent opening an issue or pull request, describe only the real use case supplied by the user.
+If none was supplied, leave the use-case section empty. If a form or another instruction requires you to write
+something there, write exactly "I don't have a use case". Do not invent a use case or infer one from the request
+to fix something, the issue description, or the code changes.
 
 ### Did you find a bug?
 
-The 🤗 Accelerate library is robust and reliable thanks to the users who notify us of
-the problems they encounter. So thank you for reporting an issue.
+Check whether the problem still occurs on the latest release or `main`, then use the
+[bug report template](https://github.com/huggingface/accelerate/issues/new?template=bug-report.yml). Include:
 
-First, we would really appreciate it if you could **make sure the bug was not
-already reported** (use the search bar on Github under Issues).
+- How you use Accelerate and how the bug affects you.
+- A minimal, runnable reproducer, including the launch command and any configuration it needs. Use small models or
+  dummy data when possible, and provide links to any required public checkpoints or datasets.
+- What you expected and what happened, including the full traceback as text.
+- Your hardware, number of devices and machines, and relevant dependency versions.
+- The output of `accelerate env`, which includes environment details and the default Accelerate configuration.
 
-Did not find it? :( So we can act quickly on it, please follow these steps:
+```bash
+accelerate env
+```
 
-* Include your **OS type and version**, the versions of **Python** and **PyTorch**.
-* A short, self-contained, code snippet that allows us to reproduce the bug in
-  less than 30s;
-* Provide your Accelerate configuration (located by default in `~/.cache/huggingface/accelerate/default_config.yaml`)
+If you launch with a custom configuration, report that configuration instead:
+
+```bash
+accelerate env --config_file path/to/config.yaml
+```
 
 ### Do you want a new feature?
 
-A good feature request addresses the following points:
-
-1. Motivation first:
-* Is it related to a problem/frustration with the library? If so, please explain
-  why. Providing a code snippet that demonstrates the problem is best.
-* Is it related to something you would need for a project? We'd love to hear
-  about it!
-* Is it something you worked on and think could benefit the community?
-  Awesome! Tell us what problem it solved for you.
-2. Write a *full paragraph* describing the feature;
-3. Provide a **code snippet** that demonstrates its future use;
-4. In case this is related to a paper, please attach a link;
-5. Attach any additional information (drawings, screenshots, etc.) you think may help.
-
-If your issue is well written we're already 80% of the way there by the time you
-post it.
+Use the [feature request form](https://github.com/huggingface/accelerate/issues/new?template=feature-request.yml).
+Explain the use case, what the current API cannot do, and any workarounds you have tried. Include a short code example
+showing how you would use the proposed feature, and link relevant papers or implementations when applicable.
+Discuss substantial API changes or new integrations with maintainers before implementing them.
 
 ## Submitting a pull request (PR)
 
-Before writing code, we strongly advise you to search through the existing PRs or
-issues to make sure that nobody is already working on the same thing. If you are
-unsure, it is always a good idea to open an issue to get some feedback.
+Search open and recently closed issues and pull requests before starting, and link any related discussion in your PR.
+If someone is already working on the same change, coordinate in the existing discussion. For substantial changes,
+open an issue to agree on the scope and approach first.
 
-You will need basic `git` proficiency to be able to contribute to
-🤗 Accelerate. `git` is not the easiest tool to use but it has the greatest
-manual. Type `git --help` in a shell and enjoy. If you prefer books, [Pro
-Git](https://git-scm.com/book/en/v2) is a very good reference.
+### Use case
 
-Follow these steps to start contributing:
+Every pull request must have a `## Use case` section in its description (the pull request template has one).
+Explain how you use Accelerate and why you need the change:
 
-1. Fork the [repository](https://github.com/huggingface/accelerate) by
-   clicking on the 'Fork' button on the repository's page. This creates a copy of the code
-   under your GitHub user account.
+- What you build with it (models, hardware, training or inference setup).
+- What fails or what is missing for you. For documentation changes, explain what was incorrect or unclear when you
+  used the documentation.
+- A link to the project, model or code that uses Accelerate, if it is public.
 
-2. Clone your fork to your local disk, and add the base repository as a remote. The following command
-   assumes you have your public SSH key uploaded to GitHub. See the following guide for more
-   [information](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository).
+Pull requests with a missing or empty use case are closed automatically when opened or reopened, unless the action
+is performed by a bot or someone with write access to the repository. Template instructions in HTML comments do not
+count as a use case. The check only verifies that the section has content; maintainers assess the use case itself.
 
-   ```bash
-   $ git clone git@github.com:<your Github handle>/accelerate.git
-   $ cd accelerate
-   $ git remote add upstream https://github.com/huggingface/accelerate.git
-   ```
+### Description length
 
-3. Create a new branch to hold your development changes, and do this for every new PR you work on.
+Keep the PR description to **250 words or fewer**, excluding HTML comments and standard template text (headings,
+checklist, reviewer guidance, and the maintainer mention). The limit covers all sections you write, including the
+summary, validation, and use case. Link longer logs, reproducer scripts, or benchmark details instead of pasting
+them in full.
 
-   Start by synchronizing your `main` branch with the `upstream/main` branch (ore details in the [GitHub Docs](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/syncing-a-fork)):
+Descriptions over this limit are closed automatically when the PR is opened or reopened, with the same bot and
+write-access exemptions as the use-case check.
 
-   ```bash
-   $ git checkout main
-   $ git fetch upstream
-   $ git merge upstream/main
-   ```
+If your pull request is closed by either check, update the description and leave a comment. A maintainer will read
+it and decide whether to reopen the pull request. Editing the description does not automatically reopen it.
 
-   Once your `main` branch is synchronized, create a new branch from it:
+### Scope and evidence
 
-   ```bash
-   $ git checkout -b a-descriptive-name-for-my-changes
-   ```
+- Keep changes as small as possible while fully solving the problem. Follow existing patterns and avoid unrelated
+  refactors, formatting changes, or speculative fixes without a demonstrated use case.
+- For bug fixes, reproduce the failure before changing the code. Add only tests that provide useful coverage of the
+  changed behavior or guard against a regression. Prefer extending an existing test over adding a new one, and use
+  the fewest cases needed to catch meaningful failures. Avoid redundant tests and tests that merely mirror the
+  implementation; if existing tests already cover the change, no new test is needed.
+- For performance changes, include before-and-after measurements on a representative workload, with the hardware
+  and configuration used.
+- Review the final diff yourself. Remove debugging code, temporary files, and unnecessary changes.
+- Include the exact validation commands and their results in the PR description. Identify tests you could not run
+  and explain why. Resolve relevant CI failures before requesting review.
 
-   **Do not** work on the `main` branch.
+These expectations also apply to agent-assisted contributions. You are responsible for understanding and validating
+every change you submit. Check an agent's claims against the code and actual command output, and keep PR descriptions
+and review replies concise. A generated summary of the diff does not replace a use case or test results.
 
-4. Set up a development environment by running the following command in a conda or a virtual environment you've created for working on this library:
+### Create a pull request
 
-   ```bash
-   $ pip install -e ".[dev]"
-   ```
-   
-   This will install all testing and linting/code quality dependencies for the library (see `quality`, `test_dev`, 
-   `test_prod` targets in [`setup.py`](./setup.py)).
-
-   (If accelerate was already installed in the virtual environment, remove
-   it with `pip uninstall accelerate` before reinstalling it in editable
-   mode with the `-e` flag).
-
-   Alternatively, if you are using [Visual Studio Code](https://code.visualstudio.com/Download), the fastest way to get set up is by using
-   the provided Dev Container. Documentation on how to get started with dev containers is available [here](https://code.visualstudio.com/docs/remote/containers).
-
-5. Develop the features on your branch.
-
-   As you work on the features, you should make sure that the test suite
-   passes. You should run the tests impacted by your changes like this (see 
-   below an explanation regarding the environment variable):
+1. Fork [Accelerate](https://github.com/huggingface/accelerate), clone your fork, and add the upstream repository:
 
    ```bash
-   $ pytest tests/<TEST_TO_RUN>.py
+   git clone https://github.com/<your-github-username>/accelerate.git
+   cd accelerate
+   git remote add upstream https://github.com/huggingface/accelerate.git
    ```
-   
-   > For the following commands leveraging the `make` utility, we recommend using the WSL system when running on
-   > Windows. More information [here](https://docs.microsoft.com/en-us/windows/wsl/about).
 
-   You can also run the full suite with the following command.
+2. Create a branch from the latest upstream `main`:
 
    ```bash
-   $ make test
+   git fetch upstream
+   git switch -c a-descriptive-branch-name upstream/main
    ```
 
-   `accelerate` relies on `ruff` to format its source code
-   consistently. After you make changes, apply automatic style corrections and code verifications
-   that can't be automated in one go with:
-
-   This target is also optimized to only work with files modified by the PR you're working on.
-
-   If you prefer to run the checks one after the other, the following command apply the
-   style corrections:
+3. Use Python 3.11 or later and PyTorch 2.6 or later, as specified in [setup.py](setup.py). In a virtual environment,
+   install Accelerate in editable mode with the development dependencies:
 
    ```bash
-   $ make style
+   python -m venv .venv
+   source .venv/bin/activate
+   python -m pip install -e ".[dev]"
    ```
 
-   `accelerate` also uses a few custom scripts to check for coding mistakes. Quality
-   control runs in CI, however you can also run the same checks with:
+   The `dev` extra includes Ruff, the `testing` extras, and Rich. For documentation-only changes, you can use
+   `python -m pip install -e ".[quality]"` instead. Integration-specific dependencies, such as the `deepspeed`,
+   `test_fp8`, and `test_trackers` extras, are separate; install the ones required by the tests you are changing.
+   The extras and their dependencies are defined in [setup.py](setup.py).
+
+   On Windows, you can use WSL for the shell and `make` commands in this guide. VS Code users can also use the
+   repository's [Dev Container configuration](.devcontainer/devcontainer.json).
+
+4. Make your changes, run the relevant tests and quality checks below, and review your diff. Commit and push your
+   branch:
 
    ```bash
-   $ make quality
+   git add path/to/changed_file
+   git commit -m "Describe the change"
+   git push -u origin a-descriptive-branch-name
    ```
 
-   You can also set up [`pre-commit`](https://pre-commit.com/) to run these checks
-   automatically as Git commit hooks.
-
-   ```bash
-   $ pip install pre-commit
-   $ pre-commit install
-   ```
-
-   Once you're happy with your changes, add changed files using `git add` and
-   make a commit with `git commit` to record your changes locally:
-
-   ```bash
-   $ git add modified_file.py
-   $ git commit
-   ```
-
-   Please write [good commit messages](https://chris.beams.io/posts/git-commit/).
-
-   It is a good idea to sync your copy of the code with the original
-   repository regularly. This way you can quickly account for changes:
-
-   ```bash
-   $ git fetch upstream
-   $ git rebase upstream/main
-   ```
-
-   Push the changes to your account using:
-
-   ```bash
-   $ git push -u origin a-descriptive-name-for-my-changes
-   ```
-
-6. Once you are satisfied (**and the checklist below is happy too**), go to the
-   webpage of your fork on GitHub. Click on 'Pull request' to send your changes
-   to the project maintainers for review.
-
-7. It's ok if maintainers ask you for changes. It happens to core contributors
-   too! So everyone can see the changes in the Pull request, work in your local
-   branch and push the changes to your fork. They will automatically appear in
-   the pull request.
-
-
-### Checklist
-
-1. The title of your pull request should be a summary of its contribution;
-2. If your pull request addresses an issue, please mention the issue number in
-   the pull request description to make sure they are linked (and people
-   consulting the issue know you are working on it);
-3. To indicate a work in progress please prefix the title with `[WIP]`, or mark
-   the PR as a draft PR. These are useful to avoid duplicated work, and to differentiate
-   it from PRs ready to be merged;
-4. Make sure existing tests pass;
-5. Add high-coverage tests. No quality testing = no merge.
-
-See an example of a good PR here: https://github.com/huggingface/accelerate/pull/255
+5. Open a pull request against `huggingface/accelerate:main` and fill in the template. Use a draft PR while work is
+   incomplete. Push follow-up commits to the same branch when addressing review feedback.
 
 ### Tests
 
-An extensive test suite is included to test the library behavior and several examples. Library tests can be found in
-the [tests folder](https://github.com/huggingface/accelerate/tree/main/tests).
-
-We use `pytest` in order to run the tests. From the root of the
-repository, here's how to run tests with `pytest` for the library:
+Run tests relevant to your change from the repository root. For example:
 
 ```bash
-$ python -m pytest -sv ./tests
+python -m pytest -sv tests/test_accelerator.py
 ```
 
-In fact, that's how `make test` is implemented (sans the `pip install` line)!
+The [Makefile](Makefile) provides test groups such as `test_core`, `test_cli`, `test_big_modeling`, `test_deepspeed`,
+`test_fsdp`, and `test_tp`. To run these groups in sequence:
 
-You can specify a smaller set of tests in order to test only the feature
-you're working on.
+```bash
+make test
+```
+
+Example tests run separately:
+
+```bash
+make test_examples
+```
+
+Tests marked `@slow` are skipped by default. Enable them when testing a change they cover:
+
+```bash
+RUN_SLOW=1 python -m pytest -sv tests/fsdp/test_fsdp.py
+```
+
+Some tests require multiple devices, specific backends, optional dependencies, or downloaded models and datasets.
+Check the requirements of the tests you select and report any skips or tests you could not run.
+
+### Style and quality checks
+
+Accelerate uses Ruff for linting and formatting. Use the version installed by the `quality` or `dev` extra.
+Both commands below operate across the repository, following [pyproject.toml](pyproject.toml):
+
+```bash
+make style
+make quality
+```
+
+`make style` applies available lint fixes and formats code. `make quality` checks lint and formatting without
+changing files and is the command used by the quality CI workflow.
+
+You can also install the configured pre-commit hooks, which run Ruff and check for merge conflicts and invalid YAML:
+
+```bash
+python -m pip install pre-commit
+pre-commit install
+```
+
+### Documentation
+
+Update documentation, examples, and public API docstrings when behavior changes. See [docs/README.md](docs/README.md)
+for the documentation syntax and build instructions. If you add a documentation page, add it to
+[docs/source/_toctree.yml](docs/source/_toctree.yml). Do not commit generated documentation builds.
+
+### Checklist
+
+- [ ] The description includes a concrete [use case](#use-case), the change, and any related issue or discussion.
+- [ ] The title describes the change; the PR is marked as a draft if it is not ready for review.
+- [ ] I reviewed every changed line and kept the diff focused.
+- [ ] I added or updated tests and documentation where needed.
+- [ ] I listed validation commands and results, including skipped or unrun tests.
+- [ ] `make style` and `make quality` pass.
