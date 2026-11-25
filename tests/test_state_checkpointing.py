@@ -20,15 +20,19 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
-from unittest import mock
+from datetime import timedelta
+from unittest import mock, skipUnless
 
 import pytest
 import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
 from parameterized import parameterized_class
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
+from accelerate.state import AcceleratorState, GradientState
 from accelerate.test_utils import (
     DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
@@ -92,6 +96,97 @@ class DummyModel(nn.Module):
 
     def forward(self, x):
         return x * self.a + self.b
+
+
+def _distributed_fallback_worker(rank: int, root_dir: str, use_safetensors: bool):
+    # Simulate two nodes with one CPU/Gloo process each (`LOCAL_RANK=0`, `LOCAL_WORLD_SIZE=1`) so
+    # `save_on_each_node=True` writes checkpoints into each rank's own project directory.
+    env = {
+        "RANK": str(rank),
+        "LOCAL_RANK": "0",
+        "WORLD_SIZE": "2",
+        "LOCAL_WORLD_SIZE": "1",
+        "MASTER_ADDR": "127.0.0.1",
+        "OMP_NUM_THREADS": "1",
+        "GLOO_SOCKET_IFNAME": "lo",
+        "ACCELERATE_USE_CPU": "true",
+    }
+    rank_dir = os.path.join(root_dir, f"rank_{rank}")
+    os.makedirs(rank_dir, exist_ok=True)
+    with mock.patch.dict(os.environ, env):
+        dist.init_process_group(
+            "gloo",
+            init_method=f"file://{root_dir}/rendezvous",
+            rank=rank,
+            world_size=2,
+            timeout=timedelta(seconds=60),
+        )
+        try:
+            AcceleratorState._reset_state()
+            GradientState._reset_state()
+
+            save_config = ProjectConfiguration(
+                project_dir=rank_dir, automatic_checkpoint_naming=True, save_on_each_node=True
+            )
+            accelerator = Accelerator(cpu=True, project_dir=rank_dir, project_config=save_config)
+            model = DummyModel()
+            with torch.no_grad():
+                model.a.fill_(10.0)
+                model.b.fill_(10.0)
+            model = accelerator.prepare(model)
+            # Save checkpoint_0 with weight 10
+            accelerator.save_state(safe_serialization=use_safetensors)
+
+            # Update weights to 20 and save checkpoint_1
+            unwrapped = accelerator.unwrap_model(model)
+            with torch.no_grad():
+                unwrapped.a.fill_(20.0)
+                unwrapped.b.fill_(20.0)
+            accelerator.save_state(safe_serialization=use_safetensors)
+
+            # Corrupt only rank 1's copy of checkpoint_1's model weights file
+            model_file = "model.safetensors" if use_safetensors else "pytorch_model.bin"
+            if rank == 1:
+                rank1_ckpt1_model = os.path.join(rank_dir, "checkpoints", "checkpoint_1", model_file)
+                with open(rank1_ckpt1_model, "r+b") as f:
+                    f.truncate(os.path.getsize(rank1_ckpt1_model) // 2)
+            accelerator.wait_for_everyone()
+
+            # Restart with fresh state on both ranks: both must agree on checkpoint_0 (weight 10),
+            # not diverge to 20 on rank 0 and 10 on rank 1.
+            AcceleratorState._reset_state()
+            GradientState._reset_state()
+            restart_config = ProjectConfiguration(
+                project_dir=rank_dir, automatic_checkpoint_naming=True, save_on_each_node=True
+            )
+            restart_accelerator = Accelerator(cpu=True, project_dir=rank_dir, project_config=restart_config)
+            restart_model = DummyModel()
+            with torch.no_grad():
+                restart_model.a.fill_(0.0)
+                restart_model.b.fill_(0.0)
+            restart_model = restart_accelerator.prepare(restart_model)
+
+            restart_accelerator.load_state()
+            reloaded = restart_accelerator.unwrap_model(restart_model)
+            assert reloaded.a.item() == 10.0, f"rank {rank} loaded a={reloaded.a.item()}, expected 10.0"
+            assert reloaded.b.item() == 10.0, f"rank {rank} loaded b={reloaded.b.item()}, expected 10.0"
+            # Counter must still be restored to one past the highest existing checkpoint number (checkpoint_1 -> 2).
+            assert restart_accelerator.project_configuration.iteration == 2
+
+            # Now also corrupt rank 1's checkpoint_0 so no checkpoint is loadable on all ranks:
+            # rank 1 should re-raise its error and rank 0 must also raise (not silently return).
+            if rank == 1:
+                rank1_ckpt0_model = os.path.join(rank_dir, "checkpoints", "checkpoint_0", model_file)
+                with open(rank1_ckpt0_model, "r+b") as f:
+                    f.truncate(os.path.getsize(rank1_ckpt0_model) // 2)
+            restart_accelerator.wait_for_everyone()
+
+            with pytest.raises(Exception):
+                restart_accelerator.load_state()
+        finally:
+            AcceleratorState._reset_state()
+            GradientState._reset_state()
+            dist.destroy_process_group()
 
 
 def parameterized_custom_name_func(func, param_num, param):
@@ -429,6 +524,15 @@ class CheckpointTest(AccelerateTestCase):
                 f.truncate(os.path.getsize(oldest) // 2)
             with self.assertRaises(Exception):
                 accelerator.load_state()
+
+    @skipUnless(dist.is_available() and dist.is_gloo_available(), "Requires torch.distributed with Gloo")
+    def test_automatic_loading_agrees_on_fallback_across_ranks(self):
+        # Regression test for #4597 review: with two CPU/Gloo workers and `save_on_each_node=True`
+        # (each rank writing to its own checkpoint directory), corrupting only rank 1's copy of the
+        # newer checkpoint must cause both ranks to fall back to the older checkpoint together rather
+        # than rank 0 loading the newer weights and rank 1 loading the older weights.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp.spawn(_distributed_fallback_worker, args=(tmpdir, self.use_safetensors), nprocs=2, join=True)
 
     def test_crash_during_save_leaves_no_partial_checkpoint(self):
         # Regression test for #4549 (silent case): a crash just before `random_states_0.pkl` is written leaves a

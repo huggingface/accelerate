@@ -3769,12 +3769,13 @@ class Accelerator:
                 The name of the folder all relevant weights and states were saved in. Can be `None` if
                 `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint. If the
                 latest checkpoint fails to load (e.g. it was left incomplete by a crash during saving),
-                earlier checkpoints are tried in order until one loads successfully. After a successful
-                load with automatic checkpoint naming, `project_configuration.iteration` is restored to one
-                past the highest existing checkpoint number, so the next save continues the numbering
-                instead of restarting at `checkpoint_0`. The same applies to an explicit load of a checkpoint
-                from the project's own `checkpoints/` folder; explicit loads from anywhere else leave the
-                counter untouched.
+                earlier checkpoints are tried in order until one loads successfully. In distributed runs, all
+                processes coordinate so they load the newest checkpoint that succeeds on every process. After
+                a successful load with automatic checkpoint naming, `project_configuration.iteration` is
+                restored to one past the highest existing checkpoint number, so the next save continues the
+                numbering instead of restarting at `checkpoint_0`. The same applies to an explicit load of a
+                checkpoint from the project's own `checkpoints/` folder; explicit loads from anywhere else
+                leave the counter untouched.
             load_kwargs (`dict`, *optional*):
                 Additional keyword arguments for the underlying `load` function, such as optional arguments for
                 state_dict and optimizer on.
@@ -3806,24 +3807,84 @@ class Accelerator:
             # Only committed `checkpoint_<i>` folders are considered; a staging directory left
             # behind by a crash during `save_state()` (`.checkpoint_<i>.tmp`) is ignored.
             checkpoints_dir = os.path.join(self.project_dir, "checkpoints")
-            folders = _sorted_checkpoint_dirs(checkpoints_dir)
+            is_distributed = (
+                torch.distributed.is_available()
+                and torch.distributed.is_initialized()
+                and torch.distributed.get_world_size() > 1
+            )
+            if not is_distributed:
+                folders = _sorted_checkpoint_dirs(checkpoints_dir)
+                if len(folders) == 0:
+                    raise ValueError(f"No checkpoints found in {checkpoints_dir}")
+                newest_error = None
+                for candidate_dir in folders[::-1]:
+                    try:
+                        # The recursive `load_state()` call restores the automatic checkpoint counter (one past
+                        # the highest existing checkpoint number) since `candidate_dir` is inside the project's
+                        # `checkpoints/` folder; see the end of this method.
+                        self.load_state(candidate_dir, load_kwargs, **load_model_func_kwargs)
+                        return
+                    except Exception as e:
+                        if newest_error is None:
+                            newest_error = e
+                        logger.warning(
+                            f"Failed to load checkpoint from {candidate_dir} ({type(e).__name__}: {e}), "
+                            "trying the previous checkpoint."
+                        )
+                raise newest_error
+
+            # In distributed runs, agree on the checkpoint index (not the path, since
+            # `save_on_each_node=True` may use per-node checkpoint directories) so ranks never
+            # silently diverge onto different checkpoints.
+            world_size = torch.distributed.get_world_size()
+            folders = _sorted_checkpoint_dirs(checkpoints_dir) if os.path.isdir(checkpoints_dir) else []
+            folders_by_index = {int(os.path.basename(folder).rsplit("_", 1)[1]): folder for folder in folders}
+            gathered_indices: list[list[int] | None] = [None] * world_size
+            torch.distributed.all_gather_object(gathered_indices, list(folders_by_index.keys()))
+
             if len(folders) == 0:
                 raise ValueError(f"No checkpoints found in {checkpoints_dir}")
-            last_error = None
-            for candidate_dir in folders[::-1]:
+
+            common_indices = sorted(set.intersection(*(set(indices) for indices in gathered_indices)), reverse=True)
+            if len(common_indices) == 0:
+                raise ValueError(
+                    f"No common checkpoints found across all processes (local checkpoints in {checkpoints_dir}: "
+                    f"{sorted(folders_by_index.keys())})"
+                )
+
+            newest_error = None
+            for ckpt_idx in common_indices:
+                candidate_dir = folders_by_index[ckpt_idx]
+                local_ok = True
                 try:
                     # The recursive `load_state()` call restores the automatic checkpoint counter (one past
                     # the highest existing checkpoint number) since `candidate_dir` is inside the project's
                     # `checkpoints/` folder; see the end of this method.
                     self.load_state(candidate_dir, load_kwargs, **load_model_func_kwargs)
-                    return
                 except Exception as e:
-                    last_error = e
+                    local_ok = False
+                    if newest_error is None:
+                        newest_error = e
                     logger.warning(
                         f"Failed to load checkpoint from {candidate_dir} ({type(e).__name__}: {e}), "
                         "trying the previous checkpoint."
                     )
-            raise last_error
+
+                gathered_ok: list[bool | None] = [None] * world_size
+                torch.distributed.all_gather_object(gathered_ok, local_ok)
+                if all(gathered_ok):
+                    max_existing = max(idx for indices in gathered_indices for idx in indices)
+                    self.project_configuration.iteration = max(self.project_configuration.iteration, max_existing + 1)
+                    return
+                if local_ok:
+                    logger.warning(
+                        f"Loaded checkpoint from {candidate_dir}, but another process failed to load "
+                        f"checkpoint_{ckpt_idx}; trying the previous checkpoint."
+                    )
+
+            if newest_error is not None:
+                raise newest_error
+            raise RuntimeError(f"Failed to load a common checkpoint across all processes from {checkpoints_dir}.")
         else:
             raise ValueError("No input_dir provided and automatic checkpoint naming is disabled.")
         logger.info(f"Loading states from {input_dir}")
