@@ -48,7 +48,7 @@ from accelerate.utils import TERecipeKwargs, AORecipeKwargs
 kwargs = [TERecipeKwargs()]
 # Or to use torchao
 # kwargs = [AORecipeKwargs()]
-accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
+accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=kwargs)
 ```
 
 ```{yaml}
@@ -127,7 +127,7 @@ accelerator = Accelerator(
   mixed_precision="fp8",
   fsdp_plugin=fsdp2_plugin,
   dynamo_plugin=dynamo_plugin,
-  kwarg_handlers=kwargs,
+  kwargs_handlers=kwargs,
 )
 ```
 
