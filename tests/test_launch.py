@@ -29,7 +29,7 @@ from accelerate.commands.launch import (
     simple_launcher,
 )
 from accelerate.launchers import notebook_launcher
-from accelerate.utils.launch import prepare_multi_gpu_env
+from accelerate.utils.launch import prepare_multi_gpu_env, prepare_tpu
 
 
 class TestPrepareMultiGpuEnv(unittest.TestCase):
@@ -175,6 +175,20 @@ class TestMultiGpuLauncher:
         with pytest.raises(SystemExit) as exc_info:
             multi_gpu_launcher(args)
         assert exc_info.value.code == exit_code
+
+
+@pytest.mark.parametrize("downcast_bf16", [True, False])
+def test_prepare_tpu_downcast_bf16_reaches_accelerator_state(monkeypatch, downcast_bf16):
+    # `AcceleratorState` only keeps `XLA_DOWNCAST_BF16=1` when `ACCELERATE_DOWNCAST_BF16` is set.
+    monkeypatch.setattr("accelerate.utils.launch.is_torch_xla_available", lambda check_is_tpu=False: True)
+    args = argparse.Namespace(mixed_precision="bf16", downcast_bf16=downcast_bf16, debug=False)
+    _, env = prepare_tpu(args, {})
+    if downcast_bf16:
+        assert env["XLA_DOWNCAST_BF16"] == "1"
+        assert env["ACCELERATE_DOWNCAST_BF16"] == "true"
+    else:
+        assert env["XLA_USE_BF16"] == "1"
+        assert "ACCELERATE_DOWNCAST_BF16" not in env
 
 
 def test_notebook_launcher_invalid_precision_error():

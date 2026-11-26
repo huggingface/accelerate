@@ -560,6 +560,8 @@ def prepare_tpu(
     if args.mixed_precision == "bf16" and is_torch_xla_available(check_is_tpu=True):
         if args.downcast_bf16:
             current_env["XLA_DOWNCAST_BF16"] = "1"
+            # `AcceleratorState` reads this to keep the downcast instead of resetting it.
+            current_env["ACCELERATE_DOWNCAST_BF16"] = "true"
         else:
             current_env["XLA_USE_BF16"] = "1"
     if args.debug:

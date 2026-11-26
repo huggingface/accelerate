@@ -143,9 +143,9 @@ The specific configuration being set is an environmental variable of `XLA_USE_BF
 There is a further configuration you can perform which is setting the `XLA_DOWNCAST_BF16` environmental variable. If set to `1`, then 
 `torch.float` is `bfloat16` and `torch.double` is `float32`.
 
-This is performed in the `Accelerator` object when passing `downcast_bf16=True`:
-```python
-accelerator = Accelerator(mixed_precision="bf16", downcast_bf16=True)
+This is enabled by passing `--downcast_bf16` to `accelerate launch`:
+```bash
+accelerate launch --mixed_precision bf16 --downcast_bf16 train.py
 ```
 
 Using downcasting instead of bf16 everywhere is good for when you are trying to calculate metrics, log values, and more where raw bf16 tensors would be unusable. 
