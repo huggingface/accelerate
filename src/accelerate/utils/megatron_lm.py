@@ -984,7 +984,8 @@ class MegatronEngine(torch.nn.Module):
                     config.grad_sync_func = config.grad_sync_func[0]
         if args.overlap_param_gather and args.delay_param_gather:
             config.param_sync_func = [
-                lambda x: self.optimizer.finish_param_sync(model_index, x) for model_index in range(len(self.module))
+                lambda x, model_index=model_index: self.optimizer.finish_param_sync(model_index, x)
+                for model_index in range(len(self.module))
             ]
             if len(self.module) == 1:
                 config.param_sync_func = config.param_sync_func[0]
